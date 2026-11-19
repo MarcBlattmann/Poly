@@ -80,6 +80,12 @@ const POINTER_MESSAGES: &[u32] = &[
 /// 0xFFFF, where none is).
 pub const DESKTOP_SET_POS: u32 = 0x5059_0001;
 
+/// The height of an overlapped window made with `CW_USEDEFAULT` for its size and position, from
+/// the height of the work area (both in the caller's units; ADR 0231).
+pub fn default_height(work_height: i32) -> i32 {
+    work_height * 3 / 4 - 21
+}
+
 /// The sender of the desktop's requests: no thread (process 0 is the
 /// system's desktop, thread 0 none of it).
 const DESKTOP_SENDER: Key = (SYSTEM_DESKTOP_PID, 0);
@@ -877,21 +883,29 @@ impl Wm {
         let (mut x, mut y, mut cx, mut cy) = (s.x, s.y, s.cx, s.cy);
         let default_size = overlapped && s.cx == CW_USEDEFAULT;
         if overlapped {
+            // In the caller's units (ADR 0231): with a default position the default size is 3/4 of
+            // the screen's width and 3/4 of the work area's height less 21 as the caller reads them
+            // (CreateWindowExW.yaml `cw_usedefault`: 768x555 on a 1024x768 screen;
+            // GetWindowRect.yaml `at_200_units`: 960x543 unaware, 1920x1107 aware at 200 %).
+            let u = self.units_of(ctx.key());
+            let screen_w = u.to_caller(self.screen.0);
+            let work_h = u.to_caller(self.display.work.bottom) - u.to_caller(self.display.work.top);
             let default_pos = x == CW_USEDEFAULT;
             if default_pos {
                 let step = 26 * (self.cascade % 8);
                 self.cascade += 1;
-                x = step;
-                y = step;
+                x = u.to_phys(step);
+                y = u.to_phys(step);
             }
             if cx == CW_USEDEFAULT {
-                if default_pos {
-                    cx = self.screen.0 * 3 / 4;
-                    cy = self.screen.1 * 3 / 4 - 21;
+                let (cx_c, cy_c) = if default_pos {
+                    (screen_w * 3 / 4, default_height(work_h))
                 } else {
-                    cx = self.screen.0 * 3 / 4 - x.max(0) / 2;
-                    cy = self.screen.1 * 3 / 4 - y.max(0) / 2;
-                }
+                    let (xc, yc) = (u.to_caller(x), u.to_caller(y));
+                    (screen_w * 3 / 4 - xc.max(0) / 2, u.to_caller(self.screen.1) * 3 / 4 - yc.max(0) / 2)
+                };
+                cx = u.to_phys(cx_c);
+                cy = u.to_phys(cy_c);
             }
         } else {
             if x == CW_USEDEFAULT {
@@ -1355,11 +1369,17 @@ impl Wm {
             parent as u32
         };
         let Some(pw) = self.get(u64::from(p)) else { return Reply::Handle { hwnd: 0 } };
+        // The class the caller can see (its own or a system one), else one another process
+        // registered: a search finds other processes' windows by their class too (Learn,
+        // "FindWindowW"; ADR 0231: a test finds the window of the copy of itself it started).
         let class_atom = match &class {
             None => None,
             Some(c) => match self.find_class(ctx.pid, c) {
                 Some(i) => Some(self.classes[i].as_ref().map_or(0, |c| c.atom)),
-                None => return Reply::Handle { hwnd: 0 },
+                None => match self.find_class_anywhere(c) {
+                    Some(atom) => Some(atom),
+                    None => return Reply::Handle { hwnd: 0 },
+                },
             },
         };
         let title = title.map(|t| upcase(&t));
@@ -1405,6 +1425,17 @@ impl Wm {
             return Reply::Handle { hwnd: c };
         }
         Reply::Handle { hwnd: 0 }
+    }
+
+    /// The atom of a class of that name or atom that any process registered.
+    fn find_class_anywhere(&self, class: &ClassRef) -> Option<u16> {
+        self.classes.iter().flatten().find_map(|c| {
+            let hit = match class {
+                ClassRef::Atom { atom } => c.atom == *atom,
+                ClassRef::Name { name } => upcase(&c.name) == upcase(name),
+            };
+            hit.then_some(c.atom)
+        })
     }
 
     fn get_window(&self, hwnd: u64, cmd: u32) -> Reply {
