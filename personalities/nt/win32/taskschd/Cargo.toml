@@ -1,0 +1,18 @@
+[package]
+name = "taskschd"
+description = "Our taskschd.dll (ADR 0226): the Task Scheduler 2.0 object model; definitions live here, folders and tasks in schedsvc.exe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "taskschd"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-taskschd = { path = "../../../../crates/poly-taskschd" }
+
+[lints]
+workspace = true

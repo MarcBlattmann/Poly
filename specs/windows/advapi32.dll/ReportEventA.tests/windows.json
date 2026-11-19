@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "repa_write",
+      "exe_sha256": "eb9556cc04d140cf29ce32424fc456398ea521412addc88edfc0355a26b86bc1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UmVnaXN0ZXJFdmVudFNvdXJjZUE6IGhhbmRsZSBzZXQKUmVwb3J0RXZlbnRBIHR3byBzdHJpbmdzLCA1IGRhdGEgYnl0ZXMsIGNhdGVnb3J5IDc6IG9rIDEgbGFzdCBlcnJvciAtMgpSZXBvcnRFdmVudEEgbm8gc3RyaW5ncywgbm8gZGF0YSwgdHlwZSAxOiBvayAxIGxhc3QgZXJyb3IgLTIKUmVwb3J0RXZlbnRBIG9uZSBBTlNJIHN0cmluZyB3aXRoIGEgYnl0ZSAweEU5OiBvayAxIGxhc3QgZXJyb3IgLTIKUmVwb3J0RXZlbnRBIG9uZSBlbXB0eSBzdHJpbmc6IG9rIDEgbGFzdCBlcnJvciAtMgpSZXBvcnRFdmVudEEgZGF0YSBvbmx5ICgzIGJ5dGVzKTogb2sgMSBsYXN0IGVycm9yIC0yClJlcG9ydEV2ZW50QSBoaWdoIGJpdCBldmVudCBpZCBhbmQgY2F0ZWdvcnkgMHhGRkZGOiBvayAxIGxhc3QgZXJyb3IgLTIKcmVjb3JkOiBpZCAweGMwMDAwMDAxIHR5cGUgNCBjYXRlZ29yeSA2NTUzNSBzdHJpbmdzIDAgdXNlciBzaWQgbGVuZ3RoIDAgY2xvc2luZyByZWNvcmQgMCBkYXRhIGxlbmd0aCAwIGNvbXB1dGVyIG5hbWUgbm9uLWVtcHR5IHRydWUKcmVjb3JkOiBpZCAweDggdHlwZSA0IGNhdGVnb3J5IDAgc3RyaW5ncyAwIHVzZXIgc2lkIGxlbmd0aCAwIGNsb3NpbmcgcmVjb3JkIDAgZGF0YSBsZW5ndGggMyBjb21wdXRlciBuYW1lIG5vbi1lbXB0eSB0cnVlIHwgZGF0YSBkZSBhZCAwMApyZWNvcmQ6IGlkIDB4NyB0eXBlIDQgY2F0ZWdvcnkgMCBzdHJpbmdzIDEgdXNlciBzaWQgbGVuZ3RoIDAgY2xvc2luZyByZWNvcmQgMCBkYXRhIGxlbmd0aCAwIGNvbXB1dGVyIG5hbWUgbm9uLWVtcHR5IHRydWUgfCAnJwpyZWNvcmQ6IGlkIDB4NiB0eXBlIDIgY2F0ZWdvcnkgMCBzdHJpbmdzIDEgdXNlciBzaWQgbGVuZ3RoIDAgY2xvc2luZyByZWNvcmQgMCBkYXRhIGxlbmd0aCAwIGNvbXB1dGVyIG5hbWUgbm9uLWVtcHR5IHRydWUgfCAnY2FmPDAwZTk+JwpyZWNvcmQ6IGlkIDB4NSB0eXBlIDEgY2F0ZWdvcnkgMCBzdHJpbmdzIDAgdXNlciBzaWQgbGVuZ3RoIDAgY2xvc2luZyByZWNvcmQgMCBkYXRhIGxlbmd0aCAwIGNvbXB1dGVyIG5hbWUgbm9uLWVtcHR5IHRydWUKcmVjb3JkOiBpZCAweDEyMzQ1Njc4IHR5cGUgNCBjYXRlZ29yeSA3IHN0cmluZ3MgMiB1c2VyIHNpZCBsZW5ndGggMCBjbG9zaW5nIHJlY29yZCAwIGRhdGEgbGVuZ3RoIDUgY29tcHV0ZXIgbmFtZSBub24tZW1wdHkgdHJ1ZSB8ICdoZWxsbyBvbmUnIHwgJ3NlY29uZCcgfCBkYXRhIDAxIDAyIDAzIDA0IDA1CnJlY29yZDogaWQgMHhjMDAwMDAwMSB0eXBlIDQgY2F0ZWdvcnkgNjU1MzUgc3RyaW5ncyAwIHVzZXIgc2lkIGxlbmd0aCAwIGNsb3NpbmcgcmVjb3JkIDAgZGF0YSBsZW5ndGggMCBjb21wdXRlciBuYW1lIG5vbi1lbXB0eSB0cnVlCnJlY29yZHMgZm91bmQgZm9yIHRoZSBzb3VyY2U6IDcKUmVwb3J0RXZlbnRBIE5VTEwgaGFuZGxlOiBvayAwIGxhc3QgZXJyb3IgNgpSZXBvcnRFdmVudEEgaGFuZGxlIC0xOiBvayAwIGxhc3QgZXJyb3IgNgpEZXJlZ2lzdGVyRXZlbnRTb3VyY2U6IDEKUmVwb3J0RXZlbnRBIGNsb3NlZCBoYW5kbGU6IG9rIDAgbGFzdCBlcnJvciA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RegisterEventSourceA: handle set\nReportEventA two strings, 5 data bytes, category 7: ok 1 last error -2\nReportEventA no strings, no data, type 1: ok 1 last error -2\nReportEventA one ANSI string with a byte 0xE9: ok 1 last error -2\nReportEventA one empty string: ok 1 last error -2\nReportEventA data only (3 bytes): ok 1 last error -2\nReportEventA high bit event id and category 0xFFFF: ok 1 last error -2\nrecord: id 0xc0000001 type 4 category 65535 strings 0 user sid length 0 closing record 0 data length 0 computer name non-empty true\nrecord: id 0x8 type 4 category 0 strings 0 user sid length 0 closing record 0 data length 3 computer name non-empty true | data de ad 00\nrecord: id 0x7 type 4 category 0 strings 1 user sid length 0 closing record 0 data length 0 computer name non-empty true | ''\nrecord: id 0x6 type 2 category 0 strings 1 user sid length 0 closing record 0 data length 0 computer name non-empty true | 'caf<00e9>'\nrecord: id 0x5 type 1 category 0 strings 0 user sid length 0 closing record 0 data length 0 computer name non-empty true\nrecord: id 0x12345678 type 4 category 7 strings 2 user sid length 0 closing record 0 data length 5 computer name non-empty true | 'hello one' | 'second' | data 01 02 03 04 05\nrecord: id 0xc0000001 type 4 category 65535 strings 0 user sid length 0 closing record 0 data length 0 computer name non-empty true\nrecords found for the source: 7\nReportEventA NULL handle: ok 0 last error 6\nReportEventA handle -1: ok 0 last error 6\nDeregisterEventSource: 1\nReportEventA closed handle: ok 0 last error 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

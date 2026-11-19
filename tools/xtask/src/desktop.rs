@@ -376,6 +376,10 @@ pub const STATE_FILE: &str = "poly-desktop-state.img";
 /// minute to open. `--fresh-state`, `--test-apps`, `--scale`, `--size`,
 /// `--memory`, `--cpus` and the kernel arguments apply as without it.
 ///
+/// `--compositor-stats` has the compositor log its frame times every three seconds (`--stats`:
+/// frames, composing, presenting, taking clients' pixels, key press to frame), on Chromium's disk
+/// too, whose compositor takes its arguments from a file.
+///
 /// `--build-only` builds everything and stops before the boot.
 pub fn command(args: &[String]) -> Result {
     let ready = prepare(args)?;
@@ -446,13 +450,21 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
         },
     };
     let scale = scale_text(percent);
-    let extra: Vec<String> = args.iter().filter(|a| !a.starts_with("--")).cloned().collect();
+    let mut extra: Vec<String> = args.iter().filter(|a| !a.starts_with("--")).cloned().collect();
+    // `--compositor-stats`: the compositor reports frame, copy and key-to-frame times (ADR 0224).
+    let stats = args.iter().any(|a| a == "--compositor-stats");
+    if stats && !chromium {
+        extra.push("poly.init.arg=--stats".to_string());
+    }
     let state = root().join("target").join(STATE_FILE);
     // What the compositor is asked on Chromium's disk, where its first
     // program is not its own (`poly-desktop` reads them from a file).
     let mut compositor_args = vec!["--settings".to_string(), CHROMIUM_SETTINGS.to_string()];
     if asked.is_some() || percent != 100 {
         compositor_args.extend(["--scale".to_string(), scale.to_string()]);
+    }
+    if stats {
+        compositor_args.push("--stats".to_string());
     }
     let (kernel, image, disk) = thread::scope(|s| {
         let kernel = s.spawn(|| super::build_kernel(release));

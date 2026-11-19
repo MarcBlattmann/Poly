@@ -419,6 +419,12 @@ each test's `system.session` from the `windows.json` beside its source
 in the manifest, and `win poly` boots those tests with the kernel
 argument `poly.win32k.session=interactive` (ADR 0136), so a test
 directory has to hold its `windows.json` when it is built.
+A test recorded on another display than 1920x1080 at 100 percent carries
+a `session` of the form `<kind>/<width>x<height>/<scale percent>` in its
+`windows.json` entry (`interactive-bottom/2560x1600/200`, the DPI tests of
+spec-win-dpi, recorded with the oracle's display switched dynamically to
+2560x1600 at 200 percent and put back afterwards); `win poly` then also
+passes `poly.win32k.display=2560x1600 poly.win32k.scale=200`.
 The windows of such tests appear on the oracle's real desktop, so tests
 keep to a few rules (spec-win-gui-b's sheets list them): windows in the
 top-left 1000x500 pixels, closed within seconds; the cursor parked away

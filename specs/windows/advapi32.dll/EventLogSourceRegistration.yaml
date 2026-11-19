@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: advapi32.dll/EventLogSourceRegistration.yaml
+id: windows/api/advapi32.dll/EventLogSourceRegistration
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s pages for RegisterEventSourceA, ReportEventA, DeregisterEventSource, OpenEventLogW/A, ReadEventLogW, "EVENTLOGRECORD" and "Event Logging" / "Event Sources" (winbase.h, winnt.h); error codes from winerror.h. Chrome''s own setup.exe imports RegisterEventSourceA, ReportEventA and DeregisterEventSource, and writes the registry key SYSTEM\CurrentControlSet\Services\EventLog\Application\Chrome (survey-chrome-installer log and registry diff). The existing sheets RegisterEventSourceW, ReportEventW and DeregisterEventSource cover the wide variants; this sheet adds what the ANSI variants do. Nothing of Windows or Google''s programs was read or disassembled.'
+summary: 'The registry side of an event source, as Chrome''s installer writes it: the key HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\<Source> with REG_SZ values EventMessageFile, CategoryMessageFile and ParameterMessageFile (all the same dll path in Chrome''s case), REG_DWORD CategoryCount (1) and TypesSupported (7), created and deleted by an elevated installer. The key does not change how events are written: with or without it, RegisterEventSource and ReportEvent give the same records, which a reader finds in the Application log.'
+interface:
+  key: 'HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\<Source>'
+rules:
+  create: 'With the full administrator token creating the key (RegCreateKeyExW, KEY_ALL_ACCESS) returns 0 and creates it new; the five values (3 x REG_SZ, 2 x REG_DWORD) are written with 0; a REG_SZ value reads back with type 1 and its text. The filtered (standard) token can open HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application for reading but not create the source key (ERROR_ACCESS_DENIED, 5) and not open it with KEY_SET_VALUE (5).'
+  unregistered: 'Before the key exists, RegisterEventSourceA(source) gives a handle and ReportEventA writes a record whose source name is the name given (id 0x1000, category 0, one string).'
+  registered: 'With the key, the same calls give records of the same shape: category 1 stays 1 (the CategoryCount of 1 does not restrict it), id 0x1001, one string; nothing about the message files is checked when writing or reading the raw record (the dll path of the test does not exist).'
+  read_back: 'OpenEventLogW(NULL, L"Application") reads the records of the source (newest first: the records written after the key was made come before older ones). OpenEventLogW with the source''s own name as the log name, and OpenEventLogA with a name that is no log (PolySpecB4NoSuchLog), both return a handle that reads the Application log (the records of the source are found).'
+  delete: 'After RegDeleteKeyW of the source key (returns 0, the key is gone: open gives 2), RegisterEventSourceA and ReportEventA still work and write records of the same shape (id 0x1002).'
+  standard_token: 'With the filtered token and a source without a key: RegisterEventSourceA returns a handle, ReportEventA returns TRUE and the record is in the log (id 0x2000, type 4, one string) and is read back.'
+errors:
+  access_denied: '5 (create or set under EventLog\Application with the filtered token)'
+side_effects: 'the test creates and deletes HKLM\SYSTEM\CurrentControlSet\Services\EventLog\Application\PolySpecB4EvtReg; events are added to the Application log'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075): they register a unique source (PolySpecB4*), write a few events to it, and read them back from the Application log with OpenEventLogW and ReadEventLogW (EVENTLOG_BACKWARDS_READ | EVENTLOG_SEQUENTIAL_READ), decoding the EVENTLOGRECORD fields they print (event id, type, category, string count and texts, user SID length, closing record number, data length and bytes) for the newest records of the source. Each test run adds its events to the oracle''s Application log (a handful per run; they are not removed). Record numbers, times and the computer name are never printed.'
+not_covered: 'Formatting event text through the message files (they need a real dll), the Event Viewer, the EventLog service''s own use of CategoryCount and TypesSupported, custom logs, and uninstall removing the key while events of the source remain in the log (they stay).'

@@ -1,0 +1,53 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/userenv.dll/CreateEnvironmentBlock.yaml
+id: windows/api/userenv.dll/CreateEnvironmentBlock
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). Default mode: the SSH logon (session 0, no interactive desktop, the administrator's elevated token, 24 privileges). ceb_process_std ran with -Token standard (the administrator's filtered token, session 1); it gave the same text as the elevated run. Every test ran twice with identical output."
+  observed_by: "spec-win-chrome-setup"
+  date: "2026-11-17"
+sources: "Observations of our own test programs on the oracle machine. Microsoft Learn: CreateEnvironmentBlock, DestroyEnvironmentBlock (userenv.h), \"Environment Variables\", \"User Environment Block\". Nothing of Windows or Google's programs was read or disassembled."
+summary: "Builds the environment a new process of the token's user would get: a freshly allocated block of NAME=VALUE entries (UTF-16, each NUL-terminated, the list ends with an empty entry, sorted case-insensitively by name) made from the system and the user's variables and the user's profile folders; with bInherit TRUE the calling process's own environment is added first, so its variables (and the per-drive '=C:' entries) appear; with FALSE they do not. The values come from the system and the profile, not from the caller's process (the runner's own TEMP differs from the block's). The block is passed as lpEnvironment (with CREATE_UNICODE_ENVIRONMENT) to CreateProcessAsUserW and CreateProcessWithTokenW and freed with DestroyEnvironmentBlock."
+interface:
+  signature: "BOOL CreateEnvironmentBlock(LPVOID *environment, HANDLE token, BOOL inherit)  (userenv)"
+  token_rights: "the token handle needs TOKEN_QUERY and TOKEN_DUPLICATE"
+rules:
+  layout: "NAME=VALUE entries as UTF-16, each ended by one NUL, the whole ended by a second NUL (empty entry); at least 30 entries; sorted by name without regard to case (ceb_process: sorted true); entries that begin with '=' (like =C:=C:\\path) appear only with bInherit TRUE and only when the caller has them"
+  variables_present: "for the process's own token (both bInherit values): ALLUSERSPROFILE APPDATA COMPUTERNAME ComSpec HOMEDRIVE HOMEPATH LOCALAPPDATA LOGONSERVER NUMBER_OF_PROCESSORS OS Path PATHEXT PROCESSOR_ARCHITECTURE ProgramData ProgramFiles ProgramFiles(x86) PUBLIC SystemDrive SystemRoot TEMP TMP USERDOMAIN USERDOMAIN_ROAMINGPROFILE USERNAME USERPROFILE windir PSModulePath CommonProgramFiles DriverData ProgramW6432 PROCESSOR_IDENTIFIER; SESSIONNAME is absent; a variable the caller set (POLYSPECB4MARK) is present with inherit TRUE and absent with inherit FALSE"
+  values: "USERPROFILE, APPDATA, LOCALAPPDATA, USERNAME, SystemRoot, COMPUTERNAME, windir, ProgramFiles and ProgramData equal the process's own values; TEMP, TMP and Path do NOT equal the caller's (the block holds the user's and the system's, the runner changes its own TEMP); TMP equals TEMP; APPDATA ends with \\AppData\\Roaming, LOCALAPPDATA with \\AppData\\Local, TEMP with \\Temp, ComSpec with \\system32\\cmd.exe, ProgramFiles with \\Program Files, ProgramData with \\ProgramData, PUBLIC with \\Users\\Public; OS is Windows_NT, PROCESSOR_ARCHITECTURE AMD64, SystemDrive C:, SystemRoot C:\\WINDOWS (case as the tests print: equal ignoring case to C:\\Windows), USERDOMAIN equals COMPUTERNAME on this workgroup machine; Path contains \\system32 and \\Windows"
+  token_kinds: "a primary duplicate with TOKEN_ALL_ACCESS gives the same names as the process token; the administrator's filtered token (standard) gives the same names too; a NULL token gives the system's default environment (success); an impersonation token of either level works; the pseudo handle -1 and the process's own handle (not tokens) also succeed (the call falls back as for a NULL token); TOKEN_QUERY alone is enough here (success) but TOKEN_DUPLICATE alone and TOKEN_ASSIGN_PRIMARY alone fail with 5"
+  bad_handles: "a handle value that is not open (0x1234) fails with ERROR_INVALID_HANDLE (6)"
+  bInherit_values: "any non-zero value (2, -1) acts as TRUE"
+  lifetime: "the block stays valid after the token handle is closed"
+examples_ceb_errors:
+  - "NULL token, inherit FALSE: result 1, last error -2, block returned"
+  - "NULL token, inherit TRUE: result 1, last error -2, block returned"
+  - "invalid handle value 0x1234: result 0, last error 6, block NULL"
+  - "handle -1: result 1, last error -2, block returned"
+  - "process handle: result 1, last error -2, block returned"
+  - "token with only TOKEN_QUERY: result 1, last error -2, block returned"
+  - "token with only TOKEN_DUPLICATE: result 0, last error 5, block NULL"
+  - "token with only TOKEN_ASSIGN_PRIMARY: result 0, last error 5, block NULL"
+  - "impersonation token (impersonation level): result 1, last error -2, block returned"
+  - "impersonation token (identification level): result 1, last error -2, block returned"
+  - "inherit value 2: result 1, last error -2, block returned"
+  - "inherit value -1: result 1, last error -2, block returned"
+  - "DestroyEnvironmentBlock(NULL): result 0, last error 87"
+  - "block readable after the token handle is closed: true"
+  - "DestroyEnvironmentBlock after the token was closed: 1"
+errors:
+  invalid_handle: "6 (a value that is no handle)"
+  access_denied: "5 (token opened without TOKEN_QUERY)"
+  null_output: "a NULL output pointer crashes the caller (access violation); not tested"
+  success_error: "the last error is not set on success"
+side_effects: "allocates a block that DestroyEnvironmentBlock frees"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "about a millisecond (reads the registry)"
+  guarantees: "none"
+building_tests: "Rust tests (ADR 0075). ceb_process: layout, names present/absent, relations with the caller's variables, shapes of values; ceb_errors: NULL/invalid/other handles, token rights, impersonation tokens, inherit values, block after the token is closed; ceb_process_std: the same as ceb_process with the filtered token. Values themselves are never printed."
+not_covered: "a NULL output pointer (crash), tokens of other users (the account has only its own), roaming profiles, group-policy variables, a token whose profile is not loaded, 32-bit callers."
+tests:
+  visible: 2
+  held_out: 1

@@ -109,6 +109,9 @@ fn embed_win32() {
         "dcomp.dll",
         // ADR 0220: the COM activation process.
         "comlaunch.exe",
+        // ADR 0226: the Task Scheduler.
+        "taskschd.dll",
+        "schedsvc.exe",
         // ADR 0199.
         "vcruntime140.dll",
         "vcruntime140_1.dll",

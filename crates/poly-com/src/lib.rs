@@ -15,6 +15,7 @@
 //!   (`PropVariantClear`, `PropVariantCopy`).
 //! - [`typelib`]: type libraries (ADR 0220, B2b): the model `oleaut32`'s `ITypeLib`/`ITypeInfo`
 //!   and its marshaller work on, its file format, registration rules and `stdole`.
+//! - [`inproc`]: the in-process classes Poly's own DLLs serve (ADR 0223).
 //! - [`hstring`]: `HSTRING`s (`WindowsCreateString` and friends, Learn:
 //!   "HSTRING", "Windows Runtime strings").
 //!
@@ -33,6 +34,7 @@ pub mod git;
 pub mod guid;
 pub mod hresult;
 pub mod hstring;
+pub mod inproc;
 pub mod marshal;
 pub mod propvariant;
 pub mod spy;

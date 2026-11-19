@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/Process32FirstW.yaml
+id: windows/api/kernel32.dll/Process32FirstW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output), Microsoft Learn's pages for Process32FirstW and PROCESSENTRY32W, the public header tlhelp32.h (layout) and winerror.h. Chrome's setup.exe walks the process list with it (survey-chrome-installer, docs/windows/chrome-setup-plan.md). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Fills a PROCESSENTRY32W (568 bytes on x64) with the first process of a process snapshot and (re)starts the walk there, so that Process32NextW gives the second one. The caller must set dwSize to exactly sizeof(PROCESSENTRY32W) = 568 before the call: any other value (0, 4, 300, 567) fails with ERROR_BAD_LENGTH (24). The first entry is pid 0, '[System Process]', parent 0. An entry holds the process id, the parent process id, the number of threads, the base priority (8 for a normal process) and the image file name without a path (NUL-terminated within 260 units); the other fields (cntUsage, th32DefaultHeapID, th32ModuleID, dwFlags) are 0. A handle that is NULL, -1 or already closed fails with ERROR_INVALID_HANDLE (6).
+interface:
+  signature: "BOOL Process32FirstW(HANDLE hSnapshot, LPPROCESSENTRY32W lppe)"
+  layout: "PROCESSENTRY32W on x64 (tlhelp32.h), 568 bytes: dwSize u32 @0, cntUsage u32 @4, th32ProcessID u32 @8, th32DefaultHeapID usize @16, th32ModuleID u32 @24, cntThreads u32 @28, th32ParentProcessID u32 @32, pcPriClassBase i32 @36, dwFlags u32 @40, szExeFile u16[260] @44; the struct's size is rounded to 568 (alignment 8)."
+rules:
+  size: "dwSize must be 568: any of 0, 4, 300, 567 gives FALSE with ERROR_BAD_LENGTH (24) (and the entry is not filled); 568 gives TRUE."
+  first_entry: "the first entry of a SNAPPROCESS snapshot: th32ProcessID 0, szExeFile '[System Process]', th32ParentProcessID 0."
+  list: "walking First then Next to the end gives at least 20 entries on the oracle, every pid once, one entry with pid 4 named 'System' and one with the caller's pid whose szExeFile is the caller's image file name (case-insensitive, no path), cntThreads >= 1, th32ParentProcessID neither 0 nor the pid itself."
+  own_entry_fields: "cntUsage 0, th32DefaultHeapID 0, th32ModuleID 0, dwFlags 0 and pcPriClassBase 8 for a process of normal priority class."
+  restart: "calling Process32FirstW again, also after Process32NextW calls, restarts the walk at the first entry (pid 0)."
+  bad_handles: "hSnapshot NULL or -1 or the handle of a snapshot that was closed: FALSE, ERROR_INVALID_HANDLE (6)."
+errors:
+  bad_length: "24"
+  invalid_handle: "6"
+side_effects: "none"
+threading: "a walk position belongs to the snapshot handle; two threads walking one snapshot share it"
+ordering: []
+timing:
+  typical: "microseconds per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: th_first_layout (the size rules, the first and own entries and the fields) and th_first_edge (restarts, NULL / -1 / closed handles). Observations are relations and the documented constants, never process ids or counts.
+not_covered: >
+  Process32First (the ANSI form, szExeFile as 8-bit text), a dwSize larger than 568, a snapshot with flags other than SNAPPROCESS, the order of the list beyond pid 0 first, the names of other processes, 32-bit callers (a smaller PROCESSENTRY32W), processes of other sessions for a standard user.

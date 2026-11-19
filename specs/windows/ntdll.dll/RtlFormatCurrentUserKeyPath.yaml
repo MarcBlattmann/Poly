@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: ntdll.dll/RtlFormatCurrentUserKeyPath.yaml
+id: windows/api/ntdll.dll/RtlFormatCurrentUserKeyPath
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s pages for ZwOpenKeyEx, ZwQueryValueKey, ZwDeleteKey, ZwCreateKey, ZwSetValueKey, RtlFormatCurrentUserKeyPath and the KEY_VALUE_*_INFORMATION structures, "Registry Key Object Routines"; constants and status codes from wdm.h, ntdef.h and ntstatus.h. Chrome''s own setup.exe imports NtOpenKeyEx, NtQueryValueKey, NtDeleteKey, NtClose and RtlFormatCurrentUserKeyPath (survey-chrome-installer) and uses them to read and delete registry keys by their native path. Nothing of Windows, Wine or Google''s programs was read or disassembled.'
+summary: 'Returns the native registry path of the current user''s hive, \Registry\User\<the user''s SID>, in a UNICODE_STRING the function allocates (the caller frees it with RtlFreeUnicodeString). Chrome''s setup uses it to reach HKEY_CURRENT_USER through native calls.'
+interface:
+  signature: 'NTSTATUS RtlFormatCurrentUserKeyPath(PUNICODE_STRING CurrentUserKeyPath)'
+rules:
+  result: 'STATUS_SUCCESS (0). The string has an even, non-zero Length in bytes, MaximumLength at least Length + 2, a NUL after Length bytes, starts with \Registry\User\S-1-5-21- (compared without regard to case), has no backslash after \Registry\User\ and ends with -<digits>. The same shape with the full administrator token and the filtered one.'
+  usable: 'NtOpenKeyEx of the path succeeds, so does <path>\Software, and <path>_Classes (the user''s classes hive) opens too. A value written with the Win32 API below HKEY_CURRENT_USER\Software is found below <path>\Software and read with NtQueryValueKey (0), and NtDeleteKey deletes it.'
+  free: 'RtlFreeUnicodeString on the result sets the buffer to NULL and both lengths to 0.'
+errors:
+  none: 'the call has no failure case a test could reach'
+side_effects: 'allocates the string'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075), one file per test; each declares the ntdll functions it calls from Learn''s prototypes. Keys the tests create are named PolySpecB4* below the current user''s key (\Registry\User\<sid>\Software), found with RtlFormatCurrentUserKeyPath, and are deleted by the test (a leftover of a crashed run is deleted first). The system keys they open (HKLM\SOFTWARE\Microsoft) are only read. Observations are status codes, lengths and structure fields; no SID is printed.'
+not_covered: 'A process impersonating another user, a service in session 0 (the path of the system or service account), the .DEFAULT hive.'

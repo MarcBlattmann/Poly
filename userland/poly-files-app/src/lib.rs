@@ -201,6 +201,9 @@ pub fn main() -> i32 {
     let mounts = native_fs::read_text("/proc/mounts").unwrap_or_default();
     let exists = |p: &str| poly_rt::fs::metadata(p).is_ok_and(|m| m.is_dir());
     let places = poly_files::places::places(&home, user_dirs.as_deref(), &mounts, &exists);
+    // The browsers run as the desktop's user and save there (ADR 0218).
+    let apps_home = poly_rt::env::var(poly_files::places::APPS_USER_HOME);
+    let places = poly_files::places::with_apps_user_downloads(places, apps_home, &exists);
     let data_home = poly_rt::env::var("XDG_DATA_HOME");
     let trash = poly_files::trash::trash_dir(&home, data_home);
     let (with_apps, folder) = applications::overlay(Box::new(fs), Box::new(installed_apps), Box::new(removable_apps));
@@ -222,7 +225,14 @@ pub fn main() -> i32 {
     app.defaults = load_mimeapps(&fs, &lists);
     app.clock = Box::new(|| poly_rt::time::since_epoch().as_secs());
     let start = poly_rt::env::args_str().nth(1).map(String::from).unwrap_or_else(|| home.clone());
-    if !app.go(&start) && !app.go(&home) {
+    // `--show PATH` / `--open PATH`: a Windows program's "show in folder" or "open" (ADR 0223).
+    if start == poly_shell::apps::FILES_SHOW || start == poly_shell::apps::FILES_OPEN {
+        let path = poly_rt::env::args_str().nth(2).map(String::from).unwrap_or_else(|| home.clone());
+        poly_rt::println!("poly-files: {start} {path}");
+        if !app.start_from_shell(&start, &path) {
+            return 0;
+        }
+    } else if !app.go(&start) && !app.go(&home) {
         app.go("/");
     }
     poly_rt::println!("poly-files: {} apps open files", app.handlers.len());

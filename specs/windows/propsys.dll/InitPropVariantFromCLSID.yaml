@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/propsys.dll/InitPropVariantFromCLSID.yaml
+id: windows/api/propsys.dll/InitPropVariantFromCLSID
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators, the SSH logon''s elevated token); every test ran twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine. Microsoft Learn: InitPropVariantFromCLSID (propvarutil.h: HRESULT InitPropVariantFromCLSID(REFCLSID clsid, PROPVARIANT* ppropvar)), PROPVARIANT and PropVariantClear (ole32.dll), VT_CLSID (wtypes.h: 72). Chrome''s setup.exe imports this function (names only: the PE import table of setup.exe) to build the property value System.AppUserModel.ToastActivatorCLSID of its shortcuts. Nothing of Windows, Wine or Google''s programs was read or disassembled.
+summary: >
+  InitPropVariantFromCLSID(clsid, &pv) makes a PROPVARIANT of type VT_CLSID (72) that owns a copy of the GUID: the pointer in the variant (at offset 8 on x64) points to a 16-byte block allocated with CoTaskMemAlloc and holding the GUID. It returns S_OK. It writes only the type and the pointer: the other 22 bytes of the variant are left as they were (it does not zero them first). PropVariantClear frees the block, sets the type to VT_EMPTY (0) and the pointer to 0. The nil GUID is an ordinary value. The variant can be given to IPropertyStore::SetValue for System.AppUserModel.ToastActivatorCLSID.
+interface:
+  declaration: 'HRESULT InitPropVariantFromCLSID(REFCLSID clsid, PROPVARIANT* ppropvar); exported by propsys.dll (the test loads it with LoadLibraryW and GetProcAddress)'
+  layout: 'PROPVARIANT on x64: 24 bytes; vt (WORD) at 0, three reserved WORDs at 2..8, the value (here a GUID pointer) at 8, 8 bytes unused at 16'
+rules:
+  result: 'S_OK; vt is 72 (VT_CLSID); the pointer is non-null and is not the address of the argument (a copy was made); the GUID it points to equals the argument.'
+  untouched_bytes: 'bytes 2..8 and 16..24 of the output are not written (a buffer pre-filled with 0xAA keeps its 0xAA there)'
+  nil_guid: 'the all-zero GUID: S_OK, VT_CLSID, a pointer to 16 zero bytes'
+  allocation: 'each call allocates its own block (two variants made from the same GUID have different pointers)'
+  clear: 'PropVariantClear on it: S_OK; afterwards vt is 0 (VT_EMPTY) and the pointer 0; a second PropVariantClear on the cleared variant: S_OK'
+  use: 'IPropertyStore::SetValue(System.AppUserModel.ToastActivatorCLSID, that variant) on a ShellLink''s store: S_OK; GetValue returns VT_CLSID with the same GUID'
+errors:
+  null_clsid: 'a NULL clsid pointer crashes (access violation); not tested'
+side_effects: 'one CoTaskMemAlloc of 16 bytes per call'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond'
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: pv_clsid (the variant and PropVariantClear), pv_clsid_link (the variant stored in a ShellLink''s property store). propsys.dll is not an import of the tests (it is loaded at run time). Observations are HRESULTs, the type and booleans about the pointer; no address is printed.
+not_covered: >
+  A NULL clsid or a NULL output pointer (crash), a variant that already owns a value (its old value is leaked, as for every Init function), InitPropVariantFromGUIDAsString and the other Init functions, 32-bit callers.

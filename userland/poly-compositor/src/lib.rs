@@ -146,9 +146,12 @@ struct Options {
     windows_hidpi: bool,
     xwayland: Option<xwayland::Start>,
     exec: Vec<String>,
+    /// `--app-user PROGRAM`: the apps of the system's desktop files start
+    /// through PROGRAM, which runs them as the desktop's user (ADR 0218).
+    app_user: Option<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats] [--windows-hidpi] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats] [--windows-hidpi] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--app-user PROGRAM] [--exec PROGRAM [ARGS...]]";
 
 /// A scale given as `auto`, a factor (`2`, `1.5`) or a percentage (`150`,
 /// `150%`; [`Scale::parse`]).
@@ -183,6 +186,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         windows_hidpi: false,
         xwayland: None,
         exec: Vec::new(),
+        app_user: None,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -214,6 +218,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
             "--settings" => o.settings = Some(value()?),
             "--xwayland" => o.xwayland = Some(xwayland::Start::Now),
             "--xwayland-lazy" => o.xwayland = Some(xwayland::Start::Lazy),
+            "--app-user" => o.app_user = Some(value()?),
             "--exec" => {
                 o.exec = it.by_ref().cloned().collect();
                 if o.exec.is_empty() {
@@ -350,6 +355,15 @@ struct FrameStats {
     damaged_pixels: u64,
     copied_bytes: u64,
     copied_max_bytes: u64,
+    /// Time spent taking clients' pixels into the scene: Wayland commits (their buffer copies)
+    /// and the desktop link's records (ADR 0224).
+    take_ns: u64,
+    /// A key press waiting for the next drawn frame (when it was read), and the times from key
+    /// presses to the frames that followed them: what a typist waits for a glyph (ADR 0224).
+    key_at: Option<u64>,
+    keys: u64,
+    key_ns: u64,
+    key_max_ns: u64,
 }
 
 impl FrameStats {
@@ -366,6 +380,14 @@ impl FrameStats {
             self.started_ns = now_ns;
         }
         self.frames += 1;
+        if damaged_pixels > 0
+            && let Some(at) = self.key_at.take()
+        {
+            let ns = now_ns.saturating_sub(at);
+            self.keys += 1;
+            self.key_ns = self.key_ns.saturating_add(ns);
+            self.key_max_ns = self.key_max_ns.max(ns);
+        }
         self.compose_ns = self.compose_ns.saturating_add(compose_ns);
         self.compose_max_ns = self.compose_max_ns.max(compose_ns);
         self.present_ns = self.present_ns.saturating_add(present_ns);
@@ -385,10 +407,12 @@ impl FrameStats {
         let damage_avg = self.damaged_pixels / frames;
         let damage_avg_bytes = damage_avg.saturating_mul(core::mem::size_of::<u32>() as u64);
         let copied_avg_bytes = self.copied_bytes / frames;
+        let take_avg_us = self.take_ns / frames / 1_000;
+        let key_avg_us = self.key_ns.checked_div(self.keys).unwrap_or(0) / 1_000;
         let damage_pct_milli =
             self.damaged_pixels.saturating_mul(100_000) / frames.saturating_mul(output_pixels.max(1));
         println!(
-            "poly-compositor: stats frames={frames} window_ms={} fps={}.{:03} compose_avg_ms={}.{:03} compose_max_ms={}.{:03} present_avg_ms={}.{:03} present_max_ms={}.{:03} copy_avg_bytes={copied_avg_bytes} copy_max_bytes={} damage_avg={damage_avg}px damage_avg_bytes={damage_avg_bytes} ({}.{:03}%)",
+            "poly-compositor: stats frames={frames} window_ms={} fps={}.{:03} compose_avg_ms={}.{:03} compose_max_ms={}.{:03} present_avg_ms={}.{:03} present_max_ms={}.{:03} copy_avg_bytes={copied_avg_bytes} copy_max_bytes={} damage_avg={damage_avg}px damage_avg_bytes={damage_avg_bytes} ({}.{:03}%) take_avg_ms={}.{:03} take_window_ms={} keys={} key_to_frame_avg_ms={}.{:03} key_to_frame_max_ms={}",
             elapsed_ns / 1_000_000,
             fps_milli / 1_000,
             fps_milli % 1_000,
@@ -403,8 +427,15 @@ impl FrameStats {
             self.copied_max_bytes,
             damage_pct_milli / 1_000,
             damage_pct_milli % 1_000,
+            take_avg_us / 1_000,
+            take_avg_us % 1_000,
+            self.take_ns / 1_000_000,
+            self.keys,
+            key_avg_us / 1_000,
+            key_avg_us % 1_000,
+            self.key_max_ns / 1_000_000,
         );
-        *self = FrameStats { started_ns: now_ns, ..FrameStats::default() };
+        *self = FrameStats { started_ns: now_ns, key_at: self.key_at, ..FrameStats::default() };
     }
 }
 
@@ -607,7 +638,12 @@ fn start_app(d: &mut desk::Desktop, server: &mut Server, env: &[String], app: &p
     app_env.retain(|v| !v.starts_with("XDG_ACTIVATION_TOKEN=") && !v.starts_with("DESKTOP_STARTUP_ID="));
     app_env.push(format!("XDG_ACTIVATION_TOKEN={token}"));
     app_env.push(format!("DESKTOP_STARTUP_ID={token}"));
-    match os::spawn(&app.argv, &app_env) {
+    // An app of the system runs as the desktop's user (ADR 0218).
+    let argv = match &d.app_user {
+        Some(wrapper) if desktop::runs_as_user(app) => poly_shell::apps::through(wrapper, &app.argv),
+        _ => app.argv.clone(),
+    };
+    match os::spawn(&argv, &app_env) {
         Ok(pid) => {
             let at = d.now_ms();
             println!("poly-compositor: launched {} (pid {pid}) at {at} ms", app.name);
@@ -693,7 +729,9 @@ fn run(args: &[String]) -> Result<u8, String> {
             scale: o.scale,
             settings: o.settings.clone(),
         };
-        Some(desk::Desktop::new(&opts, &mut server, keymap, desktop::shell_fonts()))
+        let mut d = desk::Desktop::new(&opts, &mut server, keymap, desktop::shell_fonts());
+        d.app_user = o.app_user.clone();
+        Some(d)
     } else {
         None
     };
@@ -836,6 +874,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
         }
         let mut gone = Vec::new();
+        let take_start = if o.stats { os::monotonic_ns() } else { 0 };
         for (pfd, id) in fds[1..input_at].iter().zip(&ids) {
             if pfd.revents == 0 {
                 continue;
@@ -847,6 +886,9 @@ fn run(args: &[String]) -> Result<u8, String> {
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
                 Err(_) => gone.push(*id),
             }
+        }
+        if o.stats {
+            stats.take_ns = stats.take_ns.saturating_add(os::monotonic_ns().saturating_sub(take_start));
         }
 
         // A flip completed: the frame it showed is on the screen since its
@@ -906,6 +948,12 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
             d.polled(&fds[desk_at..desk_end]);
             while let Some(ev) = d.input.next_event() {
+                if o.stats
+                    && stats.key_at.is_none()
+                    && matches!(ev, poly_wayland::seat::InputEvent::Key { pressed: true, .. })
+                {
+                    stats.key_at = Some(os::monotonic_ns());
+                }
                 if let Some(app) = d.route(ev, &mut server) {
                     start_app(d, &mut server, &env, &app);
                 }
@@ -959,7 +1007,19 @@ fn run(args: &[String]) -> Result<u8, String> {
         if let Some(l) = &mut winlink
             && fds[win_fds].iter().any(|p| p.revents != 0)
         {
+            let start = if o.stats { os::monotonic_ns() } else { 0 };
             l.pump_server(&mut server);
+            if o.stats {
+                stats.take_ns = stats.take_ns.saturating_add(os::monotonic_ns().saturating_sub(start));
+            }
+        }
+        // A Windows program's "open" with no program of its own, or its "show in folder":
+        // Files does it (ADR 0223).
+        if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {
+            for (show, path) in l.take_shell() {
+                println!("poly-compositor: a Windows program asks to {} {path}", if show { "show" } else { "open" });
+                start_app(d, &mut server, &env, &poly_shell::apps::files_entry(&path, show));
+            }
         }
         // Input to Windows windows goes to win32k (ADR 0136).
         if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {

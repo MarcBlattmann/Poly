@@ -106,6 +106,58 @@ fn the_pointer_enters_moves_clicks_and_leaves() {
     assert_eq!(e[1].args, [Arg::Uint(0), Arg::Int(-1)]);
 }
 
+/// A client destroys the surface under the pointer (Google Chrome closing
+/// its sign-in window) and reuses the freed ID for a `wl_buffer` at once, as
+/// libwayland's client does. The pointer then moves to another window: no
+/// `leave` may name the old ID, which is a buffer now (libwayland-client
+/// stops with "invalid object (32), type (wl_buffer), message leave(uo)").
+/// The focus of a destroyed surface is simply gone (wayland.xml: `leave`
+/// is for a surface that still exists).
+#[test]
+fn no_leave_names_a_destroyed_surface_whose_id_was_reused() {
+    let (mut srv, shared) = server();
+    let (mut p, g, _pointer, _keyboard) = seat_client(&mut srv, &shared);
+    let a = mapped(&mut p, &mut srv, &g, "a", 100, 80, 0x00ff_0000);
+    let b = mapped(&mut p, &mut srv, &g, "b", 100, 80, 0x0000_ff00);
+    let place = |srv: &Server, i: usize| srv.scene().windows()[i].position();
+    let (ax, ay) = place(&srv, 1);
+    motion(&mut srv, ax + 10, ay + 10);
+    p.read(&mut srv);
+    assert_eq!(srv.pointer_focus(), Some((p.id, b.surface)), "the pointer is over the top window");
+    assert!(srv.keyboard_focus().is_some_and(|(_, s)| s == b.surface));
+    p.take();
+    // The window under the pointer and with the keyboard goes away.
+    p.send(&mut srv, b.toplevel, xdg_toplevel::Request::Destroy);
+    p.send(&mut srv, b.xdg, xdg_surface::Request::Destroy);
+    p.send(&mut srv, b.surface, wl_surface::Request::Destroy);
+    p.take();
+    assert_eq!(srv.pointer_focus(), None, "the pointer focus went with its surface");
+    // Its ID comes back as a buffer.
+    let reused = p.reuse_id(b.surface, &wl_buffer::INTERFACE);
+    let (fd, _mem) = p.memfd(16 * 16 * 4);
+    let pool = p.new_id(&wl_shm_pool::INTERFACE);
+    p.send(&mut srv, g.shm, wl_shm::Request::CreatePool { id: pool, fd, size: 16 * 16 * 4 });
+    let format = wl_shm::Format::XRGB8888.0;
+    p.send(
+        &mut srv,
+        pool,
+        wl_shm_pool::Request::CreateBuffer { id: reused, offset: 0, width: 16, height: 16, stride: 64, format },
+    );
+    p.take();
+    // The pointer moves on to the other window, the keyboard goes there.
+    let (ax, ay) = place(&srv, 0);
+    motion(&mut srv, ax + 12, ay + 12);
+    srv.activate_window(srv.scene().windows()[0].id());
+    p.read(&mut srv);
+    let e = p.take();
+    for ev in e.iter().filter(|ev| ev.name().1 == "leave") {
+        assert!(!ev.args.contains(&Arg::Object(Some(reused))), "{:?} names the buffer {reused}", ev.name());
+    }
+    assert!(e.iter().any(|ev| ev.name() == ("wl_pointer", "enter")));
+    assert_eq!(srv.pointer_focus(), Some((p.id, a.surface)));
+    assert!(srv.failure(p.id).is_none());
+}
+
 #[test]
 fn the_keyboard_follows_the_active_window() {
     let (mut srv, shared) = server();

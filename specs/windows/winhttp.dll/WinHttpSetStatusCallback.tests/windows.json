@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "wh_callback_handles",
+      "exe_sha256": "aede28140cb6f858b7313ec599331e7b9ce35d8fded9d95dfdcec4a93717f6b1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29ubmVjdGlvbiAoc2Vzc2lvbiBoYXMgQSk6IHNldCBCOiBwcmV2aW91cyA9IGNhbGxiYWNrIEEgKGVycm9yIC0yKQpyZXF1ZXN0IChzZXNzaW9uIEEsIGNvbm5lY3Rpb24gQik6IHNldCBBOiBwcmV2aW91cyA9IGNhbGxiYWNrIEEgKGVycm9yIC0yKQpzZXNzaW9uIGFnYWluOiBzZXQgQjogcHJldmlvdXMgPSBjYWxsYmFjayBBCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "connection (session has A): set B: previous = callback A (error -2)\nrequest (session A, connection B): set A: previous = callback A (error -2)\nsession again: set B: previous = callback A\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "rev_outside",
+      "exe_sha256": "bc4e6e30b5bf63c227b4c87719854a3634ae599b15281741f6c751d3f5b5d21b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gQ09NIG9uIHRoZSB0aHJlYWQ6IENvUmV2ZXJ0VG9TZWxmIHdpdGggbm90aGluZyBpbXBlcnNvbmF0ZWQgPSAweDgwMDEwMTE3Cm5vIENPTSBvbiB0aGUgdGhyZWFkOiBJbXBlcnNvbmF0ZVNlbGYgPSAxIHRocmVhZCB0b2tlbjogdHlwZT1Tb21lKDIpIGltcGxldmVsPVNvbWUoMikgZWxldj1Tb21lKDEpIGVsZXZ0eXBlPVNvbWUoMikgaWw9U29tZSgxMjI4OCkgc2Vzc2lvbj1Tb21lKDEpIGFkbWluX21lbWJlcj1Tb21lKHRydWUpIHVzZXI9c2FtZQpubyBDT00gb24gdGhlIHRocmVhZDogQ29SZXZlcnRUb1NlbGYgPSAweDgwMDEwMTE3IHRocmVhZCB0b2tlbjogdHlwZT1Tb21lKDIpIGltcGxldmVsPVNvbWUoMikgZWxldj1Tb21lKDEpIGVsZXZ0eXBlPVNvbWUoMikgaWw9U29tZSgxMjI4OCkgc2Vzc2lvbj1Tb21lKDEpIGFkbWluX21lbWJlcj1Tb21lKHRydWUpIHVzZXI9c2FtZQpubyBDT00gb24gdGhlIHRocmVhZDogYWZ0ZXIgUmV2ZXJ0VG9TZWxmIHRocmVhZCB0b2tlbjogbm8gdGhyZWFkIHRva2VuIChlcnJvciAxMDA4KQpzaW5nbGUtdGhyZWFkZWQgYXBhcnRtZW50OiBDb1JldmVydFRvU2VsZiB3aXRoIG5vdGhpbmcgaW1wZXJzb25hdGVkID0gMHg4MDAxMDExNwpzaW5nbGUtdGhyZWFkZWQgYXBhcnRtZW50OiBJbXBlcnNvbmF0ZVNlbGYgPSAxIHRocmVhZCB0b2tlbjogdHlwZT1Tb21lKDIpIGltcGxldmVsPVNvbWUoMikgZWxldj1Tb21lKDEpIGVsZXZ0eXBlPVNvbWUoMikgaWw9U29tZSgxMjI4OCkgc2Vzc2lvbj1Tb21lKDEpIGFkbWluX21lbWJlcj1Tb21lKHRydWUpIHVzZXI9c2FtZQpzaW5nbGUtdGhyZWFkZWQgYXBhcnRtZW50OiBDb1JldmVydFRvU2VsZiA9IDB4ODAwMTAxMTcgdGhyZWFkIHRva2VuOiB0eXBlPVNvbWUoMikgaW1wbGV2ZWw9U29tZSgyKSBlbGV2PVNvbWUoMSkgZWxldnR5cGU9U29tZSgyKSBpbD1Tb21lKDEyMjg4KSBzZXNzaW9uPVNvbWUoMSkgYWRtaW5fbWVtYmVyPVNvbWUodHJ1ZSkgdXNlcj1zYW1lCnNpbmdsZS10aHJlYWRlZCBhcGFydG1lbnQ6IGFmdGVyIFJldmVydFRvU2VsZiB0aHJlYWQgdG9rZW46IG5vIHRocmVhZCB0b2tlbiAoZXJyb3IgMTAwOCkKbXVsdGl0aHJlYWRlZCBhcGFydG1lbnQ6IENvUmV2ZXJ0VG9TZWxmIHdpdGggbm90aGluZyBpbXBlcnNvbmF0ZWQgPSAweDgwMDEwMTE3Cm11bHRpdGhyZWFkZWQgYXBhcnRtZW50OiBJbXBlcnNvbmF0ZVNlbGYgPSAxIHRocmVhZCB0b2tlbjogdHlwZT1Tb21lKDIpIGltcGxldmVsPVNvbWUoMikgZWxldj1Tb21lKDEpIGVsZXZ0eXBlPVNvbWUoMikgaWw9U29tZSgxMjI4OCkgc2Vzc2lvbj1Tb21lKDEpIGFkbWluX21lbWJlcj1Tb21lKHRydWUpIHVzZXI9c2FtZQptdWx0aXRocmVhZGVkIGFwYXJ0bWVudDogQ29SZXZlcnRUb1NlbGYgPSAweDgwMDEwMTE3IHRocmVhZCB0b2tlbjogdHlwZT1Tb21lKDIpIGltcGxldmVsPVNvbWUoMikgZWxldj1Tb21lKDEpIGVsZXZ0eXBlPVNvbWUoMikgaWw9U29tZSgxMjI4OCkgc2Vzc2lvbj1Tb21lKDEpIGFkbWluX21lbWJlcj1Tb21lKHRydWUpIHVzZXI9c2FtZQptdWx0aXRocmVhZGVkIGFwYXJ0bWVudDogYWZ0ZXIgUmV2ZXJ0VG9TZWxmIHRocmVhZCB0b2tlbjogbm8gdGhyZWFkIHRva2VuIChlcnJvciAxMDA4KQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no COM on the thread: CoRevertToSelf with nothing impersonated = 0x80010117\nno COM on the thread: ImpersonateSelf = 1 thread token: type=Some(2) implevel=Some(2) elev=Some(1) elevtype=Some(2) il=Some(12288) session=Some(1) admin_member=Some(true) user=same\nno COM on the thread: CoRevertToSelf = 0x80010117 thread token: type=Some(2) implevel=Some(2) elev=Some(1) elevtype=Some(2) il=Some(12288) session=Some(1) admin_member=Some(true) user=same\nno COM on the thread: after RevertToSelf thread token: no thread token (error 1008)\nsingle-threaded apartment: CoRevertToSelf with nothing impersonated = 0x80010117\nsingle-threaded apartment: ImpersonateSelf = 1 thread token: type=Some(2) implevel=Some(2) elev=Some(1) elevtype=Some(2) il=Some(12288) session=Some(1) admin_member=Some(true) user=same\nsingle-threaded apartment: CoRevertToSelf = 0x80010117 thread token: type=Some(2) implevel=Some(2) elev=Some(1) elevtype=Some(2) il=Some(12288) session=Some(1) admin_member=Some(true) user=same\nsingle-threaded apartment: after RevertToSelf thread token: no thread token (error 1008)\nmultithreaded apartment: CoRevertToSelf with nothing impersonated = 0x80010117\nmultithreaded apartment: ImpersonateSelf = 1 thread token: type=Some(2) implevel=Some(2) elev=Some(1) elevtype=Some(2) il=Some(12288) session=Some(1) admin_member=Some(true) user=same\nmultithreaded apartment: CoRevertToSelf = 0x80010117 thread token: type=Some(2) implevel=Some(2) elev=Some(1) elevtype=Some(2) il=Some(12288) session=Some(1) admin_member=Some(true) user=same\nmultithreaded apartment: after RevertToSelf thread token: no thread token (error 1008)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 67
+    }
+  ]
+}

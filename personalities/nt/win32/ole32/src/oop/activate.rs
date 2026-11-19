@@ -175,6 +175,11 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
             // The local entry is not tried after an in-process one (sheet: INPROC|LOCAL).
             return inproc_class_object(&dll, clsid, iid, ctx);
         }
+        // The classes of Poly's own DLLs (the shell's file operation, taskbar and jump lists, the
+        // Save dialog: ADR 0223), served as an `InprocServer32` class is.
+        if let Some(dll) = poly_com::inproc::server_of(clsid) {
+            return inproc_class_object(dll.trim_end_matches(char::from(0)), clsid, iid, ctx);
+        }
     }
     if ctx & CLSCTX_LOCAL_SERVER == 0 {
         return Err(REGDB_E_CLASSNOTREG);

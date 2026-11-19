@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoGetCallContext.InCall.yaml
+id: windows/api/ole32.dll/CoGetCallContext.InCall
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token; where noted, tests also start a de-elevated child process holding the session shell's filtered standard token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-sec
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs (client, local COM server, LocalSystem service, and de-elevated child client in one image) on the oracle machine above. Microsoft Learn: "CoInitializeSecurity function (combaseapi.h)", "CoSetProxyBlanket", "CoQueryProxyBlanket", "CoCopyProxy", "IClientSecurity interface (objidlbase.h)", "CoGetCallContext", "IServerSecurity interface (objidlbase.h)", "CoQueryClientBlanket", "CoImpersonateClient", "CoRevertToSelf", "EOLE_AUTHENTICATION_CAPABILITIES", "RPC_C_AUTHN_LEVEL_*", "RPC_C_IMP_LEVEL_*", "COM_RIGHTS_*", "AppID Key", "LaunchPermission", "AccessPermission", "Security in COM"; combaseapi.h, objidl.h, objidlbase.h, rpcdce.h, wtypes.h, winnt.h, winerror.h for constants and layouts. Google's updater and Chrome's elevation service: their own logs, registry changes, and PE import names from the survey (docs/windows/chrome-installer-plan.md, docs/windows/com-out-of-process-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  In-call behaviour of CoGetCallContext(REFIID riid, void **ppInterface) when called on a server thread actively serving an incoming cross-process COM call (activation-time CreateInstance or a direct proxy call). Returns IServerSecurity or IUnknown for the active call and E_NOINTERFACE for all other interface ids. Extends the out-of-call specification in specs/windows/ole32.dll/CoGetCallContext.yaml.
+interface:
+  signature: "HRESULT CoGetCallContext(REFIID riid, void **ppInterface)"
+  forward: "ole32.dll!CoGetCallContext forwards to combase.dll!CoGetCallContext"
+installer: "Google's updater (157 and 159) and Chrome's elevation service import CoGetCallContext (PE import names). What they ask the context for was not observed; the interface ids it answers are listed below."
+rules:
+  supported_interfaces: "inside an incoming cross-process call (activation-time IClassFactory::CreateInstance and direct proxy calls at any proxy blanket level), CoGetCallContext returns S_OK and a non-NULL pointer ONLY for IID_IServerSecurity ({0000013E-0000-0000-C000-000000000046}) and IID_IUnknown ({00000000-0000-0000-C000-000000000046}). All other queried interfaces — IClientSecurity, IMarshal, IDispatch, IContextCallback, IObjContext, ISecurityCallContext, and GUID_NULL (and in exploration, every other registered interface id on the system) — fail with E_NOINTERFACE 0x80004002 and write NULL to *ppInterface"
+  identity_and_refcount: "two calls to CoGetCallContext(IID_IServerSecurity) during the same incoming call both return S_OK with the same pointer; QueryInterface on that pointer succeeds for IID_IUnknown and IID_IServerSecurity returning the same pointer and fails with E_NOINTERFACE 0x80004002 for IID_IMarshal and IID_IClientSecurity; AddRef returns 1 more than the immediately following Release"
+  per_thread: "the call context is bound strictly to the thread serving the incoming call: another thread spawned by the server while the call is active gets RPC_E_CALL_COMPLETE 0x80010117 from CoGetCallContext, CoQueryClientBlanket, CoImpersonateClient and CoRevertToSelf"
+  stale_pointer_after_call_ends: "if a server keeps a reference to the IServerSecurity pointer beyond the end of the call in which it was obtained and invokes it later (even during a subsequent incoming call), IServerSecurity::QueryBlanket returns RPC_E_CALL_COMPLETE 0x80010117 (while filling the integer blanket fields authn=10, authz=0, level=6, imp=1, caps=0) and IServerSecurity::ImpersonateClient returns RPC_E_CALL_COMPLETE 0x80010117"
+  outside_call: "on any thread not actively serving an incoming call (no COM, STA, MTA), returns RPC_E_CALL_COMPLETE 0x80010117 (see CoGetCallContext.yaml)"
+errors:
+  no_interface: "E_NOINTERFACE 0x80004002 (any IID other than IID_IServerSecurity and IID_IUnknown)"
+  call_complete: "RPC_E_CALL_COMPLETE 0x80010117 (no incoming call active on this thread, or retained context from an ended call)"
+side_effects: "adds a reference to the call-context object that the caller must Release"
+threading: "per thread: only the thread currently executing the incoming COM call sees its context"
+ordering: ["context is valid for the duration of the served call and invalidated as soon as the call returns"]
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, each image acting as client and COM server (and where needed a child process running scenarios in isolation). Classes are registered under HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...} for elevated runs and HKCU\Software\Classes\CLSID\{B2A0xxxx-...} for standard-token runs (with a process-unique CLSID per run) and removed afterwards. Observations are HRESULTs, Win32 codes, blanket integers, booleans and domain/user comparisons, never raw process ids, thread ids, pointers or times.
+not_covered: >
+  in-process cross-apartment calls (STA-to-MTA within one process), CoSwitchCallContext, and COM+ / MTS ISecurityCallContext.

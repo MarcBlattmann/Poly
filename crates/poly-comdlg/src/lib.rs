@@ -8,6 +8,7 @@
 //! - [`path`]: file names: offsets, default extensions, joining and parents,
 //!   and the result buffer of single and multiple selections;
 //! - [`color`] and [`font`]: the arithmetic of the two dialogs;
+//! - [`itemdlg`]: the Common Item Dialog's Save object (`IFileSaveDialog`, ADR 0223);
 //! - [`template`]: in-memory `DLGTEMPLATE`s the dialogs are made from.
 //!
 //! The DLL (`personalities/nt/win32/comdlg32`) is the windows and the hooks.
@@ -20,6 +21,7 @@ pub mod check;
 pub mod color;
 pub mod filter;
 pub mod font;
+pub mod itemdlg;
 pub mod path;
 pub mod template;
 

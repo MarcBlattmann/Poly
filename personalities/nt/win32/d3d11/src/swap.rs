@@ -1,6 +1,13 @@
 //! Swap chains of an HWND (Learn: `IDXGIFactory2::CreateSwapChainForHwnd`, `IDXGISwapChain1`): one
 //! back buffer, a 2D texture of the device; `Present` copies it into the window through GDI
 //! (`GetDC`, `SetDIBitsToDevice`), the way a window shows a bitmap.
+//!
+//! A flip-model swap chain of `B8G8R8A8` pixels hands its frames over instead (ADR 0224): its
+//! buffers are two pagefile sections, the back buffer texture's bytes are a view of one of them,
+//! and `Present`/`Present1` give that section and the dirty rectangles to win32k
+//! (`PolyUserPresentBuffer`), whose compositor maps it. The texture then draws into the other
+//! section, which first gets the presented frame's dirty rectangles, so the back buffer always
+//! holds the last frame presented as it did with one buffer.
 
 use crate::com::*;
 use crate::stubs;
@@ -17,6 +24,36 @@ unsafe extern "system" {
     fn GetClientRect(hwnd: usize, rect: *mut [i32; 4]) -> i32;
     fn IsWindow(hwnd: usize) -> i32;
     fn GetDesktopWindow() -> usize;
+}
+
+#[cfg_attr(target_arch = "x86", link(name = "win32u", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "win32u", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn PolyUserPresentBuffer(
+        hwnd: usize,
+        section: usize,
+        width: usize,
+        height: usize,
+        stride: usize,
+        rects: *const [i32; 4],
+        count: usize,
+    ) -> u32;
+}
+
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn CreateFileMappingW(
+        file: usize,
+        attrs: *const c_void,
+        protect: u32,
+        high: u32,
+        low: u32,
+        name: *const u16,
+    ) -> usize;
+    fn MapViewOfFile(map: usize, access: u32, high: u32, low: u32, len: usize) -> *mut u8;
+    fn UnmapViewOfFile(base: *const u8) -> i32;
+    fn CloseHandle(h: usize) -> i32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -54,6 +91,181 @@ pub struct SwapChain {
     source: (u32, u32),
     latency: u32,
     matrix: [f32; 6],
+    /// The sections the frames are handed over in (ADR 0224), once a present made them.
+    shared: Option<Shared>,
+}
+
+/// `DXGI_FORMAT_B8G8R8A8_UNORM` (dxgiformat.h): the pixels a section is handed over in.
+const FORMAT_BGRA: u32 = 87;
+
+/// `PAGE_READWRITE`, `SEC_COMMIT`, `FILE_MAP_ALL_ACCESS` (winnt.h, memoryapi.h).
+const PAGE_READWRITE: u32 = 0x04;
+const SEC_COMMIT: u32 = 0x0800_0000;
+const FILE_MAP_ALL_ACCESS: u32 = 0x000F_001F;
+
+/// One buffer handed over: a section, its view in this process, the texture bytes over it.
+struct Section {
+    handle: usize,
+    view: *mut u8,
+    store: alloc::sync::Arc<texture::Store>,
+}
+
+/// A swap chain's two sections; `current` is the back buffer's.
+struct Shared {
+    hwnd: usize,
+    width: u32,
+    height: u32,
+    sections: [Section; 2],
+    current: usize,
+}
+
+impl Shared {
+    /// Two sections for `t`'s pixels, the first holding them now. `None` when sections cannot be
+    /// made (the caller keeps presenting through GDI).
+    fn new(hwnd: usize, t: &mut Tex) -> Option<Shared> {
+        let len = t.data().len();
+        let (w, h) = (t.width() as u32, t.height() as u32);
+        if len < w as usize * h as usize * 4 || len > u32::MAX as usize {
+            return None;
+        }
+        let make = || -> Option<Section> {
+            // SAFETY: a pagefile-backed section of `len` bytes, mapped whole in this process.
+            unsafe {
+                let handle = CreateFileMappingW(
+                    usize::MAX,
+                    core::ptr::null(),
+                    PAGE_READWRITE | SEC_COMMIT,
+                    0,
+                    len as u32,
+                    core::ptr::null(),
+                );
+                if handle == 0 {
+                    return None;
+                }
+                let view = MapViewOfFile(handle, FILE_MAP_ALL_ACCESS, 0, 0, len);
+                if view.is_null() {
+                    CloseHandle(handle);
+                    return None;
+                }
+                Some(Section { handle, view, store: texture::Store::outside(view, len, t.store.kind) })
+            }
+        };
+        let a = make()?;
+        let Some(b) = make() else {
+            // SAFETY: made above, not used by any texture yet.
+            unsafe { a.close() };
+            return None;
+        };
+        a.store.bytes().copy_from_slice(t.data());
+        t.store = a.store.clone();
+        Some(Shared { hwnd, width: w, height: h, sections: [a, b], current: 0 })
+    }
+
+    /// Hand the back buffer's section over with `rects` (none: all of it), then draw into the
+    /// other one, which first gets those rectangles of the frame. False when win32k refused it.
+    fn present(&mut self, t: &mut Tex, rects: &[[i32; 4]]) -> bool {
+        let stride = self.width as usize * 4;
+        let cur = &self.sections[self.current];
+        // SAFETY: a system call reading `rects.len()` RECTs.
+        let status = unsafe {
+            PolyUserPresentBuffer(
+                self.hwnd,
+                cur.handle,
+                self.width as usize,
+                self.height as usize,
+                stride,
+                rects.as_ptr(),
+                rects.len(),
+            )
+        };
+        if status != 0 {
+            return false;
+        }
+        let next = 1 - self.current;
+        let (from, to) = (cur.store.bytes(), self.sections[next].store.bytes());
+        if rects.is_empty() {
+            to.copy_from_slice(from);
+        }
+        for r in rects {
+            let (l, top) = (r[0].clamp(0, self.width as i32) as usize, r[1].clamp(0, self.height as i32) as usize);
+            let (rt, b) = (r[2].clamp(0, self.width as i32) as usize, r[3].clamp(0, self.height as i32) as usize);
+            for y in top..b {
+                let at = y * stride;
+                to[at + l * 4..at + rt * 4].copy_from_slice(&from[at + l * 4..at + rt * 4]);
+            }
+        }
+        t.store = self.sections[next].store.clone();
+        self.current = next;
+        true
+    }
+
+    /// The layer goes: win32k lets go of the sections, `t` (if the back buffer is still alive)
+    /// keeps its picture in bytes of its own, and the views and sections close.
+    fn end(self, t: Option<&mut Tex>) {
+        // SAFETY: a system call; section 0 removes this process's layer of the window.
+        unsafe { PolyUserPresentBuffer(self.hwnd, 0, 0, 0, 0, core::ptr::null(), 0) };
+        if let Some(t) = t {
+            let own = texture::Store::new(t.data().len(), t.store.kind);
+            own.bytes().copy_from_slice(t.data());
+            t.store = own;
+        }
+        for s in self.sections {
+            // SAFETY: no texture uses the view any more (above).
+            unsafe { s.close() };
+        }
+    }
+}
+
+impl Section {
+    /// Unmap and close.
+    ///
+    /// # Safety
+    ///
+    /// No texture may use the view any more.
+    unsafe fn close(self) {
+        // SAFETY: the view and handle `Shared::new` made.
+        unsafe {
+            UnmapViewOfFile(self.view);
+            CloseHandle(self.handle);
+        }
+    }
+}
+
+/// Show the back buffer in the window: handed over in a section (ADR 0224) when the swap chain is
+/// flip model with `B8G8R8A8` pixels, else through GDI. `rects`: the dirty rectangles (none: all).
+fn deliver(s: &mut SwapChain, rects: &[[i32; 4]]) {
+    // SAFETY: the back buffer is a live texture of this DLL.
+    let Some(t) = (unsafe { texture::tex(s.back) }) else { return };
+    if s.hwnd == 0 {
+        return;
+    }
+    let handover = poly_d3d::swap::is_flip(s.desc[9]) && t.format() == FORMAT_BGRA;
+    if handover {
+        let fits = s
+            .shared
+            .as_ref()
+            .is_some_and(|sh| sh.hwnd == s.hwnd && (sh.width, sh.height) == (t.width() as u32, t.height() as u32));
+        if !fits {
+            if let Some(old) = s.shared.take() {
+                old.end(Some(t));
+            }
+            s.shared = Shared::new(s.hwnd, t);
+        }
+        if let Some(sh) = &mut s.shared
+            && sh.present(t, rects)
+        {
+            return;
+        }
+    }
+    show(s.hwnd, t);
+}
+
+/// The swap chain stops handing frames over (released, resized, bound elsewhere).
+fn end_shared(s: &mut SwapChain) {
+    if let Some(old) = s.shared.take() {
+        // SAFETY: the back buffer, if still alive, is a texture of this DLL.
+        old.end(unsafe { texture::tex(s.back) });
+    }
 }
 
 static SWAP_IIDS: [Guid; 7] = [
@@ -114,6 +326,7 @@ pub unsafe fn create(device: *mut c_void, hwnd: usize, desc1: *const u8, out: *m
         source: (0, 0),
         latency: 1,
         matrix: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        shared: None,
     });
     // SAFETY: the caller's output.
     unsafe { *out = p };
@@ -146,11 +359,11 @@ pub unsafe fn bind(p: *mut c_void, hwnd: usize) -> bool {
     if s.hwnd != hwnd {
         log(&alloc::format!("d3d11: swap chain {}x{} bound to window {hwnd:#x}", s.desc[0], s.desc[1]));
     }
-    s.hwnd = hwnd;
-    // SAFETY: the back buffer is a live texture of this DLL.
-    if let Some(t) = unsafe { texture::tex(s.back) } {
-        show(hwnd, t);
+    if s.shared.as_ref().is_some_and(|sh| sh.hwnd != hwnd) {
+        end_shared(s);
     }
+    s.hwnd = hwnd;
+    deliver(s, &[]);
     true
 }
 
@@ -173,6 +386,8 @@ fn new_back_buffer(device: *mut c_void, d: &Desc1) -> *mut c_void {
 
 unsafe fn drop_swap(p: *mut c_void) {
     // SAFETY: a swap chain whose last reference went.
+    end_shared(unsafe { chain(p) });
+    // SAFETY: as above.
     let (device, back) = unsafe { ((*(p as *mut SwapChain)).device, (*(p as *mut SwapChain)).back) };
     // SAFETY: made by `create`; the references it took.
     unsafe {
@@ -369,6 +584,12 @@ unsafe extern "system" fn get_device(this: *mut c_void, riid: *const Guid, out: 
 /// `Present(SyncInterval, Flags)`: the back buffer into the window (`DXGI_PRESENT_TEST`, 1,
 /// presents nothing).
 unsafe extern "system" fn present(this: *mut c_void, sync: u32, flags: u32) -> HRESULT {
+    // SAFETY: as `present_rects`.
+    unsafe { present_rects(this, sync, flags, &[]) }
+}
+
+/// `Present` with the dirty rectangles of `Present1` (none: the whole buffer).
+unsafe fn present_rects(this: *mut c_void, sync: u32, flags: u32, rects: &[[i32; 4]]) -> HRESULT {
     // SyncInterval 0 .. 4 (Learn, "IDXGISwapChain::Present"; Present.yaml).
     if sync > 4 {
         return DXGI_ERROR_INVALID_CALL;
@@ -379,28 +600,46 @@ unsafe extern "system" fn present(this: *mut c_void, sync: u32, flags: u32) -> H
         return S_OK;
     }
     s.presents.fetch_add(1, Ordering::Relaxed);
-    // SAFETY: the back buffer is a live texture of this DLL.
-    let Some(t) = (unsafe { texture::tex(s.back) }) else { return S_OK };
-    if s.hwnd != 0 {
-        show(s.hwnd, t);
-    }
+    deliver(s, rects);
     S_OK
 }
 
-/// `Present1(SyncInterval, PresentFlags, pPresentParameters)`: as `Present` (the whole buffer).
 /// `Present1(SyncInterval, PresentFlags, pPresentParameters)`: dirty and scroll rectangles are for
-/// flip-model swap chains only.
+/// flip-model swap chains only. They are what the present hands over (ADR 0224); none, or more
+/// than 64, is the whole buffer.
 unsafe extern "system" fn present1(this: *mut c_void, sync: u32, flags: u32, params: *const u32) -> HRESULT {
+    let mut rects: Vec<[i32; 4]> = Vec::new();
     if !params.is_null() {
         // SAFETY: the caller's DXGI_PRESENT_PARAMETERS: DirtyRectsCount first.
         let dirty = unsafe { *params };
+        // SAFETY: the same structure (dxgi1_2.h): the count, then the rectangles, the scrolled
+        // rectangle and its offset, pointers of this width.
+        let p = unsafe { &*(params as *const PresentParameters) };
+        if dirty > 0 && dirty <= 64 && !p.rects.is_null() {
+            // SAFETY: `DirtyRectsCount` RECTs of the caller.
+            rects.extend_from_slice(unsafe { core::slice::from_raw_parts(p.rects, dirty as usize) });
+        }
+        // A scrolled area changed too.
+        if !rects.is_empty() && !p.scroll.is_null() {
+            // SAFETY: the caller's RECT.
+            rects.push(unsafe { *p.scroll });
+        }
         // SAFETY: a live swap chain.
         if dirty != 0 && !poly_d3d::swap::is_flip(unsafe { chain(this) }.desc[9]) {
             return DXGI_ERROR_INVALID_CALL;
         }
     }
     // SAFETY: as `Present`.
-    unsafe { present(this, sync, flags) }
+    unsafe { present_rects(this, sync, flags, &rects) }
+}
+
+/// `DXGI_PRESENT_PARAMETERS` (dxgi1_2.h).
+#[repr(C)]
+struct PresentParameters {
+    _count: u32,
+    rects: *const [i32; 4],
+    scroll: *const [i32; 4],
+    _offset: *const [i32; 2],
 }
 
 /// Copy a texture into the window's client area, top-down 32-bit pixels.
@@ -523,6 +762,7 @@ unsafe extern "system" fn resize_buffers(
         s.desc[7] = count;
     }
     s.desc[11] = flags;
+    end_shared(s);
     let old = core::mem::replace(&mut s.back, new_back_buffer(s.device, &s.desc));
     // SAFETY: the old back buffer's reference.
     unsafe { release(old) };
