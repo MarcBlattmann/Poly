@@ -155,6 +155,7 @@ mod installer2;
 mod ktest;
 mod libsearch;
 mod linuxchrome;
+mod macho;
 mod macimports;
 mod mesa;
 mod native;
@@ -1651,6 +1652,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     ("native", native::boot_test),
     // Dynamically linked glibc programs through glibc's own ld.so (dynamic.rs).
     ("dynamic", dynamic::boot_tests),
+    // x86-64 Mach-O programs through Poly's own dyld: static, chained and
+    // classic fixups, dylibs, TLV, initializers (macho.rs, ADR 0237).
+    ("macho", macho::boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
@@ -1809,6 +1813,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "programs",
             "native",
             "dynamic",
+            "macho",
             "busybox",
             "rootdisk",
             "toolkits",
