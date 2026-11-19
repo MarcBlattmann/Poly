@@ -448,6 +448,15 @@ impl DcState {
         }
     }
 
+    /// Whether logical to device mapping mirrors x / y (the extents' signs and the world
+    /// transformation's together).
+    fn mirrors(&self) -> (bool, bool) {
+        let (fx, fy) = self.flips();
+        let ex = (self.viewport_ext.0 < 0) != (self.window_ext.0 < 0);
+        let ey = (self.viewport_ext.1 < 0) != (self.window_ext.1 < 0);
+        (fx != ex, fy != ey)
+    }
+
     /// Whether the world transformation mirrors x / y.
     fn flips(&self) -> (bool, bool) {
         (self.xform.m11 < 0.0, self.xform.m22 < 0.0)
@@ -2321,6 +2330,140 @@ impl Gdi {
             self.mark_used(dc, true, false);
         }
         self.paint_brush_area(dc, &painted, brush as u32, &state);
+        (true, 0)
+    }
+
+    /// `AlphaBlend` / `GdiAlphaBlend` (`specs/windows/msimg32.dll/AlphaBlend.yaml`): the source
+    /// rectangle of `src` blended onto the destination rectangle of `dst` (logical units of each
+    /// DC), stretched by picking source pixels; (result, error to set).
+    #[allow(clippy::too_many_arguments)]
+    pub fn alpha_blend(
+        &mut self,
+        dst: u64,
+        dest: (i32, i32, i32, i32),
+        src: u64,
+        source: (i32, i32, i32, i32),
+        blend: u32,
+    ) -> (bool, u32) {
+        use crate::alphablend::{AC_SRC_ALPHA, BlendFunction, blend_constant, blend_premultiplied, source_index};
+        let Some(d) = self.dc(dst) else { return (false, ERROR_INVALID_HANDLE) };
+        let dstate = d.state.clone();
+        if src == 0 {
+            return (false, 0);
+        }
+        let Some(s) = self.dc(src) else { return (false, ERROR_INVALID_PARAMETER) };
+        let sstate = s.state.clone();
+        let f = BlendFunction::from_u32(blend);
+        if !f.valid() {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        let (x, y, w, h) = dest;
+        let (sx, sy, sw, sh) = source;
+        if w < 0 || h < 0 || sw < 0 || sh < 0 {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        if w == 0 || h == 0 || sw == 0 || sh == 0 {
+            return (true, 0);
+        }
+        // The source's pixels, as (colour bytes b, g, r; alpha byte or 255 without one).
+        let Some(sbmp) = self.target(s) else { return (false, ERROR_INVALID_PARAMETER) };
+        if f.format == AC_SRC_ALPHA && sbmp.bpp != 32 {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        // A mirrored axis turns a rectangle's excluded right or bottom edge into its left or top
+        // one: the pixels covered move by one (`dc_state`, the y-up destination of the tests).
+        let device = |st: &DcState, r: Rect| {
+            let n = st.map_rect(r).normalized();
+            let (mx, my) = st.mirrors();
+            n.offset(i32::from(mx), i32::from(my))
+        };
+        let srect = device(&sstate, Rect::new(sx, sy, sx.wrapping_add(sw), sy.wrapping_add(sh)));
+        if srect.left < 0 || srect.top < 0 || srect.right > sbmp.width || srect.bottom > sbmp.height || srect.is_empty()
+        {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        let drect = device(&dstate, Rect::new(x, y, x.wrapping_add(w), y.wrapping_add(h)));
+        if src == dst && !drect.intersect(&srect).is_empty() {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        let (dw, dh) = (drect.right - drect.left, drect.bottom - drect.top);
+        let (sw, sh) = (srect.right - srect.left, srect.bottom - srect.top);
+        if dw <= 0 || dh <= 0 {
+            return (true, 0);
+        }
+        // Destinations far larger than the source, as the visible tests recorded them: when the
+        // stretch's products overflow 32 bits nothing is drawn; beyond 65535 pixels the source
+        // reads as transparent black.
+        let over = |d: i32, s: i32| i64::from(d) * i64::from(s) > i64::from(i32::MAX);
+        if over(dw, sw) || over(dh, sh) {
+            return (true, 0);
+        }
+        let blank = dw > 0xFFFF || dh > 0xFFFF;
+        let pixel = |b: &Bitmap, px: i32, py: i32| -> ([u8; 3], u8) {
+            let v = b.raw(px, py);
+            if b.bpp == 32 {
+                let q = v.to_le_bytes();
+                ([q[0], q[1], q[2]], q[3])
+            } else {
+                let c = b.to_rgb(v);
+                ([c.b, c.g, c.r], 255)
+            }
+        };
+        // The source rectangle's pixels (it lies inside the source bitmap), read before the
+        // destination is written: the two may be the same bitmap.
+        let copy: Vec<(([u8; 3], u8), u32)> = (srect.top..srect.bottom)
+            .flat_map(|ry| (srect.left..srect.right).map(move |rx| (rx, ry)))
+            .map(|(rx, ry)| (pixel(sbmp, rx, ry), sbmp.raw(rx, ry)))
+            .collect();
+        let source16 = sbmp.bpp == 16;
+        let a = f.constant;
+        let premultiplied = f.format == AC_SRC_ALPHA;
+        self.with_target(dst, |b, _, clip, _| {
+            let area = clip.intersect_rect(drect);
+            for piece in area.rects() {
+                for py in piece.top..piece.bottom {
+                    let row = source_index((py - drect.top) as u32, sh as u32, dh as u32) as usize;
+                    for px in piece.left..piece.right {
+                        let col = source_index((px - drect.left) as u32, sw as u32, dw as u32) as usize;
+                        let ((s, sa), sraw) = if blank { (([0; 3], 0), 0) } else { copy[row * sw as usize + col] };
+                        if source16 && b.bpp == 16 && !premultiplied {
+                            // 5-5-5 onto 5-5-5: both widened to eight bits, blended, and the
+                            // result rounded back to five (from a deeper source it is cut).
+                            let d = b.raw(px, py);
+                            let wide = |v: u32, at: u32| {
+                                let f = (v >> at) & 31;
+                                ((f << 3) | (f >> 2)) as u8
+                            };
+                            let mix = |at: u32| {
+                                let v = u32::from(blend_constant(wide(sraw, at), wide(d, at), a));
+                                ((v * 31 + 127) / 255) << at
+                            };
+                            b.set_raw(px, py, mix(10) | mix(5) | mix(0));
+                            continue;
+                        }
+                        let (dcol, da) = pixel(b, px, py);
+                        let (out, oa) = if premultiplied {
+                            blend_premultiplied(s, sa, dcol, da, a)
+                        } else {
+                            (
+                                [
+                                    blend_constant(s[0], dcol[0], a),
+                                    blend_constant(s[1], dcol[1], a),
+                                    blend_constant(s[2], dcol[2], a),
+                                ],
+                                blend_constant(sa, da, a),
+                            )
+                        };
+                        let v = if b.bpp == 32 {
+                            u32::from_le_bytes([out[0], out[1], out[2], oa])
+                        } else {
+                            b.from_rgb(Rgb { r: out[2], g: out[1], b: out[0] })
+                        };
+                        b.set_raw(px, py, v);
+                    }
+                }
+            }
+        });
         (true, 0)
     }
 

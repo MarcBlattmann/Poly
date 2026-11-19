@@ -24,7 +24,6 @@ poly_win32_rt::fail_exports!(
         ExtCreatePen,
         ExtEscape,
         FillPath,
-        GdiAlphaBlend,
         GdiComment,
         GetEnhMetaFileBits,
         GetEnhMetaFileHeader,
