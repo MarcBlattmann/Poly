@@ -171,11 +171,11 @@ fn resolve(l: &mut dyn DirLookup, dir: &[u16], component: &[u16], want_short: bo
     }
     let entries = l.list(dir)?;
     let shorts = short_names(&entries);
-    Ok(entries
-        .into_iter()
-        .zip(shorts)
-        .find(|(_, s)| eq_fold(s, component))
-        .map(|((long, _), short)| Entry { long, short, by_alias: true }))
+    Ok(entries.into_iter().zip(shorts).find(|(_, s)| eq_fold(s, component)).map(|((long, _), short)| Entry {
+        long,
+        short,
+        by_alias: true,
+    }))
 }
 
 struct Entry {
@@ -322,7 +322,8 @@ mod tests {
 
     #[test]
     fn aliases_find_their_entries() {
-        let n: Vec<Vec<u16>> = ["gp_second_file_one.txt", "gp_second_file_two.txt", "gp.txt"].iter().map(|s| wide(s)).collect();
+        let n: Vec<Vec<u16>> =
+            ["gp_second_file_one.txt", "gp_second_file_two.txt", "gp.txt"].iter().map(|s| wide(s)).collect();
         let mut asked = Vec::new();
         let mut creation = |i: usize| {
             asked.push(i);
@@ -341,7 +342,11 @@ mod tests {
     impl DirLookup for Tree {
         fn find(&mut self, dir: &[u16], name: &[u16]) -> Result<Option<Vec<u16>>, u32> {
             let d: std::string::String = text(dir).trim_start_matches(r"\\?\").into();
-            Ok(self.0.iter().find(|(td, n)| td.eq_ignore_ascii_case(&d) && eq_fold(&wide(n), name)).map(|(_, n)| wide(n)))
+            Ok(self
+                .0
+                .iter()
+                .find(|(td, n)| td.eq_ignore_ascii_case(&d) && eq_fold(&wide(n), name))
+                .map(|(_, n)| wide(n)))
         }
         fn list(&mut self, dir: &[u16]) -> Result<Vec<(Vec<u16>, u64)>, u32> {
             let d: std::string::String = text(dir).trim_start_matches(r"\\?\").into();
@@ -375,7 +380,10 @@ mod tests {
         let f = r"C:\PolyTests\gp_long_directory\a long file name.text";
         assert_eq!(short(&mut t, f), Ok(r"C:\POLYTE~1\GP_LON~1\ALONGF~1.TEX".into()));
         assert_eq!(long(&mut t, r"C:\POLYTE~1\GP_LON~1\ALONGF~1.TEX"), Ok(f.into()));
-        assert_eq!(long(&mut t, r"c:\polyte~1\gp_lon~1\alongf~1.tex"), Ok(r"c:\PolyTests\gp_long_directory\a long file name.text".into()));
+        assert_eq!(
+            long(&mut t, r"c:\polyte~1\gp_lon~1\alongf~1.tex"),
+            Ok(r"c:\PolyTests\gp_long_directory\a long file name.text".into())
+        );
         // Long names keep the caller's case; 8.3-shaped ones get the stored case.
         assert_eq!(long(&mut t, r"C:\POLYTESTS\GP_LONG_DIRECTORY"), Ok(r"C:\POLYTESTS\GP_LONG_DIRECTORY".into()));
         assert_eq!(long(&mut t, r"C:\PolyTests\gpmixed.txt"), Ok(r"C:\PolyTests\GpMixed.Txt".into()));
@@ -383,7 +391,10 @@ mod tests {
         // Separators, prefixes, dots, relative paths, trailing separators.
         assert_eq!(short(&mut t, "C:/PolyTests/gp_long_directory"), Ok("C:/POLYTE~1/GP_LON~1".into()));
         assert_eq!(short(&mut t, r"\\?\C:\PolyTests\gp.txt"), Ok(r"\\?\C:\POLYTE~1\gp.txt".into()));
-        assert_eq!(short(&mut t, r"C:\PolyTests\gp_long_directory\..\gp.txt"), Ok(r"C:\POLYTE~1\GP_LON~1\..\gp.txt".into()));
+        assert_eq!(
+            short(&mut t, r"C:\PolyTests\gp_long_directory\..\gp.txt"),
+            Ok(r"C:\POLYTE~1\GP_LON~1\..\gp.txt".into())
+        );
         assert_eq!(short(&mut t, r"gp_long_directory\a long file name.text"), Ok(r"GP_LON~1\ALONGF~1.TEX".into()));
         assert_eq!(long(&mut t, r"GP_LON~1\ALONGF~1.TEX"), Ok(r"gp_long_directory\a long file name.text".into()));
         assert_eq!(short(&mut t, r"C:\PolyTests\gp_long_directory\"), Ok(r"C:\POLYTE~1\GP_LON~1\".into()));

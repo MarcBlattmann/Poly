@@ -82,7 +82,14 @@ pub fn records(processes: &[ProcessSummary]) -> Vec<u8> {
     record(&mut out, SYSTEM_PID, 0, 1, 8, &w("System"));
     for p in sorted {
         let parent = if p.parent == 0 { SYSTEM_PID } else { p.parent };
-        record(&mut out, p.pid, parent, p.threads.max(1), crate::threads::class_base_priority(p.priority_class), &p.name);
+        record(
+            &mut out,
+            p.pid,
+            parent,
+            p.threads.max(1),
+            crate::threads::class_base_priority(p.priority_class),
+            &p.name,
+        );
     }
     out
 }

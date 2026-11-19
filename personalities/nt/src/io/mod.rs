@@ -65,8 +65,8 @@ pub mod iocp;
 pub mod irp;
 pub mod locks;
 pub mod names;
-pub mod npfs;
 pub mod notify;
+pub mod npfs;
 pub mod npservices;
 pub mod services;
 pub mod share;
@@ -751,8 +751,7 @@ impl IoState {
                         if d.stream.is_none() {
                             self.drop_streams_if_gone(d.volume, &d.node);
                             let directory = rec.kind == FileType::Directory;
-                            let change =
-                                notify::Change::Name { action: notify::FILE_ACTION_REMOVED, directory };
+                            let change = notify::Change::Name { action: notify::FILE_ACTION_REMOVED, directory };
                             self.note_change(d.volume, &d.path, change);
                         }
                     }

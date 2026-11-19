@@ -181,8 +181,9 @@ pub unsafe extern "system" fn CopyFileW(from: *const u16, to: *const u16, fail_i
     }
     let disposition = if fail_if_exists != 0 { CREATE_NEW } else { CREATE_ALWAYS };
     // SAFETY: the caller's NUL-terminated name.
-    let dst =
-        unsafe { CreateFileW(to, GENERIC_WRITE, FILE_SHARE_READ, core::ptr::null(), disposition, FILE_ATTRIBUTE_NORMAL, 0) };
+    let dst = unsafe {
+        CreateFileW(to, GENERIC_WRITE, FILE_SHARE_READ, core::ptr::null(), disposition, FILE_ATTRIBUTE_NORMAL, 0)
+    };
     if dst == INVALID_HANDLE_VALUE {
         let e = last_error();
         close(src);

@@ -63,6 +63,9 @@ pub struct DirWatch {
     pub waiting: Option<(u64, u64, usize)>,
 }
 
+/// A request to complete: id, status, the record bytes for the caller's buffer, their count.
+type Finished = (u64, NtStatus, Option<(u64, Vec<u8>)>, u64);
+
 /// What became of a notification request.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Requested {
@@ -84,9 +87,7 @@ pub enum Change {
 impl Change {
     fn action_and_mask(self) -> (u32, u32) {
         match self {
-            Change::Name { action, directory } => {
-                (action, if directory { CHANGE_DIR_NAME } else { CHANGE_FILE_NAME })
-            }
+            Change::Name { action, directory } => (action, if directory { CHANGE_DIR_NAME } else { CHANGE_FILE_NAME }),
             Change::Modified { mask } => (FILE_ACTION_MODIFIED, mask),
         }
     }
@@ -201,7 +202,7 @@ impl IoState {
         }
         let files = &self.files;
         self.watches.retain(|cookie, _| files.contains_key(cookie));
-        let mut done: Vec<(u64, NtStatus, Option<(u64, Vec<u8>)>, u64)> = Vec::new();
+        let mut done: Vec<Finished> = Vec::new();
         let irps = &self.irps;
         for w in self.watches.values_mut() {
             // A request that was cancelled meanwhile waits no more.
@@ -260,8 +261,7 @@ pub fn notify_change_directory_file<K: crate::kernel::NtKernel>(
 ) -> Result<NtStatus, NtStatus> {
     use super::consts::FILE_LIST_DIRECTORY;
     use super::services::{Notify, file_handle, wait_sync};
-    let [h, event, apc_routine, apc_context, iosb, buf, len, filter, subtree] =
-        crate::abi::args::<K, 9>(k, regs)?;
+    let [h, event, apc_routine, apc_context, iosb, buf, len, filter, subtree] = crate::abi::args::<K, 9>(k, regs)?;
     let (len, filter, subtree) = (len as u32 as usize, filter as u32, subtree as u8 != 0);
     let n = Notify { event, apc_routine, apc_context, iosb };
     let caller = k.caller();

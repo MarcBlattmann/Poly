@@ -61,7 +61,7 @@ pub struct EntryLayout {
 impl EntryLayout {
     pub const fn for_pointer(ptr: usize) -> EntryLayout {
         // dwSize, cntUsage, th32ProcessID, then the pointer-aligned heap id.
-        let heap = (12 + ptr - 1) / ptr * ptr;
+        let heap = 12usize.div_ceil(ptr) * ptr;
         let module = heap + ptr;
         let threads = module + 4;
         let name = threads + 16;

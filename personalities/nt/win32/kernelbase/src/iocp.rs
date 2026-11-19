@@ -499,7 +499,12 @@ pub unsafe extern "system" fn ReadDirectoryChangesW(
                 (ov as *mut IoStatusBlock, 0, apc, record as *const u8)
             }
             // Learn: an event with its low bit set queues no completion packet.
-            None => (ov as *mut IoStatusBlock, e & !1, core::ptr::null(), if e & 1 != 0 { core::ptr::null() } else { ov as *const u8 }),
+            None => (
+                ov as *mut IoStatusBlock,
+                e & !1,
+                core::ptr::null(),
+                if e & 1 != 0 { core::ptr::null() } else { ov as *const u8 },
+            ),
         }
     };
     // SAFETY: the caller's buffer of `len` bytes; valid pointers.
