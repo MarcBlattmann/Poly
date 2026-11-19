@@ -992,11 +992,14 @@ fn client_thread(arg: usize) -> u32 {
     sleep(100);
     let n = pipe_name("cns1");
     let _ = arg;
+    // Stage 1 is set BEFORE the open: the server's ConnectNamedPipe returns while the client's CreateFile is
+    // still finishing, so a store after the open races with the server's check (it failed at random on Poly).
+    // The check "stage is 1 when ConnectNamedPipe returned" still proves that the call waited for the client.
+    STAGE.store(1, Ordering::SeqCst);
     let c = open_pipe(&n, RW, 0);
     if is_invalid(c) {
         return 1;
     }
-    STAGE.store(1, Ordering::SeqCst);
     wait_stage(2);
     close(c);
     0

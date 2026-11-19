@@ -142,14 +142,25 @@ fn collect_manifests(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
     }
 }
 
-/// All duplicate-name messages for the repository at `root` (empty: fine). Held-out names are included
-/// when the store is present.
-pub fn check(root: &Path) -> Result<Vec<String>, String> {
-    let mut names = visible_names(root)?;
+/// Duplicate names of the repository at `root`: `(errors, warnings)`. A name used twice among the visible
+/// tests and the corpus is an error (CI sees all of them). A name that a held-out test shares with
+/// another entry is a warning: the store exists on the integrator's machine only, and older entries
+/// may already collide there; `strict_heldout` makes them errors too.
+pub fn check(root: &Path, strict_heldout: bool) -> Result<(Vec<String>, Vec<String>), String> {
+    let visible = visible_names(root)?;
+    let errors = duplicates(&visible);
+    let mut warnings = Vec::new();
     if let Some(store) = heldout_store(root) {
-        names.extend(heldout_names(&store));
+        let mut all = visible;
+        all.extend(heldout_names(&store));
+        warnings = duplicates(&all).into_iter().filter(|d| !errors.contains(d)).collect();
     }
-    Ok(duplicates(&names))
+    if strict_heldout {
+        let mut errors = errors;
+        errors.extend(warnings);
+        return Ok((errors, Vec::new()));
+    }
+    Ok((errors, warnings))
 }
 
 #[cfg(test)]
@@ -241,6 +252,27 @@ mod tests {
         assert_eq!(names.len(), 1, "{names:?}");
         assert_eq!(names[0].0, "h_one");
         assert!(names[0].1.0.contains("windows/api/k.dll/E"));
+        let _ = std::fs::remove_dir_all(&store);
+    }
+
+    #[test]
+    fn held_out_collisions_are_warnings_unless_strict() {
+        let root = scratch("strict");
+        put(&root, "specs/windows/k.dll/E.tests/v.rs");
+        let store = scratch("strict-store");
+        let dir = store.join("windows/api/k.dll/F");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("MANIFEST.json"), r#"{"entry":"windows/api/k.dll/F","held_out":[{"path":"v.rs","sha256":"0"}]}"#).unwrap();
+        // SAFETY: tests of this module are the only ones that touch this variable, and they run in one thread each.
+        unsafe { std::env::set_var("POLY_HELDOUT_DIR", &store) };
+        let (errors, warnings) = check(&root, false).unwrap();
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        let (errors, warnings) = check(&root, true).unwrap();
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert!(warnings.is_empty());
+        unsafe { std::env::remove_var("POLY_HELDOUT_DIR") };
+        let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&store);
     }
 }
