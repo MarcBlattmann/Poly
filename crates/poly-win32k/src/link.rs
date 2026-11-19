@@ -193,6 +193,12 @@ pub enum ToCompositor {
     /// `HTLEFT` and the others (ADR 0155 addendum "browsing"). All 0 for
     /// none. A compositor that does not know the record skips it.
     Margins { surface: SurfaceId, left: u16, top: u16, right: u16, bottom: u16 },
+    /// A Windows program asks the desktop to open a file or folder with the program Poly's
+    /// Files would use (`show` false: `ShellExecuteExW` with no association, ADR 0223), or to
+    /// show it in Files, selected in its folder (`show` true: `SHOpenFolderAndSelectItems`).
+    /// `path` is the object's path in Poly's file system. Not replayed. A compositor that does
+    /// not know the record skips it.
+    Shell { show: bool, path: String },
 }
 
 /// compositor → win32k.
@@ -223,6 +229,10 @@ pub enum FromCompositor {
     Layout { name: String },
     /// The compositor reads that buffer no more.
     Released { buffer: BufferId },
+    /// Windows apps live in `units` output pixels per logical pixel (ADR 0219): the sizes in
+    /// `Hello` and every position and size on the link are already in those pixels, and the
+    /// system DPI is 96 times `units`. Without this record: 1.
+    Units { units: u32 },
 }
 
 /// Why bytes are not a record.
@@ -362,6 +372,7 @@ mod kind {
     pub const DESTROY: u16 = 0x000D;
     pub const PROCESS: u16 = 0x000E;
     pub const MARGINS: u16 = 0x000F;
+    pub const SHELL: u16 = 0x0010;
 
     pub const HELLO: u16 = 0x8001;
     pub const OUTPUT: u16 = 0x8002;
@@ -375,6 +386,7 @@ mod kind {
     pub const REQUEST: u16 = 0x800A;
     pub const LAYOUT: u16 = 0x800B;
     pub const RELEASED: u16 = 0x800C;
+    pub const UNITS: u16 = 0x800D;
 }
 
 fn kind_of(k: SurfaceKind) -> u8 {
@@ -448,6 +460,7 @@ impl Record for ToCompositor {
             Margins { surface, left, top, right, bottom } => {
                 Out::new(out, kind::MARGINS).u32(*surface).u16(*left).u16(*top).u16(*right).u16(*bottom).done()
             }
+            Shell { show, path } => Out::new(out, kind::SHELL).bool(*show).string(path).done(),
         }
     }
 
@@ -509,6 +522,7 @@ impl Record for ToCompositor {
             kind::MARGINS => {
                 Margins { surface: b.u32()?, left: b.u16()?, top: b.u16()?, right: b.u16()?, bottom: b.u16()? }
             }
+            kind::SHELL => Shell { show: b.bool()?, path: b.string()? },
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -546,6 +560,7 @@ impl Record for FromCompositor {
             Request { surface, request } => Out::new(out, kind::REQUEST).u32(*surface).u8(request_of(*request)).done(),
             Layout { name } => Out::new(out, kind::LAYOUT).string(name).done(),
             Released { buffer } => Out::new(out, kind::RELEASED).u32(*buffer).done(),
+            Units { units } => Out::new(out, kind::UNITS).u32(*units).done(),
         }
     }
 
@@ -581,6 +596,7 @@ impl Record for FromCompositor {
             },
             kind::LAYOUT => Layout { name: b.string()? },
             kind::RELEASED => Released { buffer: b.u32()? },
+            kind::UNITS => Units { units: b.u32()? },
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -701,6 +717,7 @@ mod tests {
             Request { surface: 1, request: self::Request::Close },
             Layout { name: String::from("ch") },
             Released { buffer: 9 },
+            Units { units: 2 },
         ]
     }
 
@@ -759,6 +776,16 @@ mod tests {
         s.push(&[0x01, 0x00, 2, 0, 9, 9, 9]);
         assert_eq!(s.next_record(), Some(Err(Error::BadLength)));
         assert_eq!(s.pending(), 0);
+    }
+
+    #[test]
+    fn shell_records_carry_the_path() {
+        let mut out = Vec::new();
+        let r = ToCompositor::Shell { show: true, path: String::from("/nt/c/Users/poly/Downloads/a b.zip") };
+        r.encode(&mut out);
+        let mut s = Stream::<ToCompositor>::new();
+        s.push(&out);
+        assert_eq!(s.next_record(), Some(Ok(r)));
     }
 
     #[test]

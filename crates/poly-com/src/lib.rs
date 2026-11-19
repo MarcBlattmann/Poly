@@ -13,6 +13,7 @@
 //!   `StringFromGUID2`, `IIDFromString`).
 //! - [`propvariant`]: which `PROPVARIANT` types exist and what each owns
 //!   (`PropVariantClear`, `PropVariantCopy`).
+//! - [`inproc`]: the in-process classes Poly's own DLLs serve (ADR 0223).
 //! - [`hstring`]: `HSTRING`s (`WindowsCreateString` and friends, Learn:
 //!   "HSTRING", "Windows Runtime strings").
 //!
@@ -24,12 +25,17 @@
 
 extern crate alloc;
 
+pub mod activation;
 pub mod apartment;
+pub mod classtable;
 pub mod git;
 pub mod guid;
 pub mod hresult;
 pub mod hstring;
+pub mod inproc;
 pub mod propvariant;
+pub mod spy;
+pub mod wire;
 
 /// What `ole32.dll` must export, as code (`cargo xtask win32` checks it).
 pub const OLE32_EXPORTS: &[&str] = &[
@@ -48,6 +54,16 @@ pub const OLE32_EXPORTS: &[&str] = &[
     "CoGetObjectContext",
     "CoCreateInstance",
     "CoCreateInstanceEx",
+    // ADR 0220.
+    "CoRegisterClassObject",
+    "CoRevokeClassObject",
+    "CoResumeClassObjects",
+    "CoSuspendClassObjects",
+    "CoAddRefServerProcess",
+    "CoReleaseServerProcess",
+    "CoRegisterInitializeSpy",
+    "CoRevokeInitializeSpy",
+    "CoDisconnectObject",
     "RoGetActivationFactory",
     "RoActivateInstance",
     "CoCreateFreeThreadedMarshaler",

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "register_keys",
+      "exe_sha256": "bf71bdd40607f9ec07718ab2aa4f2b21ae4976b4fee51f85afb3967fa532223c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UmVnaXN0ZXJUeXBlTGliKGhlbHAgZGlyIE5VTEwpID0gMHgwMDAwMDAwMApIS0xNIFR5cGVMaWJcPExJQklEPgogIDEuMAogICAgKGRlZmF1bHQpID0gUG9seSB0ZXN0IGxpYnJhcnkKICAgIDAKICAgICAgd2luNjQKICAgICAgICAoZGVmYXVsdCkgPSA8ZmlsZT4KICAgIEZMQUdTCiAgICAgIChkZWZhdWx0KSA9IDAKICAgIEhFTFBESVIKICAgICAgKGRlZmF1bHQpID0gPGRpcj4KSEtMTSBJbnRlcmZhY2VcPElUbEVjaG8+CiAgKGRlZmF1bHQpID0gSVRsRWNobwogIFByb3h5U3R1YkNsc2lkMzIKICAgIChkZWZhdWx0KSA9IHswMDAyMDQyNC0wMDAwLTAwMDAtQzAwMC0wMDAwMDAwMDAwNDZ9CiAgVHlwZUxpYgogICAgKGRlZmF1bHQpID0gPExJQklEPgogICAgVmVyc2lvbiA9IDEuMApIS0xNIEludGVyZmFjZVw8SVRsQ2FsbGJhY2s+CiAgKGRlZmF1bHQpID0gSVRsQ2FsbGJhY2sKICBQcm94eVN0dWJDbHNpZDMyCiAgICAoZGVmYXVsdCkgPSB7MDAwMjA0MjQtMDAwMC0wMDAwLUMwMDAtMDAwMDAwMDAwMDQ2fQogIFR5cGVMaWIKICAgIChkZWZhdWx0KSA9IDxMSUJJRD4KICAgIFZlcnNpb24gPSAxLjAKSEtMTSBJbnRlcmZhY2VcPElUbER1YWw+CiAgKGRlZmF1bHQpID0gSVRsRHVhbAogIFByb3h5U3R1YkNsc2lkMzIKICAgIChkZWZhdWx0KSA9IHswMDAyMDQyNC0wMDAwLTAwMDAtQzAwMC0wMDAwMDAwMDAwNDZ9CiAgVHlwZUxpYgogICAgKGRlZmF1bHQpID0gPExJQklEPgogICAgVmVyc2lvbiA9IDEuMApIS0NVIFR5cGVMaWJcPExJQklEPjogKG1pc3NpbmcpCkhLQ1UgSW50ZXJmYWNlXDxJVGxFY2hvPjogKG1pc3NpbmcpCnJlZ2lzdGVyaW5nIHRoZSBzYW1lIGZpbGUgYWdhaW4gPSAweDAwMDAwMDAwClJlZ2lzdGVyVHlwZUxpYihoZWxwIGRpciBDOlxwb2x5d3NcaGVscCkgPSAweDAwMDAwMDAwCkhFTFBESVIgaXMgbm93IEM6XHBvbHl3c1xoZWxwClJlZ2lzdGVyVHlwZUxpYiBvZiB2ZXJzaW9uIDEuMSA9IDB4MDAwMDAwMDAKICB2ZXJzaW9uIGtleSAxLjAgd2luNjQgaXMgdGhlIGZpcnN0IGZpbGUKICB2ZXJzaW9uIGtleSAxLjEgd2luNjQgaXMgdGhlIHNlY29uZCBmaWxlCiAgSW50ZXJmYWNlXDxJVGxFY2hvPlxUeXBlTGliIFZlcnNpb24gaXMgMS4xCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "RegisterTypeLib(help dir NULL) = 0x00000000\nHKLM TypeLib\\<LIBID>\n  1.0\n    (default) = Poly test library\n    0\n      win64\n        (default) = <file>\n    FLAGS\n      (default) = 0\n    HELPDIR\n      (default) = <dir>\nHKLM Interface\\<ITlEcho>\n  (default) = ITlEcho\n  ProxyStubClsid32\n    (default) = {00020424-0000-0000-C000-000000000046}\n  TypeLib\n    (default) = <LIBID>\n    Version = 1.0\nHKLM Interface\\<ITlCallback>\n  (default) = ITlCallback\n  ProxyStubClsid32\n    (default) = {00020424-0000-0000-C000-000000000046}\n  TypeLib\n    (default) = <LIBID>\n    Version = 1.0\nHKLM Interface\\<ITlDual>\n  (default) = ITlDual\n  ProxyStubClsid32\n    (default) = {00020424-0000-0000-C000-000000000046}\n  TypeLib\n    (default) = <LIBID>\n    Version = 1.0\nHKCU TypeLib\\<LIBID>: (missing)\nHKCU Interface\\<ITlEcho>: (missing)\nregistering the same file again = 0x00000000\nRegisterTypeLib(help dir C:\\polyws\\help) = 0x00000000\nHELPDIR is now C:\\polyws\\help\nRegisterTypeLib of version 1.1 = 0x00000000\n  version key 1.0 win64 is the first file\n  version key 1.1 win64 is the second file\n  Interface\\<ITlEcho>\\TypeLib Version is 1.1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 79
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "3146d79e98a5",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:36:20Z",
+  "tests": [
+    {
+      "name": "revoke_cookies",
+      "exe_sha256": "e7f2d0666620dcbf295c08ece295f6b511b70980e473a1aea40d416d63443cdd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmV2b2tlKDEpIG9uIGEgdGhyZWFkIHdpdGhvdXQgQ09NID0gMHg4MDA0MDFmMAp0aHJlZSByZWdpc3RyYXRpb25zOiBjb29raWVzIGFyZSBkaWZmZXJlbnQgMSwgbm9uZSBpcyAwIDEKcmV2b2tlKGsxKSA9IDB4MDAwMDAwMDAKICBDMSBzdGlsbCBzZXJ2ZWQgYnkgaXRzIHNlY29uZCByZWdpc3RyYXRpb246IDB4MDAwMDAwMDAKcmV2b2tlKGsxKSBhZ2FpbiA9IDB4MDAwMDAwMDAKICBDMSBzdGlsbCBzZXJ2ZWQgYWZ0ZXIgdGhlIHJlcGVhdGVkIHJldm9rZTogMHgwMDAwMDAwMApyZXZva2UoazIpID0gMHgwMDAwMDAwMAogIEMxIGFmdGVyIHRoZSBsYXN0IHJlZ2lzdHJhdGlvbiBpcyBnb25lOiAweDgwMDQwMTU0CiAgQzIgdW50b3VjaGVkOiAweDAwMDAwMDAwCnJldm9rZSgwKSA9IDB4MDAwMDAwMDAKcmV2b2tlKDB4ZmZmZmZmZmYpID0gMHgwMDAwMDAwMApyZXZva2UoMHgxMjM0NTY3OCkgPSAweDAwMDAwMDAwCnJldm9rZShhIG51bWJlciBhYm92ZSB0aGUgbGl2ZSBjb29raWVzKSA9IDB4MDAwMDAwMDAKYSBuZXcgcmVnaXN0cmF0aW9uIGFmdGVyIHRoZSByZXZva2VzOiB0aGUgY29va2llIGlzIG9uZSBvZiB0aGUgb2xkIG9uZXMgMApyZXZva2UoazQpID0gMHgwMDAwMDAwMApyZXZva2UoazMpID0gMHgwMDAwMDAwMApDb1VuaW5pdGlhbGl6ZSB3aXRoIGEgbGl2ZSByZWdpc3RyYXRpb246IHRoZSBmYWN0b3J5IGxvc2VzIHRoZSByZWdpc3RyYXRpb24ncyByZWZlcmVuY2UgMQpyZXZva2UoazUpIGFmdGVyIHRoZSBhcGFydG1lbnQgZW5kZWQgPSAweDgwMDQwMWYwCiAgQzIgaW4gYSBuZXcgYXBhcnRtZW50OiAweDgwMDQwMTU0CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "revoke(1) on a thread without COM = 0x800401f0\nthree registrations: cookies are different 1, none is 0 1\nrevoke(k1) = 0x00000000\n  C1 still served by its second registration: 0x00000000\nrevoke(k1) again = 0x00000000\n  C1 still served after the repeated revoke: 0x00000000\nrevoke(k2) = 0x00000000\n  C1 after the last registration is gone: 0x80040154\n  C2 untouched: 0x00000000\nrevoke(0) = 0x00000000\nrevoke(0xffffffff) = 0x00000000\nrevoke(0x12345678) = 0x00000000\nrevoke(a number above the live cookies) = 0x00000000\na new registration after the revokes: the cookie is one of the old ones 0\nrevoke(k4) = 0x00000000\nrevoke(k3) = 0x00000000\nCoUninitialize with a live registration: the factory loses the registration's reference 1\nrevoke(k5) after the apartment ended = 0x800401f0\n  C2 in a new apartment: 0x80040154\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 64
+    },
+    {
+      "name": "revoke_holders",
+      "exe_sha256": "88640c46f4205dac779127c65402db78954258b794f0ea9dfb8229993889e3b0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVnaXN0cmF0aW9uICsgb25lIGhlbGQgcG9pbnRlcjogZmFjdG9yeSByZWZlcmVuY2VzICsyCmEgc2Vjb25kIGhlbGQgcG9pbnRlcjogKzMKcmV2b2tlID0gMHgwMDAwMDAwMAogIHRoZSBmYWN0b3J5IGtlZXBzIHRoZSB0d28gaGVsZCBwb2ludGVycycgcmVmZXJlbmNlczogKzIKICBDcmVhdGVJbnN0YW5jZSB0aHJvdWdoIGEgaGVsZCBwb2ludGVyIGFmdGVyIHRoZSByZXZva2UgPSAweDAwMDAwMDAwLCB0aGUgZmFjdG9yeSBtYWRlIGl0IDEKICBDb0NyZWF0ZUluc3RhbmNlKEMxKSBhZnRlciB0aGUgcmV2b2tlID0gMHg4MDA0MDE1NCwgb3V0cHV0IE5VTEwgMQogIGFsbCBoZWxkIHBvaW50ZXJzIHJlbGVhc2VkOiArMAphbiBvYmplY3QgbWFkZSBiZWZvcmUgdGhlIHJldm9rZTogMHgwMDAwMDAwMAogIHJldm9rZSA9IDB4MDAwMDAwMDAKICBpdHMgQWRkUmVmL1JlbGVhc2UgYWZ0ZXJ3YXJkcyB3b3JrIDEKICBpdHMgbGFzdCBSZWxlYXNlIGFmdGVyd2FyZHMgPSAwClNJTkdMRVVTRTogZmlyc3QgY3JlYXRpb24gMHgwMDAwMDAwMCwgc2Vjb25kIDB4ODAwNDAxNTQKICByZXZva2Ugb2YgdGhlIHVzZWQtdXAgcmVnaXN0cmF0aW9uID0gMHgwMDAwMDAwMAogIHRoZSBmYWN0b3J5J3MgcmVmZXJlbmNlcyBhcmUgYmFjayB0byB0aGUgc3RhcnQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "registration + one held pointer: factory references +2\na second held pointer: +3\nrevoke = 0x00000000\n  the factory keeps the two held pointers' references: +2\n  CreateInstance through a held pointer after the revoke = 0x00000000, the factory made it 1\n  CoCreateInstance(C1) after the revoke = 0x80040154, output NULL 1\n  all held pointers released: +0\nan object made before the revoke: 0x00000000\n  revoke = 0x00000000\n  its AddRef/Release afterwards work 1\n  its last Release afterwards = 0\nSINGLEUSE: first creation 0x00000000, second 0x80040154\n  revoke of the used-up registration = 0x00000000\n  the factory's references are back to the start 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

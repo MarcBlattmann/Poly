@@ -107,7 +107,7 @@ fn volume_information() {
     assert_eq!(t.f.u32_at(buf) & FILE_CASE_SENSITIVE_SEARCH, 0);
     assert_eq!(t.f.u32_at(buf + 4), 255);
     let len = t.f.u32_at(buf + 8) as usize;
-    assert_eq!(wide_str(&t.f.bytes_at(buf + 12, len)), "PolyFS");
+    assert_eq!(wide_str(&t.f.bytes_at(buf + 12, len)), "NTFS");
     let s = t.f.call(Service::QueryVolumeInformationFile, &[h, iosb, buf, 64, u64::from(FILE_FS_DEVICE_INFORMATION)]);
     assert_eq!(s, STATUS_SUCCESS);
     assert_eq!(t.f.u32_at(buf), FILE_DEVICE_DISK);

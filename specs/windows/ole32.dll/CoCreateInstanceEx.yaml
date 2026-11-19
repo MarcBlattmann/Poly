@@ -1,0 +1,58 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoCreateInstanceEx.yaml
+id: windows/api/ole32.dll/CoCreateInstanceEx
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-oop
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs (a COM server and client in one image, a service of its own) on the machine above. Microsoft Learn: "CoRegisterClassObject function (combaseapi.h)", "CoRevokeClassObject", "CoResumeClassObjects", "CoGetClassObject", "CoCreateInstance", "CoCreateInstanceEx", "REGCLS enumeration", "CLSCTX enumeration", "MULTI_QI", "COSERVERINFO", "IClassFactory", "AppID Key", "LocalService", "ServiceParameters", "LocalServer32", "COM Class Objects and CLSIDs", "Registering COM Servers", "Creating a Windows Service" (winsvc.h); objbase.h, combaseapi.h, wtypes.h, winerror.h for constants and layouts. Google's updater and installers: their own logs and registry changes from the survey (docs/windows/chrome-installer-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Creates one object of a class and asks it for several interfaces at once (MULTI_QI). This sheet is also where the class definition rules that CoCreateInstance and CoGetClassObject share with it are written down (which of several registrations COM uses, the registry hives it reads, the AppID keys LocalService and ServiceParameters) because the observations are made through it: a class registered with a process-local factory, a class with a LocalServer32 command, and a class hosted in a service (AppID LocalService) as Google's updater and Chrome's elevation service are.
+interface:
+  signature: "HRESULT CoCreateInstanceEx(REFCLSID rclsid, IUnknown *punkOuter, DWORD dwClsCtx, COSERVERINFO *pServerInfo, DWORD dwCount, MULTI_QI *pResults); typedef struct { const IID *pIID; IUnknown *pItf; HRESULT hr; } MULTI_QI"
+installer: "Google's installer talks to the update service by CoCreateInstance(CLSCTX_LOCAL_SERVER) of classes whose AppID has LocalService = GoogleUpdaterService<version> and ServiceParameters = --com-service (7 AppIDs, two services); Chrome adds GoogleChromeElevationService the same way. COM starts the service on demand and the updater's server registers its classes from inside it; the updater's install then drives the update through the interfaces it gets."
+rules:
+  not_initialised: "a thread without COM gets CO_E_NOTINITIALIZED 0x800401F0; the entries' results and pointers are left as they were"
+  multi_qi_results: "all entries answered: S_OK. Some entries unanswered (E_NOINTERFACE): CO_S_NOTALLINTERFACES 0x00080012, each entry has its own result (S_OK with a pointer, or E_NOINTERFACE 0x80004002 with a NULL pointer). No entry answered: E_NOINTERFACE 0x80004002 and every entry E_NOINTERFACE with NULL. The same interface twice gives the same pointer twice"
+  first_interface_in_process: "for a class made by an in-process factory (CoRegisterClassObject in the same apartment) the first requested interface is the one handed to the factory: when it does not exist the call gives E_NOINTERFACE and every entry (including the ones that would have existed) gets E_NOINTERFACE with a NULL pointer"
+  first_interface_local: "for a class served by another process the first entry is not special: a made-up id first and IUnknown second gives CO_S_NOTALLINTERFACES, entry 0 E_NOINTERFACE NULL, entry 1 S_OK with a proxy"
+  local_proxies: "all pointers returned for a local server are proxies; asking such a server for IMarshal is answered S_OK (the proxy manager answers it) together with IUnknown and the made-up id gives E_NOINTERFACE"
+  argument_errors: "a count of 0, a NULL array with a count, an entry whose interface-id pointer is NULL, and an entry whose pItf is not NULL on input each give E_INVALIDARG 0x80070057; the entries are left as they were (hr and pItf unchanged)"
+  unknown_class: "REGDB_E_CLASSNOTREG 0x80040154 as the call's result and as the result of every entry, every pointer NULL (also for CLSCTX_ALL)"
+  outer_unknown: "a non-NULL outer unknown for a factory that refuses aggregation gives CLASS_E_NOAGGREGATION 0x80040110 as the call's result and as the entry's, whatever interface is asked for"
+  server_info: "a COSERVERINFO with no name is the local machine: for a class registered in-process and asked with CLSCTX_INPROC_SERVER it makes the object (S_OK); with CLSCTX_LOCAL_SERVER for a class that has only an in-process registration it gives 0x80040154; for a LocalServer32 class with CLSCTX_LOCAL_SERVER it makes the object"
+  factory_calls: "the factory's CreateInstance is called once however many interfaces are asked for"
+  contexts_local_server: "for a class with a LocalServer32 command: CLSCTX_LOCAL_SERVER, LOCAL|REMOTE, ALL (0x17), INPROC|LOCAL, INPROC_HANDLER|LOCAL, LOCAL|ACTIVATE_64_BIT_SERVER and LOCAL|NO_CODE_DOWNLOAD all start the server and return a proxy; CLSCTX_REMOTE_SERVER alone gives 0x80040154 for the call and the entry; LOCAL|ACTIVATE_32_BIT_SERVER for a 64-bit server file gives 0x80040154 and starts nothing"
+  registered_factory_wins: "when a factory registered in this process (CoRegisterClassObject, context local or in-process or both) and a registry LocalServer32 entry exist for one class, CoCreateInstance for CLSCTX_LOCAL_SERVER, CLSCTX_ALL and CLSCTX_INPROC_SERVER all use the registered factory (the objects are not proxies, no server is started); after the registration is revoked the registry entry is used and a server is started"
+  inproc_and_local_entries: "a class with an InprocServer32 entry whose DLL does not exist and a LocalServer32 entry: CLSCTX_INPROC_SERVER gives ERROR_MOD_NOT_FOUND 0x8007007E, CLSCTX_LOCAL_SERVER starts the server and succeeds, INPROC|LOCAL gives 0x8007007E (the local entry is not tried), CLSCTX_ALL gives 0x80040154"
+  appid_without_service: "a CLSID with an AppID value but no AppID key, and an AppID key with no values, change nothing: the LocalServer32 command is used"
+  hive_per_user: "registrations under HKEY_CURRENT_USER\\Software\\Classes\\CLSID are used by this process (the elevated administrator's token) and win over the machine's registration of the same class id (the HKCU entry's server started, the HKLM entry's did not)"
+  hive_wow6432: "a class that exists only under HKLM\\SOFTWARE\\Classes\\WOW6432Node\\CLSID (the 32-bit view's own CLSID key) is found by a 64-bit process asking for CLSCTX_LOCAL_SERVER: the server was started and the call succeeded"
+  local_service: "a CLSID with AppID {a} whose key HKLM\\SOFTWARE\\Classes\\AppID\\{a} has LocalService = <service name> and no LocalServer32: CoCreateInstance(CLSCTX_LOCAL_SERVER) starts the demand-start service through the service control manager (it was STOPPED before and RUNNING after), the service process registers its class object itself (REGCLS_MULTIPLEUSE, local-server context) and the call returns a proxy; a second creation reuses the running service process (one start); after the service is stopped by the service control manager (it ended its process) the next creation starts it again (two starts)"
+  service_parameters: "ServiceParameters is split at spaces and passed to the service's ServiceMain as arguments after the service's own name: no value gives argc 1 (just the name); `--com-service` gives argc 2 with `--com-service` as the second; `--one --two=2 three` gives argc 4 with the three words in order"
+  service_over_server: "when the AppID names a LocalService and the CLSID also has a LocalServer32, the service is used and the LocalServer32 command is not started"
+  service_missing: "an AppID whose LocalService names no service: CoCreateInstance(CLSCTX_LOCAL_SERVER) gives ERROR_SERVICE_DOES_NOT_EXIST 0x80070424, no service is running, no LocalServer32 is tried"
+errors:
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+  invalid_argument: "E_INVALIDARG 0x80070057"
+  class_not_registered: "REGDB_E_CLASSNOTREG 0x80040154"
+  no_interface: "E_NOINTERFACE 0x80004002"
+  some_interfaces: "CO_S_NOTALLINTERFACES 0x00080012 (success code)"
+  no_aggregation: "CLASS_E_NOAGGREGATION 0x80040110"
+  module_not_found: "0x8007007E for an InprocServer32 DLL that does not exist"
+  service_missing: "0x80070424 (ERROR_SERVICE_DOES_NOT_EXIST) for an AppID whose LocalService names no service"
+side_effects: "may start a process (a LocalServer32 command, or a service through the service control manager) and leaves it running after the call"
+threading: "may be called from any initialised apartment; a local server's objects are called through proxies"
+ordering: ["COM starts the server, waits until it registers its class object, and only then returns the proxies", "for LocalService the service control manager starts the service (state RUNNING reported by the service itself), then the service registers its class object"]
+timing:
+  typical: "starting a local server took tens of milliseconds and a service about a second on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file each: each is client, COM server and, for the LocalService tests, service in one image (`--child srv|svc <tag> clsid={...} <flags>`); the service is created with CreateServiceW (demand start, LocalSystem, own process, name PolyWsComSvc<n>), started only by COM, stopped by SERVICE_CONTROL_STOP and deleted by the test; registry entries use class ids {B2A0xxxx-...} (the process id in the second group when a hung activation must not hold up the next run) and default values starting `polyws-com-oop`. Results, booleans and counts only.
+not_covered: >
+  remote machines (a server name), RunAs, LaunchPermission and AccessPermission (B2c), the 32-bit server view with a 32-bit server (the test images are 64-bit), CLSCTX_ENABLE_CLOAKING, CLSCTX_FROM_DEFAULT_CONTEXT, activation by moniker, DLL surrogates, services that run as another account, and what the service does when it does not register in time.

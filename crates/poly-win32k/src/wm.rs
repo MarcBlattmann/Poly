@@ -349,6 +349,8 @@ pub struct Wm {
     /// (`Request::LayeredChildren`): they may create layered child windows.
     layered_children: alloc::collections::BTreeSet<u32>,
     thread_dpi: BTreeMap<Key, u8>,
+    /// The system DPI: 96 times the desktop link's units (ADR 0219).
+    system_dpi: u32,
 }
 
 impl Default for Wm {
@@ -415,6 +417,7 @@ impl Wm {
             proc_dpi: BTreeMap::new(),
             layered_children: alloc::collections::BTreeSet::new(),
             thread_dpi: BTreeMap::new(),
+            system_dpi: 96,
         };
         // Index 0 is never a window.
         wm.slots.push(None);
@@ -474,6 +477,16 @@ impl Wm {
     /// The session's screen: the interactive session of the slice B oracle
     /// (the kernel's `poly.win32k.session=interactive`) or a compositor's
     /// output.
+    /// The system DPI: 96, or 96 times the desktop link's units when Windows apps live in output
+    /// pixels (ADR 0219).
+    pub fn set_system_dpi(&mut self, dpi: u32) {
+        self.system_dpi = dpi.max(1);
+    }
+
+    pub fn system_dpi(&self) -> u32 {
+        self.system_dpi
+    }
+
     pub fn set_display(&mut self, d: Display) {
         self.display = d;
         self.set_screen(d.width, d.height);
@@ -2048,6 +2061,7 @@ impl Wm {
                 height: self.screen.1,
                 work: self.display.work,
                 interactive: self.display.interactive,
+                dpi: self.system_dpi,
             },
             Request::RegisterEvent { .. } | Request::Queue {} => Reply::Ok {},
             Request::RegisterClass { spec } => self.register_class(ctx, spec),
@@ -2193,6 +2207,8 @@ impl Wm {
             | Request::ScreenPixel { .. }
             | Request::LayeredContent { .. }
             | Request::MoveSize { .. } => Reply::Ok {},
+            // The NT personality answers it (it owns the file handles); without it, no desktop.
+            Request::ShellOpen { .. } => Reply::Error { code: 50 },
             Request::KeyboardLayout {} => Reply::Value { value: u64::from(self.layout.id()) },
             Request::LayeredChildren {} => {
                 self.layered_children.insert(ctx.pid);

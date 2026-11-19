@@ -176,6 +176,30 @@ fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
         poly_ntobj::status::STATUS_INVALID_PARAMETER.0
     );
 
+    // PolyUserCommitSurfaceArea (ADR 0219): another process's copy, all grey, of which it drew
+    // only columns 2..5 of rows 3..5. Only those reach the buffer and are damaged; the corners
+    // committed above stay.
+    let grey = alloc::vec![0x77u8; (stride * hgt) as usize];
+    let g = f.put(&grey);
+    let area = f.put(&[2i32, 3, 5, 5].iter().flat_map(|v| v.to_le_bytes()).collect::<alloc::vec::Vec<u8>>());
+    let commit_area = Win32kService::CommitSurfaceArea.number();
+    assert_eq!(raw(&mut f, commit_area, &[u64::from(h), g, w, hgt, stride, area]), (Outcome::Handled, 0));
+    assert_eq!(records(&mut f), alloc::vec![ToCompositor::Damage { surface, x: 2, y: 3, width: 3, height: 2 }]);
+    let rows = f.with_state(|sys, _, _| sys.win32k.link_rows(buffer, 0, 10).unwrap());
+    let px_at = |x: usize, y: usize| rows[(y * 20 + x) * 4..(y * 20 + x) * 4 + 4].to_vec();
+    assert_eq!(px_at(0, 0), [0x60, 0x50, 0x40, 0], "outside the area: as committed before");
+    assert_eq!(px_at(0, 9), [1, 2, 3, 0]);
+    assert_eq!((px_at(2, 3), px_at(4, 4)), (alloc::vec![0x77; 4], alloc::vec![0x77; 4]));
+    assert_ne!(px_at(5, 4), alloc::vec![0x77; 4], "the right edge is exclusive");
+    assert_ne!(px_at(2, 5), alloc::vec![0x77; 4], "the bottom edge is exclusive");
+    // An empty area commits nothing; an area beyond the surface is cut to it.
+    let empty = f.put(&[4i32, 4, 4, 9].iter().flat_map(|v| v.to_le_bytes()).collect::<alloc::vec::Vec<u8>>());
+    assert_eq!(raw(&mut f, commit_area, &[u64::from(h), g, w, hgt, stride, empty]), (Outcome::Handled, 0));
+    assert!(records(&mut f).is_empty());
+    let wide = f.put(&[-5i32, 8, 99, 99].iter().flat_map(|v| v.to_le_bytes()).collect::<alloc::vec::Vec<u8>>());
+    assert_eq!(raw(&mut f, commit_area, &[u64::from(h), g, w, hgt, stride, wide]), (Outcome::Handled, 0));
+    assert_eq!(records(&mut f), alloc::vec![ToCompositor::Damage { surface, x: 0, y: 8, width: 20, height: 2 }]);
+
     // A compositor move updates Win32's screen geometry; its title-bar
     // close is queued as WM_CLOSE on the owning GUI thread.
     let surface = f.with_state(|sys, _, _| sys.win32k.surfaces.surface(h)).expect("a Windows surface");
@@ -199,4 +223,38 @@ fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
         panic!("the desktop close request did not reach the GUI thread")
     };
     assert_eq!((msg.hwnd, msg.msg), (h, poly_win32k::user::WM_CLOSE));
+}
+
+/// ADR 0219: a compositor whose Windows apps live in output pixels greets with the output in those
+/// pixels and `Units`: the system DPI is 96 times the units, and the work area is below the
+/// desktop's ridge in those pixels too. Without `Units` it stays 96.
+#[test]
+fn the_desktop_links_units_set_the_system_dpi() {
+    use poly_win32k::frame::FrameMetrics;
+    use poly_win32k::link::{FromCompositor, VERSION, encode_all};
+    for (units, dpi, ridge) in [(1u32, 96u32, 24), (2, 192, 48)] {
+        let mut f = Fake::new();
+        let hello = FromCompositor::Hello {
+            version: VERSION,
+            width: 1280 * units,
+            height: 800 * units,
+            scale: 2,
+            frame: FrameMetrics::POLY,
+        };
+        let mut records = alloc::vec![hello];
+        if units > 1 {
+            records.push(FromCompositor::Units { units });
+        }
+        f.with_state(|sys, _, _| {
+            let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
+            win32k.link_receive(objects, &encode_all(&records));
+        });
+        let Reply::Desktop { width, height, work, dpi: got, .. } =
+            user_call(&mut f, &Request::Desktop {}, 4096).1.expect("a reply")
+        else {
+            panic!("not the desktop")
+        };
+        assert_eq!((width, height, got), ((1280 * units) as i32, (800 * units) as i32, dpi));
+        assert_eq!(work.top, ridge);
+    }
 }

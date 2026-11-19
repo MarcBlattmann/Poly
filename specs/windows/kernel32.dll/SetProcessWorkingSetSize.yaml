@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetProcessWorkingSetSize.yaml
+id: windows/api/kernel32.dll/SetProcessWorkingSetSize
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). Run in all three token kinds: the SSH logon session (session 0, elevated administrator token), and with -Token standard and -Token elevated (the interactive session 1 with the administrator's filtered and full token); the observations were identical in all three, so the tests are recorded once with the SSH logon's token. Every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn's pages for SetProcessWorkingSetSize, SetProcessWorkingSetSizeEx and GetProcessWorkingSetSize and the public SDK headers memoryapi.h and winnt.h (PROCESS_SET_QUOTA 0x100, PROCESS_QUERY_INFORMATION 0x400, PROCESS_QUERY_LIMITED_INFORMATION 0x1000); error codes from winerror.h. Google's Chrome installers call SetProcessWorkingSetSize(GetCurrentProcess(), -1, -1) (a "trim") and, on Poly, a 32-bit program that finds the function missing ends the process (survey-chrome-installer). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Sets the minimum and maximum working set size of a process, in bytes. The pair (-1, -1) (the maximum value of SIZE_T in both) is the "trim" request: it succeeds, makes the system remove pages from the working set, and leaves the process's limits as they were. A process starts with minimum 0x32000 and maximum 0x159000 (GetProcessWorkingSetSize); a change reads back exactly. The handle needs only PROCESS_SET_QUOTA. The same call exists with flags as SetProcessWorkingSetSizeEx.
+interface:
+  signature: "BOOL SetProcessWorkingSetSize(HANDLE hProcess, SIZE_T dwMinimumWorkingSetSize, SIZE_T dwMaximumWorkingSetSize)"
+rules:
+  defaults: "a new process (the test itself and a suspended child created with CreateProcessW) reads minimum 0x32000, maximum 0x159000 and, through GetProcessWorkingSetSizeEx, flags 0xA (QUOTA_LIMITS_HARDWS_MIN_DISABLE | QUOTA_LIMITS_HARDWS_MAX_DISABLE)."
+  trim: "(-1, -1) with the current-process pseudo handle (or a handle of a child): TRUE, and the limits read back are unchanged (own process: still 0x32000 and 0x159000; a child that was set to 1 MiB..4 MiB before still reads 0x100000 and 0x400000). No last error is needed; the call does not fail."
+  set: "(1 MiB, 4 MiB), (2 MiB, 2 MiB) (equal values), (1, 1), (4096, 8192) and (1 MiB, -1): TRUE; the first two read back exactly (0x100000/0x400000 and 0x200000/0x200000). Through a real handle opened with PROCESS_SET_QUOTA|PROCESS_QUERY_INFORMATION the same: (0x180000, 0x300000) reads back exactly."
+  invalid_sizes: "minimum larger than maximum (2 MiB, 1 MiB): FALSE, ERROR_INVALID_PARAMETER (87). (0, 0) and (0, 4 MiB): 87. (-1, 4 MiB): 87 (only the pair (-1, -1) is the trim)."
+  too_large: "(0xFFFFFFFFFFFFFFFE, 0xFFFFFFFFFFFFFFFE) and (0x7FFFFFFFFFFF, 0x7FFFFFFFFFFF): FALSE, ERROR_NO_SYSTEM_RESOURCES (1450)."
+  handles: "NULL: FALSE, ERROR_INVALID_HANDLE (6). The value -1 (INVALID_HANDLE_VALUE, the same as the current-process pseudo handle): TRUE. A garbage handle value (0x12345678): 6. The current-thread pseudo handle (-2) and a real thread handle: 6."
+  rights: "a process handle needs PROCESS_SET_QUOTA: with only PROCESS_QUERY_INFORMATION, only PROCESS_QUERY_LIMITED_INFORMATION or only SYNCHRONIZE the call fails with ERROR_ACCESS_DENIED (5); with only PROCESS_SET_QUOTA it succeeds. GetProcessWorkingSetSize with PROCESS_QUERY_INFORMATION or PROCESS_QUERY_LIMITED_INFORMATION succeeds and with SYNCHRONIZE only or SET_QUOTA only fails with 5."
+  other_process: "a suspended child of the caller (same token): set (1 MiB, 4 MiB) TRUE and read back exactly; a handle opened by process id with PROCESS_SET_QUOTA|PROCESS_QUERY_INFORMATION or PROCESS_SET_QUOTA alone: TRUE; with only PROCESS_QUERY_LIMITED_INFORMATION: 5."
+  token: "the standard (filtered) and the elevated administrator token behave the same: SeIncreaseWorkingSetPrivilege is in both tokens (disabled in both) and none of the sizes above needs it."
+errors:
+  invalid_parameter: "87"
+  invalid_handle: "6"
+  access_denied: "5"
+  no_system_resources: "1450"
+side_effects: "changes the process's working set limits; the trim also removes pages from its working set (a later access faults them back in)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, three files (set and read back; error cases and rights; a child process). Each file declares what it calls from Learn's prototypes. Observations are return values, error codes and relations, never addresses, handles, process ids or times; sizes are the ones the test passes and the documented defaults.
+not_covered: >
+  Whether pages really leave the working set (the K32QueryWorkingSetEx entry looks at page attributes), the effect of the hard-limit flags (see SetProcessWorkingSetSizeEx), sizes between the defaults and the machine's memory (they depend on free memory), SeIncreaseWorkingSetPrivilege being needed for larger minimums, processes of other users and protected processes, a 32-bit caller.

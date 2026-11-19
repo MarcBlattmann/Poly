@@ -8,7 +8,8 @@
 //!   ignore it"). `RestartScan` starts again from the first entry, with a
 //!   new expression when one is given (to be confirmed by the spec agent).
 //! - Entries are matched without case ([`names::matches`]) and returned in
-//!   the file system's order, each aligned to 8 bytes with
+//!   NTFS's order, by their names in capitals compared unit by unit
+//!   ([`ntfs_order`]; the specs' listings, e.g. `fo_cases`, show it), each aligned to 8 bytes with
 //!   `NextEntryOffset` linking them (0 in the last). `ReturnSingleEntry`
 //!   returns one.
 //! - A first scan that matches nothing is `STATUS_NO_SUCH_FILE`; a later
@@ -57,6 +58,26 @@ pub struct Query<'a> {
     pub restart: bool,
 }
 
+/// A name's UTF-16 units in capitals (each unit on its own, as NTFS's upcase table maps them).
+fn upcased(name: &[u8]) -> Vec<u16> {
+    vfs_to_wide(name)
+        .into_iter()
+        .map(|u| {
+            let Some(c) = char::from_u32(u32::from(u)) else { return u };
+            let mut up = c.to_uppercase();
+            match (up.next(), up.next()) {
+                (Some(one), None) if (one as u32) <= 0xFFFF => one as u32 as u16,
+                _ => u,
+            }
+        })
+        .collect()
+}
+
+/// The order NTFS lists a directory in: the names in capitals, compared as UTF-16 units.
+pub fn ntfs_order(a: &[u8], b: &[u8]) -> core::cmp::Ordering {
+    upcased(a).cmp(&upcased(b)).then_with(|| a.cmp(b))
+}
+
 impl IoState {
     /// Run one `NtQueryDirectoryFile` call on directory file object `cookie`.
     pub fn query_directory(&mut self, cookie: u64, q: &Query<'_>) -> Result<Answer, NtStatus> {
@@ -92,6 +113,7 @@ impl IoState {
                 if at_root {
                     names.retain(|n| n != b"." && n != b"..");
                 }
+                names.sort_by(|a, b| ntfs_order(a, b));
                 Scan { pattern, names, next: 0, returned: false }
             }
         };
@@ -149,5 +171,41 @@ impl IoState {
         let vr = self.root.as_ref()?;
         let node = vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(dir), name, false).map_err(status_of).ok()?;
         self.facts(&node).ok()
+    }
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::ntfs_order;
+    use alloc::vec::Vec;
+
+    #[test]
+    fn names_are_listed_in_capitals_order() {
+        let mut v: Vec<&[u8]> = alloc::vec![
+            b"fc-copy.bin",
+            b"fc-a.bin",
+            b"..",
+            b"B.txt",
+            b"a.txt",
+            b".",
+            b"ads-new.bin",
+            b"ads-main.bin",
+            b"_x"
+        ];
+        v.sort_by(|a, b| ntfs_order(a, b));
+        assert_eq!(
+            v,
+            alloc::vec![
+                &b"."[..],
+                b"..",
+                b"a.txt",
+                b"ads-main.bin",
+                b"ads-new.bin",
+                b"B.txt",
+                b"fc-a.bin",
+                b"fc-copy.bin",
+                b"_x"
+            ]
+        );
     }
 }

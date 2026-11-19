@@ -15,6 +15,7 @@ version = "0.0.1"
 dependencies = [
  "poly-etw",
  "poly-kernelbase",
+ "poly-scm",
  "poly-security",
  "poly-win32-rt",
 ]
@@ -67,6 +68,14 @@ version = "0.0.1"
 dependencies = [
  "poly-comdlg",
  "poly-win32-gui",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "comlaunch"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
  "poly-win32-rt",
 ]
 
@@ -480,6 +489,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-scm"
+version = "0.0.1"
+
+[[package]]
 name = "poly-security"
 version = "0.0.1"
 dependencies = [
@@ -600,6 +613,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "services"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "setupapi"
 version = "0.0.1"
 dependencies = [
@@ -618,8 +638,10 @@ dependencies = [
 name = "shell32"
 version = "0.0.1"
 dependencies = [
+ "poly-com",
  "poly-kernelbase",
  "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]

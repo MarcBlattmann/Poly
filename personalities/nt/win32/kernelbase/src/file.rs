@@ -19,7 +19,11 @@ const SHARE_ALL: u32 = 7;
 pub extern "system" fn CloseHandle(handle: Handle) -> i32 {
     // SAFETY: closing a handle value is memory-safe; the kernel checks it.
     let st = unsafe { nt::NtClose(handle) };
-    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    crate::power::closed(handle);
+    TRUE
 }
 
 /// `CreateFileW`.

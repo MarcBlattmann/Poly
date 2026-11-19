@@ -116,6 +116,7 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::PolyDebugPrint, &[P, V]),
     (Service::PolyRandomBytes, &[P, V]),
     (Service::PolyPhysicalMemory, &[P]),
+    (Service::PolyServiceCall, &[V, P, V, P, V, P]),
     (Service::CreateKey, &[OH, V, OA, V, US, V, P]),
     (Service::OpenKey, &[OH, V, OA]),
     (Service::OpenKeyEx, &[OH, V, OA, V]),
@@ -189,6 +190,8 @@ pub const WIN32K_SIGNATURES: &[(Win32kService, &[Arg])] = &[
     (Win32kService::Call, &[P, V, P, V, OS]),
     // PolyUserCommitSurface(hwnd, pixels, width, height, stride)
     (Win32kService::CommitSurface, &[V, P, V, V, V]),
+    // PolyUserCommitSurfaceArea(hwnd, pixels, width, height, stride, area)
+    (Win32kService::CommitSurfaceArea, &[V, P, V, V, V, P]),
 ];
 
 /// The 32-bit signature of win32k service `service`.

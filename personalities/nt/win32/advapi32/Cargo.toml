@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 [dependencies]
 poly-win32-rt = { path = "../rt" }
 poly-security = { path = "../../../../crates/poly-security" }
+poly-scm = { path = "../../../../crates/poly-scm", default-features = false }
 poly-etw = { path = "../../../../crates/poly-etw" }
 poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
 

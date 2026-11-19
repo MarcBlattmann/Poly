@@ -225,7 +225,14 @@ pub fn main() -> i32 {
     app.defaults = load_mimeapps(&fs, &lists);
     app.clock = Box::new(|| poly_rt::time::since_epoch().as_secs());
     let start = poly_rt::env::args_str().nth(1).map(String::from).unwrap_or_else(|| home.clone());
-    if !app.go(&start) && !app.go(&home) {
+    // `--show PATH` / `--open PATH`: a Windows program's "show in folder" or "open" (ADR 0223).
+    if start == poly_shell::apps::FILES_SHOW || start == poly_shell::apps::FILES_OPEN {
+        let path = poly_rt::env::args_str().nth(2).map(String::from).unwrap_or_else(|| home.clone());
+        poly_rt::println!("poly-files: {start} {path}");
+        if !app.start_from_shell(&start, &path) {
+            return 0;
+        }
+    } else if !app.go(&start) && !app.go(&home) {
         app.go("/");
     }
     poly_rt::println!("poly-files: {} apps open files", app.handlers.len());

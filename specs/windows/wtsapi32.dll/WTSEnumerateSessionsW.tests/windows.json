@@ -1,0 +1,44 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "cdbe24a5206d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:53:39Z",
+  "tests": [
+    {
+      "name": "wtse_enum_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "c50db9c887ad7a71934c7cb9749c3afcbb3e2313cfedbf2d7d2e5517fe1b6b73",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1RTRW51bWVyYXRlU2Vzc2lvbnNXIG9rPTEgZXJyIC0yIGF0IGxlYXN0IDEgc2Vzc2lvbjogdHJ1ZQpzZXNzaW9uIDA6IG5hbWUgU2VydmljZXMgc3RhdGUgNApvd24gc2Vzc2lvbiBpcyBzZXNzaW9uIDA6IGZhbHNlOyBpdHMgc3RhdGUgaXMgV1RTQWN0aXZlICgwKTogdHJ1ZQpjb25zb2xlIHNlc3Npb246IG5hbWUgQ29uc29sZSBzdGF0ZSAwCmlkcyBpbiBhc2NlbmRpbmcgb3JkZXI6IHRydWU7IHNlc3Npb24gMCBsaXN0ZWQ6IHRydWU7IG93biBzZXNzaW9uIGxpc3RlZDogdHJ1ZTsgY29uc29sZSBzZXNzaW9uIGxpc3RlZDogdHJ1ZQpXVFNGcmVlTWVtb3J5KE5VTEwpIHJldHVybmVkCmFnYWluOiBvaz0xIHNhbWUgY291bnQ6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WTSEnumerateSessionsW ok=1 err -2 at least 1 session: true\nsession 0: name Services state 4\nown session is session 0: false; its state is WTSActive (0): true\nconsole session: name Console state 0\nids in ascending order: true; session 0 listed: true; own session listed: true; console session listed: true\nWTSFreeMemory(NULL) returned\nagain: ok=1 same count: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "wtse_shape",
+      "exe_sha256": "cf87102026dd72f330a0ddb0fd63083fd53c228f0cc6f0275fb1e7290940cfaf",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZSBvZiBvbmUgZW50cnkgb24geDY0IGlzIDI0IGJ5dGVzOiB0cnVlCnJvdW5kIDA6IG9rPTEgY291bnQ+MCB0cnVlCnJvdW5kIDA6IGlkcyB1bmlxdWUgdHJ1ZSwgbmFtZXMgbm9uLWVtcHR5IHRydWUsIHN0YXRlcyAwLi45IHRydWUsIG5hbWVzIG5lYXIgdGhlIGFycmF5IHRydWUKcm91bmQgMDogZmlyc3QgZW50cnkgaXMgc2Vzc2lvbiAwOiB0cnVlCnJvdW5kIDE6IG9rPTEgY291bnQ+MCB0cnVlCnJvdW5kIDE6IGlkcyB1bmlxdWUgdHJ1ZSwgbmFtZXMgbm9uLWVtcHR5IHRydWUsIHN0YXRlcyAwLi45IHRydWUsIG5hbWVzIG5lYXIgdGhlIGFycmF5IHRydWUKcm91bmQgMTogZmlyc3QgZW50cnkgaXMgc2Vzc2lvbiAwOiB0cnVlCnJvdW5kIDI6IG9rPTEgY291bnQ+MCB0cnVlCnJvdW5kIDI6IGlkcyB1bmlxdWUgdHJ1ZSwgbmFtZXMgbm9uLWVtcHR5IHRydWUsIHN0YXRlcyAwLi45IHRydWUsIG5hbWVzIG5lYXIgdGhlIGFycmF5IHRydWUKcm91bmQgMjogZmlyc3QgZW50cnkgaXMgc2Vzc2lvbiAwOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size of one entry on x64 is 24 bytes: true\nround 0: ok=1 count>0 true\nround 0: ids unique true, names non-empty true, states 0..9 true, names near the array true\nround 0: first entry is session 0: true\nround 1: ok=1 count>0 true\nround 1: ids unique true, names non-empty true, states 0..9 true, names near the array true\nround 1: first entry is session 0: true\nround 2: ok=1 count>0 true\nround 2: ids unique true, names non-empty true, states 0..9 true, names near the array true\nround 2: first entry is session 0: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

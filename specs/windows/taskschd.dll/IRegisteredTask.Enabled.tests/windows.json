@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7c2463bf1568",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:22:14Z",
+  "tests": [
+    {
+      "name": "rte_enabled",
+      "exe_sha256": "25409f274420ab4c673adf114a77c2da77734d335b3d2f8ca06e8ae4ea82e8a2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpuZXcgdGFzazogbmFtZT1bYV0gcGF0aD1bXFBvbHlTcGVjXHRyZVxhXSBzdGF0ZT0zIChocj0weDAwMDAwMDAwKSBlbmFibGVkPXRydWUgKGhyPTB4MDAwMDAwMDApIGxhc3RyZXN1bHQ9MHgwMDA0MTMwMyAoaHI9MHgwMDA0MTMwMykgZXZlciByYW49MCBtaXNzZWQ9MApkaXNhYmxlZCBieSBwdXRfRW5hYmxlZDogbmFtZT1bYV0gcGF0aD1bXFBvbHlTcGVjXHRyZVxhXSBzdGF0ZT0xIChocj0weDAwMDAwMDAwKSBlbmFibGVkPWZhbHNlIChocj0weDAwMDAwMDAwKSBsYXN0cmVzdWx0PTB4MDAwNDEzMDMgKGhyPTB4MDAwNDEzMDMpIGV2ZXIgcmFuPTAgbWlzc2VkPTAKcHV0X0VuYWJsZWQoZmFsc2UpIGFnYWluOiBocj0weDAwMDAwMDAwCkVuYWJsZWQgZWxlbWVudHMgaW4gaXRzIFhNTDogbm8gRW5hYmxlZCBlbGVtZW50CmdldF9TdGF0ZShOVUxMKTogaHI9MHg4MDAwNDAwMwogIEVuYWJsZWQgZWxlbWVudHMgaW4gaXRzIFhNTDogPEVuYWJsZWQ+ZmFsc2U8L0VuYWJsZWQ+CiAgdGhlIHRhc2s6IG5hbWU9W2NdIHBhdGg9W1xQb2x5U3BlY1x0cmVcY10gc3RhdGU9MSAoaHI9MHgwMDAwMDAwMCkgZW5hYmxlZD1mYWxzZSAoaHI9MHgwMDAwMDAwMCkgbGFzdHJlc3VsdD0weDAwMDQxMzAzIChocj0weDAwMDQxMzAzKSBldmVyIHJhbj0wIG1pc3NlZD0wClVQREFURSB3aXRoIFNldHRpbmdzLkVuYWJsZWQgdHJ1ZTogaHI9MHgwMDAwMDAwMAogIHRoZSB0YXNrOiBuYW1lPVtjXSBwYXRoPVtcUG9seVNwZWNcdHJlXGNdIHN0YXRlPTEgKGhyPTB4MDAwMDAwMDApIGVuYWJsZWQ9ZmFsc2UgKGhyPTB4MDAwMDAwMDApIGxhc3RyZXN1bHQ9MHgwMDA0MTMwMyAoaHI9MHgwMDA0MTMwMykgZXZlciByYW49MCBtaXNzZWQ9MApzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nnew task: name=[a] path=[\\PolySpec\\tre\\a] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\ndisabled by put_Enabled: name=[a] path=[\\PolySpec\\tre\\a] state=1 (hr=0x00000000) enabled=false (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nput_Enabled(false) again: hr=0x00000000\nEnabled elements in its XML: no Enabled element\nget_State(NULL): hr=0x80004003\n  Enabled elements in its XML: <Enabled>false</Enabled>\n  the task: name=[c] path=[\\PolySpec\\tre\\c] state=1 (hr=0x00000000) enabled=false (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nUPDATE with Settings.Enabled true: hr=0x00000000\n  the task: name=[c] path=[\\PolySpec\\tre\\c] state=1 (hr=0x00000000) enabled=false (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 202
+    },
+    {
+      "name": "rte_enabled_b",
+      "exe_sha256": "d675572d7a77e1c84baf2114177c1be2881d99ac83c2c07dbc12931e75f57201",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VydmljZQpvayByZWdpc3RlcgpFbmFibGVkIGVsZW1lbnRzIGluIGl0cyBYTUw6IG5vIEVuYWJsZWQgZWxlbWVudApFbmFibGVkIGVsZW1lbnRzIGluIGl0cyBYTUw6IG5vIEVuYWJsZWQgZWxlbWVudApwdXRfRW5hYmxlZCh0cnVlKTogaHI9MHgwMDAwMDAwMApwdXRfRW5hYmxlZCgxLCBub3QgVkFSSUFOVF9UUlVFKTogaHI9MHgwMDAwMDAwMCByZWFkcyBiYWNrIHRydWUKQ1JFQVRFIHwgRElTQUJMRTogaHI9MHgwMDAwMDAwMAogIGFmdGVyIHB1dF9FbmFibGVkKHRydWUpOiBuYW1lPVtiXSBwYXRoPVtcUG9seVNwZWNcdHJlXGJdIHN0YXRlPTMgKGhyPTB4MDAwMDAwMDApIGVuYWJsZWQ9dHJ1ZSAoaHI9MHgwMDAwMDAwMCkgbGFzdHJlc3VsdD0weDAwMDQxMzAzIChocj0weDAwMDQxMzAzKSBldmVyIHJhbj0wIG1pc3NlZD0wCiAgRW5hYmxlZCBlbGVtZW50cyBpbiBpdHMgWE1MOiA8RW5hYmxlZD5mYWxzZTwvRW5hYmxlZD4KICB0aGUgdGFzazogbmFtZT1bY10gcGF0aD1bXFBvbHlTcGVjXHRyZVxjXSBzdGF0ZT0zIChocj0weDAwMDAwMDAwKSBlbmFibGVkPXRydWUgKGhyPTB4MDAwMDAwMDApIGxhc3RyZXN1bHQ9MHgwMDA0MTMwMyAoaHI9MHgwMDA0MTMwMykgZXZlciByYW49MCBtaXNzZWQ9MApwdXRfRW5hYmxlZCBvbiBhIGRlbGV0ZWQgdGFzaydzIG9iamVjdDogaHI9MHg4MDA3MDAwMgpzdW1tYXJ5IDIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok service\nok register\nEnabled elements in its XML: no Enabled element\nEnabled elements in its XML: no Enabled element\nput_Enabled(true): hr=0x00000000\nput_Enabled(1, not VARIANT_TRUE): hr=0x00000000 reads back true\nCREATE | DISABLE: hr=0x00000000\n  after put_Enabled(true): name=[b] path=[\\PolySpec\\tre\\b] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\n  Enabled elements in its XML: <Enabled>false</Enabled>\n  the task: name=[c] path=[\\PolySpec\\tre\\c] state=3 (hr=0x00000000) enabled=true (hr=0x00000000) lastresult=0x00041303 (hr=0x00041303) ever ran=0 missed=0\nput_Enabled on a deleted task's object: hr=0x80070002\nsummary 2 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 192
+    }
+  ]
+}

@@ -624,6 +624,13 @@ pub const CHROME_SIGNATURES: &[(&str, &str)] = &[
     // powerbase.h, wtsapi32.h, lmaccess.h, netioapi.h, oleacc.h, uiautomationcoreapi.h, realtimeapiset.h.
     ("PathMatchSpecW", "i=ww"),
     ("SHGetKnownFolderPath", "i=pihp"),
+    // The download path (spec-chrome-dl): objbase.h, shobjidl_core.h, shellapi.h, shlobj_core.h.
+    ("CoCreateInstance", "i=ppipp"),
+    ("CoGetClassObject", "i=pippp"),
+    ("SHCreateItemFromParsingName", "i=wppp"),
+    ("SHGetFileInfoW", "q=wipii"),
+    ("SHGetFolderPathW", "i=hihip"),
+    ("ShellExecuteExW", "i=p"),
     ("SHGetPropertyStoreForWindow", "i=hpp"),
     ("InitCommonControlsEx", "i=p"),
     ("DwmSetWindowAttribute", "i=hipi"),

@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/IFileOperation.MoveItem.yaml
+id: windows/api/shell32.dll/IFileOperation.MoveItem
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled. Microsoft Learn: IShellItem, IFileOperation, IShellFolder, IFileDialog, ITaskbarList3, ICustomDestinationList, SHCreateItemFromParsingName, SHParseDisplayName, ShellExecuteExW, SHOpenFolderAndSelectItems; shobjidl_core.h for the order of the methods and the interface ids.
+summary: >
+  The shell's file operation object (CLSID_FileOperation, IFileOperation) as Chrome's download code uses it to rename a download: a MoveItem with the file's shell item, the folder's shell item and the new name, then PerformOperations. The same object does RenameItem, CopyItem and DeleteItem. Nothing happens to a file until PerformOperations. Observations are for the flags that show no window: Chrome's own flag set is not visible to a tracer (COM calls are made through the object's table); the tests use the operation's default flags for plain renames and FOF_NO_UI for everything that could ask.
+interface:
+  create: "CoCreateInstance(CLSID_FileOperation {3AD05575-8857-4850-9277-11B85BDB8E09}, NULL, CLSCTX_INPROC_SERVER, IID_IFileOperation {947AAB5F-0A5C-4C13-B4D6-4BF7836FC9F8})"
+  methods: "IFileOperation after IUnknown: Advise 3, Unadvise 4, SetOperationFlags 5, SetProgressMessage 6, SetProgressDialog 7, SetProperties 8, SetOwnerWindow 9, ApplyPropertiesToItem 10, ApplyPropertiesToItems 11, RenameItem 12, RenameItems 13, MoveItem 14, MoveItems 15, CopyItem 16, CopyItems 17, DeleteItem 18, DeleteItems 19, NewItem 20, PerformOperations 21, GetAnyOperationsAborted 22"
+  move_item: "HRESULT MoveItem(IShellItem *psiItem, IShellItem *psiDestinationFolder, PCWSTR pszNewName, IFileOperationProgressSink *pfopsItem)"
+  flags: "FILEOP_FLAGS: FOF_SILENT 4, FOF_RENAMEONCOLLISION 8, FOF_NOCONFIRMATION 0x10, FOF_ALLOWUNDO 0x40, FOF_NOCONFIRMMKDIR 0x200, FOF_NOERRORUI 0x400; the tests' FOF_NO_UI is 0x614"
+chrome:
+  rename: "per rename: CoCreateInstance as above after the two SHCreateItemFromParsingName calls; the operation is then used through its table (invisible to the tracer): the observable effect is that `<guid>.tmp` becomes `Unconfirmed N.crdownload` and, at the end of the download, that becomes the final name, in the same folder, with the file's Zone.Identifier stream and its content"
+  when: "the first rename happens when the download has its first bytes (the tmp file exists with the payload so far), the second when it ends; with Save As on, the tmp file stays until the dialog is closed"
+rules:
+  create: "S_OK in a thread whose COM is started; QueryInterface IUnknown S_OK, a made-up id E_NOINTERFACE (0x80004002)"
+  nothing_queued: "PerformOperations with nothing queued: E_UNEXPECTED (0x8000FFFF); PerformOperations a second time after one that ran: E_UNEXPECTED; GetAnyOperationsAborted before any operation: S_OK, FALSE"
+  move_in_folder: "MoveItem(file item, folder item, new name, NULL): S_OK and nothing changes yet (the old name still has the bytes, the new one is absent); PerformOperations: S_OK; then the old name is absent, the new one has the same size and bytes, the attributes (0x20) and every alternate data stream (`Zone.Identifier` with the same 26 bytes); GetAnyOperationsAborted: S_OK, FALSE"
+  dropped: "an operation released without PerformOperations does nothing: the file keeps its name"
+  source_gone: "the source deleted after MoveItem and before PerformOperations: PerformOperations S_OK, GetAnyOperationsAborted S_OK and TRUE"
+  onto_existing: "with FOF_NO_UI (no FOF_RENAMEONCOLLISION): MoveItem onto an existing name replaces it without a prompt: PerformOperations S_OK, GetAnyOperationsAborted FALSE, the target holds the source's bytes and the source name is gone; with FOF_RENAMEONCOLLISION added the existing file stays and the moved file gets the name `<name> - Copy.<ext>` (`fc-b - Copy.bin`)"
+  other_folder: "MoveItem into another folder with a NULL new name or with the same name: S_OK; two MoveItem calls in one operation: both queued and both done by one PerformOperations; the files are in the other folder afterwards"
+  rename_item: "RenameItem(item, `new name`, NULL) then PerformOperations: S_OK and the file has the new name. A new name that is empty, `..` or has a wildcard: both calls S_OK and the file keeps its name. A new name with a backslash or a colon: PerformOperations shows a modal error window even with FOF_NOERRORUI and does not return in a session nobody can answer (not tested)"
+  copy_delete: "CopyItem(item, folder, `copy name`, NULL) + PerformOperations: S_OK and both files exist; DeleteItem(item, NULL) + PerformOperations with FOF_NO_UI (no FOF_ALLOWUNDO): S_OK and the file is gone for good"
+  misc: "SetOperationFlags(FOF_NO_UI): S_OK; SetOwnerWindow(NULL): S_OK; SetProgressMessage: E_NOTIMPL (0x80004001)"
+errors:
+  unexpected: "0x8000FFFF"
+  no_interface: "0x80004002"
+  not_implemented: "0x80004001"
+side_effects: "renames, copies and deletes files in the test's scratch folder"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder. The calls are made through the object's table (the slot numbers are those of the header); a modal window never shows in the cases tested. Names with a backslash or colon were tried in separate runs, which hung and are not part of the tests.
+not_covered: >
+  progress sinks (Advise, the pfops arguments), SetProgressDialog, ApplyProperties*, NewItem, MoveItems/CopyItems/DeleteItems/RenameItems with item arrays, FOF_ALLOWUNDO (recycle bin), FOFX_* flags, elevation, network paths, moves between volumes, the windows shown without FOF_NO_UI and FOF_NOCONFIRMATION.

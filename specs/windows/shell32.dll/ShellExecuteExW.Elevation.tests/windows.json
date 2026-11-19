@@ -1,0 +1,78 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "sxex_admin_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "d16009f482271a14108252e2c6b43d617300f5b01d2db22771f004aa0822e48f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3BlbiBhbiBleGVjdXRhYmxlIHRoYXQgcmVxdWlyZXMgYWRtaW5pc3RyYXRvcjogb2sgMCBlcnIgMTIyMyBoSW5zdEFwcCBlcnJvciBoUHJvY2VzcyBudWxsIApvcGVuIGFuIGV4ZWN1dGFibGUgdGhhdCByZXF1aXJlcyBhZG1pbmlzdHJhdG9yOiBoSW5zdEFwcCBlcnJvciBjb2RlIDUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "open an executable that requires administrator: ok 0 err 1223 hInstApp error hProcess null \nopen an executable that requires administrator: hInstApp error code 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 122403
+    },
+    {
+      "name": "sxex_decline_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "62bfa147ea686592d9891ad1080bd0e29a6620ec57b8d5a4aa47c56235cec783",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cnVuYXMgb24gdGhpcyBpbWFnZTogb2sgMCBlcnIgMTIyMyBoSW5zdEFwcCBlcnJvciBoUHJvY2VzcyBudWxsIApydW5hcyBvbiB0aGlzIGltYWdlOiBoSW5zdEFwcCBlcnJvciBjb2RlIDUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "runas on this image: ok 0 err 1223 hInstApp error hProcess null \nrunas on this image: hInstApp error code 5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 122339
+    },
+    {
+      "name": "sxex_open_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "bc1f4ad65d20193b546e2e9eee5364662b12fc12284d2289e2d96e72ff6e8f15",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3BlbiB0aGlzIGltYWdlOiBvayAxIGVyciAtMiBoSW5zdEFwcCBzdWNjZXNzKD4zMikgaFByb2Nlc3Mgc2V0IGNoaWxkIGVsZXZhdGlvbiAwIHR5cGUgMyBpbnRlZ3JpdHkgMiBhZG1pbnMtZGVueS1vbmx5IDEgYWRtaW5zLWVuYWJsZWQgMCBsaW5rZWQtcHJlc2VudCAxCk5VTEwgdmVyYiwgdGhpcyBpbWFnZTogb2sgMSBlcnIgLTIgaEluc3RBcHAgc3VjY2Vzcyg+MzIpIGhQcm9jZXNzIHNldCBjaGlsZCBlbGV2YXRpb24gMCB0eXBlIDMgaW50ZWdyaXR5IDIgYWRtaW5zLWRlbnktb25seSAxIGFkbWlucy1lbmFibGVkIDAgbGlua2VkLXByZXNlbnQgMQpvcGVuIHRoaXMgaW1hZ2UsIG5vIE5PQ0xPU0VQUk9DRVNTOiBvayAxIGVyciAtMiBoSW5zdEFwcCBzdWNjZXNzKD4zMikgaFByb2Nlc3MgbnVsbCAKdW5rbm93biB2ZXJiOiBvayAwIGVyciAxMTU1IGhJbnN0QXBwIGVycm9yIGhQcm9jZXNzIG51bGwgCnVua25vd24gdmVyYjogaEluc3RBcHAgZXJyb3IgY29kZSAzMQpvcGVuIGEgbWlzc2luZyBmaWxlOiBvayAwIGVyciAyIGhJbnN0QXBwIGVycm9yIGhQcm9jZXNzIG51bGwgCm9wZW4gYSBtaXNzaW5nIGZpbGU6IGhJbnN0QXBwIGVycm9yIGNvZGUgMgpydW5hcyBvbiBhIG1pc3NpbmcgZmlsZTogb2sgMCBlcnIgMiBoSW5zdEFwcCBlcnJvciBoUHJvY2VzcyBudWxsIApydW5hcyBvbiBhIG1pc3NpbmcgZmlsZTogaEluc3RBcHAgZXJyb3IgY29kZSAyCmNiU2l6ZSA4OiBvayAwIGVyciA1CnNpemVvZiBTSEVMTEVYRUNVVEVJTkZPVyAxMTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "open this image: ok 1 err -2 hInstApp success(>32) hProcess set child elevation 0 type 3 integrity 2 admins-deny-only 1 admins-enabled 0 linked-present 1\nNULL verb, this image: ok 1 err -2 hInstApp success(>32) hProcess set child elevation 0 type 3 integrity 2 admins-deny-only 1 admins-enabled 0 linked-present 1\nopen this image, no NOCLOSEPROCESS: ok 1 err -2 hInstApp success(>32) hProcess null \nunknown verb: ok 0 err 1155 hInstApp error hProcess null \nunknown verb: hInstApp error code 31\nopen a missing file: ok 0 err 2 hInstApp error hProcess null \nopen a missing file: hInstApp error code 2\nrunas on a missing file: ok 0 err 2 hInstApp error hProcess null \nrunas on a missing file: hInstApp error code 2\ncbSize 8: ok 0 err 5\nsizeof SHELLEXECUTEINFOW 112\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 265
+    },
+    {
+      "name": "sxex_runas_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "62bfa147ea686592d9891ad1080bd0e29a6620ec57b8d5a4aa47c56235cec783",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cnVuYXMgb24gdGhpcyBpbWFnZTogb2sgMSBlcnIgLTIgaEluc3RBcHAgc3VjY2Vzcyg+MzIpIGhQcm9jZXNzIHNldCBjaGlsZCBlbGV2YXRpb24gMSB0eXBlIDIgaW50ZWdyaXR5IDMgYWRtaW5zLWRlbnktb25seSAwIGFkbWlucy1lbmFibGVkIDEgbGlua2VkLXByZXNlbnQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "runas on this image: ok 1 err -2 hInstApp success(>32) hProcess set child elevation 1 type 2 integrity 3 admins-deny-only 0 admins-enabled 1 linked-present 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 166
+    }
+  ]
+}

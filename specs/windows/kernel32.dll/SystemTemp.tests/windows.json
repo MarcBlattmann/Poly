@@ -1,0 +1,60 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "2c1341f980d8",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T10:55:57Z",
+  "tests": [
+    {
+      "name": "stmp_create_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "ead79ecfdd744c34e1dd8f6713b1e5310c89b9bbac1e84d27e421afeb427616a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q3JlYXRlRGlyZWN0b3J5VyhTeXN0ZW1UZW1wXHN1YikgPSAwIGVyciA1CkNyZWF0ZUZpbGVXKENSRUFURV9ORVcpIGluIFN5c3RlbVRlbXAgPSBmYWxzZSBlcnIgNQpvcGVuIGEgbWlzc2luZyBuYW1lIGZvciByZWFkaW5nID0gZmFsc2UgZXJyIDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CreateDirectoryW(SystemTemp\\sub) = 0 err 5\nCreateFileW(CREATE_NEW) in SystemTemp = false err 5\nopen a missing name for reading = false err 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "stmp_dir_adm",
+      "session": "interactive",
+      "token": "elevated",
+      "exe_sha256": "d3d5dadbf6a5ffe96ffa3c16500ed93d88ca2c982b6c456c5291d854c9e5c352",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V2luZG93cyBkaXJlY3RvcnkgaXMgQzpcV2luZG93czogdHJ1ZQphdHRyaWJ1dGVzOiBpbnZhbGlkPWZhbHNlIGRpcmVjdG9yeT10cnVlIGF0dHJzJjB4MWYxPTB4MTAKb3BlbiBkaXJlY3Rvcnkgd2l0aCBGSUxFX1JFQURfQVRUUklCVVRFUyAoMHg4MCk6IHRydWUgZXJyIC0yCm9wZW4gZGlyZWN0b3J5IHdpdGggUkVBRF9DT05UUk9MICgweDIwMDAwKTogdHJ1ZSBlcnIgLTIKb3BlbiBkaXJlY3Rvcnkgd2l0aCBGSUxFX0xJU1RfRElSRUNUT1JZICgxKTogdHJ1ZSBlcnIgLTIKb3BlbiBkaXJlY3Rvcnkgd2l0aCBGSUxFX0FERF9GSUxFICgyKTogdHJ1ZSBlcnIgLTIKb3BlbiBkaXJlY3Rvcnkgd2l0aCBGSUxFX0FERF9TVUJESVJFQ1RPUlkgKDQpOiB0cnVlIGVyciAtMgpvcGVuIGRpcmVjdG9yeSB3aXRoIEZJTEVfVFJBVkVSU0UgKDB4MjApOiB0cnVlIGVyciAtMgpvcGVuIGRpcmVjdG9yeSB3aXRoIERFTEVURSAoMHgxMDAwMCk6IHRydWUgZXJyIC0yCm9wZW4gZGlyZWN0b3J5IHdpdGggV1JJVEVfREFDICgweDQwMDAwKTogdHJ1ZSBlcnIgLTIKb3BlbiBkaXJlY3Rvcnkgd2l0aCBHRU5FUklDX1JFQUQ6IHRydWUgZXJyIC0yCkZpbmRGaXJzdEZpbGVXIG9uIFN5c3RlbVRlbXBcKjogdHJ1ZSBlcnIgLTIKU0RETCBvd25lcnxncm91cHxkYWNsOiBPOlNZRzpTWUQ6UEFJKEE7T0lDSTtGQTs7O1NZKShBO09JQ0k7RkE7OztCQSkKU0RETCBkYWNsOiBEOlBBSShBO09JQ0k7RkE7OztTWSkoQTtPSUNJO0ZBOzs7QkEpClNEREwgb3duZXI6IE86U1kKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Windows directory is C:\\Windows: true\nattributes: invalid=false directory=true attrs&0x1f1=0x10\nopen directory with FILE_READ_ATTRIBUTES (0x80): true err -2\nopen directory with READ_CONTROL (0x20000): true err -2\nopen directory with FILE_LIST_DIRECTORY (1): true err -2\nopen directory with FILE_ADD_FILE (2): true err -2\nopen directory with FILE_ADD_SUBDIRECTORY (4): true err -2\nopen directory with FILE_TRAVERSE (0x20): true err -2\nopen directory with DELETE (0x10000): true err -2\nopen directory with WRITE_DAC (0x40000): true err -2\nopen directory with GENERIC_READ: true err -2\nFindFirstFileW on SystemTemp\\*: true err -2\nSDDL owner|group|dacl: O:SYG:SYD:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)\nSDDL dacl: D:PAI(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)\nSDDL owner: O:SY\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    },
+    {
+      "name": "stmp_paths",
+      "exe_sha256": "e788b6dbfe9fa27ea1853cdb1b2624d423c8c37c5d83d11bcadec6da8492e212",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0VGVtcFBhdGhXIGVuZHMgd2l0aCBhIGJhY2tzbGFzaDogdHJ1ZQpHZXRUZW1wUGF0aDJXIGVxdWFscyBHZXRUZW1wUGF0aFc6IHRydWUKR2V0VGVtcFBhdGhXIGlzIGJlbG93IEM6XFdpbmRvd3NcU3lzdGVtVGVtcDogZmFsc2UKR2V0VGVtcFBhdGgyVyBpcyBiZWxvdyBDOlxXaW5kb3dzXFN5c3RlbVRlbXA6IGZhbHNlCkdldFRlbXBQYXRoVyBpcyBiZWxvdyBDOlxXaW5kb3dzOiBmYWxzZQpUTVAgaXMgc2V0OiB0cnVlOyBHZXRUZW1wUGF0aFcgc3RhcnRzIHdpdGggaXQ6IHRydWUKVEVNUCBpcyBzZXQ6IHRydWU7IEdldFRlbXBQYXRoVyBzdGFydHMgd2l0aCBpdDogdHJ1ZQpHZXRTeXN0ZW1XaW5kb3dzRGlyZWN0b3J5VyBlcXVhbHMgR2V0V2luZG93c0RpcmVjdG9yeVc6IHRydWUgKEM6XFdpbmRvd3M6IHRydWUpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetTempPathW ends with a backslash: true\nGetTempPath2W equals GetTempPathW: true\nGetTempPathW is below C:\\Windows\\SystemTemp: false\nGetTempPath2W is below C:\\Windows\\SystemTemp: false\nGetTempPathW is below C:\\Windows: false\nTMP is set: true; GetTempPathW starts with it: true\nTEMP is set: true; GetTempPathW starts with it: true\nGetSystemWindowsDirectoryW equals GetWindowsDirectoryW: true (C:\\Windows: true)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

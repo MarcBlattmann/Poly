@@ -1,0 +1,34 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "edition": "Core",
+    "display": "25H2",
+    "session": "interactive"
+  },
+  "bundle": "29c555d308a1",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:56:21Z",
+  "timeout_ms": 90000,
+  "test_timeouts_s": {},
+  "runs": 2,
+  "tests": [
+    {
+      "name": "dpi_legacy_b",
+      "exe_sha256": "3fbc46cdf3b851cbcfd5510b4a6bb57057e8d7ec7666ccd59f18552ea6ac9828",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "U2V0UHJvY2Vzc0RQSUF3YXJlIC0+IHRydWUKR2V0RHBpRm9yU3lzdGVtIDE5MiBTTV9DWFNDUkVFTiB4IFNNX0NZU0NSRUVOIDI1NjB4MTYwMApDWFZTQ1JPTEw6IDM0IGZvciB0aGUgc3lzdGVtIGRwaSAzNCBmb3IgOTYgMTcgZm9yIDE5MiAzNApDWUhTQ1JPTEw6IDM0IGZvciB0aGUgc3lzdGVtIGRwaSAzNCBmb3IgOTYgMTcgZm9yIDE5MiAzNApDWUNBUFRJT046IDQ1IGZvciB0aGUgc3lzdGVtIGRwaSA0NSBmb3IgOTYgMjMgZm9yIDE5MiA0NQpDWEJPUkRFUjogMSBmb3IgdGhlIHN5c3RlbSBkcGkgMSBmb3IgOTYgMSBmb3IgMTkyIDEKQ1lCT1JERVI6IDEgZm9yIHRoZSBzeXN0ZW0gZHBpIDEgZm9yIDk2IDEgZm9yIDE5MiAxCkNZVlRIVU1COiAzNCBmb3IgdGhlIHN5c3RlbSBkcGkgMzQgZm9yIDk2IDE3IGZvciAxOTIgMzQKQ1hIVEhVTUI6IDM0IGZvciB0aGUgc3lzdGVtIGRwaSAzNCBmb3IgOTYgMTcgZm9yIDE5MiAzNApDWElDT046IDY0IGZvciB0aGUgc3lzdGVtIGRwaSA2NCBmb3IgOTYgMzIgZm9yIDE5MiA2NApDWUlDT046IDY0IGZvciB0aGUgc3lzdGVtIGRwaSA2NCBmb3IgOTYgMzIgZm9yIDE5MiA2NApDWU1FTlU6IDM5IGZvciB0aGUgc3lzdGVtIGRwaSAzOSBmb3IgOTYgMjAgZm9yIDE5MiAzOQpDWE1JTjogMjU4IGZvciB0aGUgc3lzdGVtIGRwaSAyNTggZm9yIDk2IDEzNiBmb3IgMTkyIDI1OApDWU1JTjogNzEgZm9yIHRoZSBzeXN0ZW0gZHBpIDcxIGZvciA5NiAzOSBmb3IgMTkyIDcxCkNYU0laRTogNzIgZm9yIHRoZSBzeXN0ZW0gZHBpIDcyIGZvciA5NiAzNiBmb3IgMTkyIDcyCkNZU0laRTogNDQgZm9yIHRoZSBzeXN0ZW0gZHBpIDQ0IGZvciA5NiAyMiBmb3IgMTkyIDQ0CkNYRlJBTUU6IDUgZm9yIHRoZSBzeXN0ZW0gZHBpIDUgZm9yIDk2IDQgZm9yIDE5MiA1CkNZRlJBTUU6IDUgZm9yIHRoZSBzeXN0ZW0gZHBpIDUgZm9yIDk2IDQgZm9yIDE5MiA1CkNYTUlOVFJBQ0s6IDI1OCBmb3IgdGhlIHN5c3RlbSBkcGkgMjU4IGZvciA5NiAxMzYgZm9yIDE5MiAyNTgKQ1lNSU5UUkFDSzogNzEgZm9yIHRoZSBzeXN0ZW0gZHBpIDcxIGZvciA5NiAzOSBmb3IgMTkyIDcxCkNYRE9VQkxFQ0xLOiA0IGZvciB0aGUgc3lzdGVtIGRwaSA0IGZvciA5NiA0IGZvciAxOTIgNApDWElDT05TUEFDSU5HOiAxNTAgZm9yIHRoZSBzeXN0ZW0gZHBpIDE1MCBmb3IgOTYgNzUgZm9yIDE5MiAxNTAKQ1hFREdFOiAyIGZvciB0aGUgc3lzdGVtIGRwaSAyIGZvciA5NiAyIGZvciAxOTIgMgpDWFNNSUNPTjogMzIgZm9yIHRoZSBzeXN0ZW0gZHBpIDMyIGZvciA5NiAxNiBmb3IgMTkyIDMyCkNZU01JQ09OOiAzMiBmb3IgdGhlIHN5c3RlbSBkcGkgMzIgZm9yIDk2IDE2IGZvciAxOTIgMzIKQ1lTTUNBUFRJT046IDQ1IGZvciB0aGUgc3lzdGVtIGRwaSA0NSBmb3IgOTYgMjMgZm9yIDE5MiA0NQpDWFNNU0laRTogNDQgZm9yIHRoZSBzeXN0ZW0gZHBpIDQ0IGZvciA5NiAyMiBmb3IgMTkyIDQ0CkNYTUVOVVNJWkU6IDM4IGZvciB0aGUgc3lzdGVtIGRwaSAzOCBmb3IgOTYgMTkgZm9yIDE5MiAzOApDWERSQUc6IDQgZm9yIHRoZSBzeXN0ZW0gZHBpIDQgZm9yIDk2IDQgZm9yIDE5MiA0CkNYTUVOVUNIRUNLOiAzMSBmb3IgdGhlIHN5c3RlbSBkcGkgMzEgZm9yIDk2IDE1IGZvciAxOTIgMzEKQ1hQQURERURCT1JERVI6IDggZm9yIHRoZSBzeXN0ZW0gZHBpIDggZm9yIDk2IDQgZm9yIDE5MiA4CkdldERwaUZvck1vbml0b3IocHJpbWFyeSwgZWZmZWN0aXZlKSBociAweDAgeCAxOTIgeSAxOTIKR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5LCBhbmd1bGFyKSBociAweDAgeCA5NiB5IDk2CkdldERwaUZvck1vbml0b3IocHJpbWFyeSwgcmF3KSBociAweDgwMDcwMDMyIHggMCB5IDAKR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5LCAzKSBociAweDgwMDcwMGEwIHggNyB5IDcKR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5LCAtMSkgaHIgMHg4MDA3MDBhMCB4IDcgeSA3CkdldERwaUZvck1vbml0b3IoTlVMTCwgZWZmZWN0aXZlKSBociAweDgwMDcwMDA2IHggNyB5IDcKR2V0U2NhbGVGYWN0b3JGb3JNb25pdG9yKHByaW1hcnkpIGhyIDB4MCBmYWN0b3IgMTgwCkdldFNjYWxlRmFjdG9yRm9yTW9uaXRvcihOVUxMKSBociAweDAgZmFjdG9yIDEwMAp0aGUgd2luZG93J3MgbW9uaXRvciBpcyB0aGUgcHJpbWFyeTogdHJ1ZQpHZXREcGlGb3JNb25pdG9yKHdpbmRvdydzIG1vbml0b3IsIGVmZmVjdGl2ZSkgaHIgMHgwIHggMTkyIHkgMTkyCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetProcessDPIAware -> true\nGetDpiForSystem 192 SM_CXSCREEN x SM_CYSCREEN 2560x1600\nCXVSCROLL: 34 for the system dpi 34 for 96 17 for 192 34\nCYHSCROLL: 34 for the system dpi 34 for 96 17 for 192 34\nCYCAPTION: 45 for the system dpi 45 for 96 23 for 192 45\nCXBORDER: 1 for the system dpi 1 for 96 1 for 192 1\nCYBORDER: 1 for the system dpi 1 for 96 1 for 192 1\nCYVTHUMB: 34 for the system dpi 34 for 96 17 for 192 34\nCXHTHUMB: 34 for the system dpi 34 for 96 17 for 192 34\nCXICON: 64 for the system dpi 64 for 96 32 for 192 64\nCYICON: 64 for the system dpi 64 for 96 32 for 192 64\nCYMENU: 39 for the system dpi 39 for 96 20 for 192 39\nCXMIN: 258 for the system dpi 258 for 96 136 for 192 258\nCYMIN: 71 for the system dpi 71 for 96 39 for 192 71\nCXSIZE: 72 for the system dpi 72 for 96 36 for 192 72\nCYSIZE: 44 for the system dpi 44 for 96 22 for 192 44\nCXFRAME: 5 for the system dpi 5 for 96 4 for 192 5\nCYFRAME: 5 for the system dpi 5 for 96 4 for 192 5\nCXMINTRACK: 258 for the system dpi 258 for 96 136 for 192 258\nCYMINTRACK: 71 for the system dpi 71 for 96 39 for 192 71\nCXDOUBLECLK: 4 for the system dpi 4 for 96 4 for 192 4\nCXICONSPACING: 150 for the system dpi 150 for 96 75 for 192 150\nCXEDGE: 2 for the system dpi 2 for 96 2 for 192 2\nCXSMICON: 32 for the system dpi 32 for 96 16 for 192 32\nCYSMICON: 32 for the system dpi 32 for 96 16 for 192 32\nCYSMCAPTION: 45 for the system dpi 45 for 96 23 for 192 45\nCXSMSIZE: 44 for the system dpi 44 for 96 22 for 192 44\nCXMENUSIZE: 38 for the system dpi 38 for 96 19 for 192 38\nCXDRAG: 4 for the system dpi 4 for 96 4 for 192 4\nCXMENUCHECK: 31 for the system dpi 31 for 96 15 for 192 31\nCXPADDEDBORDER: 8 for the system dpi 8 for 96 4 for 192 8\nGetDpiForMonitor(primary, effective) hr 0x0 x 192 y 192\nGetDpiForMonitor(primary, angular) hr 0x0 x 96 y 96\nGetDpiForMonitor(primary, raw) hr 0x80070032 x 0 y 0\nGetDpiForMonitor(primary, 3) hr 0x800700a0 x 7 y 7\nGetDpiForMonitor(primary, -1) hr 0x800700a0 x 7 y 7\nGetDpiForMonitor(NULL, effective) hr 0x80070006 x 7 y 7\nGetScaleFactorForMonitor(primary) hr 0x0 factor 180\nGetScaleFactorForMonitor(NULL) hr 0x0 factor 100\nthe window's monitor is the primary: true\nGetDpiForMonitor(window's monitor, effective) hr 0x0 x 192 y 192\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 229,
+      "session": "interactive-bottom/2560x1600/200"
+    }
+  ]
+}

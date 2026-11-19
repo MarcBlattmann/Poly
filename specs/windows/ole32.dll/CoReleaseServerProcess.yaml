@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/CoReleaseServerProcess.yaml
+id: windows/api/ole32.dll/CoReleaseServerProcess
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-oop
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs (a COM server and client in one image, a service of its own) on the machine above. Microsoft Learn: "CoRegisterClassObject function (combaseapi.h)", "CoRevokeClassObject", "CoResumeClassObjects", "CoGetClassObject", "CoCreateInstance", "CoCreateInstanceEx", "REGCLS enumeration", "CLSCTX enumeration", "MULTI_QI", "COSERVERINFO", "IClassFactory", "AppID Key", "LocalService", "ServiceParameters", "LocalServer32", "COM Class Objects and CLSIDs", "Registering COM Servers", "Creating a Windows Service" (winsvc.h); objbase.h, combaseapi.h, wtypes.h, winerror.h for constants and layouts. Google's updater and installers: their own logs and registry changes from the survey (docs/windows/chrome-installer-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Subtracts one from the process's server reference count and returns the new count. When the count reaches zero COM suspends the process's class objects (they are no longer served and cannot be brought back), which makes the next client request start a new server process; the server then ends. The counter is a plain 32-bit counter and wraps when released below zero.
+interface:
+  signature: "ULONG CoReleaseServerProcess(void)"
+installer: "The updater's service and Chrome's elevation service call it when a task or object is done; reaching 0 shuts the server down."
+rules:
+  counting: "returns the new count: after adds to 3, 2, 1, 0"
+  zero_hides_local: "when a release brings the count from 1 to 0, every registration for the local-server context (MULTIPLEUSE, MULTI_SEPARATE and the ones made for both contexts) is hidden (0x80040154) from every thread; registrations for the in-process context only stay found (the registering apartment's lookup)"
+  no_return: "after the hide, AddRef (the count goes up again), CoResumeClassObjects and a new registration of the same or another class for the local-server context do not make local lookups succeed again"
+  release_at_zero: "a release at 0 returns 0 and keeps the count at 0 in a process where the count was never raised and COM was never initialised (twice in a row); once COM has been initialised in the process, or the count has been raised and released again, a release at 0 wraps: 4294967295, then 4294967294, and so on, with no error and no effect on the registered classes"
+  wrap_recovers: "after wrapping, adds count up through 0: 4294967295, 0, 1, and releases count down again"
+  server_quit: "a server that releases its count on each object's last Release and leaves when the count is 0: after the last object is released it leaves by itself; the next client activation starts a second server process; the log shows counts 2, 3 on creation and 1, 0 on release for the first server and 2, 0 for the second"
+errors:
+side_effects: "at zero: the process's local-context class registrations stop being served"
+threading: "may be called from any thread, with or without COM initialised"
+ordering: []
+timing:
+  typical: "well under a microsecond"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, see CoRegisterClassObject: the image is client and COM server (`--child srv <tag> clsid={...} <flags>`, a class factory and a plain object of its own, a log file and request files in the test's directory); class registrations are the test's own (HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...}, default value starting `polyws-com-oop`) and are removed again; a class id with a pending activation of an earlier run is avoided by putting the process id into the class id; calls that can wait for a long time run on a thread of their own with a bounded wait. Observations are results, booleans and counts, never process ids, thread ids, cookies or times.
+not_covered: >
+  what a server that keeps running after the count reached zero does with objects that are still alive, and the idle timeout of servers.

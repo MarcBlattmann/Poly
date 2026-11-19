@@ -280,6 +280,24 @@ pub fn installer_entry(path: &str) -> App {
     }
 }
 
+/// Files asked to open `path` with the program Poly opens such a file with (`show` false), or
+/// to show it selected in its folder (`show` true): a Windows program's `ShellExecuteExW` with
+/// no program of its own for the file, or its "show in folder" (ADR 0223).
+pub fn files_entry(path: &str, show: bool) -> App {
+    App {
+        name: "Files".into(),
+        comment: "Browse and organise your files".into(),
+        keywords: Vec::new(),
+        argv: alloc::vec![FILES.into(), (if show { FILES_SHOW } else { FILES_OPEN }).into(), path.into()],
+        id: "poly-files".into(),
+        icon: None,
+    }
+}
+
+/// Files' arguments for [`files_entry`]: show a file selected in its folder, open a file.
+pub const FILES_SHOW: &str = "--show";
+pub const FILES_OPEN: &str = "--open";
+
 /// The installer's window that uninstalls the app with desktop file ID
 /// `id`, as an app the desktop starts (Files asked for it, ADR 0180).
 pub fn uninstaller_entry(id: &str) -> App {

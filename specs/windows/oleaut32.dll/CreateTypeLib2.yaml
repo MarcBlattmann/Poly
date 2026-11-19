@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/oleaut32.dll/CreateTypeLib2.yaml
+id: windows/api/oleaut32.dll/CreateTypeLib2
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-typelib
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above: each test builds its own small type library with CreateTypeLib2 (a callback interface, a custom oleautomation interface with 15 methods, a dual interface; ids of the form {B2B0xxxx-<process id>-4000-8000-706F6C797773}), registers and removes it. Microsoft Learn: "CreateTypeLib2", "ICreateTypeLib2", "ICreateTypeInfo", "ICreateTypeInfo2", "LoadTypeLib", "LoadTypeLibEx", "LoadRegTypeLib", "RegisterTypeLib", "UnRegisterTypeLib", "QueryPathOfRegTypeLib", "REGKIND", "SYSKIND", "TYPEKIND", "TYPEFLAGS", "LIBFLAGS", "ITypeLib", "ITypeInfo", "FUNCDESC", "ELEMDESC", "TYPEDESC", "TYPEATTR", "TLIBATTR", "VARENUM", "Type Library Registration" (TypeLib and Interface registry keys), oaidl.h, oleauto.h, wtypes.h, winerror.h. The updater's own type libraries were read through ITypeLib and ITypeInfo (docs/windows/com-typelib-updater-types.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Creates an empty type library that is being written (ICreateTypeLib2), to a file. The tests need it to build the libraries their interfaces are described by; the updater does not import it. What matters for Poly: the library the tests write must read back through LoadTypeLibEx, ITypeLib and ITypeInfo as described below, and the dual-interface form that oleaut32 stores (a dispatch type holding the IUnknown, IDispatch and the interface's own methods).
+interface:
+  signature: "HRESULT CreateTypeLib2(SYSKIND syskind, LPCOLESTR szFile, ICreateTypeLib2 **ppctlib)"
+  builder_methods_used: "ICreateTypeLib: CreateTypeInfo(name, TYPEKIND), SetName, SetVersion, SetGuid, SetDocString, SetLcid, SetLibFlags, SaveAllChanges; ICreateTypeInfo: SetGuid, SetTypeFlags, SetVersion, AddRefTypeInfo (of an ITypeInfo, giving an HREFTYPE), AddImplType, AddFuncDesc, SetFuncAndParamNames, LayOut; the base interfaces IUnknown and IDispatch come from the standard library stdole (LoadRegTypeLib)"
+installer: "Not imported. The updater's libraries are made by MIDL; this call is used only so that tests need no ready-made library file."
+rules:
+  file_timing: "the call makes an object and no file: the file exists only after SaveAllChanges; releasing the object without saving leaves no file; the file is also not created by the call when it names a directory that does not exist (the call succeeds, SaveAllChanges then fails with STG_E_PATHNOTFOUND 0x80030003)"
+  syskind: "SYS_WIN32 (1), SYS_WIN64 (3) and every other value tried (0, 2, 4, 99) are accepted by the call; the library attributes later report the value given (3 for the tests' libraries)"
+  save: "SaveAllChanges of a library with no guid and no name succeeds and writes a file; a second SaveAllChanges succeeds; a type info created after saving is still returned"
+  created_library_read_back: "LoadTypeLibEx(file, REGKIND_NONE) of a saved library gives: attributes {the guid given, LCID given (0), syskind 3, version given, flags 0x8 (LIBFLAG_FHASDISKIMAGE is added by the save; a flag set with SetLibFlags is kept)}; GetDocumentation(-1) gives the name and the doc string given; GetTypeInfoCount counts the types made (the dual interface counts once); types are in creation order"
+  interface_type: "a type made with TKIND_INTERFACE, flags FOLEAUTOMATION|FNONEXTENSIBLE (0x180) and one base (IUnknown) reads back as kind 3, the same flags, 1 base type whose GetRefTypeInfo name is IUnknown, version as set, vtable size 8 times (3 + methods); each function has funckind FUNC_PUREVIRTUAL (1), invkind as given, callconv CC_STDCALL (4), vtable offset 8 times (3 + index), the parameter count and the descriptions given: [in] long = I4 flags 0x1; [out, retval] long* = PTR>I4 flags 0xa; BSTR, VARIANT, SAFEARRAY(long) (SAFEARRAY>I4), SAFEARRAY(long)* (PTR>SAFEARRAY>I4), IUnknown** (PTR>IUnknown*), ITlEcho** (PTR>PTR>USERDEFINED whose reference resolves to ITlEcho), ITlCallback* (PTR>USERDEFINED), LPWSTR (vt 31), hyper* (PTR>vt 20), [in, out] long* flags 0x3; the result is HRESULT; GetNames of a function gives its name then the parameter names; GetContainingTypeLib returns the library and the type's index"
+  dual_interface: "a type made with TKIND_INTERFACE, flags FDUAL|FOLEAUTOMATION|FDISPATCHABLE|FNONEXTENSIBLE and IDispatch as base reads back as TKIND_DISPATCH (kind 4) with flags 0x10c0 (FDUAL|FNONEXTENSIBLE|FDISPATCHABLE; FOLEAUTOMATION is not kept), version as set, 1 base type (IDispatch), and the functions IUnknown::QueryInterface/AddRef/Release (member ids 0x60000000..2, vtable offsets 0, 8, 16 as listed, funckind FUNC_DISPATCH 4) and IDispatch's four methods (0x60010000..3) first, then the type's own functions with funckind FUNC_DISPATCH (4), their vtable offsets 8 times (7 + index), and, for a method that returns a value in an [out, retval] parameter, a result of that parameter's type (the HRESULT and retval are folded away: AddLong reads back with two parameters and result I4; a property get reads with invkind 2); the vtable size reported is 56 (the IDispatch part)"
+  dispatch_form: "a type made with TKIND_DISPATCH (the form MIDL writes) refuses SetTypeFlags with FOLEAUTOMATION (TYPE_E_BADMODULEKIND 0x800288bd) and accepts FDUAL and FDISPATCHABLE; the proxy/stub built from such a library also accepts it as marshalling interface (RegisterTypeLib registers it with the automation marshaller {00020424-...})"
+  names: "CreateTypeInfo with a name that is already used (also in another case) fails with TYPE_E_NAMECONFLICT 0x8002802d and returns no object; an empty name and a name with a blank are accepted; all TYPEKIND values 0 to 7 and the invalid 8 and -1 are accepted by CreateTypeInfo"
+  functions: "AddFuncDesc at index 0 of an empty type succeeds; at an index beyond the count TYPE_E_ELEMENTNOTFOUND 0x8002802b; a second function with the same member id is accepted; a function name already used in the type fails at SetFuncAndParamNames with TYPE_E_AMBIGUOUSNAME 0x8002802c; adding at an existing index inserts"
+  layout_and_flags: "LayOut on a type that holds two functions with the same member id fails with TYPE_E_DUPLICATEID 0x800288c6; SetTypeFlags with 0xFFFF or 0x8000 fails with TYPE_E_BADMODULEKIND 0x800288bd; SetGuid after LayOut succeeds; SaveAllChanges of a library holding such a type (functions but no base interface, a duplicate id) fails with 0x80028027 (TYPE_E_UNDEFINEDTYPE)"
+errors:
+  null_arguments: "NULL file name or NULL output pointer: E_INVALIDARG 0x80070057, the output is not written"
+  save_in_missing_directory: "STG_E_PATHNOTFOUND 0x80030003 from SaveAllChanges"
+  name_conflict: "TYPE_E_NAMECONFLICT 0x8002802d"
+  element_not_found: "TYPE_E_ELEMENTNOTFOUND 0x8002802b"
+  ambiguous_name: "TYPE_E_AMBIGUOUSNAME 0x8002802c"
+  wrong_kind: "TYPE_E_BADMODULEKIND 0x800288bd"
+side_effects: "SaveAllChanges writes the library file; nothing else"
+threading: "may be called from any thread; COM need not be initialised for the library calls"
+ordering: ["CreateTypeLib2, populate, SaveAllChanges, then the file can be loaded"]
+timing:
+  typical: "a few milliseconds for a library of three types"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one image per test, helpers shared by all tests of this batch: the image builds the library file beside itself with CreateTypeLib2 (every test that needs a library), registers and unregisters through the calls under test or RegisterTypeLib, and deletes everything it made (registry keys under HKLM\SOFTWARE\Classes\TypeLib and \Interface with the run's own ids, files). Registry strings are shown with the run's ids, file and directory replaced by <LIBID>, <ITlEcho>, <file>, <dir>; observations are results, booleans and counts, never process ids.
+not_covered: >
+  ICreateTypeInfo2 custom data, variables, constants and records, aliases, coclass implementation lists, DefineFuncAsDllEntry, the byte format of the file (no document describes it; B2b-2), SetHelpStringDll.

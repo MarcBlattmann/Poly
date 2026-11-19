@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHCreateItemFromParsingName.yaml
+id: windows/api/shell32.dll/SHCreateItemFromParsingName
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-chrome-dl
+  date: 2026-11-11
+sources: >
+  Observations of our own test programs on the machine above and, for what Chrome does, Chrome for Testing 157.0.8103.38 downloading a file from a local web server on the same machine (its download path traced with tools/wintrace/polytrace-sync for the shell and COM calls and with the counting logger for kernel32; the file system seen from outside). Microsoft Learn and the public SDK headers for prototypes and constants. Wine's tests were not read. No Microsoft or Google binary was decompiled or disassembled. Microsoft Learn: IShellItem, IFileOperation, IShellFolder, IFileDialog, ITaskbarList3, ICustomDestinationList, SHCreateItemFromParsingName, SHParseDisplayName, ShellExecuteExW, SHOpenFolderAndSelectItems; shobjidl_core.h for the order of the methods and the interface ids.
+summary: >
+  Makes a shell item (IShellItem) from a file path. Chrome's download code asks for two items for every rename of a download: the file (the `<guid>.tmp` or `Unconfirmed N.crdownload` file) and the folder it is in, both as IID_IShellItem with no bind context, and gives them to IFileOperation. Poly's stub fails, so no download is ever renamed: the bytes stay in the `.tmp` file and the bubble shows a download that does not finish.
+interface:
+  signature: "HRESULT SHCreateItemFromParsingName(PCWSTR pszPath, IBindCtx *pbc, REFIID riid, void **ppv)"
+  item: "IShellItem (IUnknown 0-2, BindToHandler 3, GetParent 4, GetDisplayName 5, GetAttributes 6, Compare 7); the object also answers IShellItem2 and IUnknown"
+chrome:
+  calls: "browser process, one thread, per rename: SHCreateItemFromParsingName(`<Downloads>\\<guid>.tmp`, NULL, IID_IShellItem), SHCreateItemFromParsingName(`<Downloads>`, NULL, IID_IShellItem), CoCreateInstance(CLSID_FileOperation, NULL, CLSCTX_INPROC_SERVER, IID_IFileOperation); then the same three with `<Downloads>\\Unconfirmed <6 digits>.crdownload`. Every call S_OK. (The folder's call leaves the last error at 1008, the file's at 0 or unchanged: not specified.)"
+rules:
+  com_needed: "before CoInitializeEx on the thread: CO_E_NOTINITIALIZED (0x800401F0) and no item; with COM started (single-threaded or multi-threaded apartment) everything below holds"
+  existing_file: "S_OK and an item. GetDisplayName(SIGDN_FILESYSPATH 0x80058000) and SIGDN_DESKTOPABSOLUTEPARSING 0x80028000 give the path as given (compared without regard to case); SIGDN_NORMALDISPLAY, SIGDN_PARENTRELATIVEPARSING and SIGDN_PARENTRELATIVEEDITING the file name (`item-file.polyx`; for a registered type the extension may be hidden in NORMALDISPLAY); SIGDN_URL a `file:///` url"
+  attributes: "GetAttributes(SFGAO_FILESYSTEM | SFGAO_FOLDER | SFGAO_STREAM | SFGAO_CANRENAME | SFGAO_CANMOVE) of a plain file: S_FALSE (1) and 0x40400012 (FILESYSTEM, STREAM, CANRENAME, CANMOVE); of a folder (FILESYSTEM | FOLDER | STREAM asked): S_FALSE and 0x60000000. S_FALSE means not every asked bit is set"
+  parent: "GetParent gives the item of the folder (its FILESYSPATH is the folder's path without the trailing backslash); Compare of two items of the same file: S_OK with order 0; with a different item: S_FALSE (1) and a nonzero order"
+  folder: "the path of a folder (with or without the trailing backslash) and a drive root (`C:\\`) give an item; NORMALDISPLAY of a folder is its name"
+  not_there: "a file that is not there in an existing folder: 0x80070002; a folder that is not there: 0x80070002; a relative name: 0x80070002 (relative names are not resolved against the current directory)"
+  refused_names: "forward slashes, the `\\\\?\\` prefix, a stream part (`file:Zone.Identifier`), a wildcard and `<` in a name: E_INVALIDARG (0x80070057), no item"
+  empty_name: "an empty string gives S_OK and an item that has no file-system path (GetDisplayName(FILESYSPATH) on it: E_INVALIDARG)"
+  interfaces: "IID_IShellItem, IID_IShellItem2 and IID_IUnknown: S_OK; a made-up id: E_NOINTERFACE (0x80004002), no item; two calls for the same file give two objects; AddRef/Release count references; the last Release of an unshared item returns 0"
+  moved_file: "an item keeps the name it had when it was made: after the file is renamed by IFileOperation the item's own name is still the old one"
+errors:
+  no_com: "0x800401F0"
+  not_found: "0x80070002"
+  invalid_name: "0x80070057"
+  no_interface: "0x80004002"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each with its own declarations (Learn prototypes, SDK header constants). Observations are results, error codes, booleans, sizes and short contents; no line holds a handle, a pointer, a drive letter, a user or machine name or a time. Files live in the test's own scratch folder. The test file's folder is the scratch folder of the run; no line prints it.
+not_covered: >
+  bind contexts (STR_PARSE_*), `shell:` and `::{guid}` parsing names, network paths, drive letters of removable media, items of virtual folders, IShellItem::BindToHandler, the other methods of IShellItem2 (property store, GetString).

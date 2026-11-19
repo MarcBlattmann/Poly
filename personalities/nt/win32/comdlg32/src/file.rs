@@ -347,7 +347,10 @@ unsafe extern "system" fn proc_(hdlg: H, msg: u32, w: usize, l: isize) -> isize 
         let Some(st) = state(hdlg) else { return 0 };
         st.hdlg = hdlg;
         init(st);
-        return 1;
+        // `init` put the focus in the file name field: FALSE keeps it there (Learn,
+        // "WM_INITDIALOG": TRUE would move it to the first control, the Up button), so Enter
+        // means Save as in Windows' dialog.
+        return 0;
     }
     let Some(st) = state(hdlg) else { return 0 };
     if !st.explorer() && st.hook != 0 {

@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/IsUserAnAdmin.yaml
+id: windows/api/shell32.dll/IsUserAnAdmin
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), User Account Control on (defaults). The local account \"server\" is a member of Administrators and logged on at the console. Tests ran in session 1 through tools/pipeline/windows/poly-oracle.ps1 -Token standard (the user's filtered token: run level Limited) and -Token elevated (the full token: run level Highest); see UacStandardToken.yaml and UacElevatedToken.yaml. Every test ran twice with identical output. Tests named *_std are recorded with the standard token, *_adm with the elevated one (per-test token in windows.json)."
+  observed_by: spec-win-elevation
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: IsUserAnAdmin (shlobj_core.h),
+  "How User Account Control works", CheckTokenMembership. The survey of Google's Chrome installers (docs/windows/chrome-installer-plan.md)
+  for what calls it: both installers ask whether they are elevated and, if not, start themselves again with the runas verb.
+  No Microsoft binary was read or disassembled; Wine's tests were not read.
+summary: >
+  `BOOL IsUserAnAdmin(void)`: TRUE when the calling thread's token has the Administrators group ENABLED, FALSE otherwise
+  (it is CheckTokenMembership of the Administrators alias on the effective token). That means: TRUE in an elevated process of
+  an administrator, FALSE in the same administrator's non-elevated process (the Administrators group there is deny-only),
+  FALSE for a user who is not an administrator. It never sets the last error and takes no arguments. Poly's policy
+  (owner decision 2026-11-17): ordinary programs are not elevated, so IsUserAnAdmin is FALSE for them and Google's installer stub
+  takes its runas branch.
+returns:
+  standard_token: "FALSE (0) in a process with the filtered token (-Token standard), also from a second thread of that process and in a child process made with CreateProcessW."
+  elevated_token: "TRUE (1) in a process with the full token (-Token elevated), from a second thread, and in a child process made with CreateProcessW."
+  repeated: "the same value on every call (two calls in a row)."
+  impersonation: "the answer follows the thread's token. A copy of the process token (DuplicateTokenEx, impersonation) set with SetThreadToken: the same answer as the process (0 standard, 1 elevated). The LINKED token set with SetThreadToken: 0 in both cases, because the linked token the process may get is an identification-level token; after RevertToSelf the process's own answer is back (0 or 1)."
+errors: {}
+side_effects: "none; the last error is left as it was (a test set it to a marker, called the function and read it back unchanged)."
+threading: "may be called from any thread; uses the thread's impersonation token if there is one"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075). Each body is built twice, as `*_std` (recorded with -Token standard) and `*_adm` (-Token elevated); a
+  child process is the test's own image started with ` --child isadmin` (its exit code carries the answer).
+not_covered: >
+  A user who is not an administrator, the built-in Administrator account, a domain user, Group Policy that disables the split,
+  a WOW64 (32-bit) caller (same answer expected, not observed), the 'Administrators group enabled by a restricted token'.

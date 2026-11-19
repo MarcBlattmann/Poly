@@ -1,0 +1,44 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "uace_facts",
+      "exe_sha256": "63683b3dc6bf3962cf31ed1015cdf906ceae874ffa7e3c10baf79ac5bb56aaab",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b3duIHRva2VuOiB0eXBlIDEgZWxldmF0aW9uIDEgZWxldmF0aW9udHlwZSAyIHJlc3RyaWN0ZWQgMCBpbnRlZ3JpdHkgMHgzMDAwIGFkbWlucyBhdHRyIDB4Zgpvd24gdG9rZW46IG1hbmRhdG9yeSBwb2xpY3kgMyB1aWFjY2VzcyAwIHNhbmRib3hpbmVydCAwIGFwcGNvbnRhaW5lciAwCm93biB0b2tlbjogdmlydHVhbGl6YXRpb24gYWxsb3dlZCAwIGVuYWJsZWQgMApvd24gdG9rZW46IGdyb3VwIEFkbWluaXN0cmF0b3JzIGF0dHJpYnV0ZXMgMHhmCm93biB0b2tlbjogZ3JvdXAgVXNlcnMgYXR0cmlidXRlcyAweDcKb3duIHRva2VuOiBncm91cHMgbW9yZSB0aGFuIDg6IHRydWUKb3duIHRva2VuOiBwcml2aWxlZ2UgY291bnQgMjQKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VCYWNrdXBQcml2aWxlZ2UgYXR0ciAweDAKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VDaGFuZ2VOb3RpZnlQcml2aWxlZ2UgYXR0ciAweDMKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VDcmVhdGVHbG9iYWxQcml2aWxlZ2UgYXR0ciAweDMKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VDcmVhdGVQYWdlZmlsZVByaXZpbGVnZSBhdHRyIDB4MApvd24gdG9rZW46IHByaXZpbGVnZSBTZUNyZWF0ZVN5bWJvbGljTGlua1ByaXZpbGVnZSBhdHRyIDB4MApvd24gdG9rZW46IHByaXZpbGVnZSBTZURlYnVnUHJpdmlsZWdlIGF0dHIgMHgyCm93biB0b2tlbjogcHJpdmlsZWdlIFNlRGVsZWdhdGVTZXNzaW9uVXNlckltcGVyc29uYXRlUHJpdmlsZWdlIGF0dHIgMHgwCm93biB0b2tlbjogcHJpdmlsZWdlIFNlSW1wZXJzb25hdGVQcml2aWxlZ2UgYXR0ciAweDMKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VJbmNyZWFzZUJhc2VQcmlvcml0eVByaXZpbGVnZSBhdHRyIDB4MApvd24gdG9rZW46IHByaXZpbGVnZSBTZUluY3JlYXNlUXVvdGFQcml2aWxlZ2UgYXR0ciAweDAKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VJbmNyZWFzZVdvcmtpbmdTZXRQcml2aWxlZ2UgYXR0ciAweDAKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VMb2FkRHJpdmVyUHJpdmlsZWdlIGF0dHIgMHgwCm93biB0b2tlbjogcHJpdmlsZWdlIFNlTWFuYWdlVm9sdW1lUHJpdmlsZWdlIGF0dHIgMHgwCm93biB0b2tlbjogcHJpdmlsZWdlIFNlUHJvZmlsZVNpbmdsZVByb2Nlc3NQcml2aWxlZ2UgYXR0ciAweDAKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VSZW1vdGVTaHV0ZG93blByaXZpbGVnZSBhdHRyIDB4MApvd24gdG9rZW46IHByaXZpbGVnZSBTZVJlc3RvcmVQcml2aWxlZ2UgYXR0ciAweDAKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VTZWN1cml0eVByaXZpbGVnZSBhdHRyIDB4MApvd24gdG9rZW46IHByaXZpbGVnZSBTZVNodXRkb3duUHJpdmlsZWdlIGF0dHIgMHgwCm93biB0b2tlbjogcHJpdmlsZWdlIFNlU3lzdGVtRW52aXJvbm1lbnRQcml2aWxlZ2UgYXR0ciAweDAKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VTeXN0ZW1Qcm9maWxlUHJpdmlsZWdlIGF0dHIgMHgwCm93biB0b2tlbjogcHJpdmlsZWdlIFNlU3lzdGVtdGltZVByaXZpbGVnZSBhdHRyIDB4MApvd24gdG9rZW46IHByaXZpbGVnZSBTZVRha2VPd25lcnNoaXBQcml2aWxlZ2UgYXR0ciAweDAKb3duIHRva2VuOiBwcml2aWxlZ2UgU2VUaW1lWm9uZVByaXZpbGVnZSBhdHRyIDB4MApvd24gdG9rZW46IHByaXZpbGVnZSBTZVVuZG9ja1ByaXZpbGVnZSBhdHRyIDB4MApUb2tlbkVsZXZhdGlvbiB3aXRoIDggYnl0ZXM6IG9rIDAgZXJyIDI0IHJldHVybmVkIGxlbmd0aCA0ClRva2VuRWxldmF0aW9uVHlwZSB3aXRoIDIgYnl0ZXM6IG9rIDAgZXJyIDEyMiByZXR1cm5lZCBsZW5ndGggNAppbXBlcnNvbmF0aW9uIGNvcHk6IG9rIDEKaW1wZXJzb25hdGlvbiBjb3B5OiB0eXBlIDIgZWxldmF0aW9uIDEgZWxldmF0aW9udHlwZSAyIHJlc3RyaWN0ZWQgMCBpbnRlZ3JpdHkgMHgzMDAwIGFkbWlucyBhdHRyIDB4ZgpwcmltYXJ5IGNvcHk6IG9rIDEKcHJpbWFyeSBjb3B5OiB0eXBlIDEgZWxldmF0aW9uIDEgZWxldmF0aW9udHlwZSAyIHJlc3RyaWN0ZWQgMCBpbnRlZ3JpdHkgMHgzMDAwIGFkbWlucyBhdHRyIDB4ZgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "own token: type 1 elevation 1 elevationtype 2 restricted 0 integrity 0x3000 admins attr 0xf\nown token: mandatory policy 3 uiaccess 0 sandboxinert 0 appcontainer 0\nown token: virtualization allowed 0 enabled 0\nown token: group Administrators attributes 0xf\nown token: group Users attributes 0x7\nown token: groups more than 8: true\nown token: privilege count 24\nown token: privilege SeBackupPrivilege attr 0x0\nown token: privilege SeChangeNotifyPrivilege attr 0x3\nown token: privilege SeCreateGlobalPrivilege attr 0x3\nown token: privilege SeCreatePagefilePrivilege attr 0x0\nown token: privilege SeCreateSymbolicLinkPrivilege attr 0x0\nown token: privilege SeDebugPrivilege attr 0x2\nown token: privilege SeDelegateSessionUserImpersonatePrivilege attr 0x0\nown token: privilege SeImpersonatePrivilege attr 0x3\nown token: privilege SeIncreaseBasePriorityPrivilege attr 0x0\nown token: privilege SeIncreaseQuotaPrivilege attr 0x0\nown token: privilege SeIncreaseWorkingSetPrivilege attr 0x0\nown token: privilege SeLoadDriverPrivilege attr 0x0\nown token: privilege SeManageVolumePrivilege attr 0x0\nown token: privilege SeProfileSingleProcessPrivilege attr 0x0\nown token: privilege SeRemoteShutdownPrivilege attr 0x0\nown token: privilege SeRestorePrivilege attr 0x0\nown token: privilege SeSecurityPrivilege attr 0x0\nown token: privilege SeShutdownPrivilege attr 0x0\nown token: privilege SeSystemEnvironmentPrivilege attr 0x0\nown token: privilege SeSystemProfilePrivilege attr 0x0\nown token: privilege SeSystemtimePrivilege attr 0x0\nown token: privilege SeTakeOwnershipPrivilege attr 0x0\nown token: privilege SeTimeZonePrivilege attr 0x0\nown token: privilege SeUndockPrivilege attr 0x0\nTokenElevation with 8 bytes: ok 0 err 24 returned length 4\nTokenElevationType with 2 bytes: ok 0 err 122 returned length 4\nimpersonation copy: ok 1\nimpersonation copy: type 2 elevation 1 elevationtype 2 restricted 0 integrity 0x3000 admins attr 0xf\nprimary copy: ok 1\nprimary copy: type 1 elevation 1 elevationtype 2 restricted 0 integrity 0x3000 admins attr 0xf\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "uace_linked",
+      "exe_sha256": "9d83b0c461fda7276964e60c894e33f4b340cabe2f22bfa468124a29a261f843",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VG9rZW5MaW5rZWRUb2tlbjogb2sgMSBlcnIgLTIgcmV0dXJuZWQgbGVuZ3RoIDgKVG9rZW5MaW5rZWRUb2tlbiB3aXRoIDAgYnl0ZXM6IG9rIDAgZXJyIDI0IHJldHVybmVkIGxlbmd0aCA4ClRva2VuTGlua2VkVG9rZW4gd2l0aCA0IGJ5dGVzOiBvayAwIGVyciAyNCByZXR1cm5lZCBsZW5ndGggOApUb2tlbkxpbmtlZFRva2VuIHdpdGggMTYgYnl0ZXM6IG9rIDAgZXJyIDI0IHJldHVybmVkIGxlbmd0aCA4CmxpbmtlZCB0b2tlbjogdHlwZSAyIGVsZXZhdGlvbiAwIGVsZXZhdGlvbnR5cGUgMyByZXN0cmljdGVkIDEgaW50ZWdyaXR5IDB4MjAwMCBhZG1pbnMgYXR0ciAweDEwCmxpbmtlZCB0b2tlbjogaW1wZXJzb25hdGlvbiBsZXZlbCAxICh0eXBlIDIpCmxpbmtlZCB0b2tlbjogbWFuZGF0b3J5IHBvbGljeSAzIHVpYWNjZXNzIDAKbGlua2VkIHRva2VuOiBwcml2aWxlZ2UgY291bnQgNQpsaW5rZWQgdG9rZW46IHByaXZpbGVnZSBTZUNoYW5nZU5vdGlmeVByaXZpbGVnZSBhdHRyIDB4MwpsaW5rZWQgdG9rZW46IHByaXZpbGVnZSBTZUluY3JlYXNlV29ya2luZ1NldFByaXZpbGVnZSBhdHRyIDB4MApsaW5rZWQgdG9rZW46IHByaXZpbGVnZSBTZVNodXRkb3duUHJpdmlsZWdlIGF0dHIgMHgwCmxpbmtlZCB0b2tlbjogcHJpdmlsZWdlIFNlVGltZVpvbmVQcml2aWxlZ2UgYXR0ciAweDAKbGlua2VkIHRva2VuOiBwcml2aWxlZ2UgU2VVbmRvY2tQcml2aWxlZ2UgYXR0ciAweDAKVG9rZW5MaW5rZWRUb2tlbiBvZiB0aGUgbGlua2VkIHRva2VuOiBvayAxCmxpbmtlZCBvZiBsaW5rZWQ6IHR5cGUgMiBlbGV2YXRpb24gMSBlbGV2YXRpb250eXBlIDIgcmVzdHJpY3RlZCAwIGludGVncml0eSAweDMwMDAgYWRtaW5zIGF0dHIgMHhmCnF1ZXJ5IHRocm91Z2ggdGhlIGxpbmtlZCBoYW5kbGU6IG9rIDEKZHVwbGljYXRlIHRoZSBsaW5rZWQgdG9rZW4gYXMgYW4gaW1wZXJzb25hdGlvbiB0b2tlbjogb2sgMCBlcnIgMTM0NgpTZXRUaHJlYWRUb2tlbihsaW5rZWQpOiBvayAxIGVyciAtMgpJc1VzZXJBbkFkbWluIHdoaWxlIGltcGVyc29uYXRpbmcgdGhlIGxpbmtlZCB0b2tlbjogMAp0aHJlYWQgdG9rZW46IHR5cGUgMiBlbGV2YXRpb24gMCBlbGV2YXRpb250eXBlIDMgcmVzdHJpY3RlZCAxIGludGVncml0eSAweDIwMDAgYWRtaW5zIGF0dHIgMHgxMApJc1VzZXJBbkFkbWluIGFmdGVyIFJldmVydFRvU2VsZjogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "TokenLinkedToken: ok 1 err -2 returned length 8\nTokenLinkedToken with 0 bytes: ok 0 err 24 returned length 8\nTokenLinkedToken with 4 bytes: ok 0 err 24 returned length 8\nTokenLinkedToken with 16 bytes: ok 0 err 24 returned length 8\nlinked token: type 2 elevation 0 elevationtype 3 restricted 1 integrity 0x2000 admins attr 0x10\nlinked token: impersonation level 1 (type 2)\nlinked token: mandatory policy 3 uiaccess 0\nlinked token: privilege count 5\nlinked token: privilege SeChangeNotifyPrivilege attr 0x3\nlinked token: privilege SeIncreaseWorkingSetPrivilege attr 0x0\nlinked token: privilege SeShutdownPrivilege attr 0x0\nlinked token: privilege SeTimeZonePrivilege attr 0x0\nlinked token: privilege SeUndockPrivilege attr 0x0\nTokenLinkedToken of the linked token: ok 1\nlinked of linked: type 2 elevation 1 elevationtype 2 restricted 0 integrity 0x3000 admins attr 0xf\nquery through the linked handle: ok 1\nduplicate the linked token as an impersonation token: ok 0 err 1346\nSetThreadToken(linked): ok 1 err -2\nIsUserAnAdmin while impersonating the linked token: 0\nthread token: type 2 elevation 0 elevationtype 3 restricted 1 integrity 0x2000 admins attr 0x10\nIsUserAnAdmin after RevertToSelf: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

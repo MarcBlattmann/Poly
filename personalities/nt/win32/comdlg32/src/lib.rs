@@ -8,6 +8,9 @@
 //! Observed on the oracle (`specs/windows/comdlg32.dll`): a cancelled dialog sets the error to
 //! 0; every failing check names its `CDERR_*` code; the hook of an Explorer-style file dialog
 //! gets a child dialog that is made inside the dialog (`file::run`).
+//!
+//! The Common Item Dialog's Save object (`CLSID_FileSaveDialog`, ADR 0223) is [`itemdlg`]: its
+//! `Show` runs the same file dialog.
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
@@ -18,6 +21,7 @@ mod ansi;
 mod colordlg;
 mod file;
 mod fontdlg;
+mod itemdlg;
 mod sys;
 mod util;
 

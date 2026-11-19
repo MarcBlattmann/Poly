@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "bfa7b81da781",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T12:17:35Z",
+  "tests": [
+    {
+      "name": "unreg_errors",
+      "exe_sha256": "950a9b819fca1479b509bf34ac805c5f07391fdf3971cb80377b5ff2e7637d44",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBsaWJyYXJ5IHRoYXQgd2FzIG5ldmVyIHJlZ2lzdGVyZWQ6IDB4ODAwMjgwMWMKcmVnaXN0ZXJlZCB2ZXJzaW9uIDIuMywgTENJRCAweDQwOTogMHgwMDAwMDAwMApVblJlZ2lzdGVyVHlwZUxpYiB3aXRoIHZlcnNpb24gMi4wID0gMHg4MDAyODAxYwogIGFmdGVyd2FyZHM6IGxpYnJhcnkga2V5IDEsIHZlcnNpb24ga2V5IDEKVW5SZWdpc3RlclR5cGVMaWIgd2l0aCB2ZXJzaW9uIDIuMiA9IDB4ODAwMjgwMWMKICBhZnRlcndhcmRzOiBsaWJyYXJ5IGtleSAxLCB2ZXJzaW9uIGtleSAxClVuUmVnaXN0ZXJUeXBlTGliIHdpdGggdmVyc2lvbiAyLjQgPSAweDgwMDI4MDFjCiAgYWZ0ZXJ3YXJkczogbGlicmFyeSBrZXkgMSwgdmVyc2lvbiBrZXkgMQpVblJlZ2lzdGVyVHlwZUxpYiB3aXRoIHZlcnNpb24gMS4wID0gMHg4MDAyODAxYwogIGFmdGVyd2FyZHM6IGxpYnJhcnkga2V5IDEsIHZlcnNpb24ga2V5IDEKVW5SZWdpc3RlclR5cGVMaWIgd2l0aCB2ZXJzaW9uIDMuMyA9IDB4ODAwMjgwMWMKICBhZnRlcndhcmRzOiBsaWJyYXJ5IGtleSAxLCB2ZXJzaW9uIGtleSAxClVuUmVnaXN0ZXJUeXBlTGliIHdpdGggTENJRCAwID0gMHg4MDAyODAxYwogIGFmdGVyd2FyZHM6IGxpYnJhcnkga2V5IDEsIHZlcnNpb24ga2V5IDEKVW5SZWdpc3RlclR5cGVMaWIgd2l0aCBMQ0lEIDB4NDA3ID0gMHg4MDAyODAxYwogIGFmdGVyd2FyZHM6IGxpYnJhcnkga2V5IDEsIHZlcnNpb24ga2V5IDEKVW5SZWdpc3RlclR5cGVMaWIgd2l0aCBTWVNfV0lOMzIgPSAweDgwMDI4MDFjCiAgYWZ0ZXJ3YXJkczogbGlicmFyeSBrZXkgMSwgdmVyc2lvbiBrZXkgMQpVblJlZ2lzdGVyVHlwZUxpYiB3aXRoIFNZU19NQUMgKDIpID0gMHg4MDA3MDA1NwogIGFmdGVyd2FyZHM6IGxpYnJhcnkga2V5IDEsIHZlcnNpb24ga2V5IDEKVW5SZWdpc3RlclR5cGVMaWIgd2l0aCBzeXN0ZW0ga2luZCAwID0gMHg4MDAyODAxYwogIGFmdGVyd2FyZHM6IGxpYnJhcnkga2V5IDEsIHZlcnNpb24ga2V5IDEKVW5SZWdpc3RlclR5cGVMaWIgd2l0aCBzeXN0ZW0ga2luZCA5ID0gMHg4MDA3MDA1NwogIGFmdGVyd2FyZHM6IGxpYnJhcnkga2V5IDEsIHZlcnNpb24ga2V5IDEKVW5SZWdpc3RlclR5cGVMaWIgd2l0aCB0aGUgbWF0Y2hpbmcgbnVtYmVycyA9IDB4MDAwMDAwMDAKICBhZnRlcndhcmRzOiBsaWJyYXJ5IGtleSAwLCB2ZXJzaW9uIGtleSAwCnJlZ2lzdGVyZWQgYWdhaW46IDB4MDAwMDAwMDAKVW5SZWdpc3RlclR5cGVMaWIgYWZ0ZXIgdGhlIGZpbGUgd2FzIGRlbGV0ZWQgPSAweDgwMDI5YzRhCiAgYWZ0ZXJ3YXJkczogbGlicmFyeSBrZXkgMSwgdmVyc2lvbiBrZXkgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a library that was never registered: 0x8002801c\nregistered version 2.3, LCID 0x409: 0x00000000\nUnRegisterTypeLib with version 2.0 = 0x8002801c\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with version 2.2 = 0x8002801c\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with version 2.4 = 0x8002801c\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with version 1.0 = 0x8002801c\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with version 3.3 = 0x8002801c\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with LCID 0 = 0x8002801c\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with LCID 0x407 = 0x8002801c\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with SYS_WIN32 = 0x8002801c\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with SYS_MAC (2) = 0x80070057\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with system kind 0 = 0x8002801c\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with system kind 9 = 0x80070057\n  afterwards: library key 1, version key 1\nUnRegisterTypeLib with the matching numbers = 0x00000000\n  afterwards: library key 0, version key 0\nregistered again: 0x00000000\nUnRegisterTypeLib after the file was deleted = 0x80029c4a\n  afterwards: library key 1, version key 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 74
+    }
+  ]
+}

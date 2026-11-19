@@ -419,6 +419,12 @@ each test's `system.session` from the `windows.json` beside its source
 in the manifest, and `win poly` boots those tests with the kernel
 argument `poly.win32k.session=interactive` (ADR 0136), so a test
 directory has to hold its `windows.json` when it is built.
+A test recorded on another display than 1920x1080 at 100 percent carries
+a `session` of the form `<kind>/<width>x<height>/<scale percent>` in its
+`windows.json` entry (`interactive-bottom/2560x1600/200`, the DPI tests of
+spec-win-dpi, recorded with the oracle's display switched dynamically to
+2560x1600 at 200 percent and put back afterwards); `win poly` then also
+passes `poly.win32k.display=2560x1600 poly.win32k.scale=200`.
 The windows of such tests appear on the oracle's real desktop, so tests
 keep to a few rules (spec-win-gui-b's sheets list them): windows in the
 top-left 1000x500 pixels, closed within seconds; the cursor parked away
@@ -430,6 +436,24 @@ interactive run at a time may use the machine.
 ```sh
 POLY_RUN=~/poly-dev/polyd tools/pipeline/windows/poly-remote.sh --host homeserver2     --tests-dir specs/windows/user32.dll/InvalidateRect.tests --runner-arg -Interactive [--record]
 ```
+
+**Tokens: standard and elevated** (`poly-oracle.ps1 -Token standard|elevated`, ADR 0171,
+`docs/windows/chrome-installer-plan.md`). The oracle's SSH logon of an administrator has the
+full token with no UAC split (`TokenElevationType` 1, no linked token); Windows' own programs
+of a desktop user have **two** tokens of the same logon. `-Token` runs the tests through a
+one-time task (as `-Interactive`, session 1, the user must be logged on) with run level
+Limited (`standard`: medium integrity, Administrators deny-only, 5 privileges, `TokenElevationType` 3,
+`TokenElevation` 0, `TokenLinkedToken` the full token) or Highest (`elevated`: the full token, high
+integrity, 24 privileges, `TokenElevationType` 2, linked token the filtered one), so no consent
+prompt is shown and no security setting changes. The result file's `system.token` says which;
+a test's own `token` in `windows.json` overrides it (a directory can hold both), and `win poly`
+boots Poly with `poly.win.token=standard|elevated` for it (nothing for a test without a token:
+the pipeline's old default, the elevated administrator). A consent prompt that a test provokes (`ShellExecute` runas from a `standard` caller) is
+**never answered** on the oracle: Windows ends it itself after about two minutes and the call returns as
+declined (`ERROR_CANCELLED`), so those tests take about 140 s per run (give them `-TestTimeouts name=400`).
+On Poly a `poly.win.token=standard` test run has nobody to click: the consent dialog must answer No at once.
+Per-test `token` and `session` in `windows.json` rows are kept by `tests split` (`RunResult`).
+Never click through or approve a real consent prompt on the oracle, and never change UAC settings there.
 
 **Tests with resources and dialogs** (menus, dialogs, string tables, bitmaps, icons,
 accelerators; `specs/windows/user32.dll/LoadMenuW.tests` and its relatives). A test that
