@@ -381,3 +381,28 @@ pub unsafe extern "system" fn SetDIBits(
         }
     }
 }
+
+/// `GdiAlphaBlend(hdcDest, xoriginDest, yoriginDest, wDest, hDest, hdcSrc, xoriginSrc, yoriginSrc,
+/// wSrc, hSrc, ftn)`: what `msimg32!AlphaBlend` calls (`specs/windows/msimg32.dll/AlphaBlend.yaml`);
+/// the `BLENDFUNCTION` comes by value in four bytes.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub extern "system" fn GdiAlphaBlend(
+    dst: H,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    src: H,
+    sx: i32,
+    sy: i32,
+    sw: i32,
+    sh: i32,
+    blend: u32,
+) -> i32 {
+    let (ok, e) = gdi(|g| g.alpha_blend(dst as u64, (x, y, w, h), src as u64, (sx, sy, sw, sh), blend));
+    if !ok && e != 0 {
+        set_last_error(e);
+    }
+    i32::from(ok)
+}

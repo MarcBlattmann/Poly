@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "sub_get",
+      "exe_sha256": "a6c0b41a2f43c6768e04212c5cb9bf29ddcc18c8e44f53ee56a589e733749cd9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm90aGluZyBzZXQ6ICgwLCAwKQpBLDEgKDEsIDEwMCkgIEIsMSAoMSwgMjAwKSAgQSwyICgxLCAzMDApICBDLDEgKDAsIDApICBBLDMgKDAsIDApCkEsMSBhZnRlciBTZXRXaW5kb3dTdWJjbGFzcyB3aXRoIHJlZmVyZW5jZSBkYXRhIDA6ICgxLCAwKQpBLDEgYWZ0ZXIgcmVmZXJlbmNlIGRhdGEgdXNpemU6Ok1BWDogKDEsIDE4NDQ2NzQ0MDczNzA5NTUxNjE1KQpmYWlsdXJlIHdyaXRlcyB0aGlzIHRvIHRoZSBvdXQgcGFyYW1ldGVyIChpdCBoZWxkIDc3KTogMCAwIChsYXN0IGVycm9yIDB4NWE1YSkKY2FsbGJhY2tzfCBBIFUrMSB3MSBpZD0yIHJlZj0zMDAgdz0wIGw9MApjYWxsYmFja3N8IEIgVSsxIHcxIGlkPTEgcmVmPTIwMCB3PTAgbD0wCmNhbGxiYWNrc3wgQSBVKzEgdzEgaWQ9MSByZWY9MTg0NDY3NDQwNzM3MDk1NTE2MTUgdz0wIGw9MApjYWxsYmFja3N8IGJhc2UgVSsxIHcxIHc9MCBsPTAKQSwxIGFmdGVyIHJlbW92ZTogKDAsIDApICBCLDEgKDEsIDIwMCkKTlVMTCBvdXQgcG9pbnRlcjogMQpkZXN0cm95fCBBIFdNX0RFU1RST1kgdzEgaWQ9MiByZWY9MzAwIHc9MCBsPTAKZGVzdHJveXwgQiBXTV9ERVNUUk9ZIHcxIGlkPTEgcmVmPTIwMCB3PTAgbD0wCmRlc3Ryb3l8IGJhc2UgV01fREVTVFJPWSB3MSB3PTAgbD0wCmRlc3Ryb3l8IEEgV01fTkNERVNUUk9ZIHcxIGlkPTIgcmVmPTMwMCB3PTAgbD0wCmRlc3Ryb3l8IEIgV01fTkNERVNUUk9ZIHcxIGlkPTEgcmVmPTIwMCB3PTAgbD0wCmRlc3Ryb3l8IGJhc2UgV01fTkNERVNUUk9ZIHcxIHc9MCBsPTAKYWZ0ZXIgZGVzdHJveTogKDAsIDApCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "nothing set: (0, 0)\nA,1 (1, 100)  B,1 (1, 200)  A,2 (1, 300)  C,1 (0, 0)  A,3 (0, 0)\nA,1 after SetWindowSubclass with reference data 0: (1, 0)\nA,1 after reference data usize::MAX: (1, 18446744073709551615)\nfailure writes this to the out parameter (it held 77): 0 0 (last error 0x5a5a)\ncallbacks| A U+1 w1 id=2 ref=300 w=0 l=0\ncallbacks| B U+1 w1 id=1 ref=200 w=0 l=0\ncallbacks| A U+1 w1 id=1 ref=18446744073709551615 w=0 l=0\ncallbacks| base U+1 w1 w=0 l=0\nA,1 after remove: (0, 0)  B,1 (1, 200)\nNULL out pointer: 1\ndestroy| A WM_DESTROY w1 id=2 ref=300 w=0 l=0\ndestroy| B WM_DESTROY w1 id=1 ref=200 w=0 l=0\ndestroy| base WM_DESTROY w1 w=0 l=0\ndestroy| A WM_NCDESTROY w1 id=2 ref=300 w=0 l=0\ndestroy| B WM_NCDESTROY w1 id=1 ref=200 w=0 l=0\ndestroy| base WM_NCDESTROY w1 w=0 l=0\nafter destroy: (0, 0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}
