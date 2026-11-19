@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/minherit.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# minherit.tests/macos.json.
+id: macos/syscall/bsd/minherit
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 250,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 250, arguments in x0..x5 (x0..x7 for calls with
+  more; second result in x1). On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. minherit(address, length, inheritance) says what a child
+  gets of the region after fork: VM_INHERIT_SHARE (0), COPY (1) or NONE
+  (2) (<mach/vm_inherit.h>); 3 (DONATE_COPY), 4 and 5 are EINVAL. A
+  private (copy-on-write) mapping is copied to the child by default; with
+  SHARE the child's writes show in the parent. An anonymous MAP_SHARED
+  mapping is shared by default; with COPY the child's writes do not show.
+  With NONE the region is not in the child: its access is a fault at an
+  address that is not mapped (SIGSEGV 11, a value). An address that is not
+  page aligned and one that is not mapped are accepted (value 0).
+returns:
+  success: "0"
+errors:
+  bad_inheritance: "EINVAL (22): 3, 4, 5"
+side_effects: "the region's inheritance changes"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

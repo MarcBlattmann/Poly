@@ -14,6 +14,12 @@ impl core::fmt::Debug for WaitQueue {
     }
 }
 
+impl Default for WaitQueue {
+    fn default() -> WaitQueue {
+        WaitQueue::new()
+    }
+}
+
 impl WaitQueue {
     pub const fn new() -> WaitQueue {
         WaitQueue(UnsafeCell::new(poly_sched::WaitQueue::new()))

@@ -131,6 +131,7 @@ version = "0.0.1"
 dependencies = [
  "poly-d3d",
  "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]
@@ -340,6 +341,7 @@ dependencies = [
 name = "oleaut32"
 version = "0.0.1"
 dependencies = [
+ "poly-com",
  "poly-kernelbase",
  "poly-win32-rt",
 ]

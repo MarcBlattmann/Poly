@@ -308,3 +308,42 @@ fn run_dyn(owner: Owner, call: &mut dyn FnMut()) {
     }
     close(done);
 }
+
+/// Run `f` (a call that blocks, such as a pipe transaction to another process) so that an STA
+/// caller keeps running the calls posted to its apartment meanwhile (callbacks into it: sheet
+/// `CoMarshalInterface`, rule `callback_parameter`, "the client needs no explicit message loop").
+/// On a thread without a COM window `f` runs directly.
+pub(crate) fn blocking<R: Send>(f: impl FnOnce() -> R + Send) -> R {
+    if my_window().is_none() {
+        return f();
+    }
+    let mut f = Some(f);
+    let mut out: Option<R> = None;
+    let mut call = || {
+        if let Some(f) = f.take() {
+            out = Some(f());
+        }
+    };
+    // SAFETY: an unnamed auto-reset event, closed below.
+    let done = unsafe { CreateEventW(core::ptr::null(), 0, 0, core::ptr::null()) };
+    if done == 0 {
+        call();
+        return out.unwrap_or_else(|| unreachable!());
+    }
+    // SAFETY: the job lives on this stack frame until `done` is set: `wait` returns only then.
+    let mut job =
+        Job { call: unsafe { core::mem::transmute::<&mut dyn FnMut(), &'static mut dyn FnMut()>(&mut call) }, done };
+    let jp = (&raw mut job) as *mut c_void;
+    let mut tid = 0u32;
+    // SAFETY: the worker runs the job and sets `done`.
+    let t = unsafe { CreateThread(core::ptr::null(), 0, mta_worker, jp, 0, &mut tid) };
+    if t == 0 {
+        (job.call)();
+    } else {
+        close(t);
+        wait(done);
+    }
+    close(done);
+    drop(job);
+    out.unwrap_or_else(|| unreachable!())
+}

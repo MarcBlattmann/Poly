@@ -129,6 +129,11 @@ pub struct ThreadFlags {
     /// Where the thread was in user mode when an interrupt last returned to it, while
     /// [`crate::user::SAMPLE_USER_RIP`] is on (a diagnostic: where a busy thread spins).
     pub last_user_rip: AtomicU64,
+    /// Where the thread sleeps in [`park`]: its own queue, so that an [`unpark`] wakes it and
+    /// no other thread. (One queue for every parked thread woke them all at each unpark and at
+    /// each timed park's deadline: with Chrome's few hundred threads, a wake-up came tens of
+    /// milliseconds late.)
+    parked: WaitQueue,
 }
 
 impl ThreadFlags {
@@ -179,8 +184,9 @@ pub enum ExecError {
     Script,
 }
 
-/// Threads waiting for a process to end, to be continued, or in [`park`]:
-/// one queue, woken whole; each waiter checks its own condition.
+/// Threads waiting for a process to end, to be continued, or in [`wait_event`]:
+/// one queue, woken whole; each waiter checks its own condition. A thread in
+/// [`park`] sleeps on its own queue ([`ThreadFlags`]) instead.
 static EVENTS: WaitQueue = WaitQueue::new();
 
 /// The process table: every process that has (or had) threads and has not
@@ -432,16 +438,27 @@ impl Process {
         };
         self.exiting.store(true, Ordering::SeqCst);
         EVENTS.wake_all();
+        self.wake_parked(None);
         self.kick_threads(None);
         status
     }
 
+    /// The live threads but `except`.
+    fn other_threads(&self, except: Option<u32>) -> Vec<Arc<ThreadFlags>> {
+        self.threads.lock().live.iter().filter(|(id, _)| Some(*id) != except).map(|(_, f)| Arc::clone(f)).collect()
+    }
+
     /// [`ThreadFlags::kick`] every live thread but `except`.
     fn kick_threads(&self, except: Option<u32>) {
-        let flags: Vec<Arc<ThreadFlags>> =
-            self.threads.lock().live.iter().filter(|(id, _)| Some(*id) != except).map(|(_, f)| Arc::clone(f)).collect();
-        for f in flags {
+        for f in self.other_threads(except) {
             f.kick();
+        }
+    }
+
+    /// Every live thread but `except` that is in [`park`] looks at its flags again.
+    fn wake_parked(&self, except: Option<u32>) {
+        for f in self.other_threads(except) {
+            f.parked.wake_all();
         }
     }
 
@@ -519,6 +536,7 @@ impl Process {
             }
         }
         EVENTS.wake_all();
+        self.wake_parked(Some(tid));
         self.kick_threads(Some(tid));
         let ended = || self.exiting.load(Ordering::SeqCst) || flags.killed.load(Ordering::SeqCst);
         EVENTS.wait_until(|| self.live.load(Ordering::SeqCst) <= 1 || ended());
@@ -588,10 +606,11 @@ pub fn park(process: &Process, flags: &ThreadFlags, deadline_ns: Option<u64>) ->
             || flags.killed.load(Ordering::SeqCst)
             || process.exiting.load(Ordering::SeqCst)
     };
+    // Its own queue: only what concerns this thread wakes it.
     let in_time = match deadline_ns {
-        Some(d) => EVENTS.wait_until_deadline(ready, d),
+        Some(d) => flags.parked.wait_until_deadline(ready, d),
         None => {
-            EVENTS.wait_until(ready);
+            flags.parked.wait_until(ready);
             true
         }
     };
@@ -626,13 +645,15 @@ pub fn wake_waiters() {
 /// Wake thread `flags` from [`park`], or make its next park return at once.
 pub fn unpark(flags: &ThreadFlags) {
     flags.unparked.store(true, Ordering::SeqCst);
-    EVENTS.wake_all();
+    flags.parked.wake_all();
 }
 
 /// Set thread `flags`' signal notification and end its [`park`].
 pub fn notify(flags: &ThreadFlags) {
     flags.notified.store(true, Ordering::SeqCst);
+    // Waits of [`wait_event`] look at it too.
     EVENTS.wake_all();
+    flags.parked.wake_all();
     flags.kick();
 }
 
@@ -678,6 +699,64 @@ fn parked(_: usize) -> usize {
 
 fn finishes(_: usize) -> usize {
     0
+}
+
+/// Park on the process and flags `arg` points at (a test's `(Arc<Process>, Arc<ThreadFlags>)`,
+/// alive until the thread is joined): 1 woken, 2 timed out, 3 interrupted.
+fn parks(arg: usize) -> usize {
+    // SAFETY: the test keeps the pair alive until it has joined this thread.
+    let (p, f) = unsafe { &*(arg as *const (Arc<Process>, Arc<ThreadFlags>)) };
+    match park(p, f, None) {
+        Unparked::Woken => 1,
+        Unparked::TimedOut => 2,
+        Unparked::Interrupted => 3,
+    }
+}
+
+crate::kernel_test! {
+    /// Each thread parks on its own queue: an unpark wakes the thread it is for and leaves the
+    /// others asleep (one shared queue woke every parked thread at each unpark, chrome-feel); a
+    /// group exit still ends every park.
+    fn an_unpark_wakes_its_thread_and_a_group_exit_wakes_them_all() -> TestResult {
+        use crate::thread::{self, State};
+        let elf = binfmt::Format::Elf { bits: binfmt::Bits::B64, arch: binfmt::Arch::X86_64 };
+        let p = Arc::new(Process::new(alloc_pid(), Personality::Linux, elf));
+        let mut pairs = Vec::new();
+        let mut tids = Vec::new();
+        for _ in 0..3 {
+            let (tid, flags) = p.attach_thread().ok_or("could not attach a thread")?;
+            tids.push(tid);
+            pairs.push(alloc::boxed::Box::new((Arc::clone(&p), flags)));
+        }
+        let mut waiters = Vec::new();
+        for pair in &pairs {
+            let arg = &**pair as *const (Arc<Process>, Arc<ThreadFlags>) as usize;
+            waiters.push(thread::spawn(parks, arg).map_err(|_| "spawn failed")?);
+        }
+        let all_blocked = |w: &[thread::ThreadId]| w.iter().all(|&t| thread::state(t) == Some(State::Blocked));
+        let parked = thread::wait_until(5, || all_blocked(&waiters));
+        unpark(&pairs[0].1);
+        let first = thread::join(waiters[0]);
+        let others_asleep = all_blocked(&waiters[1..]);
+        // Ends the other parks (and any left on a failure).
+        p.group_exit(ExitStatus::Exited(0));
+        let rest: Vec<_> = waiters[1..].iter().map(|&w| thread::join(w)).collect();
+        let result = if !parked {
+            Err("the threads did not park")
+        } else if first != Ok(1) {
+            Err("the unparked thread did not wake as woken")
+        } else if !others_asleep {
+            Err("an unpark woke another thread")
+        } else if rest.iter().any(|r| *r != Ok(3)) {
+            Err("a group exit did not end a park")
+        } else {
+            Ok(())
+        };
+        for tid in tids {
+            p.cancel_thread(tid);
+        }
+        result
+    }
 }
 
 crate::kernel_test! {

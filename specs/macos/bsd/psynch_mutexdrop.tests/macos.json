@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:08:30",
+  "tests": [
+    {
+      "name": "mutexdrop_forked",
+      "source_sha256": "e5ff247a03eaa5d1e191be572261349100570c4bf48b2d7f83e5cc69a5d73622",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2373ba90e98b94f4368c4ef4395adf2527b2eb8effe20af7083bb64a82cbe39e",
+          "exit_code": 0,
+          "stdout": "ok the child's drop succeeded\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mutexdrop_null",
+      "source_sha256": "cf816ac6bbf1fa1dba39d759f6ea4712eff1e60b2bc2634c202b6090331411d4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1618aef11c72a4e6957171e245a220d7b527948e075fd71a63dea1a4c592e3a6",
+          "exit_code": 0,
+          "stdout": "value a NULL mutex: errno 0\nok a good one afterwards\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

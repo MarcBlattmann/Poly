@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/_kernelrpc_mach_port_allocate_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# _kernelrpc_mach_port_allocate_trap.tests/macos.json.
+id: macos/syscall/mach/_kernelrpc_mach_port_allocate_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 16;
+  arm64 `svc #0x80` with x16 = -16. The result is the kern_return_t in rax
+  / x0; there is no carry-flag convention. A task port that is not valid
+  makes the trap return MACH_SEND_INVALID_DEST (0x10000003).
+  port_allocate(task, right, name pointer) makes a new right in the task
+  and stores its name. MACH_PORT_RIGHT_RECEIVE (1) makes a port (its name:
+  nonzero, 32 bits, a different one each time, type MACH_PORT_TYPE_RECEIVE
+  0x20000); PORT_SET (3) a port set (type 0x80000); DEAD_NAME (4) a dead
+  name (type 0x100000). SEND (0), a right number that does not exist (99)
+  and (a value) SEND_ONCE (2) are KERN_INVALID_VALUE (18). A task port
+  that is not valid (0, 12345) returns MACH_SEND_INVALID_DEST (0x10000003)
+  and does not write the name; a name pointer that cannot be written
+  (address 8) is KERN_MEMORY_ERROR (10); calls after a failure work.
+returns:
+  success: "KERN_SUCCESS (0), *name = the new right's name"
+errors:
+  invalid_right: "KERN_INVALID_VALUE (18): right 0, 2, 99"
+  invalid_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+  bad_pointer: "KERN_MEMORY_ERROR (10): name pointer at address 8"
+side_effects: "a right and its name are added to the task's port name space"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

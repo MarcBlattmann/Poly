@@ -10,22 +10,22 @@ oracle:
   date: 2026-11-14
 summary: >
   Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 169,
-  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
-  `svc #0x80` with x16 = 169, arguments in x0..x5 (second result in x1).
-  On failure the carry flag is set and the result register holds the errno
-  (<sys/errno.h>); on success the carry flag is clear. csops(pid,
-  operation, buffer, size) queries code-signing state; pid 0 is the
-  caller. Operation 0 (CS_OPS_STATUS) stores the flags (u32): for a
-  process run from an executable that the linker signed ad hoc, 0x22020201
-  (570556929), including CS_VALID (1); the same through the caller's own
-  pid and in a forked child. Operation 10 (CS_OPS_BLOB) copies the
-  signature blob: it starts with the bytes fa de 0c c0 (the embedded-
-  signature magic, big endian), then its length (big endian u32; 279 for
-  the oracle's test executables). Operations 4 and 5 (path, code-directory
-  hash) are refused with EINVAL for the caller (values). Operation numbers
-  and flags are from XNU's bsd/sys/codesign.h, which the SDK does not
-  install. Not to be probed: operation 1 (CS_OPS_MARKINVALID) invalidates
-  the process's signature and the process is killed (SIGKILL) at once.
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64 `svc
+  #0x80` with x16 = 169, arguments in x0..x5 (second result in x1). On
+  failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. csops(pid, operation,
+  buffer, size) queries code-signing state; pid 0 is the caller. Operation 0
+  (CS_OPS_STATUS) stores the flags (u32): for a process run from an
+  executable that the linker signed ad hoc, 0x22020201 (570556929),
+  including CS_VALID (1); the same through the caller's own pid and in a
+  forked child. Operation 10 (CS_OPS_BLOB) copies the signature blob: it
+  starts with the bytes fa de 0c c0 (the embedded- signature magic, big
+  endian), then its length (big endian u32; 279 for the oracle's test
+  executables). Operations 4 and 5 (path, code-directory hash) are refused
+  with EINVAL for the caller (values). Operation numbers and flags have no
+  public header in the SDK; they were found by experiment. Not to be probed:
+  operation 1 (CS_OPS_MARKINVALID) invalidates the process's signature and
+  the process is killed (SIGKILL) at once.
 returns:
   success: "0, buffer filled"
 errors:
