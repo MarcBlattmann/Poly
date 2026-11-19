@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "sub_args",
+      "exe_sha256": "e93275d573afbc935b0f358673ff9632cb627560c574e34f32cbd63f648db129",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U2V0KE5VTEwgd2luZG93KTogMCAobGFzdCBlcnJvciAweDVhNWEpClJlbW92ZShOVUxMIHdpbmRvdyk6IDAgKGxhc3QgZXJyb3IgMHg1YTVhKQpHZXQoTlVMTCB3aW5kb3cpOiAwIHJlZiAweDAgKGxhc3QgZXJyb3IgMHg1YTVhKQpTZXQobWFkZS11cCB3aW5kb3cpOiAwIChsYXN0IGVycm9yIDB4NWE1YSkKUmVtb3ZlKG1hZGUtdXAgd2luZG93KTogMCAobGFzdCBlcnJvciAweDVhNWEpClNldChOVUxMIHByb2NlZHVyZSk6IDAgKGxhc3QgZXJyb3IgMHg1YTVhKQphZnRlciBOVUxMIHByb2NlZHVyZXwgYmFzZSBVKzEgdzEgdz0wIGw9MApTZXQoZGVza3RvcCB3aW5kb3cpOiAwIChsYXN0IGVycm9yIDB4NWE1YSkKR2V0KGRlc2t0b3Agd2luZG93KTogMApTZXQoZGVzdHJveWVkIHdpbmRvdyk6IDAgKGxhc3QgZXJyb3IgMHg1YTVhKQpHZXQgd2l0aCBhIE5VTEwgcmVmZXJlbmNlIGRhdGEgcG9pbnRlcjogMQpvdGhlciB0aHJlYWQ6IFNldCAwIChsYXN0IGVycm9yIDB4NWE1YSksIEdldCAxIHJlZiAweGEsIFJlbW92ZSAxLCBEZWZTdWJjbGFzc1Byb2MgMAphZnRlciB0aGUgb3RoZXIgdGhyZWFkOiBHZXQgQSwxIG9uIG91ciB0aHJlYWQ6ICgwLCAwKQphZnRlciB0aGUgb3RoZXIgdGhyZWFkfCBiYXNlIFdNX0RFU1RST1kgdzIgdz0wIGw9MAphZnRlciB0aGUgb3RoZXIgdGhyZWFkfCBiYXNlIFdNX05DREVTVFJPWSB3MiB3PTAgbD0wCmFmdGVyIHRoZSBvdGhlciB0aHJlYWR8IGJhc2UgVSsxIHcxIHc9MCBsPTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Set(NULL window): 0 (last error 0x5a5a)\nRemove(NULL window): 0 (last error 0x5a5a)\nGet(NULL window): 0 ref 0x0 (last error 0x5a5a)\nSet(made-up window): 0 (last error 0x5a5a)\nRemove(made-up window): 0 (last error 0x5a5a)\nSet(NULL procedure): 0 (last error 0x5a5a)\nafter NULL procedure| base U+1 w1 w=0 l=0\nSet(desktop window): 0 (last error 0x5a5a)\nGet(desktop window): 0\nSet(destroyed window): 0 (last error 0x5a5a)\nGet with a NULL reference data pointer: 1\nother thread: Set 0 (last error 0x5a5a), Get 1 ref 0xa, Remove 1, DefSubclassProc 0\nafter the other thread: Get A,1 on our thread: (0, 0)\nafter the other thread| base WM_DESTROY w2 w=0 l=0\nafter the other thread| base WM_NCDESTROY w2 w=0 l=0\nafter the other thread| base U+1 w1 w=0 l=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 69
+    },
+    {
+      "name": "sub_chain",
+      "exe_sha256": "4f7c36097f7a0dc05bfc29be848f40401195263d640ef3b2b7a6c28a6e7d2e0b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2luZG93IG1hZGU6IHRydWUKcGxhaW4gc2VuZCBVKzE6IHJlc3VsdCA3NzcKcGxhaW58IGJhc2UgVSsxIHcxIHc9NSBsPTYKU2V0V2luZG93U3ViY2xhc3MgQSBpZCAxIHJlZiAxMDA6IDEgKGxhc3QgZXJyb3IgMHg1YTVhKQpCIGlkIDIgcmVmIDIwMDogMSwgQyBpZCAzIHJlZiAzMDA6IDEKc2VuZCBVKzEgKHc9MTEgbD0yMik6IHJlc3VsdCA3NzcKY2hhaW4gQSxCLEN8IEMgVSsxIHcxIGlkPTMgcmVmPTMwMCB3PTExIGw9MjIKY2hhaW4gQSxCLEN8IEIgVSsxIHcxIGlkPTIgcmVmPTIwMCB3PTExIGw9MjIKY2hhaW4gQSxCLEN8IEEgVSsxIHcxIGlkPTEgcmVmPTEwMCB3PTExIGw9MjIKY2hhaW4gQSxCLEN8IGJhc2UgVSsxIHcxIHc9MTEgbD0yMgpzZW5kIFUrMjogcmVzdWx0IDg4OApjaGFpbiBBLEIsQ3wgQyBVKzIgdzEgaWQ9MyByZWY9MzAwIHc9MCBsPS0xCmNoYWluIEEsQixDfCBCIFUrMiB3MSBpZD0yIHJlZj0yMDAgdz0wIGw9LTEKY2hhaW4gQSxCLEN8IEEgVSsyIHcxIGlkPTEgcmVmPTEwMCB3PTAgbD0tMQpjaGFpbiBBLEIsQ3wgYmFzZSBVKzIgdzEgdz0wIGw9LTEKRCBpZCA0IHJlZiA0MDA6IDEKc2VuZCBVKzMgdG8gY2hhaW4gRCxDLEIsQTogcmVzdWx0IDQyNDIgKEQgYW5zd2VycyBpdHNlbGYpCkQgYW5zd2Vyc3wgRCBVKzMgdzEgaWQ9NCByZWY9NDAwIHc9MSBsPTIKc2VuZCBVKzIgdG8gY2hhaW4gRCxDLEIsQTogcmVzdWx0IDE4ODggKEQgYWRkcyAxMDAwKQpEIGFkZHN8IEQgVSsyIHcxIGlkPTQgcmVmPTQwMCB3PTMgbD00CkQgYWRkc3wgQyBVKzIgdzEgaWQ9MyByZWY9MzAwIHc9MCBsPTAKRCBhZGRzfCBCIFUrMiB3MSBpZD0yIHJlZj0yMDAgdz0wIGw9MApEIGFkZHN8IEEgVSsyIHcxIGlkPTEgcmVmPTEwMCB3PTAgbD0wCkQgYWRkc3wgYmFzZSBVKzIgdzEgdz0wIGw9MApzZW5kIFUrMSB0byBjaGFpbiBELEMsQixBOiByZXN1bHQgNzc3CkQgcGFzc2VzfCBEIFUrMSB3MSBpZD00IHJlZj00MDAgdz03IGw9OApEIHBhc3Nlc3wgQyBVKzEgdzEgaWQ9MyByZWY9MzAwIHc9NyBsPTgKRCBwYXNzZXN8IEIgVSsxIHcxIGlkPTIgcmVmPTIwMCB3PTcgbD04CkQgcGFzc2VzfCBBIFUrMSB3MSBpZD0xIHJlZj0xMDAgdz03IGw9OApEIHBhc3Nlc3wgYmFzZSBVKzEgdzEgdz03IGw9OApzZXQgd2l0aCBpZCAweGZmZmZmZmZmZmZmZmZmZmUgcmVmIDB4ZmZmZmZmZmZmZmZmZmZmYTogMQpiaWcgdmFsdWVzfCBBIFUrMSB3MiBpZD0xODQ0Njc0NDA3MzcwOTU1MTYxNCByZWY9MTg0NDY3NDQwNzM3MDk1NTE2MTAgdz0wIGw9MApiaWcgdmFsdWVzfCBiYXNlIFUrMSB3MiB3PTAgbD0wCkdldFdpbmRvd1N1YmNsYXNzOiAxIHJlZiAweGZmZmZmZmZmZmZmZmZmZmEKc2V0IHdpdGggaWQgMCByZWYgMDogMQp6ZXJvIHZhbHVlc3wgQiBVKzEgdzMgaWQ9MCByZWY9MCB3PTAgbD0wCnplcm8gdmFsdWVzfCBiYXNlIFUrMSB3MyB3PTAgbD0wCmRlc3Ryb3l8IEQgV01fREVTVFJPWSB3MSBpZD00IHJlZj00MDAgdz0wIGw9MApkZXN0cm95fCBDIFdNX0RFU1RST1kgdzEgaWQ9MyByZWY9MzAwIHc9MCBsPTAKZGVzdHJveXwgQiBXTV9ERVNUUk9ZIHcxIGlkPTIgcmVmPTIwMCB3PTAgbD0wCmRlc3Ryb3l8IEEgV01fREVTVFJPWSB3MSBpZD0xIHJlZj0xMDAgdz0wIGw9MApkZXN0cm95fCBiYXNlIFdNX0RFU1RST1kgdzEgdz0wIGw9MApkZXN0cm95fCBEIFdNX05DREVTVFJPWSB3MSBpZD00IHJlZj00MDAgdz0wIGw9MApkZXN0cm95fCBDIFdNX05DREVTVFJPWSB3MSBpZD0zIHJlZj0zMDAgdz0wIGw9MApkZXN0cm95fCBCIFdNX05DREVTVFJPWSB3MSBpZD0yIHJlZj0yMDAgdz0wIGw9MApkZXN0cm95fCBBIFdNX05DREVTVFJPWSB3MSBpZD0xIHJlZj0xMDAgdz0wIGw9MApkZXN0cm95fCBiYXNlIFdNX05DREVTVFJPWSB3MSB3PTAgbD0wCmRlc3Ryb3l8IEEgV01fREVTVFJPWSB3MiBpZD0xODQ0Njc0NDA3MzcwOTU1MTYxNCByZWY9MTg0NDY3NDQwNzM3MDk1NTE2MTAgdz0wIGw9MApkZXN0cm95fCBiYXNlIFdNX0RFU1RST1kgdzIgdz0wIGw9MApkZXN0cm95fCBBIFdNX05DREVTVFJPWSB3MiBpZD0xODQ0Njc0NDA3MzcwOTU1MTYxNCByZWY9MTg0NDY3NDQwNzM3MDk1NTE2MTAgdz0wIGw9MApkZXN0cm95fCBiYXNlIFdNX05DREVTVFJPWSB3MiB3PTAgbD0wCmRlc3Ryb3l8IEIgV01fREVTVFJPWSB3MyBpZD0wIHJlZj0wIHc9MCBsPTAKZGVzdHJveXwgYmFzZSBXTV9ERVNUUk9ZIHczIHc9MCBsPTAKZGVzdHJveXwgQiBXTV9OQ0RFU1RST1kgdzMgaWQ9MCByZWY9MCB3PTAgbD0wCmRlc3Ryb3l8IGJhc2UgV01fTkNERVNUUk9ZIHczIHc9MCBsPTAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "window made: true\nplain send U+1: result 777\nplain| base U+1 w1 w=5 l=6\nSetWindowSubclass A id 1 ref 100: 1 (last error 0x5a5a)\nB id 2 ref 200: 1, C id 3 ref 300: 1\nsend U+1 (w=11 l=22): result 777\nchain A,B,C| C U+1 w1 id=3 ref=300 w=11 l=22\nchain A,B,C| B U+1 w1 id=2 ref=200 w=11 l=22\nchain A,B,C| A U+1 w1 id=1 ref=100 w=11 l=22\nchain A,B,C| base U+1 w1 w=11 l=22\nsend U+2: result 888\nchain A,B,C| C U+2 w1 id=3 ref=300 w=0 l=-1\nchain A,B,C| B U+2 w1 id=2 ref=200 w=0 l=-1\nchain A,B,C| A U+2 w1 id=1 ref=100 w=0 l=-1\nchain A,B,C| base U+2 w1 w=0 l=-1\nD id 4 ref 400: 1\nsend U+3 to chain D,C,B,A: result 4242 (D answers itself)\nD answers| D U+3 w1 id=4 ref=400 w=1 l=2\nsend U+2 to chain D,C,B,A: result 1888 (D adds 1000)\nD adds| D U+2 w1 id=4 ref=400 w=3 l=4\nD adds| C U+2 w1 id=3 ref=300 w=0 l=0\nD adds| B U+2 w1 id=2 ref=200 w=0 l=0\nD adds| A U+2 w1 id=1 ref=100 w=0 l=0\nD adds| base U+2 w1 w=0 l=0\nsend U+1 to chain D,C,B,A: result 777\nD passes| D U+1 w1 id=4 ref=400 w=7 l=8\nD passes| C U+1 w1 id=3 ref=300 w=7 l=8\nD passes| B U+1 w1 id=2 ref=200 w=7 l=8\nD passes| A U+1 w1 id=1 ref=100 w=7 l=8\nD passes| base U+1 w1 w=7 l=8\nset with id 0xfffffffffffffffe ref 0xfffffffffffffffa: 1\nbig values| A U+1 w2 id=18446744073709551614 ref=18446744073709551610 w=0 l=0\nbig values| base U+1 w2 w=0 l=0\nGetWindowSubclass: 1 ref 0xfffffffffffffffa\nset with id 0 ref 0: 1\nzero values| B U+1 w3 id=0 ref=0 w=0 l=0\nzero values| base U+1 w3 w=0 l=0\ndestroy| D WM_DESTROY w1 id=4 ref=400 w=0 l=0\ndestroy| C WM_DESTROY w1 id=3 ref=300 w=0 l=0\ndestroy| B WM_DESTROY w1 id=2 ref=200 w=0 l=0\ndestroy| A WM_DESTROY w1 id=1 ref=100 w=0 l=0\ndestroy| base WM_DESTROY w1 w=0 l=0\ndestroy| D WM_NCDESTROY w1 id=4 ref=400 w=0 l=0\ndestroy| C WM_NCDESTROY w1 id=3 ref=300 w=0 l=0\ndestroy| B WM_NCDESTROY w1 id=2 ref=200 w=0 l=0\ndestroy| A WM_NCDESTROY w1 id=1 ref=100 w=0 l=0\ndestroy| base WM_NCDESTROY w1 w=0 l=0\ndestroy| A WM_DESTROY w2 id=18446744073709551614 ref=18446744073709551610 w=0 l=0\ndestroy| base WM_DESTROY w2 w=0 l=0\ndestroy| A WM_NCDESTROY w2 id=18446744073709551614 ref=18446744073709551610 w=0 l=0\ndestroy| base WM_NCDESTROY w2 w=0 l=0\ndestroy| B WM_DESTROY w3 id=0 ref=0 w=0 l=0\ndestroy| base WM_DESTROY w3 w=0 l=0\ndestroy| B WM_NCDESTROY w3 id=0 ref=0 w=0 l=0\ndestroy| base WM_NCDESTROY w3 w=0 l=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    },
+    {
+      "name": "sub_wndproc",
+      "exe_sha256": "c44e393d0cc937ae77b8fe8ecbd59db6aa1792a189b3974068bdd463c32b342e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2luZG93IHByb2NlZHVyZSBjaGFuZ2VkIGJ5IHRoZSBmaXJzdCBzdWJjbGFzczogdHJ1ZQp3aW5kb3cgcHJvY2VkdXJlIHVuY2hhbmdlZCBieSB0aGUgc2Vjb25kIHN1YmNsYXNzOiB0cnVlClNldFdpbmRvd0xvbmdQdHIgcmV0dXJuZWQgdGhlIHN1YmNsYXNzJ3MgcHJvY2VkdXJlOiB0cnVlCnNlbmQgVSsxOiByZXN1bHQgNQpyZXBsYWNlZHwgcmVwbGFjZW1lbnQgcHJvYyBVKzEKZGVzdHJveSBhZnRlciByZXBsYWNlbWVudHwgKG5vdGhpbmcgbG9nZ2VkKQphZnRlciByZW1vdmluZyBCOiBwcm9jZWR1cmUgaXMgdGhlIG9yaWdpbmFsIGFnYWluOiBmYWxzZQphZnRlciByZW1vdmluZyBBIHRvbzogcHJvY2VkdXJlIGlzIHRoZSBvcmlnaW5hbCBhZ2FpbjogdHJ1ZQpzZW5kIFUrMTogcmVzdWx0IDc3NwpubyBzdWJjbGFzc3wgYmFzZSBVKzEgdzIgdz0wIGw9MApkZXN0cm95fCBiYXNlIFdNX0RFU1RST1kgdzIgdz0wIGw9MApkZXN0cm95fCBiYXNlIFdNX05DREVTVFJPWSB3MiB3PTAgbD0wCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "window procedure changed by the first subclass: true\nwindow procedure unchanged by the second subclass: true\nSetWindowLongPtr returned the subclass's procedure: true\nsend U+1: result 5\nreplaced| replacement proc U+1\ndestroy after replacement| (nothing logged)\nafter removing B: procedure is the original again: false\nafter removing A too: procedure is the original again: true\nsend U+1: result 777\nno subclass| base U+1 w2 w=0 l=0\ndestroy| base WM_DESTROY w2 w=0 l=0\ndestroy| base WM_NCDESTROY w2 w=0 l=0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}
