@@ -91,6 +91,22 @@ typedef unsigned long size_t;
 #define SYS_fstatat64 470
 #define SYS_getentropy 500
 #define SYS_munmap 73
+#define SYS_msync 65
+#define SYS_madvise 75
+#define SYS_mincore 78
+#define SYS_mlock 203
+#define SYS_munlock 204
+#define SYS_minherit 250
+#define SYS_psynch_mutexwait 301
+#define SYS_psynch_mutexdrop 302
+#define SYS_psynch_cvbroad 303
+#define SYS_psynch_cvsignal 304
+#define SYS_psynch_cvwait 305
+#define SYS_bsdthread_create 360
+#define SYS_bsdthread_terminate 361
+#define SYS_ulock_wait 515
+#define SYS_ulock_wake 516
+#define SYS_ulock_wait2 544
 #define SYS_mprotect 74
 #define SYS_mkdir 136
 #define SYS_rmdir 137
@@ -128,6 +144,10 @@ typedef unsigned long size_t;
 #define EISDIR 21
 #define EINVAL 22
 #define ENOTTY 25
+#define EAGAIN 35
+#define ENOTSUP 45
+#define ETIMEDOUT 60
+#define EOWNERDEAD 105
 #define EPIPE 32
 #define ELOOP 62
 #define ERANGE 34
@@ -164,6 +184,29 @@ typedef unsigned long size_t;
 #define MAP_PRIVATE 0x0002
 #define MAP_FIXED 0x0010
 #define MAP_ANON 0x1000
+
+/* <sys/mman.h>, <mach/vm_inherit.h> */
+#define MS_ASYNC 0x0001
+#define MS_INVALIDATE 0x0002
+#define MS_SYNC 0x0010
+#define MADV_NORMAL 0
+#define MADV_RANDOM 1
+#define MADV_SEQUENTIAL 2
+#define MADV_WILLNEED 3
+#define MADV_DONTNEED 4
+#define MADV_FREE 5
+#define MADV_ZERO_WIRED_PAGES 6
+#define MADV_FREE_REUSABLE 7
+#define MADV_FREE_REUSE 8
+#define MADV_CAN_REUSE 9
+#define MADV_ZERO 11
+#define MINCORE_INCORE 0x1
+#define MINCORE_REFERENCED 0x2
+#define MINCORE_MODIFIED 0x4
+#define VM_INHERIT_SHARE 0
+#define VM_INHERIT_COPY 1
+#define VM_INHERIT_NONE 2
+#define VM_INHERIT_DONATE_COPY 3
 
 /* <sys/stat.h> */
 #define S_IFMT 0170000
@@ -284,6 +327,51 @@ _Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
 #define KERN_SUCCESS 0
 #define MACH_PORT_NULL 0u
 #define MACH_PORT_DEAD 0xffffffffu
+#define KERN_INVALID_ADDRESS 1
+#define KERN_PROTECTION_FAILURE 2
+#define KERN_NO_SPACE 3
+#define KERN_INVALID_ARGUMENT 4
+#define KERN_NOT_RECEIVER 7
+#define KERN_MEMORY_ERROR 10
+#define KERN_INVALID_NAME 15
+#define KERN_INVALID_TASK 16
+#define KERN_INVALID_RIGHT 17
+#define KERN_INVALID_VALUE 18
+#define KERN_UREFS_OVERFLOW 19
+#define KERN_INVALID_CAPABILITY 20
+/* <mach/message.h>: what a trap returns when the task port is not valid */
+#define MACH_SEND_INVALID_DEST 0x10000003
+#define MACH_MSG_TYPE_MAKE_SEND 20
+/* <mach/port.h> */
+#define MACH_PORT_RIGHT_SEND 0
+#define MACH_PORT_RIGHT_RECEIVE 1
+#define MACH_PORT_RIGHT_SEND_ONCE 2
+#define MACH_PORT_RIGHT_PORT_SET 3
+#define MACH_PORT_RIGHT_DEAD_NAME 4
+#define MACH_PORT_TYPE_SEND 0x10000
+#define MACH_PORT_TYPE_RECEIVE 0x20000
+#define MACH_PORT_TYPE_SEND_ONCE 0x40000
+#define MACH_PORT_TYPE_PORT_SET 0x80000
+#define MACH_PORT_TYPE_DEAD_NAME 0x100000
+/* <mach/vm_statistics.h> */
+#define VM_FLAGS_ANYWHERE 0x00000001
+/* Mach trap numbers: XNU's trap table (osfmk/kern/syscall_sw.c) */
+#define MACH__kernelrpc_mach_vm_allocate_trap 10
+#define MACH__kernelrpc_mach_vm_deallocate_trap 12
+#define MACH__kernelrpc_mach_vm_protect_trap 14
+#define MACH__kernelrpc_mach_port_allocate_trap 16
+#define MACH__kernelrpc_mach_port_deallocate_trap 18
+#define MACH__kernelrpc_mach_port_mod_refs_trap 19
+#define MACH__kernelrpc_mach_port_insert_right_trap 21
+#define MACH__kernelrpc_mach_port_type_trap 76
+#define MACH_mach_wait_until_trap 90
+/* XNU bsd/sys/ulock.h (not installed in the SDK) */
+#define UL_COMPARE_AND_WAIT 1
+#define UL_UNFAIR_LOCK 2
+#define UL_COMPARE_AND_WAIT_SHARED 3
+#define UL_COMPARE_AND_WAIT64 5
+#define ULF_WAKE_ALL 0x100
+#define ULF_NO_ERRNO 0x01000000
 
 /* struct stat64 (struct stat with 64-bit inodes, the SDK's default),
  * <sys/stat.h>: 144 bytes. */
@@ -400,6 +488,39 @@ static inline i64 poly_mach6(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f) {
 }
 #else
 #error "macOS tests are built for x86_64 and arm64"
+#endif
+
+#if defined(__arm64__) || defined(__aarch64__)
+#define POLY_ARM64 1
+/* Calls with seven or eight arguments (psynch): x0..x7 on arm64. x86_64
+ * passes them on the stack and is not done yet, so those tests are
+ * arm64-only for now. */
+static inline sysret poly_bsd8(i64 n, i64 a, i64 b, i64 c, i64 d, i64 e, i64 f, i64 g, i64 h) {
+    register i64 x0 __asm__("x0") = a;
+    register i64 x1 __asm__("x1") = b;
+    register i64 x2 __asm__("x2") = c;
+    register i64 x3 __asm__("x3") = d;
+    register i64 x4 __asm__("x4") = e;
+    register i64 x5 __asm__("x5") = f;
+    register i64 x6 __asm__("x6") = g;
+    register i64 x7 __asm__("x7") = h;
+    register i64 x16 __asm__("x16") = n;
+    i64 carry;
+    __asm__ volatile("svc #0x80\n\tcset %[c], cs"
+                     : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3), "+r"(x4), "+r"(x5), "+r"(x6), "+r"(x7), "+r"(x16), [c] "=r"(carry)
+                     :
+                     : "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x17", "memory", "cc");
+    sysret r = {x0, x1, 0};
+    if (carry) r.err = x0;
+    return r;
+}
+/* mach_absolute_time() on arm64 is the virtual counter (24 MHz here:
+ * mach_timebase_info 125/3). */
+static inline u64 poly_mach_now(void) {
+    u64 t;
+    __asm__ volatile("isb\n\tmrs %0, cntvct_el0" : "=r"(t));
+    return t;
+}
 #endif
 
 #define bsd0(n) poly_bsd6((n), 0, 0, 0, 0, 0, 0)
