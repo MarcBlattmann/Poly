@@ -24,6 +24,24 @@ summary: >
   and nothing is copied. Observed but not tested: an unwritable oldlenp
   (address 8) made the call never return (the thread spun at full CPU
   until killed); Poly should fail it with EFAULT instead.
+  More names. {CTL_HW, HW_MEMSIZE 24} is an 8-byte integer (more than 1
+  GiB); HW_BYTEORDER 4 is 1234; HW_MACHINE 1 a string ("arm64" on the
+  oracle, a value); KERN_OSREV 3 is 199506; KERN_ARGMAX 8 is at least
+  262144 (1048576 on the oracle); KERN_MAXPROC 6 and KERN_MAXFILES 7 are
+  positive; KERN_VERSION 4 starts "Darwin Kernel Version " and ends with a
+  NUL; KERN_HOSTNAME 10 is not empty; KERN_OSVERSION 65 is the build
+  ("26A428", a value); KERN_BOOTTIME 21 is a struct timeval of 16 bytes
+  after 2023 (an 8-byte buffer is ENOMEM). Processes: {CTL_KERN, KERN_PROC
+  14, KERN_PROC_PID 1, pid} fills struct kinfo_proc (<sys/sysctl.h>, 648
+  bytes: p_stat at 36 is 2 for a running process, p_pid at 40, p_comm at
+  243, the uid at 420, e_ppid at 560); a pid that does not exist succeeds
+  with length 0; a 100-byte buffer is ENOMEM; a size query reports more
+  than one record (3888 on the oracle, a value). {CTL_KERN, KERN_PROCARGS2
+  49, pid} gives an int argc and then the executable's path as the program
+  was started; it is EINVAL for a pid that does not exist and for another
+  user's process (pid 1). {CTL_SYSCTL 0, 3} (name to numbers; XNU's
+  bsd/sys/sysctl.h) takes the name as new data: "kern.ostype" gives {1, 1}
+  (8 bytes), "hw.memsize" {6, 24}, "kern.nosuch" ENOENT.
 returns:
   success: "0, *oldlenp = bytes copied"
   size_query: "0 with oldp NULL, *oldlenp = the value's size"
@@ -40,5 +58,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

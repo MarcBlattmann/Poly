@@ -91,6 +91,7 @@ typedef unsigned long size_t;
 #define SYS_fstatat64 470
 #define SYS_getentropy 500
 #define SYS_munmap 73
+#define SYS_mknod 14
 #define SYS_msync 65
 #define SYS_madvise 75
 #define SYS_mincore 78
@@ -311,7 +312,10 @@ _Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
 /* <sys/dirent.h> */
 #define DT_UNKNOWN 0
 #define DT_DIR 4
+#define DT_FIFO 1
+#define DT_CHR 2
 #define DT_REG 8
+#define DT_LNK 10
 
 /* <sys/sysctl.h> */
 #define CTL_MAXNAME 12
@@ -322,6 +326,29 @@ _Static_assert(sizeof(struct poly_kevent) == 32, "struct kevent is 32 bytes");
 #define HW_MACHINE 1
 #define HW_NCPU 3
 #define HW_PAGESIZE 7
+#define KERN_VERSION 4
+#define KERN_MAXPROC 6
+#define KERN_MAXFILES 7
+#define KERN_ARGMAX 8
+#define KERN_HOSTNAME 10
+#define KERN_PROC 14
+#define KERN_BOOTTIME 21
+#define KERN_PROCARGS2 49
+#define KERN_OSVERSION 65
+#define KERN_PROC_PID 1
+#define KERN_OSREV 3
+#define HW_BYTEORDER 4
+#define HW_MEMSIZE 24
+/* XNU bsd/sys/sysctl.h (not in the SDK): the name-to-number call. */
+#define CTL_SYSCTL 0
+#define CTL_SYSCTL_NAME2OID 3
+/* struct kinfo_proc of <sys/sysctl.h> (648 bytes): where the fields are. */
+#define KINFO_PROC_SIZE 648
+#define KP_P_STAT 36
+#define KP_P_PID 40
+#define KP_P_COMM 243
+#define KP_E_UID 420
+#define KP_E_PPID 560
 
 /* <mach/kern_return.h>, <mach/port.h> */
 #define KERN_SUCCESS 0
