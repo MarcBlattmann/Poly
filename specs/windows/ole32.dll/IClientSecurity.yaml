@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/IClientSecurity.yaml
+id: windows/api/ole32.dll/IClientSecurity
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token; where noted, tests also start a de-elevated child process holding the session shell's filtered standard token); every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-com-sec
+  date: 2026-11-19
+sources: >
+  Observations of our own test programs (client, local COM server, LocalSystem service, and de-elevated child client in one image) on the oracle machine above. Microsoft Learn: "CoInitializeSecurity function (combaseapi.h)", "CoSetProxyBlanket", "CoQueryProxyBlanket", "CoCopyProxy", "IClientSecurity interface (objidlbase.h)", "CoGetCallContext", "IServerSecurity interface (objidlbase.h)", "CoQueryClientBlanket", "CoImpersonateClient", "CoRevertToSelf", "EOLE_AUTHENTICATION_CAPABILITIES", "RPC_C_AUTHN_LEVEL_*", "RPC_C_IMP_LEVEL_*", "COM_RIGHTS_*", "AppID Key", "LaunchPermission", "AccessPermission", "Security in COM"; combaseapi.h, objidl.h, objidlbase.h, rpcdce.h, wtypes.h, winnt.h, winerror.h for constants and layouts. Google's updater and Chrome's elevation service: their own logs, registry changes, and PE import names from the survey (docs/windows/chrome-installer-plan.md, docs/windows/com-out-of-process-plan.md); no Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  COM interface implemented by a client-side proxy manager ({0000013D-0000-0000-C000-000000000046}) providing QueryBlanket, SetBlanket and CopyProxy. The free functions CoQueryProxyBlanket, CoSetProxyBlanket and CoCopyProxy query the proxy for IClientSecurity and forward to its methods.
+interface:
+  iid: "{0000013D-0000-0000-C000-000000000046}"
+  vtable: "IUnknown (QueryInterface, AddRef, Release), QueryBlanket, SetBlanket, CopyProxy"
+installer: "Underlying interface invoked by CoSetProxyBlanket, CoQueryProxyBlanket and CoCopyProxy."
+rules:
+  query_interface: "QueryInterface(IID_IClientSecurity) succeeds (S_OK) on any local cross-process proxy (class object proxy, its IUnknown, created object proxy, and proxies whose server has exited), returning a non-NULL pointer distinct from the interface proxy pointer itself; fails with E_NOINTERFACE 0x80004002 on an in-process object"
+  reference_counting: "AddRef returns one more than the Release that follows it returns (the absolute counts were not recorded)"
+  methods_match_functions: "QueryBlanket, SetBlanket and CopyProxy accept a proxy pointer of the owning proxy manager as their first argument after this and exhibit the same behaviour as CoQueryProxyBlanket, CoSetProxyBlanket and CoCopyProxy: QueryBlanket returns the same defaults (authn=10, authz=0, level=6, imp=2, caps=0x1, princ=<DOMAIN>\\<user>); SetBlanket updates the proxy blanket visible to CoQueryProxyBlanket and controls the impersonation level received by the server (IDENTIFY -> 1, IMPERSONATE -> 2, DELEGATE -> 3); CopyProxy returns a distinct pointer starting with the default blanket"
+  foreign_proxy_rejected: "calling SetBlanket with a proxy pointer belonging to a different proxy manager (such as an object proxy passed to the class object proxy's IClientSecurity), a plain in-process object, or NULL returns E_NOINTERFACE 0x80004002 and leaves the target proxy's blanket unchanged (note: CoSetProxyBlanket(NULL, ...) returns E_INVALIDARG because it rejects NULL before QueryInterface, whereas IClientSecurity::SetBlanket(NULL, ...) returns E_NOINTERFACE)"
+errors:
+  no_interface: "E_NOINTERFACE 0x80004002 (non-proxy, NULL target, or proxy from another proxy manager)"
+  set_blanket_errors: "same argument validation errors as CoSetProxyBlanket"
+side_effects: "same as CoQueryProxyBlanket, CoSetProxyBlanket and CoCopyProxy"
+threading: "not observed beyond one thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, each image acting as client and COM server (and where needed a child process running scenarios in isolation). Classes are registered under HKLM\SOFTWARE\Classes\CLSID\{B2A0xxxx-...} for elevated runs and HKCU\Software\Classes\CLSID\{B2A0xxxx-...} for standard-token runs (with a process-unique CLSID per run) and removed afterwards. Observations are HRESULTs, Win32 codes, blanket integers, booleans and domain/user comparisons, never raw process ids, thread ids, pointers or times.
+not_covered: >
+  custom IClientSecurity implementations on custom marshallers and remote DCOM proxies.

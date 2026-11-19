@@ -222,6 +222,9 @@ fn update<R>(f: impl FnOnce(&mut ComState) -> R) -> Option<R> {
 
 /// The threads of the process in the multithreaded apartment (for the implicit MTA).
 static MTA_THREADS: MtaThreads = MtaThreads::new();
+/// Active COM-initialised threads in the process (when it drops to 0, per-process PSClsid
+/// overrides are cleared: sheet `CoRegisterPSClsid`, rule `scope`).
+static ACTIVE_APARTMENTS: AtomicU32 = AtomicU32::new(0);
 
 /// Whether COM works on this thread: it has an apartment or the process has an MTA to be in.
 fn com_usable() -> bool {
@@ -299,6 +302,7 @@ fn initialize(kind: InitKind) -> Hresult {
         oop::entries::com_initialised();
     }
     if hr == S_OK {
+        ACTIVE_APARTMENTS.fetch_add(1, Ordering::AcqRel);
         match kind.model() {
             // SAFETY: no arguments.
             Model::Sta => drop(MAIN_STA.claim_if_gone(unsafe { GetCurrentThreadId() }, thread_alive)),
@@ -352,6 +356,9 @@ fn uninitialize(ole: bool) {
             }
         }
         None => {}
+    }
+    if ACTIVE_APARTMENTS.fetch_sub(1, Ordering::AcqRel) == 1 {
+        oop::marshal::clear_ps_cache();
     }
     // The apartment's message filter goes with it.
     if let Some(f) = filter_slot() {
@@ -2163,8 +2170,45 @@ pub extern "system" fn ole32_main(_module: *mut u8, reason: u32, _reserved: *mut
     1
 }
 
+// ----- error information ----------------------------------------------------------------
+
+// `ole32`'s `CreateErrorInfo`, `SetErrorInfo` and `GetErrorInfo` are `oleaut32`'s (Learn documents
+// them under both DLLs; the thread's error object is one). ADR 0220, B2b.
+#[cfg_attr(target_arch = "x86", link(name = "oleaut32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "oleaut32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    #[link_name = "CreateErrorInfo"]
+    fn oa_create_error_info(out: *mut *mut c_void) -> Hresult;
+    #[link_name = "SetErrorInfo"]
+    fn oa_set_error_info(reserved: u32, info: *mut c_void) -> Hresult;
+    #[link_name = "GetErrorInfo"]
+    fn oa_get_error_info(reserved: u32, out: *mut *mut c_void) -> Hresult;
+}
+
+/// `CreateErrorInfo`: `oleaut32`'s.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CreateErrorInfo(out: *mut *mut c_void) -> Hresult {
+    // SAFETY: the caller's argument, passed on.
+    unsafe { oa_create_error_info(out) }
+}
+
+/// `SetErrorInfo`: `oleaut32`'s.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetErrorInfo(reserved: u32, info: *mut c_void) -> Hresult {
+    // SAFETY: as above.
+    unsafe { oa_set_error_info(reserved, info) }
+}
+
+/// `GetErrorInfo`: `oleaut32`'s.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetErrorInfo(reserved: u32, out: *mut *mut c_void) -> Hresult {
+    // SAFETY: as above.
+    unsafe { oa_get_error_info(reserved, out) }
+}
+
 mod delayed;
 mod oop;
+mod stream;
 
 #[cfg(target_arch = "x86_64")]
 mod apps;

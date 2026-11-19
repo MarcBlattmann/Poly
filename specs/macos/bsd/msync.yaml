@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/msync.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# msync.tests/macos.json.
+id: macos/syscall/bsd/msync
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 65,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 65, arguments in x0..x5 (x0..x7 for calls with
+  more; second result in x1). On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. msync(address, length, flags) with MS_SYNC (0x10),
+  MS_ASYNC (1), MS_INVALIDATE (2) or 0 succeeds for a file mapping and for
+  anonymous memory; MS_SYNC together with MS_ASYNC is EINVAL; a flag bit
+  the call does not know (0x100) is accepted (value 0). Pages that are not
+  mapped are ENOMEM; an address that is not page aligned and a length of 0
+  are EINVAL. A store through a MAP_SHARED file mapping is seen by read(2)
+  of the file at once and after msync; the mapping does not extend the
+  file (a store a page-fraction past the end leaves the size alone).
+returns:
+  success: "0"
+errors:
+  bad_flags: "EINVAL (22): MS_SYNC|MS_ASYNC"
+  bad_range: "EINVAL (22): an unaligned address, a length of 0; ENOMEM (12): pages that are not mapped"
+side_effects: "dirty pages of a shared file mapping are written to the file (synchronously for MS_SYNC)"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

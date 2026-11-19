@@ -131,6 +131,7 @@ version = "0.0.1"
 dependencies = [
  "poly-d3d",
  "poly-win32-rt",
+ "poly-win32k",
 ]
 
 [[package]]
@@ -206,6 +207,15 @@ dependencies = [
 name = "hid"
 version = "0.0.1"
 dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "hnetcfg"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+ "poly-kernelbase",
  "poly-win32-rt",
 ]
 
@@ -340,6 +350,7 @@ dependencies = [
 name = "oleaut32"
 version = "0.0.1"
 dependencies = [
+ "poly-com",
  "poly-kernelbase",
  "poly-win32-rt",
 ]
@@ -452,6 +463,13 @@ name = "poly-libm"
 version = "0.0.1"
 
 [[package]]
+name = "poly-lnk"
+version = "0.0.1"
+dependencies = [
+ "poly-com",
+]
+
+[[package]]
 name = "poly-msvc32"
 version = "0.0.1"
 
@@ -501,6 +519,10 @@ dependencies = [
 
 [[package]]
 name = "poly-seh"
+version = "0.0.1"
+
+[[package]]
+name = "poly-taskschd"
 version = "0.0.1"
 
 [[package]]
@@ -604,6 +626,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "schedsvc"
+version = "0.0.1"
+dependencies = [
+ "poly-taskschd",
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "secur32"
 version = "0.0.1"
 dependencies = [
@@ -640,6 +670,7 @@ version = "0.0.1"
 dependencies = [
  "poly-com",
  "poly-kernelbase",
+ "poly-lnk",
  "poly-win32-rt",
  "poly-win32k",
 ]
@@ -649,6 +680,14 @@ name = "shlwapi"
 version = "0.0.1"
 dependencies = [
  "poly-kernelbase",
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "taskschd"
+version = "0.0.1"
+dependencies = [
+ "poly-taskschd",
  "poly-win32-rt",
 ]
 
@@ -691,6 +730,7 @@ name = "userenv"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+ "poly-kernelbase",
  "poly-security",
  "poly-win32-cryptrt",
  "poly-win32-rt",

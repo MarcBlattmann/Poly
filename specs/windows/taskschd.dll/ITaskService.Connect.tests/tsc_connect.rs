@@ -1877,7 +1877,14 @@ fn test(t: &mut Test) {
         let (_, c) = g_bool(s, ITASKSERVICE_GET_CONNECTED);
         let (_, ts) = g_bstr(s, ITASKSERVICE_GET_TARGETSERVER);
         let same_as_name = eq_nocase(bs_units_of(ts), cn);
-        let shown = if k == 5 { Buf::<620>::new() } else { bq(ts) };
+        // The machine's own name is printed as <computer name>: it differs from machine to machine.
+        let shown = if same_as_name && !ts.is_null() {
+            let mut b = Buf::<620>::new();
+            let _ = write!(b, "[<computer name>]");
+            b
+        } else {
+            bq(ts)
+        };
         say!(
             t,
             "Connect({label}): hr={} connected={} target={} target is the computer name={}",

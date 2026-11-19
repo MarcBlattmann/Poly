@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "enuma_buffers",
+      "exe_sha256": "5ad9f766fdee6cb8413c643a21d1fb49a041fe6937ecd7f10e3db03cd5554a6d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlIGtleTogMApuYW1lIGJ1ZmZlciB0b28gc21hbGwgKDMgZm9yIGEgNSBjaGFyYWN0ZXIgbmFtZSk6IHN0YXR1cyAyMzQgbmFtZSBsZW5ndGggMyB0eXBlIDEgZGF0YSBsZW5ndGggNApuYW1lIGJ1ZmZlciBvZiA1IChubyByb29tIGZvciB0aGUgTlVMKTogc3RhdHVzIDIzNCBuYW1lIGxlbmd0aCA1Cm5hbWUgYnVmZmVyIG9mIDY6IHN0YXR1cyAwIG5hbWUgbGVuZ3RoIDUKZGF0YSBidWZmZXIgdG9vIHNtYWxsICgyIGJ5dGVzKTogc3RhdHVzIDIzNCBkYXRhIGxlbmd0aCA0IGZpcnN0IGJ5dGUgdW50b3VjaGVkIHRydWUKZGF0YSBidWZmZXIgb2YgZXhhY3RseSA0OiBzdGF0dXMgMCBkYXRhIGxlbmd0aCA0Ck5VTEwgZGF0YSBhbmQgdHlwZSwgZGF0YSBsZW5ndGggMDogc3RhdHVzIDAgZGF0YSBsZW5ndGggNApOVUxMIGRhdGEsIGRhdGEgbGVuZ3RoIDY0OiBzdGF0dXMgMCBkYXRhIGxlbmd0aCA0Ck5VTEwgbmFtZTogc3RhdHVzIDg3Ck5VTEwgbmFtZSBsZW5ndGggcG9pbnRlcjogc3RhdHVzIDg3Cm5vbi1OVUxMIHJlc2VydmVkOiBzdGF0dXMgODcKTlVMTCBrZXkgaGFuZGxlOiBzdGF0dXMgNgppbmRleCAxMDA6IHN0YXR1cyAyNTkKbmFtZSBvbmx5LCBpbmRleCAxOiBzdGF0dXMgMCBuYW1lIGxlbmd0aCAzCmtleSBsZWZ0IGJlaGluZDogZmFsc2UKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create key: 0\nname buffer too small (3 for a 5 character name): status 234 name length 3 type 1 data length 4\nname buffer of 5 (no room for the NUL): status 234 name length 5\nname buffer of 6: status 0 name length 5\ndata buffer too small (2 bytes): status 234 data length 4 first byte untouched true\ndata buffer of exactly 4: status 0 data length 4\nNULL data and type, data length 0: status 0 data length 4\nNULL data, data length 64: status 0 data length 4\nNULL name: status 87\nNULL name length pointer: status 87\nnon-NULL reserved: status 87\nNULL key handle: status 6\nindex 100: status 259\nname only, index 1: status 0 name length 3\nkey left behind: false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}

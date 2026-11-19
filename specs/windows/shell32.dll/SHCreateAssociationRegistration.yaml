@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/SHCreateAssociationRegistration.yaml
+id: windows/api/shell32.dll/SHCreateAssociationRegistration
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon (session 0, elevated token) as the local account \"server\" (member of Administrators). Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine. Microsoft Learn: "SHCreateAssociationRegistration", "IApplicationAssociationRegistration" (QueryCurrentDefault, QueryAppIsDefault, QueryAppIsDefaultAll, SetAppAsDefault, SetAppAsDefaultAll, ClearUserAssociations), "ASSOCIATIONTYPE", "ASSOCIATIONLEVEL", "Default Programs" (Capabilities, RegisteredApplications) and the public header shobjidl_core.h (the interface id {4E530B0A-E611-4C77-A3AC-9031D022281B} and the order of the methods: QueryCurrentDefault, QueryAppIsDefault, QueryAppIsDefaultAll, SetAppAsDefault, SetAppAsDefaultAll, ClearUserAssociations after IUnknown). Chrome's setup.exe imports it (survey-chrome-installer) to register Chrome as a default-program candidate. Nothing of Windows, Wine or Google's programs was read or disassembled. ClearUserAssociations was never called (it would reset the machine's user associations).
+summary: >
+  Returns the object through which a program reads and sets the default application of a file extension or URL protocol. This Windows build lets a program read freely and refuses a program to make itself the default: QueryCurrentDefault returns the ProgID (effective level) or the registered command (machine level) of the default, QueryAppIsDefault and QueryAppIsDefaultAll answer S_OK with TRUE for every application name (also for names nobody registered, and for an empty name), SetAppAsDefault fails with E_FAIL, SetAppAsDefaultAll answers S_OK and changes nothing the user can see.
+interface:
+  signature: "HRESULT SHCreateAssociationRegistration(REFIID riid, void **ppv)"
+  returns: "S_OK and the object for IID_IApplicationAssociationRegistration (queried for IUnknown it gives the same object)"
+  methods: "vtable order after IUnknown: QueryCurrentDefault(PCWSTR query, ASSOCIATIONTYPE type, ASSOCIATIONLEVEL level, PWSTR *assoc) ; QueryAppIsDefault(PCWSTR query, type, level, PCWSTR appRegistryName, BOOL *isDefault) ; QueryAppIsDefaultAll(level, PCWSTR appRegistryName, BOOL *isDefault) ; SetAppAsDefault(PCWSTR appRegistryName, PCWSTR set, type) ; SetAppAsDefaultAll(PCWSTR appRegistryName) ; ClearUserAssociations()"
+  enums: "ASSOCIATIONTYPE: AT_FILEEXTENSION 0, AT_URLPROTOCOL 1, AT_STARTMENUCLIENT 2, AT_MIMETYPE 3; ASSOCIATIONLEVEL: AL_MACHINE 0, AL_EFFECTIVE 1, AL_USER 2 (shobjidl_core.h)"
+rules:
+  query_current_default_effective: "with level AL_EFFECTIVE (1): S_OK and a non-empty CoTaskMem string (the ProgID, e.g. a name, never a command) for \"http\" and \"https\" (URL protocol) and for \".html\" and \".htm\" (file extension) on a normal machine; the caller frees the string with CoTaskMemFree. With a name nobody registered (\".polyspecb4\", \"polyspecb4proto\") at any level (0, 1, 2): HRESULT_FROM_WIN32(ERROR_NO_ASSOCIATION) = 0x80070483 and *assoc NULL."
+  query_current_default_levels: "for a URL protocol that exists only as a machine-wide ProgID (a ProgID key under HKLM\\SOFTWARE\\Classes with the \"URL Protocol\" value and shell\\open\\command, and the protocol listed in a registered application's Capabilities\\URLAssociations): AL_EFFECTIVE (1) gives S_OK and the ProgID name; AL_MACHINE (0) gives S_OK and the text of the command (the default value of shell\\open\\command, e.g. \"C:\\Windows\\System32\\cmd.exe\" /c exit); AL_USER (2) gives 0x80070483 (no choice by the user)."
+  query_app_is_default: "QueryAppIsDefault(query, type, level, app, &flag) returns S_OK and *flag = TRUE (1) for every combination tried: \"http\" with an unregistered app name, with an empty app name, a made-up extension, a made-up protocol, a registered app (see below), at levels 0, 1 and 2. The result does not tell whether the application really is the default."
+  query_app_is_default_all: "QueryAppIsDefaultAll(AL_EFFECTIVE, app, &flag) returns S_OK and TRUE for an unregistered and for a registered app name."
+  set_app_as_default: "SetAppAsDefault(app, \"polyspecb4proto\", AT_URLPROTOCOL) for an app registered under HKLM\\SOFTWARE\\RegisteredApplications with a Capabilities key (ApplicationName, URLAssociations\\polyspecb4proto = ProgID): E_FAIL 0x80004005 (the same for an app name that is not registered); no key is written under HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations and AL_USER stays 0x80070483."
+  set_app_as_default_all: "SetAppAsDefaultAll(app): S_OK for the registered app and 0x80070002 (ERROR_FILE_NOT_FOUND) for an app name that is not in RegisteredApplications; it changes no user choice (AL_USER still 0x80070483, no HKCU key)."
+  bad_arguments: "QueryCurrentDefault with a NULL query: E_INVALIDARG (0x80070057); with an association level of 9: E_INVALIDARG; with an association type of 9: S_OK (and no assertion about the text, not tested)."
+errors:
+  no_association: "0x80070483 (ERROR_NO_ASSOCIATION as an HRESULT)"
+  invalid_arg: "0x80070057"
+  fail: "0x80004005 (SetAppAsDefault)"
+  not_found: "0x80070002 (SetAppAsDefaultAll with an unregistered application)"
+side_effects: "sar_register creates and removes (also in a failed run's cleanup at its start) HKLM\\SOFTWARE\\Clients\\StartMenuInternet\\PolySpecB4App, HKLM\\SOFTWARE\\Classes\\PolySpecB4Proto and the value PolySpecB4App under HKLM\\SOFTWARE\\RegisteredApplications; nothing is written to HKCU"
+threading: "COM apartment thread (the tests use a single-threaded apartment)"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test, calling the interface through its vtable after SHCreateAssociationRegistration. sar_query writes nothing; sar_register needs the elevated administrator (it writes HKLM) and uses only made-up names (PolySpecB4*). Observations never show a ProgID of the machine, only whether text is non-empty.
+not_covered: >
+  ClearUserAssociations, SetAppAsDefault for a real association or from a non-elevated token, MIME types (AT_MIMETYPE) and start menu clients (AT_STARTMENUCLIENT), the user's UserChoice protection (hash) and what the Settings app shows, a machine where the default browser is different (the tests print only shapes), non-administrator users, 32-bit callers.

@@ -429,7 +429,7 @@ fn report(o: &Opts, s: &crate::chromewin::Summary, text: &str) -> String {
         let _ = writeln!(r, "then {}: {exe} {args}", i + 1);
     }
     if o.runs.len() > 1 {
-        for l in text.lines().filter(|l| l.contains("LAUNCH-EXIT")) {
+        for l in text.lines().filter(|l| l.contains("LAUNCH-EXIT") && !l.contains(crate::console::RESULT_FRAME)) {
             let _ = writeln!(r, "  {}", l.trim());
         }
     }
@@ -721,8 +721,8 @@ pub fn desktop_check(
 /// (`type:data:text/html,<b>x</b>`).
 fn split_steps(s: &str) -> Vec<String> {
     const KINDS: &[&str] = &[
-        "launch", "sleep", "wait", "shot", "pixel", "type", "wtype", "key", "chord", "click", "dclick", "rclick",
-        "drag", "wheel", "move",
+        "launch", "sleep", "wait", "shot", "pixel", "near", "type", "wtype", "key", "chord", "click", "dclick",
+        "rclick", "drag", "wheel", "move",
     ];
     let mut out: Vec<String> = Vec::new();
     for piece in s.split(',') {
@@ -756,6 +756,10 @@ enum Step {
     Shot(String),
     /// The screen's pixel at X|Y must be this colour (RRGGBB): the step fails otherwise.
     Pixel(i32, i32, [u8; 3]),
+    /// The screen's pixel at X|Y must be this colour (RRGGBB) within T in each channel
+    /// (`near:X|Y|RRGGBB|T`): the page seen through a popup's soft shadow, which a popup composed
+    /// without its alpha shows near black (ADR 0225).
+    Near(i32, i32, [u8; 3], u8),
     Type(String),
     /// Type for a Windows program: the keys of win32k's keyboard layout
     /// (German, `poly_win32k::kbd`), where `type` uses the US positions.
@@ -788,6 +792,16 @@ impl Step {
             "sleep" => Step::Sleep(arg.parse().map_err(|_| format!("step {s:?}: seconds"))?),
             "wait" => Step::Wait(arg.into()),
             "shot" => Step::Shot(arg.into()),
+            "near" => {
+                let v: Vec<&str> = arg.split('|').collect();
+                let [x, y, rgb, t] = v[..] else { return Err(format!("step {s:?}: X|Y|RRGGBB|T")) };
+                let colour = u32::from_str_radix(rgb.trim(), 16).ok().filter(|_| rgb.trim().len() == 6);
+                let (Ok(x), Ok(y), Some(c), Ok(t)) = (x.trim().parse(), y.trim().parse(), colour, t.trim().parse())
+                else {
+                    return Err(format!("step {s:?}: X|Y|RRGGBB|T"));
+                };
+                Step::Near(x, y, [(c >> 16) as u8, (c >> 8) as u8, c as u8], t)
+            }
             "pixel" => {
                 let v: Vec<&str> = arg.split('|').collect();
                 let [x, y, rgb] = v[..] else { return Err(format!("step {s:?}: X|Y|RRGGBB")) };
@@ -1004,7 +1018,7 @@ impl Driver {
                 self.qmp.screendump(&png)?;
                 eprintln!("==> screenshot {}", png.display());
             }
-            Step::Pixel(x, y, want) => {
+            Step::Pixel(x, y, want) | Step::Near(x, y, want, _) => {
                 let ppm = self.out.join(format!("{}-pixel.ppm", self.name));
                 self.qmp.screendump(&ppm)?;
                 let image = crate::screen::Image::read_ppm(&ppm)?;
@@ -1013,7 +1027,11 @@ impl Driver {
                     return Err(format!("pixel {x},{y} is outside the {}x{} screen", image.width, image.height));
                 }
                 let got = image.pixel(px, py);
-                if got != *want {
+                if let Step::Near(.., t) = step {
+                    if got.iter().zip(want).any(|(g, w)| g.abs_diff(*w) > *t) {
+                        return Err(format!("pixel {x},{y} is {got:02x?}, wanted {want:02x?} within {t}"));
+                    }
+                } else if got != *want {
                     return Err(format!("pixel {x},{y} is {got:02x?}, wanted {want:02x?}"));
                 }
                 eprintln!("==> pixel {x},{y} is {got:02x?}");
@@ -1122,6 +1140,8 @@ mod tests {
         assert_eq!(qcodes_de('/'), Some(vec!["shift".to_string(), "7".to_string()]));
         assert_eq!(Step::parse("pixel:200|400|008000"), Ok(Step::Pixel(200, 400, [0, 128, 0])));
         assert!(Step::parse("pixel:200|400|8000").is_err());
+        assert_eq!(Step::parse("near:496|300|0000ff|64"), Ok(Step::Near(496, 300, [0, 0, 255], 64)));
+        assert!(Step::parse("near:496|300|0000ff").is_err());
         assert!(Step::parse("pixel:200|400").is_err());
         assert_eq!(Step::parse("chord:ctrl+s"), Ok(Step::Chord(vec!["ctrl".into(), "s".into()])));
         assert!(Step::parse("fly").is_err());

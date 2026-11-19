@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 16:36:10",
+  "tests": [
+    {
+      "name": "signal_forked",
+      "source_sha256": "b26a5e19778cce7c1cff14ee2b02317c10dcca7aa585a4ddb6ae9c30f1796ac7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "34d6b50f7aef5165f27bd6b575b37cc07306ce7f7950b03499907edb6e2e4a19",
+          "exit_code": 0,
+          "stdout": "ok the child got the same three errors\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "signal_invalid_names",
+      "source_sha256": "60f1096af42d3f7b28f26c0c125335f30a4c9f759cd955228445640a24d5321a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1f08c4e52af082953843dd4be3631b227fdda43cb814044a2396c5a0f95ae113",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL: KERN_INVALID_NAME\nok MACH_PORT_DEAD: KERN_INVALID_NAME\nok an unknown name: KERN_INVALID_NAME\nok it returned at once (under 50 ms)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

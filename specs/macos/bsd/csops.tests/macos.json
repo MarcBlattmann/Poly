@@ -10,11 +10,11 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 16:25:09",
   "tests": [
     {
       "name": "csops_blob",
-      "source_sha256": "f0c189b30fb63e34d8c3f79a71c0a99f4e2fa3b5b6d6f148b003fff9dfd8d234",
+      "source_sha256": "51387c5591707a670d4b8056159c5080b4bf66011f08c7da9eb77fe01f1aa238",
       "results": {
         "arm64": {
           "status": "ran",
@@ -29,7 +29,7 @@
     },
     {
       "name": "csops_status",
-      "source_sha256": "8e5dbb040f6e6d8091d85b4d96e6cc2d7b21cb150f497e37d1854db16f5d6e47",
+      "source_sha256": "dd7f1eb2568aafdc428ed81ad8882f070daafc1472a002c7dcd224bce3af8e89",
       "results": {
         "arm64": {
           "status": "ran",

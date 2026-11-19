@@ -50,7 +50,7 @@ pub const CAPTURE_FLAG: &str = "poly.test.capture";
 const OUT_CHUNK: usize = 256;
 
 fn record(line: &str) {
-    log::write_console(line);
+    log::write_lines(line);
 }
 
 /// `POLY-INIT: exec <path>`.

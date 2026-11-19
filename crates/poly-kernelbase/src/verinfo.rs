@@ -17,8 +17,26 @@ use poly_pe::{Pe, ResourceDirectory, ResourceKey, dir, resource_type};
 
 /// `ERROR_RESOURCE_DATA_NOT_FOUND` (`winerror.h`).
 pub const ERROR_RESOURCE_DATA_NOT_FOUND: u32 = 1812;
-/// `ERROR_BAD_EXE_FORMAT` (`winerror.h`): the file is not a PE image.
-pub const ERROR_BAD_EXE_FORMAT: u32 = 193;
+/// `ERROR_INVALID_DATA` (`winerror.h`): `VerQueryValueW` on a block that is not a version block.
+pub const ERROR_INVALID_DATA: u32 = 13;
+
+/// What the three functions report for a file that is not an executable image (a text file, a
+/// file of the two bytes `MZ` and zeros, an empty file, a directory) and for a NULL or empty
+/// name: `ERROR_RESOURCE_DATA_NOT_FOUND` (the sheets of `GetFileVersionInfoSizeW` and
+/// `GetFileVersionInfoW`).
+pub const ERROR_NOT_AN_IMAGE: u32 = ERROR_RESOURCE_DATA_NOT_FOUND;
+
+/// The error for a file name that could not be opened (`error` from `CreateFileW`, `is_dir`
+/// whether the name is a directory): a missing file or directory is `ERROR_FILE_NOT_FOUND`
+/// (also a missing directory on the way, which `CreateFileW` calls `ERROR_PATH_NOT_FOUND`), a
+/// directory is not an image, anything else stays what it is.
+pub fn open_error(error: u32, is_dir: bool) -> u32 {
+    match error {
+        ERROR_FILE_NOT_FOUND | ERROR_PATH_NOT_FOUND => ERROR_FILE_NOT_FOUND,
+        _ if is_dir => ERROR_NOT_AN_IMAGE,
+        e => e,
+    }
+}
 
 /// Reads `buf.len()` bytes at the file offset; how many were read.
 pub type ReadAt<'a> = &'a mut dyn FnMut(u64, &mut [u8]) -> Result<usize, u32>;
@@ -43,13 +61,13 @@ fn read_exact(read: ReadAt<'_>, at: u64, len: usize) -> Result<Vec<u8>, u32> {
 }
 
 /// The bytes of the `RT_VERSION` resource (named 1, the first language) of
-/// the PE file `read` reads. Errors are the Win32 ones the three pages
-/// give: not a PE image `ERROR_BAD_EXE_FORMAT`, no resource section or no
-/// version resource `ERROR_RESOURCE_DATA_NOT_FOUND`.
+/// the PE file `read` reads. Errors are the sheets': not a PE image
+/// [`ERROR_NOT_AN_IMAGE`], an image without a version resource (or without
+/// resources at all) `ERROR_RESOURCE_TYPE_NOT_FOUND`.
 pub fn read_version_resource(read: ReadAt<'_>) -> Result<Vec<u8>, u32> {
     let mut head = read_exact(read, 0, HEADER_READ)?;
     if head.len() < 0x40 || &head[..2] != b"MZ" {
-        return Err(ERROR_BAD_EXE_FORMAT);
+        return Err(ERROR_NOT_AN_IMAGE);
     }
     let pe = match Pe::parse(&head) {
         Ok(p) => p,
@@ -58,26 +76,26 @@ pub fn read_version_resource(read: ReadAt<'_>) -> Result<Vec<u8>, u32> {
             head = read_exact(read, 0, 0x10000)?;
             return finish(read, &head);
         }
-        Err(_) => return Err(ERROR_BAD_EXE_FORMAT),
+        Err(_) => return Err(ERROR_NOT_AN_IMAGE),
     };
     finish_with(read, &pe)
 }
 
 fn finish(read: ReadAt<'_>, head: &[u8]) -> Result<Vec<u8>, u32> {
-    let pe = Pe::parse(head).map_err(|_| ERROR_BAD_EXE_FORMAT)?;
+    let pe = Pe::parse(head).map_err(|_| ERROR_NOT_AN_IMAGE)?;
     finish_with(read, &pe)
 }
 
 fn finish_with(read: ReadAt<'_>, pe: &Pe<'_>) -> Result<Vec<u8>, u32> {
     let d = pe.info().directory(dir::RESOURCE).filter(|d| d.virtual_address != 0 && d.size != 0);
-    let Some(d) = d else { return Err(ERROR_RESOURCE_DATA_NOT_FOUND) };
+    let Some(d) = d else { return Err(ERROR_RESOURCE_TYPE_NOT_FOUND) };
     let Some((_, section)) = pe.sections().find_rva(d.virtual_address) else {
-        return Err(ERROR_RESOURCE_DATA_NOT_FOUND);
+        return Err(ERROR_RESOURCE_TYPE_NOT_FOUND);
     };
     let len = (section.file_backed_size() as usize).min(MAX_SECTION);
     let sec = read_exact(read, u64::from(section.pointer_to_raw_data), len)?;
     let base = d.virtual_address - section.virtual_address;
-    let tree = sec.get(base as usize..).ok_or(ERROR_BAD_EXE_FORMAT)?;
+    let tree = sec.get(base as usize..).ok_or(ERROR_RESOURCE_DATA_NOT_FOUND)?;
     let not_found = |_| ERROR_RESOURCE_DATA_NOT_FOUND;
     let root = ResourceDirectory::from_tree(tree).map_err(not_found)?;
     let by_name = root
@@ -87,7 +105,7 @@ fn finish_with(read: ReadAt<'_>, pe: &Pe<'_>) -> Result<Vec<u8>, u32> {
         .transpose()
         .map_err(not_found)?
         .flatten()
-        .ok_or(ERROR_RESOURCE_DATA_NOT_FOUND)?;
+        .ok_or(ERROR_RESOURCE_TYPE_NOT_FOUND)?;
     let by_lang = by_name
         .find(ResourceKey::Id(1))
         .map_err(not_found)?
@@ -176,21 +194,16 @@ fn fold(c: u16) -> u16 {
 /// length in characters, with the NUL); `"\\VarFileInfo\\Translation"` an
 /// array of language and code page pairs (its length in bytes). The result
 /// is the offset of the value in `block` and its length as Learn gives it;
-/// a name that is not there is `ERROR_RESOURCE_TYPE_NOT_FOUND`.
+/// a name that is not there is `ERROR_RESOURCE_TYPE_NOT_FOUND`, a block that
+/// is not a version block `ERROR_INVALID_DATA`. Backslashes only separate
+/// (the sheet: `""`, `"\\"` and `"\\\\"` are the root, the leading one may
+/// be left out and a trailing one added); a container (`"\\StringFileInfo"`)
+/// is found with length 0.
 pub fn query_value(block: &[u8], sub_block: &[u16]) -> Result<(usize, u32), u32> {
     let not_found = ERROR_RESOURCE_TYPE_NOT_FOUND;
-    let root = node(block, 0, block.len()).ok_or(ERROR_RESOURCE_DATA_NOT_FOUND)?;
-    let mut path = sub_block;
-    if path.first() != Some(&u16::from(b'\\')) {
-        return Err(not_found);
-    }
-    path = &path[1..];
+    let root = node(block, 0, block.len()).ok_or(ERROR_INVALID_DATA)?;
     let mut current = root;
-    while !path.is_empty() {
-        let (comp, rest) = match path.iter().position(|&c| c == u16::from(b'\\')) {
-            Some(i) => (&path[..i], &path[i + 1..]),
-            None => (path, &path[path.len()..]),
-        };
+    for comp in sub_block.split(|&c| c == u16::from(b'\\')).filter(|c| !c.is_empty()) {
         let mut at = current.children;
         let mut found = None;
         while at < current.end {
@@ -202,7 +215,6 @@ pub fn query_value(block: &[u8], sub_block: &[u16]) -> Result<(usize, u32), u32>
             at = align4(child.end);
         }
         current = found.ok_or(not_found)?;
-        path = rest;
     }
     if current.value + current.value_bytes > block.len() {
         return Err(ERROR_RESOURCE_DATA_NOT_FOUND);
@@ -429,16 +441,22 @@ mod tests {
         assert_eq!(len, 4);
         assert_eq!(&block[at..at + 4], &[0x09, 0x04, 0xB0, 0x04]);
         // Things that are not there.
-        for p in [
-            "\\StringFileInfo\\040904b0\\Nope",
-            "\\StringFileInfo\\0407Aaaa\\FileVersion",
-            "\\Nope",
-            "",
-            "StringFileInfo",
-        ] {
+        for p in ["\\StringFileInfo\\040904b0\\Nope", "\\StringFileInfo\\0407Aaaa\\FileVersion", "\\Nope"] {
             assert_eq!(query_value(&block, &wide(p)), Err(ERROR_RESOURCE_TYPE_NOT_FOUND), "{p:?}");
         }
-        assert_eq!(query_value(&[1, 2, 3], &wide("\\")), Err(ERROR_RESOURCE_DATA_NOT_FOUND));
+        // The root by other spellings; the leading backslash may go, a trailing one is fine.
+        for p in ["", "\\\\"] {
+            assert_eq!(query_value(&block, &wide(p)).map(|r| r.1), Ok(52), "{p:?}");
+        }
+        let want = query_value(&block, &wide("\\StringFileInfo\\040904b0\\FileVersion"));
+        assert_eq!(query_value(&block, &wide("StringFileInfo\\040904B0\\FileVersion\\")), want);
+        // A container: length 0.
+        for p in ["\\StringFileInfo", "StringFileInfo", "\\StringFileInfo\\040904b0", "\\VarFileInfo"] {
+            assert_eq!(query_value(&block, &wide(p)).map(|r| r.1), Ok(0), "{p:?}");
+        }
+        // Not a version block at all.
+        assert_eq!(query_value(&[1, 2, 3], &wide("\\")), Err(ERROR_INVALID_DATA));
+        assert_eq!(query_value(&[0; 64], &wide("\\")), Err(ERROR_INVALID_DATA));
     }
 
     /// The version resource Poly's system DLLs carry answers what Learn's "Getting the System
@@ -557,7 +575,18 @@ mod tests {
             buf.fill(b'x');
             Ok(buf.len())
         };
-        assert_eq!(read_version_resource(&mut junk), Err(ERROR_BAD_EXE_FORMAT));
+        assert_eq!(read_version_resource(&mut junk), Err(ERROR_RESOURCE_DATA_NOT_FOUND));
+        // `MZ` and zeros; an empty file.
+        let mut mz = |at: u64, buf: &mut [u8]| -> Result<usize, u32> {
+            buf.fill(0);
+            if at == 0 {
+                buf[..2].copy_from_slice(b"MZ");
+            }
+            Ok(buf.len().min(64))
+        };
+        assert_eq!(read_version_resource(&mut mz), Err(ERROR_RESOURCE_DATA_NOT_FOUND));
+        let mut empty = |_: u64, _: &mut [u8]| -> Result<usize, u32> { Ok(0) };
+        assert_eq!(read_version_resource(&mut empty), Err(ERROR_RESOURCE_DATA_NOT_FOUND));
         let mut none = file.clone();
         none[0x98 + 112 + 16..0x98 + 112 + 24].fill(0);
         let mut read2 = |at: u64, buf: &mut [u8]| -> Result<usize, u32> {
@@ -566,9 +595,17 @@ mod tests {
             buf[..n].copy_from_slice(&none[at..at + n]);
             Ok(n)
         };
-        assert_eq!(read_version_resource(&mut read2), Err(ERROR_RESOURCE_DATA_NOT_FOUND));
+        assert_eq!(read_version_resource(&mut read2), Err(ERROR_RESOURCE_TYPE_NOT_FOUND));
         let mut broken = |_: u64, _: &mut [u8]| -> Result<usize, u32> { Err(ERROR_ACCESS_DENIED) };
         assert_eq!(read_version_resource(&mut broken), Err(ERROR_ACCESS_DENIED));
+    }
+
+    #[test]
+    fn open_errors() {
+        assert_eq!(open_error(ERROR_FILE_NOT_FOUND, false), ERROR_FILE_NOT_FOUND);
+        assert_eq!(open_error(ERROR_PATH_NOT_FOUND, false), ERROR_FILE_NOT_FOUND);
+        assert_eq!(open_error(ERROR_ACCESS_DENIED, true), ERROR_RESOURCE_DATA_NOT_FOUND);
+        assert_eq!(open_error(ERROR_ACCESS_DENIED, false), ERROR_ACCESS_DENIED);
     }
 
     /// The version information of the files of the Chrome package, when it is

@@ -1,0 +1,44 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "dcb_basic",
+      "exe_sha256": "e697c295970ce0297e18cfc46ef318088f42d2a4efe4d94f3931b2bbc12fb58b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVzdHJveSBhIGJsb2NrOiByZXN1bHQgMQo1MCBjcmVhdGUvZGVzdHJveSByb3VuZHMsIGFsbCBzdWNjZWVkZWQ6IHRydWUKdHdvIGJsb2NrcyBhcmUgZGlzdGluY3QgcG9pbnRlcnM6IHRydWUKZmlyc3QgZW50cmllcyBoYXZlIHRoZSBzYW1lIGxlbmd0aDogdHJ1ZQpjaGFuZ2luZyBibG9jayBhIGxlYXZlcyBibG9jayBiIGFsb25lOiB0cnVlCmRlc3Ryb3kgYiB0aGVuIGE6IDEgMQpibG9jayBmb3IgYSBOVUxMIHRva2VuOiB0cnVlCmRlc3Ryb3kgaXQ6IDEKZGVzdHJveSBOVUxMOiByZXN1bHQgMCwgbGFzdCBlcnJvciA4NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "destroy a block: result 1\n50 create/destroy rounds, all succeeded: true\ntwo blocks are distinct pointers: true\nfirst entries have the same length: true\nchanging block a leaves block b alone: true\ndestroy b then a: 1 1\nblock for a NULL token: true\ndestroy it: 1\ndestroy NULL: result 0, last error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 106
+    },
+    {
+      "name": "dcb_basic_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "e697c295970ce0297e18cfc46ef318088f42d2a4efe4d94f3931b2bbc12fb58b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGVzdHJveSBhIGJsb2NrOiByZXN1bHQgMQo1MCBjcmVhdGUvZGVzdHJveSByb3VuZHMsIGFsbCBzdWNjZWVkZWQ6IHRydWUKdHdvIGJsb2NrcyBhcmUgZGlzdGluY3QgcG9pbnRlcnM6IHRydWUKZmlyc3QgZW50cmllcyBoYXZlIHRoZSBzYW1lIGxlbmd0aDogdHJ1ZQpjaGFuZ2luZyBibG9jayBhIGxlYXZlcyBibG9jayBiIGFsb25lOiB0cnVlCmRlc3Ryb3kgYiB0aGVuIGE6IDEgMQpibG9jayBmb3IgYSBOVUxMIHRva2VuOiB0cnVlCmRlc3Ryb3kgaXQ6IDEKZGVzdHJveSBOVUxMOiByZXN1bHQgMCwgbGFzdCBlcnJvciA4NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "destroy a block: result 1\n50 create/destroy rounds, all succeeded: true\ntwo blocks are distinct pointers: true\nfirst entries have the same length: true\nchanging block a leaves block b alone: true\ndestroy b then a: 1 1\nblock for a NULL token: true\ndestroy it: 1\ndestroy NULL: result 0, last error 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 140
+    }
+  ]
+}

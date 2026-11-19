@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/winhttp.dll/WinHttpSetStatusCallback.yaml
+id: windows/api/winhttp.dll/WinHttpSetStatusCallback
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators). Default mode: the SSH logon (session 0, no interactive desktop, the administrator's elevated token, 24 privileges). No network traffic. Every test ran twice with identical output."
+  observed_by: "spec-win-chrome-setup"
+  date: "2026-11-17"
+sources: "Observations of our own test programs on the oracle machine. Microsoft Learn: WinHttpSetStatusCallback (winhttp.h), WINHTTP_CALLBACK_FLAG_* and WINHTTP_INVALID_STATUS_CALLBACK ((WINHTTP_STATUS_CALLBACK)-1), \"WinHTTP Error Codes\". Nothing of Windows or Google's programs was read or disassembled."
+summary: "Installs or removes a status callback on a WinHTTP handle and returns the previous callback (NULL when there was none) or WINHTTP_INVALID_STATUS_CALLBACK ((callback)-1) with a last error when the call fails. A handle without a callback of its own starts with the parent's one: a connection and a request created under a session that has callback A return A as the previous callback when they set their own. Chrome's setup.exe imports the function."
+interface:
+  signature: "WINHTTP_STATUS_CALLBACK WinHttpSetStatusCallback(HINTERNET handle, WINHTTP_STATUS_CALLBACK callback, DWORD notification_flags, DWORD_PTR reserved)  (winhttp)"
+rules:
+  previous: "the first call on a session returns NULL; later calls return the callback installed before; a call with callback NULL removes it and returns the previous one; another NULL call returns NULL"
+  flags: "WINHTTP_CALLBACK_FLAG_ALL_NOTIFICATIONS (0xFFFFFFFF) and 0x10 and 0x80000000 are accepted; flags 0 fail with WINHTTP_INVALID_STATUS_CALLBACK and the callback stays (the sequence in the results shows it exactly); a call with flags 0x40000 returned the previous callback but did not replace it (the following NULL call still returned callback A) - the exact sequence below is what an implementation must reproduce"
+  reserved: "a non-zero reserved argument: WINHTTP_INVALID_STATUS_CALLBACK with last error 87"
+  query_option: "WinHttpQueryOption(session, WINHTTP_OPTION_CALLBACK = 1) returns 8 bytes: the installed callback pointer"
+  invalid_handles: "NULL handle: WINHTTP_INVALID_STATUS_CALLBACK with last error 12018; a value that is not a handle or an already closed handle: WINHTTP_INVALID_STATUS_CALLBACK with 6"
+  inheritance: "a connection created under a session with callback A: setting B returns A; a request under that connection (session A, connection B): setting A returns A (not B: the session's callback, as the request was created from the session's setting); the session itself, unaffected, still returns A"
+results_basic:
+  - "session: set A with ALL_NOTIFICATIONS: previous = NULL (error -2)"
+  - "session: set B with flags 0x40000: previous = callback A"
+  - "session: set B again with flags 0: previous = WINHTTP_INVALID_STATUS_CALLBACK"
+  - "session: set NULL: previous = callback A"
+  - "session: set NULL again: previous = NULL"
+  - "session: set A with flags 0x10: previous = NULL"
+  - "session: query option CALLBACK: result 1, error -2, length 8, value callback A"
+  - "session: set B with flags 0x80000000: previous = callback A (error -2)"
+  - "session: set A with reserved = 1: previous = WINHTTP_INVALID_STATUS_CALLBACK (error 87)"
+  - "NULL handle: result WINHTTP_INVALID_STATUS_CALLBACK (error 12018)"
+  - "bad handle: result WINHTTP_INVALID_STATUS_CALLBACK (error 6)"
+  - "closed handle: result WINHTTP_INVALID_STATUS_CALLBACK (error 6)"
+  - ""
+results_handles:
+  - "connection (session has A): set B: previous = callback A (error -2)"
+  - "request (session A, connection B): set A: previous = callback A (error -2)"
+  - "session again: set B: previous = callback A"
+  - ""
+errors:
+  invalid_status_callback: "(callback)-1 returned, GetLastError 12018 (NULL handle), 6 (invalid or closed handle), 87 (reserved non-zero)"
+side_effects: "changes the handle's callback only"
+threading: "may be called from any thread; callbacks are not invoked by this test (no requests are sent)"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+building_tests: "Rust tests (ADR 0075): wh_callback_basic (session sequence, flags, option query, invalid handles), wh_callback_handles (connection and request). Callbacks are two empty functions; their identity is printed as `callback A`/`callback B`."
+not_covered: "callbacks actually invoked during requests (needs a server), asynchronous handles (WINHTTP_FLAG_ASYNC), flag combinations other than the ones listed, callbacks on WebSocket handles."
+tests:
+  visible: 1
+  held_out: 1

@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "evtreg_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "c6321d5747ecaadc794a0dd57008cbde92ad988642da65875aec61bbabec2f7f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlIHRoZSBzb3VyY2Uga2V5IHVuZGVyIEhLTE06IDUKb3BlbiB0aGUgQXBwbGljYXRpb24gbG9nIGtleSBmb3IgcmVhZGluZzogMApvcGVuIGl0IHdpdGggS0VZX1NFVF9WQUxVRTogNQpSZWdpc3RlckV2ZW50U291cmNlQTogaGFuZGxlIHNldApSZXBvcnRFdmVudEE6IDEgbGFzdCBlcnJvciAtMgpyZWNvcmQ6IGlkIDB4MjAwMCB0eXBlIDQgY2F0ZWdvcnkgMCBzdHJpbmdzIDEgdXNlciBzaWQgbGVuZ3RoIDAgY2xvc2luZyByZWNvcmQgMCBkYXRhIGxlbmd0aCAwIGNvbXB1dGVyIG5hbWUgbm9uLWVtcHR5IHRydWUgfCAnc3RhbmRhcmQgdXNlciBldmVudCcKcmVjb3JkcyBmb3VuZDogMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create the source key under HKLM: 5\nopen the Application log key for reading: 0\nopen it with KEY_SET_VALUE: 5\nRegisterEventSourceA: handle set\nReportEventA: 1 last error -2\nrecord: id 0x2000 type 4 category 0 strings 1 user sid length 0 closing record 0 data length 0 computer name non-empty true | 'standard user event'\nrecords found: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 87
+    }
+  ]
+}

@@ -184,6 +184,17 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
     if ctx & CLSCTX_LOCAL_SERVER == 0 {
         return Err(REGDB_E_CLASSNOTREG);
     }
+    // The classes of Windows' desktop process (`ShellWindows`): Poly's desktop is no Windows
+    // process, so the shell serves them in the caller (`poly_com::inproc::desktop_server_of`).
+    // The shell link answers a local-server request too (ShellLink.yaml); Poly's DLL serves it here.
+    let local = poly_com::inproc::desktop_server_of(clsid).or_else(|| {
+        if poly_com::inproc::served_for_local_server(clsid) { poly_com::inproc::server_of(clsid) } else { None }
+    });
+    if entry.is_none()
+        && let Some(dll) = local
+    {
+        return inproc_class_object(dll.trim_end_matches(char::from(0)), clsid, iid, ctx);
+    }
     let plan = entry.as_ref().and_then(local_plan);
     if let Some(p) = &plan {
         if !bitness_ok(ctx, p) {
@@ -194,7 +205,8 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
     // is asked if it runs, and not started for it.
     let start = plan.is_some();
     // A server withdraws its registrations without waiting for the activation process, so a
-    // factory served at that moment can be disconnected already: then the class is asked for again.
+    // factory served at that moment can be disconnected already, and a server process that ended is
+    // dropped when the activation process notices: then the class is asked for again (1 s at most).
     for attempt in 0.. {
         let req = Request::Activate { clsid: *clsid, plan: plan.clone() };
         let reply = match pipe::activation(&req, start) {
@@ -207,7 +219,7 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
         };
         let px = proxy::remote(factory);
         let alive = proxy::ping(px);
-        if !alive && attempt < 3 {
+        if !alive && attempt < 50 {
             // SAFETY: the proxy's IUnknown with one reference.
             unsafe { release_unknown(px) };
             // SAFETY: a plain sleep, for the withdrawal to arrive.

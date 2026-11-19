@@ -117,6 +117,8 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::PolyRandomBytes, &[P, V]),
     (Service::PolyPhysicalMemory, &[P]),
     (Service::PolyServiceCall, &[V, P, V, P, V, P]),
+    (Service::PolyProcessList, &[P, V, P]),
+    (Service::NotifyChangeDirectoryFile, &[H, H, V, V, IO, P, V, V, V]),
     (Service::CreateKey, &[OH, V, OA, V, US, V, P]),
     (Service::OpenKey, &[OH, V, OA]),
     (Service::OpenKeyEx, &[OH, V, OA, V]),
@@ -130,6 +132,9 @@ pub const SIGNATURES: &[(Service, &[Arg])] = &[
     (Service::FlushKey, &[H]),
     (Service::NotifyChangeKey, &[H, H, V, V, IO, V, V, P, V, V]),
     (Service::SetInformationKey, &[H, V, P, V]),
+    (Service::SaveKey, &[H, H]),
+    (Service::LoadKey, &[OA, OA]),
+    (Service::UnloadKey, &[OA]),
     (Service::RaiseException, &[ER, CX, V]),
     (Service::Continue, &[CX, V]),
     (Service::QuerySystemTime, &[P]),
@@ -192,6 +197,8 @@ pub const WIN32K_SIGNATURES: &[(Win32kService, &[Arg])] = &[
     (Win32kService::CommitSurface, &[V, P, V, V, V]),
     // PolyUserCommitSurfaceArea(hwnd, pixels, width, height, stride, area)
     (Win32kService::CommitSurfaceArea, &[V, P, V, V, V, P]),
+    // PolyUserPresentBuffer(hwnd, section, width, height, stride, rects, count)
+    (Win32kService::PresentBuffer, &[V, H, V, V, V, P, V]),
 ];
 
 /// The 32-bit signature of win32k service `service`.

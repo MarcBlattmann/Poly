@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/_kernelrpc_mach_vm_deallocate_trap.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# _kernelrpc_mach_vm_deallocate_trap.tests/macos.json.
+id: macos/syscall/mach/_kernelrpc_mach_vm_deallocate_trap
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Mach trap, no libSystem: x86_64 `syscall` with rax = 0x1000000 | 12;
+  arm64 `svc #0x80` with x16 = -12. The result is the kern_return_t in rax
+  / x0; there is no carry-flag convention. A task port that is not valid
+  makes the trap return MACH_SEND_INVALID_DEST (0x10000003).
+  vm_deallocate(task, address, size) frees the pages the range touches (a
+  size of 1 frees the page): afterwards mprotect is ENOMEM and a child
+  that touches them dies of SIGSEGV (11, a value); freeing again, freeing
+  a range that was never mapped, and a size of 0 (which frees nothing)
+  succeed; freeing the middle page of three leaves the outer pages mapped
+  with their content. An address that is not page aligned is not refused:
+  address+1 with one page freed both pages it touches (a value). An
+  invalid task is MACH_SEND_INVALID_DEST.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  invalid_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "the pages are unmapped"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "de66edf5cd5f",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T14:12:50Z",
+  "tests": [
+    {
+      "name": "hc_basic",
+      "exe_sha256": "3c1a32db9de729ccfc4e1791ec8e7157171c2629b9f75c68f6fb2d648a7e14a5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHNldWRvIGhhbmRsZSBvZiB0aGUgY3VycmVudCBwcm9jZXNzOiByZXN1bHQgdHJ1ZSwgbGFzdCBlcnJvciAtMiwgY291bnQgPiAwIHRydWUsIGNvdW50IDwgMTAwMCB0cnVlCmFmdGVyIENyZWF0ZUV2ZW50VyB0aGUgY291bnQgZ3JldyBieSBleGFjdGx5IDE6IHRydWUKYWZ0ZXIgYSBzZWNvbmQgZXZlbnQgaXQgZ3JldyBieSBleGFjdGx5IDEgYWdhaW46IHRydWUKYWZ0ZXIgY2xvc2luZyBib3RoIGl0IGlzIGJhY2sgdG8gdGhlIGZpcnN0IGNvdW50OiB0cnVlCk9wZW5Qcm9jZXNzIGFkZGVkIG9uZSBoYW5kbGU6IHRydWUKYSBwcm9jZXNzIGhhbmRsZSB3aXRoIFBST0NFU1NfUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTjogcmVzdWx0IHRydWUsIGxhc3QgZXJyb3IgLTIsIHRoZSBzYW1lIGNvdW50IGFzIHRoZSBwc2V1ZG8gaGFuZGxlOiB0cnVlCk5VTEwgaGFuZGxlIGxlYXZlcyB0aGUgb3V0cHV0IGFsb25lOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "pseudo handle of the current process: result true, last error -2, count > 0 true, count < 1000 true\nafter CreateEventW the count grew by exactly 1: true\nafter a second event it grew by exactly 1 again: true\nafter closing both it is back to the first count: true\nOpenProcess added one handle: true\na process handle with PROCESS_QUERY_LIMITED_INFORMATION: result true, last error -2, the same count as the pseudo handle: true\nNULL handle leaves the output alone: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

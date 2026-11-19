@@ -113,12 +113,17 @@ pub const OUTPUTS: &[&str] = &[
     "dcomp.dll",
     // ADR 0220.
     "comlaunch.exe",
+    // ADR 0226.
+    "taskschd.dll",
+    "schedsvc.exe",
     // ADR 0199.
     "vcruntime140.dll",
     "vcruntime140_1.dll",
     "msvcp140.dll",
     // ADR 0221.
     "services.exe",
+    // The Windows Firewall's COM objects.
+    "hnetcfg.dll",
 ];
 /// The file listing the generated system DLLs (ADR 0155, step 10), next to them: the kernel's `build.rs`
 /// embeds what it names.
@@ -346,10 +351,14 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/dcomp",
             // ADR 0220.
             "personalities/nt/win32/comlaunch",
+            // ADR 0226.
+            "personalities/nt/win32/taskschd",
+            "personalities/nt/win32/schedsvc",
             // ADR 0199.
             "personalities/nt/win32/vcruntime140",
             "personalities/nt/win32/vcruntime140_1",
             "personalities/nt/win32/msvcp140",
+            "personalities/nt/win32/hnetcfg",
         ],
         &[
             "personalities/nt/win32/Cargo.toml",

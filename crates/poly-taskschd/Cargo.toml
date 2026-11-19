@@ -1,0 +1,13 @@
+[package]
+name = "poly-taskschd"
+description = "The logic of the Task Scheduler (ADR 0226): task definitions and their XML, the task store, trigger times and the messages between taskschd.dll and schedsvc.exe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

@@ -20,7 +20,7 @@ use core::ffi::c_void;
 use core::sync::atomic::{AtomicBool, Ordering};
 use poly_com::activation::{Activator, Decision, Published};
 use poly_com::hresult::{E_UNEXPECTED, Hresult, REGDB_E_CLASSNOTREG, S_OK, from_win32};
-use poly_com::wire::{ACTIVATION_PIPE, Plan, Reply, Request, frame, frame_len};
+use poly_com::wire::{ACTIVATION_PIPE, Op, Plan, Reply, Request, frame, frame_len};
 
 poly_win32_rt::process_heap_allocator!();
 
@@ -49,6 +49,15 @@ unsafe extern "system" {
         security: *const c_void,
     ) -> Handle;
     fn ConnectNamedPipe(pipe: Handle, overlapped: *mut c_void) -> i32;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        security: *const c_void,
+        disposition: u32,
+        flags: u32,
+        template: Handle,
+    ) -> Handle;
     fn ReadFile(file: Handle, buf: *mut u8, len: u32, read: *mut u32, overlapped: *mut c_void) -> i32;
     fn WriteFile(file: Handle, buf: *const u8, len: u32, written: *mut u32, overlapped: *mut c_void) -> i32;
     fn CloseHandle(h: Handle) -> i32;
@@ -118,6 +127,9 @@ struct ProcessInformation {
 const PIPE_ACCESS_DUPLEX: u32 = 3;
 const PIPE_UNLIMITED_INSTANCES: u32 = 255;
 const ERROR_PIPE_CONNECTED: u32 = 535;
+const ERROR_PIPE_BUSY: u32 = 231;
+/// `RPC_E_DISCONNECTED` (`winerror.h`): an exporter's answer for an object it let go of.
+const RPC_E_DISCONNECTED: Hresult = 0x8001_0108_u32 as i32;
 /// `FILE_FLAG_FIRST_PIPE_INSTANCE` (`winbase.h`); `ERROR_ACCESS_DENIED`, `ERROR_INVALID_PARAMETER`.
 const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
 const ERROR_ACCESS_DENIED: u32 = 5;
@@ -406,6 +418,47 @@ fn expand(s: &str) -> String {
     String::from_utf16_lossy(&out[..n.saturating_sub(1)])
 }
 
+/// Whether the exporter of `p`'s server still has its factory: a call that needs no apartment
+/// (giving back no references) answers `RPC_E_DISCONNECTED` for a withdrawn one; a pipe that is
+/// gone means the server is.
+fn factory_alive(p: &Published) -> bool {
+    let name = wide(&p.factory.endpoint);
+    let mut h = INVALID_HANDLE;
+    for _ in 0..100 {
+        // SAFETY: a NUL-terminated name; GENERIC_READ | GENERIC_WRITE, OPEN_EXISTING; closed below.
+        h = unsafe { CreateFileW(name.as_ptr(), 0xC000_0000, 0, core::ptr::null(), 3, 0, 0) };
+        // SAFETY: no arguments.
+        if h != INVALID_HANDLE || unsafe { GetLastError() } != ERROR_PIPE_BUSY {
+            break;
+        }
+        // SAFETY: a plain sleep.
+        unsafe { Sleep(5) };
+    }
+    if h == INVALID_HANDLE {
+        return false;
+    }
+    let req = Request::Call { oid: p.factory.oid, op: Op::Release(0) };
+    let reply = if write_all(h, &frame(&req.encode())) {
+        let mut head = [0u8; 4];
+        if read_exact(h, &mut head) {
+            frame_len(head).and_then(|n| {
+                let mut b = alloc::vec![0u8; n];
+                read_exact(h, &mut b).then_some(b)
+            })
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    // SAFETY: our handle, closed once.
+    unsafe { CloseHandle(h) };
+    match reply.and_then(|b| Reply::decode(&b).ok()) {
+        Some(r) => r.hr != RPC_E_DISCONNECTED,
+        None => false,
+    }
+}
+
 /// Answer one request.
 fn handle(req: Request) -> Reply {
     match req {
@@ -420,18 +473,33 @@ fn handle(req: Request) -> Reply {
         }
         Request::Activate { clsid, plan } => {
             let mut started: Option<u64> = None;
+            // A registration that arrives while this request waits is fresh: it is handed out at
+            // once, without the check below (a server may leave soon after it registered; Windows
+            // serves the waiting caller within that time).
+            let mut waited = false;
             loop {
                 prune();
                 let t = now();
                 match STATE.with(|a| a.activate(&clsid, plan.as_ref(), t, started)) {
-                    Decision::Serve(p) => return Reply { hr: S_OK, obj: Some(p.factory) },
+                    Decision::Serve(p) => {
+                        // A server withdraws without waiting, and may end before its withdrawal
+                        // arrives: a factory its exporter no longer has is dropped, and the class
+                        // asked for again (which starts a server when there is none).
+                        if waited || factory_alive(&p) {
+                            return Reply { hr: S_OK, obj: Some(p.factory), data: Vec::new() };
+                        }
+                        STATE.with(|a| a.revoke(p.pid, p.cookie));
+                    }
                     Decision::NotRegistered => return Reply::hr(REGDB_E_CLASSNOTREG),
                     Decision::TimedOut => return Reply::hr(CO_E_SERVER_EXEC_FAILURE),
                     Decision::Wait => {
-                        // SAFETY: a plain sleep.
-                        unsafe { Sleep(10) };
+                        waited = true;
+                        // SAFETY: a plain sleep (1 ms: the caller is answered as soon as the server
+                        // registers).
+                        unsafe { Sleep(1) };
                     }
                     Decision::Launch => {
+                        waited = true;
                         started = Some(t);
                         if let Some(p) = &plan
                             && let Err(hr) = launch(p)
@@ -470,7 +538,28 @@ unsafe extern "system" fn connection(arg: *mut c_void) -> u32 {
     0
 }
 
+/// A listening instance of the activation pipe; `first` adds `FILE_FLAG_FIRST_PIPE_INSTANCE`.
+fn new_instance(name: &[u16], first: u32) -> Handle {
+    // SAFETY: a NUL-terminated name; byte mode, blocking.
+    unsafe {
+        CreateNamedPipeW(
+            name.as_ptr(),
+            PIPE_ACCESS_DUPLEX | first,
+            0,
+            PIPE_UNLIMITED_INSTANCES,
+            65536,
+            65536,
+            0,
+            core::ptr::null(),
+        )
+    }
+}
+
 /// The entry point: serve the activation pipe until the machine stops.
+///
+/// A listening instance exists at every moment: the next one is made before a connected one is
+/// handed to its thread, so a client never finds the pipe gone while this process runs (a client
+/// takes "no pipe" for "no activation process", ADR 0220).
 #[unsafe(no_mangle)]
 pub extern "system" fn comlaunch_main(_peb: *mut u8) -> u32 {
     let name = wide(ACTIVATION_PIPE);
@@ -478,20 +567,8 @@ pub extern "system" fn comlaunch_main(_peb: *mut u8) -> u32 {
     // The first instance must be ours alone (`FILE_FLAG_FIRST_PIPE_INSTANCE`): a second activation
     // process (two clients that started one each) leaves at once.
     let mut first = FILE_FLAG_FIRST_PIPE_INSTANCE;
+    let mut h = new_instance(&name, first);
     loop {
-        // SAFETY: a NUL-terminated name; byte mode, blocking.
-        let h = unsafe {
-            CreateNamedPipeW(
-                name.as_ptr(),
-                PIPE_ACCESS_DUPLEX | first,
-                0,
-                PIPE_UNLIMITED_INSTANCES,
-                65536,
-                65536,
-                0,
-                core::ptr::null(),
-            )
-        };
         if h == INVALID_HANDLE {
             // SAFETY: no arguments.
             match unsafe { GetLastError() } {
@@ -503,18 +580,20 @@ pub extern "system" fn comlaunch_main(_peb: *mut u8) -> u32 {
                 // A pipe implementation without the flag: go on without it.
                 ERROR_INVALID_PARAMETER if first != 0 => {
                     first = 0;
+                    h = new_instance(&name, first);
                     continue;
                 }
                 _ => {}
             }
             failures += 1;
             if failures > 100 {
-                // The pipe cannot be made (another activation process has it): nothing to do.
+                // The pipe cannot be made: nothing to do.
                 // SAFETY: ends this process.
                 unsafe { ExitProcess(1) };
             }
             // SAFETY: a plain sleep.
             unsafe { Sleep(20) };
+            h = new_instance(&name, first);
             continue;
         }
         failures = 0;
@@ -526,15 +605,18 @@ pub extern "system" fn comlaunch_main(_peb: *mut u8) -> u32 {
         if !ok {
             // SAFETY: our own handle.
             unsafe { CloseHandle(h) };
+            h = new_instance(&name, 0);
             continue;
         }
+        let connected = h;
+        h = new_instance(&name, 0);
         let mut tid = 0u32;
         // SAFETY: the connection thread owns the handle from here.
-        let t = unsafe { CreateThread(core::ptr::null(), 0, connection, h as *mut c_void, 0, &mut tid) };
+        let t = unsafe { CreateThread(core::ptr::null(), 0, connection, connected as *mut c_void, 0, &mut tid) };
         // SAFETY: handles of ours, closed once.
         unsafe {
             if t == 0 {
-                CloseHandle(h);
+                CloseHandle(connected);
             } else {
                 CloseHandle(t);
             }

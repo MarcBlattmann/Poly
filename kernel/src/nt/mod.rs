@@ -161,6 +161,10 @@ pub static D3D11: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/d3d11.dll"))
 pub static DCOMP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/dcomp.dll"));
 /// `comlaunch.exe`: COM's activation process, started by `ole32` on demand (ADR 0220).
 pub static COMLAUNCH: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/comlaunch.exe"));
+/// `taskschd`: the Task Scheduler's object model (ADR 0226).
+pub static TASKSCHD: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/taskschd.dll"));
+/// `schedsvc.exe`: the Task Scheduler's process, started by `taskschd` on demand (ADR 0226).
+pub static SCHEDSVC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/schedsvc.exe"));
 /// Poly's own `vcruntime140.dll` and `vcruntime140_1.dll` (ADR 0199).
 pub static VCRUNTIME140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140.dll"));
 pub static VCRUNTIME140_1: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/vcruntime140_1.dll"));
@@ -169,6 +173,8 @@ pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.
 /// Poly's `services.exe`, the host of the service control manager (ADR 0221), installed in
 /// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static SERVICES_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/services.exe"));
+/// Our `hnetcfg.dll`: the Windows Firewall's COM objects over a rule table that enforces nothing.
+pub static HNETCFG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hnetcfg.dll"));
 
 /// Our `bcryptprimitives.dll` (ADR 0155), installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
@@ -1070,10 +1076,26 @@ impl NtKernel for Kernel {
         Some([created, seen[0], seen[1]])
     }
 
+    fn processes(&mut self) -> Vec<poly_personality_nt::proclist::ProcessSummary> {
+        // A process whose exit status is set is ending: no longer listed.
+        with(|s| {
+            s.processes
+                .values()
+                .filter(|p| p.exit_status.is_none())
+                .map(poly_personality_nt::proclist::ProcessSummary::of)
+                .collect()
+        })
+    }
+
     fn memory_counters(&self, pid: ProcessId) -> Option<poly_personality_nt::threads::VmCounters> {
         let memory = io::memory_of(pid.0)?;
         let (resident, cached, shared) = memory.page_counts();
-        let private = resident.saturating_sub(cached + shared);
+        // Private usage is the commit charge of the process's private memory (sheet of
+        // `K32GetProcessMemoryInfo`: committing 16 MiB raises it before a page is touched), or
+        // its private resident pages where the NT state does not know it.
+        let resident_private = resident.saturating_sub(cached + shared);
+        let committed = with(|s| s.processes.get(&pid).map(|p| p.vm.private_committed_bytes() / 4096));
+        let private = committed.unwrap_or(resident_private);
         let (faults, peak_resident) = crate::process::find(pid.0).map_or((0, 0), |p| p.cpu.memory_counts());
         let peak_private = with(|s| {
             let p = s.private_peak.entry(pid).or_insert(0);

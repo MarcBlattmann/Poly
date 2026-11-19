@@ -10,6 +10,8 @@
 
 use alloc::vec::Vec;
 
+pub mod url;
+
 const BACKSLASH: u16 = b'\\' as u16;
 const SLASH: u16 = b'/' as u16;
 const COLON: u16 = b':' as u16;
@@ -143,20 +145,37 @@ pub fn find_file_name(path: &[u16]) -> usize {
 
 /// `OS_*` values of `IsOS` (`shlwapi.h`).
 pub const OS_NT: u32 = 1;
+pub const OS_NT4ORGREATER: u32 = 3;
 pub const OS_WIN2000ORGREATER: u32 = 7;
+pub const OS_XPORGREATER: u32 = 18;
+pub const OS_HOME: u32 = 19;
 pub const OS_PROFESSIONAL: u32 = 20;
 pub const OS_PERSONALTERMINALSERVER: u32 = 25;
+pub const OS_FASTUSERSWITCHING: u32 = 26;
 pub const OS_DOMAINMEMBER: u32 = 28;
 pub const OS_ANYSERVER: u32 = 29;
 
-/// `IsOS(dwOS)` for Poly, which shows programs a Windows workstation (`VER_NT_WORKSTATION`, the
-/// product type of `GetVersionExW`) that is in no domain, with one user at the console, in a
-/// 64-bit process. From Learn's table: `OS_NT` is always TRUE; `OS_WIN2000ORGREATER`,
-/// `OS_PROFESSIONAL` (a workstation) and `OS_PERSONALTERMINALSERVER` (Windows XP or a successor,
-/// Home or Professional) hold; the values the table calls always FALSE, the server, embedded,
-/// terminal-server, tablet, media-center and domain values do not, nor does an unknown value.
+/// `IsOS(dwOS)` for Poly, which shows programs a Windows 11 workstation (`VER_NT_WORKSTATION`,
+/// the product type of `GetVersionExW`) in no domain, in a 64-bit process: the answers of the
+/// sheet `shlwapi.dll/IsOS.yaml`, recorded on Windows 11 Home. `OS_NT`, the "or greater" values
+/// of the NT line (`OS_NT4ORGREATER`, 4, `OS_WIN2000ORGREATER`, `OS_XPORGREATER`), `OS_HOME`,
+/// `OS_PROFESSIONAL`, `OS_PERSONALTERMINALSERVER`, `OS_FASTUSERSWITCHING` and the undocumented
+/// 37 hold; the Windows 9x values, the server, embedded, terminal, tablet, media-center and
+/// domain values do not, nor does any other value.
 pub fn is_os(os: u32) -> bool {
-    matches!(os, OS_NT | OS_WIN2000ORGREATER | OS_PROFESSIONAL | OS_PERSONALTERMINALSERVER)
+    matches!(
+        os,
+        OS_NT
+            | OS_NT4ORGREATER
+            | 4
+            | OS_WIN2000ORGREATER
+            | OS_XPORGREATER
+            | OS_HOME
+            | OS_PROFESSIONAL
+            | OS_PERSONALTERMINALSERVER
+            | OS_FASTUSERSWITCHING
+            | 37
+    )
 }
 
 /// `IID_IUnknown` (`unknwn.h`), as the 16 bytes it has in memory.
@@ -358,19 +377,14 @@ mod tests {
     }
 
     #[test]
-    fn is_os_describes_a_workstation() {
-        assert!(is_os(OS_NT));
-        assert!(is_os(OS_WIN2000ORGREATER));
-        assert!(is_os(OS_PROFESSIONAL));
-        assert!(is_os(OS_PERSONALTERMINALSERVER));
-        // OS_WINDOWS and the values Learn calls always FALSE.
-        for os in [0, 2, 3, 5, 6, 16, 17, 18, 19, 27, 31] {
+    fn is_os_gives_the_sheets_table() {
+        let yes = [1, 3, 4, 7, 18, 19, 20, 25, 26, 37];
+        for os in 0..=0x40 {
+            assert_eq!(is_os(os), yes.contains(&os), "{os}");
+        }
+        for os in [0x64, 0xff, 0x8000_0000, 0xffff_ffff] {
             assert!(!is_os(os), "{os}");
         }
-        assert!(!is_os(OS_ANYSERVER));
-        assert!(!is_os(OS_DOMAINMEMBER));
-        assert!(!is_os(30));
-        assert!(!is_os(1000));
     }
 
     #[test]

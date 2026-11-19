@@ -30,7 +30,7 @@ use alloc::vec::Vec;
 use poly_ntobj::NtStatus;
 use poly_ntobj::name::wide;
 use poly_registry::Registry;
-use poly_registry::consts::{REG_EXPAND_SZ, REG_SZ};
+use poly_registry::consts::{REG_DWORD, REG_EXPAND_SZ, REG_SZ};
 use poly_registry::defaults::sz;
 use poly_registry::tree::{CreateOptions, KeyId};
 
@@ -59,7 +59,7 @@ pub struct Entry {
     /// Made volatile if missing (the user's `Volatile Environment`).
     pub volatile: bool,
     pub name: String,
-    /// `REG_SZ` or `REG_EXPAND_SZ`.
+    /// `REG_SZ`, `REG_EXPAND_SZ` or `REG_DWORD` (its data the number in decimal).
     pub kind: u32,
     pub data: String,
     pub policy: Policy,
@@ -131,8 +131,33 @@ pub fn entries(reg: &Registry, user: &User) -> Vec<Entry> {
         v.push(entry(Machine, &fonts_key, name, REG_SZ, file, Default));
     }
 
+    // The Task Scheduler (ADR 0226): its in-process class, and the `Schedule` service that runs
+    // `schedsvc.exe` as LocalSystem. The service starts on demand; the scheduler makes itself an
+    // auto-start service while it holds tasks whose triggers fire, so that they fire after a boot.
+    let clsid = "SOFTWARE\\Classes\\CLSID\\{0F87369F-A4E5-4CFC-BD3E-73E6154572DD}";
+    v.push(entry(Machine, clsid, "", REG_SZ, "TaskScheduler class", Default));
+    let inproc = alloc::format!("{clsid}\\InprocServer32");
+    v.push(entry(Machine, &inproc, "", REG_SZ, "taskschd.dll", Fixed));
+    v.push(entry(Machine, &inproc, "ThreadingModel", REG_SZ, "Both", Fixed));
+    let schedule = alloc::format!("{}\\Services\\Schedule", current_control_set(reg));
+    for (name, kind, data) in [
+        ("Type", REG_DWORD, "16"),
+        ("Start", REG_DWORD, "3"),
+        ("ErrorControl", REG_DWORD, "1"),
+        ("ImagePath", REG_EXPAND_SZ, "%SystemRoot%\\System32\\schedsvc.exe"),
+        ("ObjectName", REG_SZ, "LocalSystem"),
+        ("DisplayName", REG_SZ, "Task Scheduler"),
+    ] {
+        v.push(entry(Machine, &schedule, name, kind, data, Default));
+    }
+
     let env = alloc::format!("{}\\Control\\Session Manager\\Environment", current_control_set(reg));
     for (name, data) in [("TEMP", "%SystemRoot%\\TEMP"), ("TMP", "%SystemRoot%\\TEMP"), ("windir", "%SystemRoot%")] {
+        v.push(entry(Machine, &env, name, REG_EXPAND_SZ, data, Default));
+    }
+    // The system variables every process has (CreateEnvironmentBlock.yaml `variables_present`),
+    // for a hive made before the defaults had them.
+    for (name, data) in poly_registry::defaults::SYSTEM_ENVIRONMENT_EXTRA {
         v.push(entry(Machine, &env, name, REG_EXPAND_SZ, data, Default));
     }
     let user_env = alloc::format!("{}\\Environment", user.sid);
@@ -208,7 +233,8 @@ pub type Changed = Vec<String>;
 fn apply(reg: &mut Registry, e: &Entry, now: u64) -> Result<bool, NtStatus> {
     let start = master(reg, e.under);
     let key = make_key(reg, start, &e.key, e.volatile, now)?;
-    let data = sz(&e.data);
+    let data =
+        if e.kind == REG_DWORD { e.data.parse::<u32>().unwrap_or(0).to_le_bytes().to_vec() } else { sz(&e.data) };
     let name = wide(&e.name);
     match reg.value(key, &name) {
         Ok(v) if v.kind == e.kind && v.data == data => return Ok(false),

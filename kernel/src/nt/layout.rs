@@ -187,8 +187,12 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("dcomp.dll", super::DCOMP),
         // ADR 0220.
         ("comlaunch.exe", super::COMLAUNCH),
+        // ADR 0226.
+        ("taskschd.dll", super::TASKSCHD),
+        ("schedsvc.exe", super::SCHEDSVC),
         // ADR 0221.
         ("services.exe", super::SERVICES_EXE),
+        ("hnetcfg.dll", super::HNETCFG),
     ] {
         if bytes.is_empty() {
             continue;
@@ -197,6 +201,16 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Ok(create::Installed::Written) => crate::kprintln!("nt: layout: {name} written to System32"),
             Ok(_) => {}
             Err(e) => crate::kprintln!("nt: layout: cannot install {name} ({:#x})", e.0),
+        }
+    }
+    // Poly's own copy of the standard type library `stdole` 2.0 (ADR 0220, B2b), in Poly's
+    // type-library format: every library's interfaces refer to it for `IUnknown` and `IDispatch`.
+    if !super::OLEAUT32.is_empty() {
+        let bytes = poly_com::typelib::stdole::file_bytes();
+        match create::install_file(&vr, &root, "Windows\\System32", "stdole2.tlb", &bytes) {
+            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: stdole2.tlb written to System32"),
+            Ok(_) => {}
+            Err(e) => crate::kprintln!("nt: layout: cannot install stdole2.tlb ({:#x})", e.0),
         }
     }
     // Poly's own Visual C++ runtime (ADR 0199). A user who installs
@@ -266,7 +280,9 @@ pub(super) fn prepare(sys: &mut NtSystem) {
 /// the NT lock).
 pub(super) fn environment(sys: &NtSystem) -> Vec<u16> {
     let processors = crate::thread::online_cpus().len() as u32;
-    env::build(&sys.registry.reg, &POLY_USER, env::Machine { processors }).to_utf16()
+    let id = crate::arch::cpu::identify();
+    let processor = env::Processor { vendor: id.vendor, family: id.family, model: id.model, stepping: id.stepping };
+    env::build(&sys.registry.reg, &POLY_USER, env::Machine { processors, processor: Some(processor) }).to_utf16()
 }
 
 /// The DOS path of an executable at VFS path `path`.

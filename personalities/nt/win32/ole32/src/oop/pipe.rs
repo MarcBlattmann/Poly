@@ -75,6 +75,7 @@ pub(crate) fn read_frame(h: Handle) -> Option<Vec<u8>> {
 
 /// Open the client end of `name`, waiting while every instance is busy.
 fn open(name: &[u16]) -> Result<Handle, Failure> {
+    let mut missing = 0;
     for _ in 0..200 {
         // SAFETY: a NUL-terminated name.
         let h = unsafe {
@@ -91,6 +92,13 @@ fn open(name: &[u16]) -> Result<Handle, Failure> {
                     // SAFETY: a plain sleep.
                     unsafe { Sleep(1) };
                 }
+            }
+            // The pipe may be between two listening instances for a moment; a server that is
+            // gone stays gone (about 100 ms until the caller is told).
+            ERROR_FILE_NOT_FOUND if missing < 20 => {
+                missing += 1;
+                // SAFETY: a plain sleep.
+                unsafe { Sleep(5) };
             }
             ERROR_FILE_NOT_FOUND => return Err(Failure::NoServer),
             e => return Err(Failure::Broken(from_win32(e))),
