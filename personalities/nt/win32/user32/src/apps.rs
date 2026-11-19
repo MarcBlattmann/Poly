@@ -101,7 +101,6 @@ poly_win32_rt::fail_exports!(
         MapVirtualKeyA,
         OpenIcon,
         PackDDElParam,
-        PhysicalToLogicalPoint,
         PostThreadMessageA,
         PrivateExtractIconsW,
         RealChildWindowFromPoint,

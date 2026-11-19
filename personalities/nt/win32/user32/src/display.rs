@@ -1,7 +1,8 @@
 //! DPI awareness, system parameters and colours, display modes and
 //! monitors (ADR 0172): the third GUI slice's `user32` calls about the
-//! screen. One monitor at 96 DPI; the sheets are
-//! `SetProcessDpiAwarenessContext.yaml` ... `EnumDisplayMonitors.yaml`.
+//! screen. One monitor; the sheets are
+//! `SetProcessDpiAwarenessContext.yaml` ... `EnumDisplayMonitors.yaml`. Above 96 DPI every
+//! number is in the calling thread's units (ADR 0231: win32k converts).
 
 use super::{H, SYS, SpinLock, call, info, set_last_error};
 use alloc::vec::Vec;
@@ -59,14 +60,63 @@ fn thread_awareness() -> u8 {
     }
 }
 
+/// The process's awareness as set (by a call or its manifest; unaware without).
+fn process_awareness() -> u8 {
+    match call(Request::Dpi { set: false, process: true, awareness: 0 }) {
+        Reply::Value { value } => value as u8,
+        _ => 0,
+    }
+}
+
+/// What win32k says of the desktop for this thread (ADR 0231).
+pub(crate) struct Desk {
+    /// The thread's system DPI (`GetDpiForSystem`) and the monitor's effective DPI for it.
+    pub dpi: u32,
+    pub monitor_dpi: u32,
+    /// The physical screen, the session's system DPI, the scale in percent.
+    pub phys: (i32, i32),
+    pub process_dpi: u32,
+    pub scale: u32,
+}
+
+pub(crate) fn desk() -> Desk {
+    match call(Request::Desktop {}) {
+        Reply::Desktop { dpi, monitor_dpi, phys_width, phys_height, process_dpi, scale, .. } => {
+            Desk { dpi, monitor_dpi, phys: (phys_width, phys_height), process_dpi, scale }
+        }
+        _ => Desk { dpi: 96, monitor_dpi: 96, phys: (1024, 768), process_dpi: 96, scale: 100 },
+    }
+}
+
+/// The awareness a manifest declared, set as the process's before the program runs
+/// (`SetProcessDpiAwarenessContext.yaml` `manifest`).
+pub(crate) fn manifest_awareness(manifest: &[u8]) {
+    if let Some(a) = poly_win32k::dpiscale::manifest_awareness(manifest) {
+        call(Request::Dpi { set: true, process: true, awareness: a });
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "system" fn GetThreadDpiAwarenessContext() -> isize {
     guic::context_handle(thread_awareness()) as isize
 }
 
+/// The process's own context (NULL or the current process), whatever its threads set.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiAwarenessContextForProcess(_process: usize) -> isize {
-    GetThreadDpiAwarenessContext()
+    guic::context_handle(process_awareness()) as isize
+}
+
+/// `GetDpiFromDpiAwarenessContext`: the DPI of a context with one of its own (unaware and
+/// GDI-scaled 96, system the system DPI), 0 for the per-monitor ones and invalid values
+/// (GetSystemDpiForProcess.yaml `context_functions`).
+#[unsafe(no_mangle)]
+pub extern "system" fn GetDpiFromDpiAwarenessContext(ctx: isize) -> u32 {
+    match awareness_of(ctx) {
+        Some(guic::AWARE_UNAWARE | guic::AWARE_GDI_SCALED) => 96,
+        Some(guic::AWARE_SYSTEM) => desk().process_dpi,
+        _ => 0,
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -114,21 +164,23 @@ pub extern "system" fn GetAwarenessFromDpiAwarenessContext(ctx: isize) -> i32 {
     }
 }
 
-/// `IsProcessDPIAware`: whether the calling thread is not unaware.
+/// `IsProcessDPIAware`: whether the process is system or per-monitor aware.
 #[unsafe(no_mangle)]
 pub extern "system" fn IsProcessDPIAware() -> i32 {
-    i32::from(guic::dpi_awareness(thread_awareness()) != 0)
+    i32::from(guic::dpi_awareness(process_awareness()) != 0)
 }
 
-/// `SetProcessDPIAware`: system awareness, once.
+/// `SetProcessDPIAware`: system awareness; TRUE again on a second call (SetProcessDPIAware.yaml).
 #[unsafe(no_mangle)]
 pub extern "system" fn SetProcessDPIAware() -> i32 {
-    i32::from(matches!(call(Request::Dpi { set: true, process: true, awareness: guic::AWARE_SYSTEM }), Reply::Ok {}))
+    call(Request::Dpi { set: true, process: true, awareness: guic::AWARE_SYSTEM });
+    1
 }
 
+/// The system DPI the process started with: the session's, in every awareness mode.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetSystemDpiForProcess(_process: usize) -> u32 {
-    u::system_dpi(&SYS)
+    desk().process_dpi
 }
 
 /// Windows whose non-client scaling was enabled (the per-monitor v1 cascade
@@ -481,7 +533,8 @@ fn put_name(p: *mut u8, at: usize, s: &str, max: usize) {
 }
 
 fn modes() -> Vec<(i32, i32)> {
-    let d = u::screen(&SYS);
+    let (pw, ph) = desk().phys;
+    let d = metrics::Display { width: pw, height: ph, ..u::screen(&SYS) };
     let mut v: Vec<(i32, i32)> =
         [(800, 600), (1024, 768), (1280, 720), (1280, 1024), (1366, 768), (1600, 900), (1920, 1080)]
             .into_iter()
@@ -505,7 +558,9 @@ pub unsafe extern "system" fn EnumDisplaySettingsW(device: *const u16, mode: u32
     if !device.is_null() && !wstr_eq(device, "\\\\.\\display1") {
         return 0;
     }
-    let d = u::screen(&SYS);
+    // The physical mode for every caller (EnumDisplaySettingsW.yaml `at_200_current`).
+    let (pw, ph) = desk().phys;
+    let d = metrics::Display { width: pw, height: ph, ..u::screen(&SYS) };
     let (w, h, fields, name, spec, freq) = match mode {
         0xFFFF_FFFF | 0xFFFF_FFFE => (d.width, d.height, DM_FIELDS_CURRENT, "CDD", 0x401u16, 60),
         0xFFFF_FFFD => {
@@ -674,8 +729,10 @@ pub unsafe extern "system" fn EnumDisplayMonitors(
 const E_ACCESSDENIED: i32 = 0x8007_0005u32 as i32;
 const E_INVALIDARG: i32 = 0x8007_0057u32 as i32;
 
-/// `GetDpiForMonitor`: 96 x 96 for the effective and angular types; the raw
-/// type is not supported; the type is checked before the monitor.
+/// `GetDpiForMonitor`: the effective DPI is the monitor's in the caller's units (96 for an
+/// unaware caller, 192 for an aware one at 200 percent), the angular one 96 scaled the same way
+/// (no EDID: 96 assumed); the raw type is not supported; the type is checked before the monitor
+/// (GetDpiForMonitor.yaml `at_200_values`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetDpiForMonitor(monitor: usize, kind: u32, dpi_x: *mut u32, dpi_y: *mut u32) -> i32 {
     if kind > 2 {
@@ -690,7 +747,13 @@ pub unsafe extern "system" fn GetDpiForMonitor(monitor: usize, kind: u32, dpi_x:
         set_last_error(0x1E7);
         return 0x8007_01E7u32 as i32;
     }
-    let v = if kind == 2 { 0 } else { u::system_dpi(&SYS) };
+    let d = desk();
+    let phys_dpi = poly_win32k::dpiscale::dpi_of(d.scale);
+    let v = match kind {
+        0 => d.monitor_dpi,
+        1 => (96 * d.monitor_dpi).div_ceil(phys_dpi.max(1)),
+        _ => 0,
+    };
     // SAFETY: the caller's outputs.
     unsafe {
         *dpi_x = v;
@@ -704,14 +767,31 @@ pub unsafe extern "system" fn GetDpiForMonitor(monitor: usize, kind: u32, dpi_x:
     }
 }
 
+/// `GetScaleFactorForMonitor`: the monitor's `DEVICE_SCALE_FACTOR` for every caller; 100 for a
+/// NULL monitor (GetDpiForMonitor.yaml `scale_factor`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetScaleFactorForMonitor(monitor: usize, scale: *mut i32) -> i32 {
-    if scale.is_null() || monitor != PRIMARY_MONITOR {
+    if scale.is_null() || (monitor != PRIMARY_MONITOR && monitor != 0) {
         return E_INVALIDARG;
     }
+    let f = if monitor == 0 { 100 } else { poly_win32k::dpiscale::device_scale_factor(desk().scale) };
     // SAFETY: the caller's output.
-    unsafe { *scale = (u::system_dpi(&SYS) * 100 / 96) as i32 };
+    unsafe { *scale = f as i32 };
     0
+}
+
+/// [`GetDpiForMonitor`] for `shcore.dll`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyUserDpiForMonitor(monitor: usize, kind: u32, x: *mut u32, y: *mut u32) -> i32 {
+    // SAFETY: forwarded.
+    unsafe { GetDpiForMonitor(monitor, kind, x, y) }
+}
+
+/// [`GetScaleFactorForMonitor`] for `shcore.dll`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PolyUserScaleFactorForMonitor(monitor: usize, scale: *mut i32) -> i32 {
+    // SAFETY: forwarded.
+    unsafe { GetScaleFactorForMonitor(monitor, scale) }
 }
 
 #[unsafe(no_mangle)]
@@ -736,6 +816,97 @@ pub unsafe extern "system" fn GetProcessDpiAwareness(process: usize, value: *mut
         return E_INVALIDARG;
     }
     // SAFETY: the caller's output.
-    unsafe { *value = guic::dpi_awareness(thread_awareness()) as u32 };
+    unsafe { *value = guic::dpi_awareness(process_awareness()) as u32 };
     0
+}
+
+// ----- point conversion between a thread's units and physical pixels (LogicalToPhysicalPointForPerMonitorDPI.yaml)
+
+/// Whether point `p` lies in `r`, edges included (the oracle's (1000,600) is in 200,200,1000,800).
+fn on(r: poly_win32k::frame::Rect, p: (i32, i32)) -> bool {
+    (r.left..=r.right).contains(&p.0) && (r.top..=r.bottom).contains(&p.1)
+}
+
+/// The two legacy calls: since Windows 8.1 they leave the point as it is; TRUE when it lies in
+/// the window (as the caller reads it), FALSE for a point outside, ERROR_INVALID_WINDOW_HANDLE
+/// for no window. The desktop takes every point.
+unsafe fn legacy_point(hwnd: H, pt: *mut i32) -> i32 {
+    let Some(i) = super::info(hwnd) else {
+        set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+        return 0;
+    };
+    if pt.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller's POINT.
+    let p = unsafe { (*pt, *pt.add(1)) };
+    i32::from(i.desktop || on(i.window, p))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn LogicalToPhysicalPoint(hwnd: H, pt: *mut i32) -> i32 {
+    // SAFETY: forwarded.
+    unsafe { legacy_point(hwnd, pt) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PhysicalToLogicalPoint(hwnd: H, pt: *mut i32) -> i32 {
+    // SAFETY: forwarded.
+    unsafe { legacy_point(hwnd, pt) }
+}
+
+/// The per-monitor calls: between the units of a window (NULL: of the calling thread) and
+/// physical pixels. `to_phys`: logical to physical; the point must lie in the window's rectangle
+/// on its side of the conversion; the desktop takes every point unchanged.
+unsafe fn per_monitor_point(hwnd: H, pt: *mut i32, to_phys: bool) -> i32 {
+    if pt.is_null() {
+        return 0;
+    }
+    let d = desk();
+    let phys_dpi = poly_win32k::dpiscale::dpi_of(d.scale);
+    // SAFETY: the caller's POINT.
+    let p = unsafe { (*pt, *pt.add(1)) };
+    let (units, rect) = if hwnd == 0 {
+        (d.monitor_dpi, None)
+    } else {
+        let Some(i) = super::info(hwnd) else {
+            set_last_error(ERROR_INVALID_WINDOW_HANDLE);
+            return 0;
+        };
+        if i.desktop {
+            return 1;
+        }
+        // The window in its own units and in physical pixels (a per-monitor window's units
+        // are physical).
+        let wu = if matches!(i.dpi, guic::AWARE_PER_MONITOR | guic::AWARE_PER_MONITOR_V2) { phys_dpi } else { i.dpi_value };
+        let caller = poly_win32k::dpiscale::Units::new(d.monitor_dpi, phys_dpi);
+        let phys = caller.rect_to_phys(i.window);
+        let own = poly_win32k::dpiscale::Units::new(wu, phys_dpi);
+        (wu, Some((own.rect_to_caller(phys), phys)))
+    };
+    let u = poly_win32k::dpiscale::Units::new(units, phys_dpi);
+    let q = if to_phys { (u.to_phys(p.0), u.to_phys(p.1)) } else { (u.to_caller(p.0), u.to_caller(p.1)) };
+    if let Some((own, phys)) = rect
+        && !on(if to_phys { own } else { phys }, p)
+    {
+        return 0;
+    }
+    // SAFETY: as above.
+    unsafe {
+        *pt = q.0;
+        *pt.add(1) = q.1;
+    }
+    1
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn LogicalToPhysicalPointForPerMonitorDPI(hwnd: H, pt: *mut i32) -> i32 {
+    // SAFETY: forwarded.
+    unsafe { per_monitor_point(hwnd, pt, true) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PhysicalToLogicalPointForPerMonitorDPI(hwnd: H, pt: *mut i32) -> i32 {
+    // SAFETY: forwarded.
+    unsafe { per_monitor_point(hwnd, pt, false) }
 }

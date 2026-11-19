@@ -339,6 +339,10 @@ static TASKBAR_BOTTOM: core::sync::atomic::AtomicBool = core::sync::atomic::Atom
 /// The kernel argument naming the Windows session win32k reproduces.
 pub const SESSION_ARG: &str = "poly.win32k.session";
 
+/// `poly.win32k.display=WxH` and `poly.win32k.scale=P`: the interactive session's physical
+/// screen and its scale in percent (ADR 0231; 1920x1080 at 100 without them).
+static DISPLAY: Mutex<Option<((i32, i32), u32)>> = Mutex::new(None);
+
 /// `poly.nt.trace` (`poly.nt.trace=all` for the noisy services too): one
 /// serial line per system call (`poly_personality_nt::trace`). 0 off, 1 on, 2 all.
 static TRACE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
@@ -702,6 +706,16 @@ pub fn configure(boot: &crate::boot_info::BootInfo) {
         TASKBAR_BOTTOM.store(true, core::sync::atomic::Ordering::Relaxed);
         crate::kprintln!("nt: win32k reproduces the interactive desktop session (1920x1080, taskbar at the bottom)");
     }
+    let (display, scale) = (boot.arg("poly.win32k.display"), boot.arg("poly.win32k.scale"));
+    if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) && (display.is_some() || scale.is_some()) {
+        match poly_win32k::dpiscale::parse_display(display, scale) {
+            Some(((w, h), p)) => {
+                *DISPLAY.lock() = Some(((w, h), p));
+                crate::kprintln!("nt: the session's screen is {w}x{h} at {p} percent");
+            }
+            None => crate::kprintln!("nt: poly.win32k.display / poly.win32k.scale not understood; ignored"),
+        }
+    }
 }
 
 /// The full `NTSTATUS` the processes the test-run protocol watches ended
@@ -773,12 +787,20 @@ fn make_state(slot: &mut Option<NtState>) {
         let _ = thread::detach(tid);
     }
     if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
-        let display = if TASKBAR_BOTTOM.load(core::sync::atomic::Ordering::Relaxed) {
+        let bottom = TASKBAR_BOTTOM.load(core::sync::atomic::Ordering::Relaxed);
+        let display = if bottom {
             poly_win32k::metrics::Display::INTERACTIVE_BOTTOM
         } else {
             poly_win32k::metrics::Display::INTERACTIVE
         };
-        state.sys.win32k.wm.set_display(display);
+        match *DISPLAY.lock() {
+            Some(((w, h), p)) => {
+                let d = poly_win32k::metrics::Display::interactive_at(w, h, p, bottom);
+                state.sys.win32k.wm.set_system_dpi(poly_win32k::dpiscale::dpi_of(p));
+                state.sys.win32k.wm.set_display(d);
+            }
+            None => state.sys.win32k.wm.set_display(display),
+        }
     }
 }
 

@@ -54,6 +54,10 @@ pub const WM_MOUSEWHEEL: u32 = 0x020A;
 pub const WM_MOUSEHWHEEL: u32 = 0x020E;
 pub const WM_PARENTNOTIFY: u32 = 0x0210;
 pub const WM_DWMNCRENDERINGCHANGED: u32 = 0x031F;
+pub const WM_DPICHANGED: u32 = 0x02E0;
+pub const WM_DPICHANGED_BEFOREPARENT: u32 = 0x02E2;
+pub const WM_DPICHANGED_AFTERPARENT: u32 = 0x02E3;
+pub const WM_GETDPISCALEDSIZE: u32 = 0x02E4;
 /// Set by `SetWindowRgn(NULL)`: the next frame change redraws everything.
 pub static FRAME_REDRAW: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 /// The bit `SetWindowRgn` adds to its frame change (`SetWindowRgn.yaml`
@@ -439,9 +443,94 @@ pub fn run_incoming<E: Env + ?Sized>(env: &E, inc: &Incoming) {
         env.call(Request::SendDone { id: inc.id, result: 0 });
         return;
     }
+    // The monitor's scale changed (ADR 0231): a window the system scales moves so that its
+    // visible frame stays put; a per-monitor aware one runs its WM_DPICHANGED sequence.
+    if inc.wndproc == 0 && inc.msg == crate::wm::dpi::DPI_MOVE {
+        let (x, y, _, _) = crate::wm::unpack_set_pos(inc.w, inc.l);
+        set_window_pos(env, u64::from(inc.hwnd), 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        env.call(Request::SendDone { id: inc.id, result: 0 });
+        return;
+    }
+    if inc.wndproc == 0 && inc.msg == crate::wm::dpi::DPI_CHANGED {
+        dpi_changed(env, u64::from(inc.hwnd), inc.w as u32, (inc.w >> 32) as u32, inc.l);
+        env.call(Request::SendDone { id: inc.id, result: 0 });
+        return;
+    }
     env.sent_hook(inc.hwnd, inc.msg, inc.w, inc.l, false);
     let r = env.call_proc(inc.wndproc, inc.hwnd, inc.msg, inc.w, inc.l);
     env.call(Request::SendDone { id: inc.id, result: r });
+}
+
+/// `SIZE` (`windef.h`).
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CSize {
+    pub cx: i32,
+    pub cy: i32,
+}
+
+/// Every descendant of a window, parents before their children.
+fn descendants<E: Env + ?Sized>(env: &E, hwnd: u32, out: &mut Vec<u32>) {
+    if let Reply::Relatives { children, .. } = env.call(Request::Relatives { hwnd }) {
+        for c in children {
+            out.push(c);
+            descendants(env, c, out);
+        }
+    }
+}
+
+/// A per-monitor aware top-level window's part of a scale change (`DisplayConfigSetDeviceInfo.yaml`
+/// `messages_per_monitor_v2`, `messages_per_monitor_v1`): `new` and `old` DPI, `suggested` the
+/// size win32k suggests (width in the low half, height in the high half).
+///
+/// v2: `WM_GETDPISCALEDSIZE` (the current size; a non-zero answer replaces the suggested size),
+/// `WM_DPICHANGED_BEFOREPARENT` to the descendants, `WM_DPICHANGED` with the suggested rectangle
+/// (`DefWindowProc` measures the frame anew, tells the descendants and applies the rectangle).
+/// v1: the window takes the suggested size with its old frame, then `WM_DPICHANGED`.
+fn dpi_changed<E: Env + ?Sized>(env: &E, hwnd: u64, new: u32, old: u32, suggested: u64) {
+    let Some(i) = info(env, hwnd) else { return };
+    let _ = old;
+    let (mut cx, mut cy) = (suggested as u32 as i32, (suggested >> 32) as u32 as i32);
+    let dpi_w = u64::from(new) | (u64::from(new) << 16);
+    if i.dpi == crate::guic::AWARE_PER_MONITOR_V2 {
+        let mut size = CSize { cx: i.window.width(), cy: i.window.height() };
+        if send(env, hwnd, WM_GETDPISCALEDSIZE, u64::from(new), &mut size as *mut CSize as u64) != 0 {
+            (cx, cy) = (size.cx, size.cy);
+        }
+        let mut below = Vec::new();
+        descendants(env, i.hwnd, &mut below);
+        for c in below {
+            send(env, u64::from(c), WM_DPICHANGED_BEFOREPARENT, 0, 0);
+        }
+    } else {
+        set_window_pos(env, hwnd, 0, 0, 0, cx, cy, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    let Some(i) = info(env, hwnd) else { return };
+    let mut r = CRect { left: i.window.left, top: i.window.top, right: i.window.left + cx, bottom: i.window.top + cy };
+    send(env, hwnd, WM_DPICHANGED, dpi_w, &mut r as *mut CRect as u64);
+    // A procedure that kept DefWindowProc out of it still has its frame measured anew from now on.
+    env.call(Request::DpiFrame { hwnd: hwnd as u32 });
+}
+
+/// `DefWindowProc`'s `WM_DPICHANGED`: the frame at the new DPI; a per-monitor-v2 top-level
+/// window tells its descendants and takes the suggested rectangle (`l`).
+fn def_dpi_changed<E: Env + ?Sized>(env: &E, hwnd: u64, l: u64) {
+    let Some(i) = info(env, hwnd) else { return };
+    env.call(Request::DpiFrame { hwnd: i.hwnd });
+    let flags = SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE;
+    set_window_pos(env, hwnd, 0, 0, 0, 0, 0, flags);
+    if i.dpi == crate::guic::AWARE_PER_MONITOR_V2 && i.style & WS_CHILD == 0 {
+        let mut below = Vec::new();
+        descendants(env, i.hwnd, &mut below);
+        for c in below {
+            send(env, u64::from(c), WM_DPICHANGED_AFTERPARENT, 0, 0);
+        }
+        if l != 0 {
+            // SAFETY: lParam of WM_DPICHANGED is the suggested RECT.
+            let r = unsafe { *(l as *const CRect) };
+            set_window_pos(env, hwnd, 0, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+    }
 }
 
 /// `SendMessageW`: a procedure of this thread is called directly; another
@@ -1787,6 +1876,10 @@ pub fn set_parent<E: Env + ?Sized>(env: &E, hwnd: u64, parent: u64) -> u64 {
 /// `DefWindowProcW` (`DefWindowProcW.yaml`).
 pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l: u64) -> u64 {
     match msg {
+        WM_DPICHANGED => {
+            def_dpi_changed(env, hwnd, l);
+            0
+        }
         WM_NCCREATE => {
             if l != 0 {
                 // SAFETY: lParam is a CREATESTRUCTW for WM_NCCREATE.
@@ -1817,7 +1910,7 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 // SAFETY: lParam starts with a RECT (NCCALCSIZE_PARAMS for TRUE).
                 let r = unsafe { &mut *(l as *mut CRect) };
                 let bar = i.style & WS_CHILD == 0 && i.id != 0 && env.menu_bar_shown(i.id);
-                *r = CRect::from(metrics::default_client(Rect::from(*r), i.style, i.ex_style, bar));
+                *r = CRect::from(metrics::default_client_dpi(Rect::from(*r), i.style, i.ex_style, bar, i.frame_dpi.max(1)));
             }
             0
         }

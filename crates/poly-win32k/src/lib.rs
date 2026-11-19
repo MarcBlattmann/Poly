@@ -54,6 +54,7 @@ pub mod desktop;
 pub mod dib;
 pub mod dispcfg;
 pub mod dlg;
+pub mod dpiscale;
 pub mod exports;
 pub mod frame;
 pub mod guic;

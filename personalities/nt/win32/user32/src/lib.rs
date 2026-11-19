@@ -1855,15 +1855,17 @@ pub extern "system" fn GetDpiForSystem() -> u32 {
     u::system_dpi(&SYS)
 }
 
-/// 96 for any window of a DPI-unaware process, the desktop and message
-/// windows included; 0 with ERROR_INVALID_PARAMETER otherwise.
+/// The DPI of the window's awareness context: 96 for an unaware one and the desktop, the system
+/// DPI for a system aware one, the monitor's for a per-monitor aware one, whoever asks
+/// (GetDpiForWindow.yaml `at_200_kinds`); 0 with ERROR_INVALID_PARAMETER for no window.
 #[unsafe(no_mangle)]
 pub extern "system" fn GetDpiForWindow(hwnd: H) -> u32 {
-    if hwnd != 0 && info(hwnd).is_some() {
-        u::system_dpi(&SYS)
-    } else {
-        set_last_error(ERROR_INVALID_PARAMETER);
-        0
+    match (hwnd != 0).then(|| info(hwnd)).flatten() {
+        Some(i) => i.dpi_value,
+        None => {
+            set_last_error(ERROR_INVALID_PARAMETER);
+            0
+        }
     }
 }
 
@@ -3288,6 +3290,15 @@ pub extern "system" fn user32_main(_module: *mut u8, reason: u32, _reserved: *mu
                 wire::decode::<Reply>(&out[..(len as usize).min(out.len())])
         {
             return 0;
+        }
+        // The DPI awareness the executable's manifest declares (ADR 0231).
+        if s == 0 {
+            // SAFETY: NULL names the executable, mapped in this process.
+            let base = unsafe { GetModuleHandleW(core::ptr::null()) } as u64;
+            // SAFETY: the executable's base.
+            if let Some(m) = unsafe { poly_kernelbase::version::image_manifest(base) } {
+                display::manifest_awareness(&m);
+            }
         }
     }
     1

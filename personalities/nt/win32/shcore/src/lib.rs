@@ -1,6 +1,6 @@
 //! Our `shcore.dll` (ADR 0172): `GetDpiForMonitor` and the legacy process
-//! DPI awareness calls over `user32`. One monitor at 96 DPI in every
-//! awareness mode (`GetDpiForMonitor.yaml`).
+//! DPI awareness calls over `user32`, which answers in the caller's units (ADR 0231,
+//! `GetDpiForMonitor.yaml`).
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
@@ -12,10 +12,15 @@ use poly_win32_rt as _;
 #[cfg_attr(not(target_arch = "x86"), link(name = "user32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetMonitorInfoW(monitor: usize, info: *mut u8) -> i32;
-    fn GetThreadDpiAwarenessContext() -> isize;
+    fn GetDpiAwarenessContextForProcess(process: usize) -> isize;
     fn GetAwarenessFromDpiAwarenessContext(ctx: isize) -> i32;
     fn SetProcessDpiAwarenessContext(ctx: isize) -> i32;
-    fn GetDpiForSystem() -> u32;
+    /// user32's `GetDpiForMonitor` and `GetScaleFactorForMonitor` under Poly's own names (the
+    /// same names here would bind to this DLL's own exports).
+    #[link_name = "PolyUserDpiForMonitor"]
+    fn user32_dpi_for_monitor(monitor: usize, kind: u32, dpi_x: *mut u32, dpi_y: *mut u32) -> i32;
+    #[link_name = "PolyUserScaleFactorForMonitor"]
+    fn user32_scale_factor(monitor: usize, scale: *mut i32) -> i32;
 }
 
 const S_OK: i32 = 0;
@@ -50,18 +55,20 @@ pub unsafe extern "system" fn GetDpiForMonitor(monitor: usize, kind: i32, dpi_x:
     if dpi_x.is_null() || dpi_y.is_null() {
         return fail(0x1E7, HR_INVALID_ADDRESS);
     }
-    // SAFETY: a user32 call without preconditions.
-    let v = if kind == MDT_RAW_DPI { 0 } else { unsafe { GetDpiForSystem() } };
-    // SAFETY: the caller's outputs.
-    unsafe {
-        *dpi_x = v;
-        *dpi_y = v;
+    if kind == MDT_RAW_DPI {
+        // SAFETY: the caller's outputs.
+        unsafe {
+            *dpi_x = 0;
+            *dpi_y = 0;
+        }
+        return fail(0x32, HR_NOT_SUPPORTED);
     }
-    if kind == MDT_RAW_DPI { fail(0x32, HR_NOT_SUPPORTED) } else { S_OK }
+    // SAFETY: the monitor was checked; the caller's outputs.
+    unsafe { user32_dpi_for_monitor(monitor, kind as u32, dpi_x, dpi_y) }
 }
 
-/// `GetProcessDpiAwareness`: the calling thread's awareness for NULL or
-/// the current process, E_INVALIDARG and -1 for another handle.
+/// `GetProcessDpiAwareness`: the process's awareness for NULL or the
+/// current process, E_INVALIDARG and -1 for another handle.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetProcessDpiAwareness(process: usize, value: *mut i32) -> i32 {
     if value.is_null() {
@@ -73,7 +80,7 @@ pub unsafe extern "system" fn GetProcessDpiAwareness(process: usize, value: *mut
         return E_INVALIDARG;
     }
     // SAFETY: user32 calls without preconditions.
-    let a = unsafe { GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) };
+    let a = unsafe { GetAwarenessFromDpiAwarenessContext(GetDpiAwarenessContextForProcess(0)) };
     // SAFETY: the caller's output.
     unsafe { *value = a };
     S_OK
@@ -92,18 +99,18 @@ pub extern "system" fn SetProcessDpiAwareness(value: i32) -> i32 {
     if unsafe { SetProcessDpiAwarenessContext(ctx) } != 0 { S_OK } else { E_ACCESSDENIED }
 }
 
-/// `GetScaleFactorForMonitor`: 100 percent.
+/// `GetScaleFactorForMonitor`: the monitor's `DEVICE_SCALE_FACTOR`, 100 for a NULL monitor
+/// (GetDpiForMonitor.yaml `scale_factor`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetScaleFactorForMonitor(monitor: usize, scale: *mut i32) -> i32 {
     let mut mi = [0u8; 40];
     mi[0] = 40;
     // SAFETY: a MONITORINFO of the right size.
-    if scale.is_null() || unsafe { GetMonitorInfoW(monitor, mi.as_mut_ptr()) } == 0 {
+    if scale.is_null() || (monitor != 0 && unsafe { GetMonitorInfoW(monitor, mi.as_mut_ptr()) } == 0) {
         return E_INVALIDARG;
     }
-    // SAFETY: the caller's output; a user32 call without preconditions.
-    unsafe { *scale = (GetDpiForSystem() * 100 / 96) as i32 };
-    S_OK
+    // SAFETY: the caller's output, checked.
+    unsafe { user32_scale_factor(monitor, scale) }
 }
 
 /// The entry point (`DllMain`): nothing to set up.

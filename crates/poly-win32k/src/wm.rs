@@ -16,6 +16,7 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec;
 use alloc::vec::Vec;
 
+pub mod dpi;
 pub mod input;
 pub mod paint;
 pub mod raw;
@@ -196,6 +197,13 @@ struct Window {
     helper: bool,
     /// The menu bar's height above the client area, inside the surface.
     menu_bar: i32,
+    /// Its rectangles in its own units while they map to the physical ones (`dpi`, ADR 0231).
+    own: Option<dpi::Own>,
+    /// The DPI its frame stays measured at after a scale change until `DefWindowProc` handles
+    /// `WM_DPICHANGED` (0: its DPI).
+    frame_pin: u32,
+    /// What `WM_DPICHANGED` suggested last (`dpiscale::suggest`).
+    suggest: Option<crate::dpiscale::SuggestBase>,
 }
 
 #[derive(Debug, Default)]
@@ -349,8 +357,11 @@ pub struct Wm {
     /// (`Request::LayeredChildren`): they may create layered child windows.
     layered_children: alloc::collections::BTreeSet<u32>,
     thread_dpi: BTreeMap<Key, u8>,
-    /// The system DPI: 96 times the desktop link's units (ADR 0219).
+    /// The system DPI: 96 times the desktop link's units (ADR 0219), or the session's scale
+    /// (ADR 0231).
     system_dpi: u32,
+    /// The monitor's DPI now: the system DPI until the scale changes (ADR 0231).
+    monitor_dpi: u32,
 }
 
 impl Default for Wm {
@@ -418,6 +429,7 @@ impl Wm {
             layered_children: alloc::collections::BTreeSet::new(),
             thread_dpi: BTreeMap::new(),
             system_dpi: 96,
+            monitor_dpi: 96,
         };
         // Index 0 is never a window.
         wm.slots.push(None);
@@ -481,6 +493,7 @@ impl Wm {
     /// pixels (ADR 0219).
     pub fn set_system_dpi(&mut self, dpi: u32) {
         self.system_dpi = dpi.max(1);
+        self.monitor_dpi = self.system_dpi;
     }
 
     pub fn system_dpi(&self) -> u32 {
@@ -680,6 +693,8 @@ impl Wm {
             desktop: h == self.desktop,
             message_only: w.parent == self.message,
             dpi: if h == self.desktop { guic::AWARE_PER_MONITOR } else { w.dpi },
+            dpi_value: self.window_dpi(h),
+            frame_dpi: if w.frame_pin != 0 { w.frame_pin } else { self.window_dpi(h) },
             creating: w.state == State::Creating,
             ime: w.ime,
             lay_ready: w.ex_style & guic::WS_EX_LAYERED == 0 || w.lay.attrs || w.lay.update,
@@ -1531,7 +1546,9 @@ impl Wm {
     fn dpi_op(&mut self, ctx: Ctx, set: bool, process: bool, awareness: u8) -> Reply {
         let prev = self.thread_awareness(ctx.key());
         if !set {
-            return Reply::Value { value: u64::from(prev) };
+            // The process's own (`GetDpiAwarenessContextForProcess`, `GetProcessDpiAwareness`).
+            let a = if process { self.proc_dpi.get(&ctx.pid).copied().unwrap_or(guic::AWARE_UNAWARE) } else { prev };
+            return Reply::Value { value: u64::from(a) };
         }
         if process && self.proc_dpi.contains_key(&ctx.pid) {
             return err(ERROR_ACCESS_DENIED);
@@ -2049,20 +2066,12 @@ impl Wm {
 
     // ----- the request dispatcher
 
-    /// Run one request of thread `ctx`.
-    pub fn handle(&mut self, ctx: Ctx, req: Request, fx: &mut Effects) -> Reply {
+    /// Run one request of thread `ctx`, in physical pixels (`dpi::handle` converts).
+    fn handle_raw(&mut self, ctx: Ctx, req: Request, fx: &mut Effects) -> Reply {
         self.queue(ctx.key());
         self.now = self.now.max(ctx.now);
         match req {
-            Request::Desktop {} => Reply::Desktop {
-                desktop: self.desktop,
-                message: self.message,
-                width: self.screen.0,
-                height: self.screen.1,
-                work: self.display.work,
-                interactive: self.display.interactive,
-                dpi: self.system_dpi,
-            },
+            Request::Desktop {} => self.desktop_reply(ctx.key()),
             Request::RegisterEvent { .. } | Request::Queue {} => Reply::Ok {},
             Request::RegisterClass { spec } => self.register_class(ctx, spec),
             Request::UnregisterClass { class, .. } => self.unregister_class(ctx, class),
@@ -2228,6 +2237,8 @@ impl Wm {
                 None => err(ERROR_INVALID_WINDOW_HANDLE),
             },
             Request::Dpi { set, process, awareness } => self.dpi_op(ctx, set, process, awareness),
+            Request::SetScale { step } => self.set_scale(step, fx),
+            Request::DpiFrame { hwnd } => self.dpi_frame(hwnd),
             Request::Post { hwnd, msg, w, l } => {
                 if hwnd == 0 {
                     return self.post(ctx, ctx.key(), 0, msg, w, l, fx);
@@ -2445,6 +2456,9 @@ impl Window {
             min_pos: (-1, -1),
             helper: false,
             menu_bar: 0,
+            own: None,
+            frame_pin: 0,
+            suggest: None,
         }
     }
 }
