@@ -1181,16 +1181,13 @@ fn run(args: &[String]) -> Result<u8, String> {
 /// cannot be read.
 fn publisher_of(file: &str) -> Option<String> {
     use poly_rt::io::Read;
-    const MOST: u32 = 1 << 20;
     let mut f = poly_rt::fs::File::open(file).ok()?;
-    let mut head = vec![0u8; 4096];
-    let n = f.read(&mut head).ok()?;
-    head.truncate(n);
-    let (offset, size) = poly_x509::authenticode::certificate_table(&head)?;
-    f.seek(offset as i64, poly_rt::abi::Whence::Start).ok()?;
-    let mut table = vec![0u8; size.min(MOST) as usize];
-    f.read_exact(&mut table).ok()?;
-    poly_x509::authenticode::publisher(&table)
+    poly_x509::authenticode::publisher_of(&mut |at, buf| {
+        if f.seek(at as i64, poly_rt::abi::Whence::Start).is_err() {
+            return 0;
+        }
+        f.read(buf).unwrap_or(0)
+    })
 }
 
 fn add_fds(fds: &mut Vec<os::PollFd>, more: impl IntoIterator<Item = os::PollFd>) -> core::ops::Range<usize> {

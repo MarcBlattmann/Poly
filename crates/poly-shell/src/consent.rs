@@ -217,7 +217,7 @@ impl Consent {
         text.draw_style(fb, clip, tx as f32, text.centre(y, line, strong), right, &p.program, strong, ink, 255);
         y += line;
         let publisher = match &p.publisher {
-            Some(name) => alloc::format!("Publisher: {name} (signature not verified)"),
+            Some(name) => alloc::format!("Publisher: {}", poly_x509::authenticode::publisher_label(name)),
             None => String::from("Publisher: Unknown"),
         };
         text.draw_style(
