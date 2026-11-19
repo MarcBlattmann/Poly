@@ -346,3 +346,4 @@ shell32!DragQueryFileW 4
 shell32!SHAppBarMessage 2
 shell32!SHChangeNotify 4
 shell32!SHGetFileInfoW 5
+gdi32!SetBrushOrgEx 4
