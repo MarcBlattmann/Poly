@@ -68,3 +68,34 @@ rule: a command for the state a window is already in changes nothing.
 - Open: the maximized window leaves a 5-pixel strip at the right edge at 200 %, as before this
   change. Chrome's `WM_NCCALCSIZE` answer for a maximized window is not the whole hidden frame
   there. That is not addressed here.
+
+## Addendum: opening a downloaded file
+
+QA bug 7. "Open" in Chrome's download bubble reaches Poly as `ShellExecuteExW` → the desktop's
+shell open (ADR 0223) → `Files --open PATH`. Files had no app for text. It ran `vi` in a Terminal
+and then showed its own window over it. Chrome's second start for the file also failed, as
+described below.
+
+1. **The browser is the viewer of what it can show.** Chrome for Windows' launcher entry lists
+   text, HTML, PDF and the common pictures in `MimeType=`, and its `Exec` ends in `%U` (the
+   launcher drops it, Files fills in the files). Linux Chromium's entry lists the same types. They
+   are not defaults in `mimeapps.list`: an app installed for one of these types is not overruled.
+   `.exe` and `.deb` keep going to Poly's installers (ADR 0173, ADR 0230).
+2. **A path argument naming a file reaches a Windows program as its DOS path.** This applies to
+   a Windows program started from Poly's side (a launcher entry, Files, `xdg-open`): an argument
+   that is an absolute path of an existing file or folder becomes its DOS path.
+   `/nt/c/Users/poly/Downloads/a.txt` is `C:\Users\poly\Downloads\a.txt`, other paths are on
+   `Z:`. A switch such as `/S` names no file and stays as it is (`layout::dos_argument`).
+3. **`WM_COPYDATA` sent to another thread carries its bytes.** Learn (`WM_COPYDATA`) says the
+   data is copied to the receiving process. `SendMessage` of `WM_COPYDATA` sends `dwData` and
+   the bytes (`Request::SendCopy`). The receiver's `user32` gives its procedure a
+   `COPYDATASTRUCT` of its own, valid while the procedure runs. Before, the receiver got the
+   sender's pointer. Chrome's second start hands its command line to the running Chrome this way,
+   so the running Chrome read memory that was not there, exited, and the second start opened a
+   new browser ("Restore pages?"). Now the running Chrome opens the file in a new tab, in front.
+4. **Files leaves the front to the app that opened the file**, also to the terminal's editor
+   for a text that no app claims. It shows its own window only when nothing opened the file.
+
+Open: Files starts the app, so the compositor's launch feedback cannot see the second
+`chrome.exe` exit after its hand-over. The busy pointer then waits for its 30 s timeout over the
+desktop.
