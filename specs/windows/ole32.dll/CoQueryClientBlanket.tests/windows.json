@@ -2,8 +2,8 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
   "bundle": "merged",
@@ -14,7 +14,7 @@
       "name": "qcb_outside",
       "session": "interactive",
       "token": "elevated",
-      "exe_sha256": "03d8a4de34bd11dfa580f7f7e711c87d47331f5ea5b827789d17d7b27010c0a9",
+      "exe_sha256": "dd520b81e8d2443e952d370c8e37a71e1f2f5513c6adb306c8f01d89c1aa8dcf",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -24,13 +24,13 @@
       "output": "no COM on the thread: CoQueryClientBlanket = 0x80010117 authn=unset authz=unset level=unset imp=unset caps=0x0\nno COM on the thread: CoQueryClientBlanket with NULL outputs = 0x80010117\nno COM on the thread: CoGetCallContext(IServerSecurity) = 0x80010117 pointer 0\nsingle-threaded apartment: CoQueryClientBlanket = 0x80010117 authn=unset authz=unset level=unset imp=unset caps=0x0\nsingle-threaded apartment: CoQueryClientBlanket with NULL outputs = 0x80010117\nsingle-threaded apartment: CoGetCallContext(IServerSecurity) = 0x80010117 pointer 0\nmultithreaded apartment: CoQueryClientBlanket = 0x80010117 authn=unset authz=unset level=unset imp=unset caps=0x0\nmultithreaded apartment: CoQueryClientBlanket with NULL outputs = 0x80010117\nmultithreaded apartment: CoGetCallContext(IServerSecurity) = 0x80010117 pointer 0\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 60
+      "ms": 58
     },
     {
       "name": "qcb_service",
       "session": "interactive",
       "token": "elevated",
-      "exe_sha256": "12f613b2ebce24541d2a0b0024cf9cefe31b899197a906ef6f17e2d5d1489bf1",
+      "exe_sha256": "3530259f26c976274ef7a17f0342b43155addf196822dbc35e24e26df8a1b3bf",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -40,13 +40,13 @@
       "output": "elevated token: 1\nelevated client, activation: CoCreateInstance = 0x00000000\nelevated client, direct call: CreateInstance = 0x00000000\nstandard client, direct call: the standard client ended with 0\nstandard client, activation: the standard client ended with 0\nservice removed: stopped 1 deleted 1\nsrv: ---- elevated client, activation: CoCreateInstance\nsrv: service main argc=1\nsrv: service arg0=PolyWsSecSvc21\nsrv: start\nsrv: init mta 0x00000000\nsrv: CoInitializeSecurity(acl) = 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create bl: CoGetCallContext(IServerSecurity) = 0x00000000 pointer 1\nsrv: create bl: IServerSecurity::QueryBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create bl: CoQueryClientBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create -> 0x00000000\nsrv: ---- elevated client, direct call\nsrv: create outer=null iid=IUnknown\nsrv: create bl: CoGetCallContext(IServerSecurity) = 0x00000000 pointer 1\nsrv: create bl: IServerSecurity::QueryBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create bl: CoQueryClientBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create -> 0x00000000\nsrv: ---- standard client, direct call\nsrv: ---- client: direct call\nsrv: create outer=null iid=IUnknown\nsrv: create bl: CoGetCallContext(IServerSecurity) = 0x00000000 pointer 1\nsrv: create bl: IServerSecurity::QueryBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create bl: CoQueryClientBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create -> 0x00000000\nsrv: cli: direct = 0x00000000 (type=Some(1) implevel=None elev=Some(0) elevtype=Some(3) il=Some(8192) session=Some(1) admin_member=None user=same)\nsrv: ---- standard client, activation\nsrv: create outer=null iid=IUnknown\nsrv: create bl: CoGetCallContext(IServerSecurity) = 0x00000000 pointer 1\nsrv: create bl: IServerSecurity::QueryBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create bl: CoQueryClientBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create -> 0x00000000\nsrv: cli: create = 0x00000000 (type=Some(1) implevel=None elev=Some(0) elevtype=Some(3) il=Some(8192) session=Some(1) admin_member=None user=same)\nsrv: revoke -> 0x00000000\nsrv: exit\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 694
+      "ms": 655
     },
     {
       "name": "qcb_std",
       "session": "interactive",
       "token": "standard",
-      "exe_sha256": "196c6785ecff8d1cc0d456104f981a5b1279ece461f491d0cc54d99406e5a233",
+      "exe_sha256": "34dcd5a2f713a15f059815337738f8e62ca79d93d7f7743203d39039e9286982",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -56,7 +56,7 @@
       "output": "activation: CoCreateInstance = 0x00000000\nclass object = 0x00000000\ndirect call, default proxy blanket: CreateInstance = 0x00000000\ndirect call, impersonation level IDENTIFY: CreateInstance = 0x00000000\ndirect call, impersonation level IMPERSONATE: CreateInstance = 0x00000000\ndirect call, impersonation level DELEGATE, PKT_PRIVACY: CreateInstance = 0x00000000\nsrv: ---- activation: CoCreateInstance\nsrv: start\nsrv: init mta 0x00000000\nsrv: create outer=null iid=IUnknown\nsrv: create bl: CoGetCallContext(IServerSecurity) = 0x00000000 pointer 1\nsrv: create bl: IServerSecurity::QueryBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create bl: CoQueryClientBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: CoQueryClientBlanket all NULL = 0x00000000\nsrv: create args: only the authentication service = 0x00000000 10\nsrv: create args: only the level = 0x00000000 6\nsrv: create args: only the server principal name = 0x00000000 NULL\nsrv: create args: only the client name = 0x00000000 privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: IServerSecurity::QueryBlanket all NULL = 0x00000000\nsrv: create args: IServerSecurity::QueryBlanket only the authentication service = 0x00000000 10\nsrv: create -> 0x00000000\nsrv: ---- direct call, default proxy blanket\nsrv: create outer=null iid=IUnknown\nsrv: create bl: CoGetCallContext(IServerSecurity) = 0x00000000 pointer 1\nsrv: create bl: IServerSecurity::QueryBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create bl: CoQueryClientBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: CoQueryClientBlanket all NULL = 0x00000000\nsrv: create args: only the authentication service = 0x00000000 10\nsrv: create args: only the level = 0x00000000 6\nsrv: create args: only the server principal name = 0x00000000 NULL\nsrv: create args: only the client name = 0x00000000 privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: IServerSecurity::QueryBlanket all NULL = 0x00000000\nsrv: create args: IServerSecurity::QueryBlanket only the authentication service = 0x00000000 10\nsrv: create -> 0x00000000\nsrv: ---- direct call, impersonation level IDENTIFY\nsrv: create outer=null iid=IUnknown\nsrv: create bl: CoGetCallContext(IServerSecurity) = 0x00000000 pointer 1\nsrv: create bl: IServerSecurity::QueryBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create bl: CoQueryClientBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: CoQueryClientBlanket all NULL = 0x00000000\nsrv: create args: only the authentication service = 0x00000000 10\nsrv: create args: only the level = 0x00000000 6\nsrv: create args: only the server principal name = 0x00000000 NULL\nsrv: create args: only the client name = 0x00000000 privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: IServerSecurity::QueryBlanket all NULL = 0x00000000\nsrv: create args: IServerSecurity::QueryBlanket only the authentication service = 0x00000000 10\nsrv: create -> 0x00000000\nsrv: ---- direct call, impersonation level IMPERSONATE\nsrv: create outer=null iid=IUnknown\nsrv: create bl: CoGetCallContext(IServerSecurity) = 0x00000000 pointer 1\nsrv: create bl: IServerSecurity::QueryBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create bl: CoQueryClientBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: CoQueryClientBlanket all NULL = 0x00000000\nsrv: create args: only the authentication service = 0x00000000 10\nsrv: create args: only the level = 0x00000000 6\nsrv: create args: only the server principal name = 0x00000000 NULL\nsrv: create args: only the client name = 0x00000000 privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: IServerSecurity::QueryBlanket all NULL = 0x00000000\nsrv: create args: IServerSecurity::QueryBlanket only the authentication service = 0x00000000 10\nsrv: create -> 0x00000000\nsrv: ---- direct call, impersonation level DELEGATE, PKT_PRIVACY\nsrv: create outer=null iid=IUnknown\nsrv: create bl: CoGetCallContext(IServerSecurity) = 0x00000000 pointer 1\nsrv: create bl: IServerSecurity::QueryBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create bl: CoQueryClientBlanket = 0x00000000 authn=10 authz=0 level=6 imp=1 caps=0x0 princ=<null> privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: CoQueryClientBlanket all NULL = 0x00000000\nsrv: create args: only the authentication service = 0x00000000 10\nsrv: create args: only the level = 0x00000000 6\nsrv: create args: only the server principal name = 0x00000000 NULL\nsrv: create args: only the client name = 0x00000000 privs has_domain=1 domain_is_computer=1 user_is_client=1\nsrv: create args: IServerSecurity::QueryBlanket all NULL = 0x00000000\nsrv: create args: IServerSecurity::QueryBlanket only the authentication service = 0x00000000 10\nsrv: create -> 0x00000000\nsrv: revoke -> 0x00000000\nsrv: exit\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 305
+      "ms": 319
     }
   ]
 }

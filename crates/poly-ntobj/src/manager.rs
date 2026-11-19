@@ -82,14 +82,31 @@ pub struct ObjectManager {
 ///   and `\BaseNamedObjects\Local` → `\BaseNamedObjects`, so the `Global\`
 ///   and `Local\` prefixes of "Kernel object namespaces" (Learn) work while
 ///   there is one session. To be confirmed by the spec agent.
-pub const WELL_KNOWN_DIRECTORIES: [&str; 7] =
-    ["\\??", "\\GLOBAL??", "\\Device", "\\BaseNamedObjects", "\\Sessions", "\\KernelObjects", "\\KnownDlls"];
+/// - The interactive logon is session 1 (ADR 0222). Learn ("Kernel object namespaces"): a
+///   session's named objects live in `\Sessions\<n>\BaseNamedObjects`; `\Sessions\BNOLINKS\<n>` is
+///   the name the MSYS2 runtime of Git for Windows opens for it (its own error message on Poly).
+///   Both are links to `\BaseNamedObjects`: Poly keeps one namespace for named objects, as
+///   `Local\` does.
+pub const WELL_KNOWN_DIRECTORIES: [&str; 9] = [
+    "\\??",
+    "\\GLOBAL??",
+    "\\Device",
+    "\\BaseNamedObjects",
+    "\\Sessions",
+    "\\Sessions\\1",
+    "\\Sessions\\BNOLINKS",
+    "\\KernelObjects",
+    "\\KnownDlls",
+];
 
 /// The symbolic links every namespace starts with: (link, target).
-pub const WELL_KNOWN_LINKS: [(&str, &str); 3] = [
+pub const WELL_KNOWN_LINKS: [(&str, &str); 6] = [
     ("\\DosDevices", "\\??"),
     ("\\BaseNamedObjects\\Global", "\\BaseNamedObjects"),
     ("\\BaseNamedObjects\\Local", "\\BaseNamedObjects"),
+    ("\\Sessions\\1\\BaseNamedObjects", "\\BaseNamedObjects"),
+    ("\\Sessions\\BNOLINKS\\0", "\\BaseNamedObjects"),
+    ("\\Sessions\\BNOLINKS\\1", "\\BaseNamedObjects"),
 ];
 
 impl Default for ObjectManager {

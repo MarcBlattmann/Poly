@@ -2,8 +2,8 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64",
     "session": "interactive",
     "token": "elevated"
@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "appid_access_a",
-      "exe_sha256": "33e99e741db1715fd1c05e0e52014e29c6e79320622c349fb2d9e2edb43916c0",
+      "exe_sha256": "c1acb3a4a9bf40888fd55665c3b84c95ad6b7efe22f6143badcb22521d1951fa",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -24,11 +24,11 @@
       "output": "elevated token: 1\nAccessPermission absent (server uses the AppID): elevated client 0x00000000 standard client 0x00000000 (process ended with 0); server CoInitializeSecurity 0x00000000\nAccessPermission O:BAG:BAD:(A;;0x3;;;WD) (server uses the AppID): elevated client 0x00000000 standard client 0x00000000 (process ended with 0); server CoInitializeSecurity 0x00000000\nAccessPermission O:BAG:BAD:(A;;0x3;;;BA) (server uses the AppID): elevated client 0x00000000 standard client 0x80070005 (process ended with 0); server CoInitializeSecurity 0x00000000\nAccessPermission O:BAG:BAD:(A;;0x3;;;BU) (server uses the AppID): elevated client 0x00000000 standard client 0x00000000 (process ended with 0); server CoInitializeSecurity 0x00000000\nAccessPermission O:BAG:BAD:(A;;0x3;;;SY) (server uses the AppID): elevated client 0x80070005 standard client 0x80070005 (process ended with 0); server CoInitializeSecurity 0x00000000\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 3489
+      "ms": 3562
     },
     {
       "name": "appid_launch_a",
-      "exe_sha256": "37e63658f92f74ce205c88aabbcc472b677bb2e8801d66bcfe9a62d5f50e20c6",
+      "exe_sha256": "76181a35ab543fca83badc09b325afde8b52b2dfae35f7afeb5cb2003ec96fe6",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -38,11 +38,11 @@
       "output": "elevated token: 1\nLaunchPermission absent: elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;WD): elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;BA): elevated client 0x00000000 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;BU): elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;SY): elevated client 0x80070005 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:(D;;0xb;;;BA)(A;;0xb;;;WD): elevated client 0x80070005 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0x1;;;WD): elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 4096
+      "ms": 3759
     },
     {
       "name": "appid_launch_b",
-      "exe_sha256": "5c6d10e560dc165c211006c49fa54c19b68e1c8ce91f0dc925fdb1be112c86a5",
+      "exe_sha256": "04daa1aa49d49c39d0be912ea57fdbd5dfa2ca4772b1c29802a5f42a48eaba14",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -52,7 +52,7 @@
       "output": "elevated token: 1\nLaunchPermission O:BAG:BAD:(A;;0x2;;;WD): elevated client 0x80040153 standard client 0x80040153 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0x8;;;WD): elevated client 0x80040153 standard client 0x80040153 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xa;;;WD): elevated client 0x80040153 standard client 0x80040153 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0x3;;;WD): elevated client 0x80070005 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:: elevated client 0x80070005 standard client 0x80070005 (process ended with 0)\nLaunchPermission O:BAG:BAD:(A;;0xb;;;IU): elevated client 0x00000000 standard client 0x00000000 (process ended with 0)\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 2473
+      "ms": 2378
     }
   ]
 }
