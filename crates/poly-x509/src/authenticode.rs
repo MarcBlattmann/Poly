@@ -196,5 +196,3 @@ mod tests {
         assert_eq!(certificate_table(b"MZ"), None);
     }
 }
-
-

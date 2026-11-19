@@ -16,12 +16,12 @@ unsafe extern "system" {
         name: *const u16,
         access: u32,
         share: u32,
-        sa: *const u8,
+        sa: *const c_void,
         disp: u32,
         flags: u32,
         tpl: isize,
     ) -> isize;
-    fn ReadFile(h: isize, buf: *mut u8, n: u32, read: *mut u32, ov: *mut u8) -> i32;
+    fn ReadFile(h: isize, buf: *mut u8, n: u32, read: *mut u32, ov: *mut c_void) -> i32;
     fn GetFileSizeEx(h: isize, size: *mut i64) -> i32;
     fn CloseHandle(h: isize) -> i32;
     fn GetProcessHeap() -> *mut u8;
