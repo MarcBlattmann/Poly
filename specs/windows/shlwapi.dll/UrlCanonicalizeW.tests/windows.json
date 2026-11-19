@@ -2,17 +2,17 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "merged",
-  "runner": "poly-oracle.ps1 2 (-Token)",
-  "started": null,
+  "bundle": "e15cff448738",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-19T20:14:59Z",
   "tests": [
     {
-      "name": "uc_basic",
-      "exe_sha256": "345f3e7e09b2e3aaeaef40ae18bdfa36c634fab2a43fad4e2ae1d4eec60b2cf0",
+      "name": "ucanon_basic",
+      "exe_sha256": "5a8308c09303104abf0e0d0a3f5989eb4ab27fd186d386dd7cd426d3f23a9a47",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -22,11 +22,11 @@
       "output": "flags 0x0 <http://www.example.com/a/b> -> hr 0x0, cch 26, <http://www.example.com/a/b>\nflags 0x0 <http://www.example.com> -> hr 0x0, cch 23, <http://www.example.com/>\nflags 0x0 <HTTP://WWW.EXAMPLE.COM/A> -> hr 0x0, cch 24, <http://www.example.com/A>\nflags 0x0 <http://a/./b/../c> -> hr 0x0, cch 17, <http://a/./b/../c>\nflags 0x0 <http://a/b/../../c> -> hr 0x0, cch 10, <http://a/c>\nflags 0x0 <http://a/b/./> -> hr 0x0, cch 11, <http://a/b/>\nflags 0x0 <http://a/b/..> -> hr 0x0, cch 9, <http://a/>\nflags 0x0 <http://a/b/c/../../../d> -> hr 0x0, cch 10, <http://a/d>\nflags 0x0 <http://a//b///c> -> hr 0x0, cch 15, <http://a//b///c>\nflags 0x0 <http://a/b c/d e> -> hr 0x0, cch 16, <http://a/b c/d e>\nflags 0x0 <http://a/b%20c> -> hr 0x0, cch 14, <http://a/b%20c>\nflags 0x0 <http://a/b%2fc> -> hr 0x0, cch 14, <http://a/b%2fc>\nflags 0x0 <http://a/%7euser> -> hr 0x0, cch 16, <http://a/%7euser>\nflags 0x0 <http://a/b?x=1 2&y=./z> -> hr 0x0, cch 22, <http://a/b?x=1 2&y=./z>\nflags 0x0 <http://a/b?q=../c> -> hr 0x0, cch 17, <http://a/b?q=../c>\nflags 0x0 <http://a/b#frag ment> -> hr 0x0, cch 20, <http://a/b#frag ment>\nflags 0x0 <http://a/b\\c\\d> -> hr 0x0, cch 14, <http://a/b/c/d>\nflags 0x0 <http://a\\b> -> hr 0x0, cch 10, <http://a/b>\nflags 0x0 <http://user:pw@host:80/p> -> hr 0x0, cch 21, <http://user:pw@host/p>\nflags 0x0 <http://a/b|c^d{e}f> -> hr 0x0, cch 18, <http://a/b|c^d{e}f>\nflags 0x0 <http://a/<00e9>> -> hr 0x0, cch 10, <http://a/<00e9>>\nflags 0x0 <www.example.com/a/../b> -> hr 0x0, cch 17, <www.example.com/b>\nflags 0x0 <example> -> hr 0x0, cch 7, <example>\nflags 0x0 <a b> -> hr 0x0, cch 3, <a b>\nflags 0x0 </a/./b/../c> -> hr 0x0, cch 4, </a/c>\nflags 0x0 <./a/b> -> hr 0x0, cch 3, <a/b>\nflags 0x0 <..\\a> -> hr 0x0, cch 4, <..\\a>\nflags 0x0 <C:\\a\\b c.txt> -> hr 0x0, cch 22, <file:///C:/a/b%20c.txt>\nflags 0x0 <C:\\a\\.\\b\\..\\c> -> hr 0x0, cch 14, <file:///C:/a/c>\nflags 0x0 <\\\\server\\share\\a b> -> hr 0x0, cch 25, <file://server/share/a%20b>\nflags 0x0 <file:///C:/a/b%20c> -> hr 0x0, cch 18, <file:///C:/a/b%20c>\nflags 0x0 <file:///C:/a b/c> -> hr 0x0, cch 16, <file:///C:/a b/c>\nflags 0x0 <file:///C:\\a\\b> -> hr 0x0, cch 14, <file:///C:/a/b>\nflags 0x0 <file://server/share/a b> -> hr 0x0, cch 23, <file://server/share/a b>\nflags 0x0 <file:///C:/a/./b/../c> -> hr 0x0, cch 14, <file:///C:/a/c>\nflags 0x0 <file:c:/a/b> -> hr 0x0, cch 14, <file:///c:/a/b>\nflags 0x0 <mailto:a@b.c> -> hr 0x0, cch 12, <mailto:a@b.c>\nflags 0x0 <javascript:alert(1)> -> hr 0x0, cch 19, <javascript:alert(1)>\nflags 0x0 <about:blank> -> hr 0x0, cch 11, <about:blank>\nflags 0x0 <res://x.dll/1> -> hr 0x0, cch 13, <res://x.dll/1>\nflags 0x0 <ftp://h/a b> -> hr 0x0, cch 11, <ftp://h/a b>\nflags 0x0 <https://a/b/./c> -> hr 0x0, cch 13, <https://a/b/c>\nflags 0x0 <x-custom://a/./b/../c d> -> hr 0x0, cch 16, <x-custom://a/c d>\nflags 0x0 <> -> hr 0x0, cch 0, <>\nflags 0x0 <  http://a/b  > -> hr 0x0, cch 10, <http://a/b>\nflags 0x0 <http://a/b/> -> hr 0x0, cch 11, <http://a/b/>\nflags 0x0 <http://a/b/.> -> hr 0x0, cch 11, <http://a/b/>\nflags 0x0 <http://a/.> -> hr 0x0, cch 10, <http://a/.>\nflags 0x0 <http://a/..> -> hr 0x0, cch 11, <http://a/..>\nflags 0x0 <http://a/%> -> hr 0x0, cch 10, <http://a/%>\nflags 0x0 <http://a/%zz> -> hr 0x0, cch 12, <http://a/%zz>\nflags 0x0 <http://a/a%20%20b> -> hr 0x0, cch 17, <http://a/a%20%20b>\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 89
+      "ms": 119
     },
     {
-      "name": "uc_buffers",
-      "exe_sha256": "e13bfd4fd5d455462f17faff2959c20a74bc888604d3925979f7d5cc31c0e590",
+      "name": "ucanon_buffers",
+      "exe_sha256": "469d89c3e652f83a6b2d1f7317d6bc38ea83bb5c21bbfbcca2e545a8f2401ca1",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -36,7 +36,7 @@
       "output": "escape grows: capacity 0: hr 0x80070057, cch 0, text len 0, units written (of first 30) 0\nescape grows: capacity 1: hr 0x80004003, cch 15, text len 0, units written (of first 30) 0\nescape grows: capacity 13: hr 0x80004003, cch 15, text len 0, units written (of first 30) 0\nescape grows: capacity 14: hr 0x80004003, cch 15, text len 0, units written (of first 30) 0\nescape grows: capacity 15: hr 0x0, cch 14, text len 14, units written (of first 30) 15\nescape grows: capacity 16: hr 0x0, cch 14, text len 14, units written (of first 30) 15\nescape grows: capacity 100: hr 0x0, cch 14, text len 14, units written (of first 30) 15\nspace kept: capacity 0: hr 0x80070057, cch 0, text len 0, units written (of first 30) 0\nspace kept: capacity 12: hr 0x80004003, cch 13, text len 0, units written (of first 30) 0\nspace kept: capacity 13: hr 0x0, cch 12, text len 12, units written (of first 30) 13\nspace kept: capacity 14: hr 0x0, cch 12, text len 12, units written (of first 30) 13\nunchanged: capacity 0: hr 0x80070057, cch 0, text len 0, units written (of first 30) 0\nunchanged: capacity 12: hr 0x80004003, cch 14, text len 0, units written (of first 30) 0\nunchanged: capacity 13: hr 0x80004003, cch 14, text len 0, units written (of first 30) 0\nunchanged: capacity 14: hr 0x0, cch 13, text len 13, units written (of first 30) 14\nunchanged: capacity 15: hr 0x0, cch 13, text len 13, units written (of first 30) 14\nshrinks: capacity 5: hr 0x80004003, cch 18, text len 0, units written (of first 30) 0\nshrinks: capacity 12: hr 0x80004003, cch 18, text len 0, units written (of first 30) 0\nshrinks: capacity 14: hr 0x80004003, cch 18, text len 0, units written (of first 30) 0\nNULL url: hr 0x80070057, cch 50\nNULL output buffer, capacity 50: hr 0x80070057, cch 50\nNULL cch: hr 0x80070057\nNULL output buffer, capacity 0: hr 0x80070057, cch 0\nempty url: capacity 10: hr 0x0, cch 0, text len 0, units written (of first 30) 1\nempty url, capacity 0: capacity 0: hr 0x80070057, cch 0, text len 0, units written (of first 30) 0\nempty url, capacity 1: capacity 1: hr 0x0, cch 0, text len 0, units written (of first 30) 1\nin place: hr 0x0, cch 14, <http://a/./b c>\nlong url (250 units, one space): hr 0x0, cch 251\nlong url (310 units): hr 0x0, cch 310\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 47
+      "ms": 52
     }
   ]
 }
