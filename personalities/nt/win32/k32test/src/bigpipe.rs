@@ -88,8 +88,15 @@ pub fn run() {
             core::ptr::null(),
         );
         check(server != INVALID_HANDLE_VALUE);
-        let client =
-            CreateFileW(name.as_ptr(), GENERIC_READ_WRITE, 0, core::ptr::null(), OPEN_EXISTING, FILE_FLAG_OVERLAPPED, 0);
+        let client = CreateFileW(
+            name.as_ptr(),
+            GENERIC_READ_WRITE,
+            0,
+            core::ptr::null(),
+            OPEN_EXISTING,
+            FILE_FLAG_OVERLAPPED,
+            0,
+        );
         check(client != INVALID_HANDLE_VALUE);
         let src = VirtualAlloc(core::ptr::null_mut(), LEN, MEM_COMMIT_RESERVE, PAGE_READWRITE);
         let dst = VirtualAlloc(core::ptr::null_mut(), LEN, MEM_COMMIT_RESERVE, PAGE_READWRITE);
