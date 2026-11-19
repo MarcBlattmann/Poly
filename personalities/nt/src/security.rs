@@ -93,6 +93,11 @@ pub fn inherit_token(
         (Some(id), _) => id,
         (None, Some(c)) => process_token(sys, c, thread)?,
         (None, None) => {
+            // A process the kernel gave its token before its first thread (the shell stand-in
+            // of [`become_shell`]) keeps it: the logon's token is only the default.
+            if sys.objects.security.process_token(child).is_some() {
+                return Ok(());
+            }
             let first = sys.logon.token();
             install_process_token(sys, child, first, thread, None)?;
             return Ok(());
@@ -185,21 +190,35 @@ pub fn assign_process_security(
 /// creator asked for (`lpProcessAttributes`, `lpThreadAttributes`), on top of the defaults. Called
 /// after the creator's handles were opened, so that a descriptor that allows nobody anything does
 /// not keep the creator from its own handles (specs/windows/kernel32.dll/DuplicateHandle.yaml).
+///
+/// A process made with a given token (`given_token`: `CreateProcessAsUserW` and the others that
+/// take one) gets the defaults of that token instead of its creator's (Learn,
+/// "CreateProcessAsUserW", `lpProcessAttributes` and `lpThreadAttributes`: "The default security
+/// descriptor is that of the user referenced in the hToken parameter"), its label included. They
+/// apply here too, so that the creator keeps the handles it was given (ADR 0235).
 pub fn assign_explicit_process_security(
     sys: &mut NtSystem,
     child: ProcessId,
     creator: Option<&Caller>,
+    given_token: bool,
     process: Option<(poly_ntobj::ObjectId, Option<&[u8]>)>,
     thread: Option<(poly_ntobj::ObjectId, Option<&[u8]>)>,
 ) {
-    let token = creator
-        .and_then(|c| sys.objects.security.effective(c.process, c.thread))
-        .or_else(|| sys.objects.security.process_token(child));
-    if let Some((p, Some(sd))) = process {
-        sys.objects.assign_security(p, ObjectType::Process, token, Some(sd));
+    let own = sys.objects.security.process_token(child);
+    let token = if given_token {
+        own
+    } else {
+        creator.and_then(|c| sys.objects.security.effective(c.process, c.thread)).or(own)
+    };
+    if let Some((p, sd)) = process
+        && (given_token || sd.is_some())
+    {
+        sys.objects.assign_security(p, ObjectType::Process, token, sd);
     }
-    if let Some((t, Some(sd))) = thread {
-        sys.objects.assign_security(t, ObjectType::Thread, token, Some(sd));
+    if let Some((t, sd)) = thread
+        && (given_token || sd.is_some())
+    {
+        sys.objects.assign_security(t, ObjectType::Thread, token, sd);
     }
 }
 
@@ -1245,6 +1264,35 @@ mod tests {
         assert_eq!(f.call(Service::OpenProcessToken, &[SELF, 0, out]), STATUS_ACCESS_DENIED);
         let g = open(&mut f, 0x8000_0000);
         assert_eq!(f.call(Service::QueryInformationToken, &[g, 20, buf, 4, ret]), STATUS_SUCCESS);
+    }
+
+    #[test]
+    fn the_shell_keeps_the_filtered_token_when_it_starts() {
+        // The kernel makes the shell stand-in, gives it the filtered token, then starts it; the
+        // start must not put the (elevated) logon's token back (ADR 0222, 0235).
+        let mut f = Fake::new();
+        f.sys.logon = poly_security::token::Logon::Elevated;
+        let pid = poly_ntobj::ProcessId(77);
+        let thread = poly_ntobj::ThreadRef(0);
+        super::become_shell(&mut f.sys, pid, thread).unwrap();
+        super::inherit_token(&mut f.sys, pid, None, None, thread).unwrap();
+        let id = f.sys.objects.security.process_token(pid).unwrap();
+        let t = f.sys.objects.security.token(id).unwrap();
+        assert_eq!(t.elevation_type, poly_security::token::TOKEN_ELEVATION_TYPE_LIMITED);
+        assert!(!t.elevated);
+        assert_eq!(t.integrity_rid(), poly_security::sid::rid::SECURITY_MANDATORY_MEDIUM_RID);
+        // A process started from a copy of it (CreateProcessWithTokenW) is standard too.
+        let child = poly_ntobj::ProcessId(78);
+        super::inherit_token(&mut f.sys, child, Some(pid), Some(id), thread).unwrap();
+        let c = f.sys.objects.security.process_token(child).unwrap();
+        let c = f.sys.objects.security.token(c).unwrap();
+        assert_eq!(c.elevation_type, poly_security::token::TOKEN_ELEVATION_TYPE_LIMITED);
+        assert_eq!(c.integrity_rid(), poly_security::sid::rid::SECURITY_MANDATORY_MEDIUM_RID);
+        // Without a token of its own, a first process gets the logon's.
+        let other = poly_ntobj::ProcessId(79);
+        super::inherit_token(&mut f.sys, other, None, None, thread).unwrap();
+        let o = f.sys.objects.security.process_token(other).unwrap();
+        assert!(f.sys.objects.security.token(o).unwrap().elevated);
     }
 
     #[test]

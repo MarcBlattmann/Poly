@@ -78,6 +78,7 @@ pub mod security;
 pub mod services;
 pub mod sync;
 pub mod sysinfo;
+pub mod sysproc;
 pub mod system;
 pub mod threads;
 pub mod trace;
@@ -302,6 +303,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         PolyProcessList => proclist::process_list(k, regs),
         NotifyChangeDirectoryFile => io::notify::notify_change_directory_file(k, regs),
         PolyRequestElevation => consent::request_elevation(k, regs),
+        PolyStartSystemProcess => sysproc::start_system_process(k, regs),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
         QuerySystemTime => sysinfo::query_system_time(k, regs),

@@ -1467,6 +1467,7 @@ fn start_params(
                         &mut s.sys,
                         pid,
                         Some(&h.caller),
+                        h.token.is_some(),
                         proc.object.map(|o| (o, h.process_security.as_deref())),
                         proc.threads.first().map(|t| (t.object, h.thread_security.as_deref())),
                     );

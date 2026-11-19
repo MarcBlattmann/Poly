@@ -211,6 +211,16 @@ unsafe extern "system" {
     fn CloseServiceHandle(h: isize) -> i32;
 }
 
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
+unsafe extern "system" {
+    /// Poly's start of the system's own programs as the system (ADR 0235).
+    fn PolyStartSystemProcess(program: usize) -> u32;
+}
+
+/// `PolyStartSystemProcess`'s number of the Task Scheduler.
+const SYSTEM_PROCESS_TASK_SCHEDULER: usize = 2;
+
 /// `SC_MANAGER_CONNECT`, `SERVICE_START` (winsvc.h); `ERROR_SERVICE_ALREADY_RUNNING`.
 const SC_MANAGER_CONNECT: u32 = 1;
 const SERVICE_START: u32 = 0x10;
@@ -238,9 +248,9 @@ fn start_service() -> bool {
     }
 }
 
-/// Start the scheduler unless another process did: the `Schedule` service, or (no service, no
-/// right to start it) `C:\Windows\System32\schedsvc.exe` as a plain process; wait until its pipe
-/// exists (10 s at most). Whether it runs.
+/// Start the scheduler unless another process did: the `Schedule` service (by the caller, or by
+/// the system for a caller without the right), or (no such service) `C:\Windows\System32\schedsvc.exe`
+/// as a plain process; wait until its pipe exists (10 s at most). Whether it runs.
 fn start_scheduler() -> bool {
     let mname = wide(START_MUTEX);
     // SAFETY: a named mutex; closed below.
@@ -250,7 +260,10 @@ fn start_scheduler() -> bool {
         unsafe { WaitForSingleObject(m, 15_000) };
     }
     let mut up = running();
-    if !up && start_service() {
+    // The `Schedule` service, started by the caller or, for a caller that may not start it, by
+    // the system (ADR 0235): either way the service manager runs it as LocalSystem.
+    // SAFETY: a plain system call.
+    if !up && (start_service() || unsafe { PolyStartSystemProcess(SYSTEM_PROCESS_TASK_SCHEDULER) } == 0) {
         for _ in 0..1000 {
             if running() {
                 up = true;

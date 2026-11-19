@@ -71,19 +71,6 @@ unsafe extern "system" {
     pub(crate) fn WriteFile(file: Handle, buf: *const u8, len: u32, written: *mut u32, overlapped: *mut c_void) -> i32;
     pub(crate) fn CreateMutexW(security: *const c_void, owner: i32, name: *const u16) -> Handle;
     pub(crate) fn ReleaseMutex(mutex: Handle) -> i32;
-    pub(crate) fn CreateProcessW(
-        app: *const u16,
-        cmd: *mut u16,
-        process_security: *const c_void,
-        thread_security: *const c_void,
-        inherit: i32,
-        flags: u32,
-        env: *const c_void,
-        dir: *const u16,
-        startup: *const StartupInfo,
-        info: *mut ProcessInformation,
-    ) -> i32;
-    pub(crate) fn GetSystemDirectoryW(buf: *mut u16, size: u32) -> u32;
     pub(crate) fn GetModuleHandleW(name: *const u16) -> usize;
 }
 
@@ -100,47 +87,6 @@ unsafe extern "system" {
         len: *mut u32,
     ) -> i32;
     pub(crate) fn RegCloseKey(key: isize) -> i32;
-}
-
-/// `STARTUPINFOW` (`processthreadsapi.h`).
-#[repr(C)]
-pub(crate) struct StartupInfo {
-    pub cb: u32,
-    pub reserved: *mut u16,
-    pub desktop: *mut u16,
-    pub title: *mut u16,
-    pub pos: [u32; 7],
-    pub flags: u32,
-    pub show_window: u16,
-    pub cb_reserved2: u16,
-    pub reserved2: *mut u8,
-    pub std: [Handle; 3],
-}
-
-impl StartupInfo {
-    pub(crate) fn new() -> StartupInfo {
-        StartupInfo {
-            cb: core::mem::size_of::<StartupInfo>() as u32,
-            reserved: core::ptr::null_mut(),
-            desktop: core::ptr::null_mut(),
-            title: core::ptr::null_mut(),
-            pos: [0; 7],
-            flags: 0,
-            show_window: 0,
-            cb_reserved2: 0,
-            reserved2: core::ptr::null_mut(),
-            std: [0; 3],
-        }
-    }
-}
-
-/// `PROCESS_INFORMATION`.
-#[repr(C)]
-pub(crate) struct ProcessInformation {
-    pub process: Handle,
-    pub thread: Handle,
-    pub pid: u32,
-    pub tid: u32,
 }
 
 /// `INVALID_HANDLE_VALUE`.

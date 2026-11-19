@@ -140,10 +140,20 @@ pub(crate) fn activation(req: &Request, start: bool) -> Result<Reply, Failure> {
     Err(Failure::NoServer)
 }
 
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
+unsafe extern "system" {
+    /// Poly's start of the system's own programs as the system (ADR 0235).
+    fn PolyStartSystemProcess(program: usize) -> u32;
+}
+
+/// `PolyStartSystemProcess`'s number of the COM activation process.
+const SYSTEM_PROCESS_COM_ACTIVATION: usize = 1;
+
 /// The name of the mutex that lets one process start `comlaunch.exe`.
 const START_MUTEX: &str = "PolyComActivationStart";
 
-/// Start `C:\Windows\System32\comlaunch.exe` unless another process did; wait until its pipe exists
+/// Have the kernel start `C:\Windows\System32\comlaunch.exe` unless another process did; wait until its pipe exists
 /// (10 s at most). Whether it runs.
 fn start_activation_process() -> bool {
     let name = wide(START_MUTEX);
@@ -169,34 +179,10 @@ fn start_activation_process() -> bool {
     };
     let mut up = running();
     if !up {
-        let mut dir = [0u16; 260];
-        // SAFETY: the buffer holds 260 units.
-        let n = unsafe { GetSystemDirectoryW(dir.as_mut_ptr(), 260) } as usize;
-        let mut cmd: Vec<u16> = Vec::new();
-        cmd.push(u16::from(b'"'));
-        cmd.extend_from_slice(&dir[..n.min(259)]);
-        cmd.extend("\\comlaunch.exe\"".encode_utf16());
-        cmd.push(0);
-        let si = StartupInfo::new();
-        let mut pi = ProcessInformation { process: 0, thread: 0, pid: 0, tid: 0 };
-        // SAFETY: `cmd` is mutable and NUL-terminated; live structures. CREATE_NO_WINDOW (0x0800_0000).
-        let ok = unsafe {
-            CreateProcessW(
-                core::ptr::null(),
-                cmd.as_mut_ptr(),
-                core::ptr::null(),
-                core::ptr::null(),
-                0,
-                0x0800_0000,
-                core::ptr::null(),
-                core::ptr::null(),
-                &si,
-                &mut pi,
-            )
-        };
-        if ok != 0 {
-            close(pi.thread);
-            close(pi.process);
+        // The kernel starts it as LocalSystem, as Windows runs its activation service (ADR 0235).
+        // SAFETY: a plain system call.
+        let status = unsafe { PolyStartSystemProcess(SYSTEM_PROCESS_COM_ACTIVATION) };
+        if status == 0 {
             for _ in 0..1000 {
                 if running() {
                     up = true;

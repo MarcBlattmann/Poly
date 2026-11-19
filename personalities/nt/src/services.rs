@@ -343,6 +343,10 @@ pub enum Service {
     /// elevated and waits; `STATUS_SUCCESS` with a full primary token for a yes, `STATUS_CANCELLED`
     /// for a no.
     PolyRequestElevation,
+    /// `PolyStartSystemProcess(Program)`: start one of the system's programs the way the system
+    /// runs it, whoever asks (ADR 0235, [`crate::sysproc`]): 1 the COM activation process as
+    /// LocalSystem, 2 the Task Scheduler service through the service control manager.
+    PolyStartSystemProcess,
 
     // ----- exceptions (ADR 0068)
     /// `NtRaiseException(ExceptionRecord*, ContextRecord*, FirstChance)`:
@@ -506,7 +510,7 @@ pub const TABLE_WIN32K: u32 = 1;
 pub const TABLE_POLY: u32 = 3;
 
 /// Every service with its number and its name as `ntdll` exports it.
-pub const SERVICES: [(Service, u32, &str); 81] = [
+pub const SERVICES: [(Service, u32, &str); 82] = [
     (Service::Close, 0x000, "NtClose"),
     (Service::DuplicateObject, 0x001, "NtDuplicateObject"),
     (Service::QueryObject, 0x002, "NtQueryObject"),
@@ -588,6 +592,7 @@ pub const SERVICES: [(Service, u32, &str); 81] = [
     (Service::PolyPhysicalMemory, (TABLE_POLY << 12) | 4, "PolyPhysicalMemory"),
     (Service::PolyServiceCall, (TABLE_POLY << 12) | 5, "PolyServiceCall"),
     (Service::PolyRequestElevation, (TABLE_POLY << 12) | 6, "PolyRequestElevation"),
+    (Service::PolyStartSystemProcess, (TABLE_POLY << 12) | 7, "PolyStartSystemProcess"),
 ];
 
 /// The registry services (ADR 0066), kept in their own table so the
