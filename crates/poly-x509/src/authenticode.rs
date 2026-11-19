@@ -60,6 +60,49 @@ pub fn certificate_table(headers: &[u8]) -> Option<(u64, u32)> {
     (offset != 0 && size >= 8).then_some((u64::from(offset), size))
 }
 
+/// How much of a file [`publisher_of`] reads for its headers, and the most of a certificate
+/// table it reads.
+pub const HEADERS: usize = 4096;
+pub const MAX_TABLE: u32 = 1 << 20;
+
+/// Reads into the buffer at a file offset; how many bytes it read (0 at the end or on an error).
+pub type ReadAt<'a> = &'a mut dyn FnMut(u64, &mut [u8]) -> usize;
+
+fn read_upto(read: ReadAt<'_>, at: u64, len: usize) -> Vec<u8> {
+    let mut buf = alloc::vec![0u8; len];
+    let mut got = 0;
+    while got < len {
+        let n = read(at + got as u64, &mut buf[got..]);
+        if n == 0 {
+            break;
+        }
+        got += n;
+    }
+    buf.truncate(got);
+    buf
+}
+
+/// The publisher of the PE file `read` reads: its headers, then its certificate table, then the
+/// first signer's name ([`certificate_table`], [`publisher`]). `None` when it is not signed or
+/// cannot be read. Poly's one reader of a program's publisher: the consent prompt (ADR 0222)
+/// and the installer's window (ADR 0230) both ask it.
+pub fn publisher_of(read: ReadAt<'_>) -> Option<String> {
+    let head = read_upto(read, 0, HEADERS);
+    let (offset, size) = certificate_table(&head)?;
+    let size = size.min(MAX_TABLE) as usize;
+    let table = read_upto(read, offset, size);
+    if table.len() != size {
+        return None;
+    }
+    publisher(&table)
+}
+
+/// How Poly names a publisher it read: the signer's name, said to be unverified, since the
+/// signature itself is not checked (ADR 0222). The prompt and the installer show the same words.
+pub fn publisher_label(name: &str) -> String {
+    alloc::format!("{name} (signature not verified)")
+}
+
 /// The publisher named by the first `PKCS_SIGNED_DATA` entry of a certificate table.
 pub fn publisher(table: &[u8]) -> Option<String> {
     let mut at = 0usize;
@@ -194,5 +237,48 @@ mod tests {
         h[d..d + 8].fill(0);
         assert_eq!(certificate_table(&h), None);
         assert_eq!(certificate_table(b"MZ"), None);
+    }
+
+    #[test]
+    fn a_whole_file_names_its_publisher_and_the_label_says_it_is_not_verified() {
+        let (leaf, root) = (cert(LEAF), cert(ROOT));
+        let ci = signed_data(&[&root, &leaf], &leaf);
+        let mut table = Vec::new();
+        table.extend_from_slice(&((8 + ci.len()) as u32).to_le_bytes());
+        table.extend_from_slice(&0x200u16.to_le_bytes());
+        table.extend_from_slice(&PKCS_SIGNED_DATA.to_le_bytes());
+        table.extend_from_slice(&ci);
+        // A PE32+ file: headers, then the table at 0x2000.
+        let mut file = alloc::vec![0u8; 0x2000];
+        file[..2].copy_from_slice(b"MZ");
+        file[0x3C..0x40].copy_from_slice(&0x80u32.to_le_bytes());
+        file[0x80..0x84].copy_from_slice(b"PE\0\0");
+        let opt = 0x80 + 24;
+        file[opt..opt + 2].copy_from_slice(&0x20Bu16.to_le_bytes());
+        file[opt + 108..opt + 112].copy_from_slice(&16u32.to_le_bytes());
+        let d = opt + 112 + 8 * 4;
+        file[d..d + 4].copy_from_slice(&0x2000u32.to_le_bytes());
+        file[d + 4..d + 8].copy_from_slice(&(table.len() as u32).to_le_bytes());
+        file.extend_from_slice(&table);
+        // Read in small pieces, as a file system may hand them out.
+        let read_from = |data: &[u8]| {
+            let data = data.to_vec();
+            move |at: u64, buf: &mut [u8]| -> usize {
+                let at = at as usize;
+                if at >= data.len() {
+                    return 0;
+                }
+                let n = buf.len().min(data.len() - at).min(100);
+                buf[..n].copy_from_slice(&data[at..at + n]);
+                n
+            }
+        };
+        let want = leaf.subject.first(oid::COMMON_NAME).or_else(|| leaf.subject.first(oid::ORGANIZATION_NAME));
+        assert_eq!(publisher_of(&mut read_from(&file)), want);
+        // A table cut short, an unsigned file, no file.
+        assert_eq!(publisher_of(&mut read_from(&file[..file.len() - 10])), None);
+        assert_eq!(publisher_of(&mut read_from(&file[..0x2000])), None);
+        assert_eq!(publisher_of(&mut read_from(b"")), None);
+        assert_eq!(publisher_label("Google LLC"), "Google LLC (signature not verified)");
     }
 }

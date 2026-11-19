@@ -14,6 +14,7 @@ poly-gfx.workspace = true
 poly-input.workspace = true
 poly-png.workspace = true
 poly-wayland.workspace = true
+poly-x509.workspace = true
 
 [lints]
 workspace = true
