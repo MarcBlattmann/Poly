@@ -794,10 +794,16 @@ impl Server {
     /// had focus is not any more; both hear of it through configure events
     /// (`configure` says so only if the window was configured as inactive).
     pub(super) fn activate(&mut self, c: ClientId, tl: ObjectId, configure: bool) {
-        if let Some(iw) = self.active_internal.take() {
+        let internal_had_focus = if let Some(iw) = self.active_internal.take() {
             self.scene.set_active(iw, false);
-        }
+            true
+        } else {
+            false
+        };
         let previous = self.active.replace((c, tl));
+        if internal_had_focus || previous.is_none_or(|(pc, _)| pc != c) {
+            self.focus_moves += 1;
+        }
         if previous == Some((c, tl)) {
             // It may have been given the focus before it had a window (an
             // activation request before the first map): the window is

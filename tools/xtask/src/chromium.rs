@@ -158,6 +158,11 @@ pub const DISK_SEEDS: &[&str] = &[
     // X client, and `xkbcomp`, which it runs for its keymaps.
     "xwayland",
     "x11-xkb-utils",
+    // EGL and GLES through libglvnd and Mesa: what a browser's GPU process (Google Chrome's,
+    // installed from its package) loads; without `libEGL.so.1` it ends at start-up.
+    "libegl1",
+    "libegl-mesa0",
+    "libgles2",
 ];
 
 /// What the initramfs takes from the lock: a statically linked BusyBox for
@@ -1451,6 +1456,8 @@ ARGS=
 [ -r /etc/poly-desktop.args ] && ARGS=$(cat /etc/poly-desktop.args)
 [ -x /usr/bin/Xwayland ] && ARGS=\"--xwayland-lazy $ARGS\"
 [ -x /usr/local/bin/poly-as-user ] && ARGS=\"--app-user /usr/local/bin/poly-as-user $ARGS\"
+# Files starts the apps it opens files with as the same user (ADR 0218).
+[ -x /usr/local/bin/poly-as-user ] && export POLY_APP_USER=/usr/local/bin/poly-as-user
 [ -x /usr/local/bin/poly-session-bus ] && /usr/local/bin/poly-session-bus > /dev/null 2>&1 &
 exec /usr/local/bin/poly-compositor --desktop $ARGS
 ";
@@ -1463,18 +1470,19 @@ const SESSION_ENV: &str = "# The home of the user the desktop runs apps as (ADR 
 export POLY_APPS_USER_HOME=/home/poly
 # X11 apps: the display the compositor owns, where there is an X server.
 [ -x /usr/bin/Xwayland ] && export DISPLAY=:0
+# A generic freedesktop desktop: xdg-open and xdg-settings (xdg-utils) then ask no X client
+# (xprop) about the desktop, which made the compositor start Xwayland for the first download
+# opened from a browser (about 110 s), and keep the default browser in mimeapps.list.
+export XDG_CURRENT_DESKTOP=X-Generic
 # apt and dpkg ask nothing (debconf(7)).
 export DEBIAN_FRONTEND=noninteractive
 ";
 
-/// `/etc/poly-desktop.env`: the toolkits' desktop environment, and the
-/// browser `xdg-open` falls back on where `mimeapps.list` does not name one
-/// (it would try Debian's `chromium`, which refuses to run as root).
+/// `/etc/poly-desktop.env`: the toolkits' desktop environment and the session's.
+/// No `$BROWSER`: `mimeapps.list` names the default browser ([`mimeapps_list`]), and with
+/// `$BROWSER` set `xdg-settings` refuses to change it ("Make default browser" in a browser).
 fn desktop_env() -> String {
-    format!(
-        "{}# Where mimeapps.list names no browser (xdg-open).\nexport BROWSER=\"/bin/bash /usr/local/bin/poly-chromium {WINDOW_ARGS}\"\n{SESSION_ENV}",
-        crate::toolkits::DESKTOP_ENV
-    )
+    format!("{}{SESSION_ENV}", crate::toolkits::DESKTOP_ENV)
 }
 
 /// What decides which of Poly's own files Chromium's disk and initramfs get.
@@ -2882,9 +2890,10 @@ mod tests {
         // xdg-utils finds the system list and the entry in the standard
         // places, and its fallback is the same command.
         assert!(desktop_env().contains("export XDG_CONFIG_DIRS=/etc/xdg\n"));
-        assert!(
-            desktop_env().contains("export BROWSER=\"/bin/bash /usr/local/bin/poly-chromium --ozone-platform=wayland")
-        );
+        // The default browser is mimeapps.list's alone, so xdg-settings can change it, and
+        // xdg-utils asks no X client (xprop) about the desktop.
+        assert!(!desktop_env().contains("BROWSER="));
+        assert!(desktop_env().contains("export XDG_CURRENT_DESKTOP=X-Generic\n"));
     }
 
     /// The initramfs of `cargo xtask desktop --chromium` carries Poly's files
@@ -2917,6 +2926,8 @@ mod tests {
         // The system's apps start as user poly (ADR 0218); Chromium's launch
         // script, started so, runs poly-as-user again as that user.
         assert!(DESKTOP_SCRIPT.contains("ARGS=\"--app-user /usr/local/bin/poly-as-user $ARGS\""));
+        // Files opens files with the system's apps as that user too.
+        assert!(DESKTOP_SCRIPT.contains("export POLY_APP_USER=/usr/local/bin/poly-as-user\n"));
         assert!(USER_SCRIPT.lines().nth(4) == Some("[ \"$EUID\" = 1000 ] && exec \"$@\""));
         assert!(USER_SCRIPT.contains("${BUS:+DBUS_SESSION_BUS_ADDRESS=\"$BUS\"}"));
         assert!(SESSION_BUS_SCRIPT.contains("--session --address=\"unix:path=$U/bus\" --nofork"));

@@ -611,6 +611,8 @@ impl Server {
             self.scene.raise(w);
             return;
         }
+        // The focus leaves the clients: their earlier activation tokens are spent.
+        self.focus_moves += 1;
         if let Some((c, tl)) = self.active.take()
             && self.clients.contains_key(&c)
         {
