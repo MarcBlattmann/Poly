@@ -3313,5 +3313,4 @@ pub extern "system" fn user32_main(_module: *mut u8, reason: u32, _reserved: *mu
 
 mod delayed;
 
-#[cfg(target_arch = "x86_64")]
 mod apps;
