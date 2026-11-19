@@ -2107,6 +2107,7 @@ fn qcode(c: char) -> Option<(String, bool)> {
         ')' => shifted("0"),
         '&' => shifted("7"),
         ':' => shifted("semicolon"),
+        '*' => shifted("8"),
         _ => None,
     }
 }
