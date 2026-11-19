@@ -59,7 +59,6 @@ poly_win32_rt::fail_exports!(
         GetTempPathA,
         GetTimeFormatEx,
         GetTimeFormatW,
-        GetVolumeInformationW,
         GlobalAddAtomW,
         GlobalDeleteAtom,
         HeapCompact,

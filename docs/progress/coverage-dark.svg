@@ -1369,7 +1369,7 @@
 <rect x="321.0" y="579.6" width="43.0" height="42.0" fill="#21262d"/>
 <rect x="321.0" y="579.6" width="9.4" height="42.0" fill="#2ea043"/>
 <rect x="330.4" y="579.6" width="8.6" height="42.0" fill="#bb8009"/>
-<rect x="339.1" y="579.6" width="2.7" height="42.0" fill="#388bfd"/>
+<rect x="339.0" y="579.6" width="3.2" height="42.0" fill="#388bfd"/>
 <rect x="320.0" y="578.6" width="45.0" height="44.0" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="326.0" y="593.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">user…</text>
 </g>
@@ -1588,6 +1588,7 @@
 <rect x="531.6" y="526.4" width="16.3" height="18.3" fill="#21262d"/>
 <rect x="531.6" y="526.4" width="0.1" height="18.3" fill="#2ea043"/>
 <rect x="531.7" y="526.4" width="0.6" height="18.3" fill="#bb8009"/>
+<rect x="532.3" y="526.4" width="0.3" height="18.3" fill="#388bfd"/>
 <rect x="530.6" y="525.4" width="18.3" height="20.3" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>comctl32: 4 / 184 done (2.2%)</title>

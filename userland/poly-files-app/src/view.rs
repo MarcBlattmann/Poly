@@ -617,6 +617,37 @@ impl FilesApp {
         }
     }
 
+    /// Files started for a Windows program (ADR 0223): `--show PATH` shows PATH's folder with
+    /// PATH selected ("Show in folder"); `--open PATH` opens PATH as a double click would, and
+    /// shows it selected in its folder when no app takes it (with the status saying why).
+    /// Whether Files has a window to show afterwards (false: another app opened the file).
+    pub fn start_from_shell(&mut self, flag: &str, path: &str) -> bool {
+        let folder = poly_files::path::parent(path).unwrap_or("/");
+        let shown = |app: &mut Self| {
+            if !app.go(folder) {
+                return false;
+            }
+            app.browser.select_name(poly_files::path::file_name(path));
+            true
+        };
+        if flag == poly_shell::apps::FILES_SHOW {
+            return shown(self) || self.go(path);
+        }
+        match poly_files::apps::open(&*self.fs, path, &self.handlers, self.defaults.as_deref()) {
+            Ok(Open::Folder(p)) => self.go(&p),
+            Ok(Open::Launch(_) | Open::With(_)) => {
+                self.open_path(path);
+                // Opened: Files' own window is not wanted, unless starting the app failed.
+                !self.status.starts_with("Opened ")
+            }
+            _ => {
+                shown(self);
+                self.open_path(path);
+                true
+            }
+        }
+    }
+
     pub fn open_path(&mut self, path: &str) {
         if apps::contains(path) {
             return self.open_app_at(path);

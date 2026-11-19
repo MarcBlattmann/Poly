@@ -377,6 +377,12 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("DeviceIoControl", "api-ms-win-core-io-l1-1-0"),
     ("GetDiskFreeSpaceW", "api-ms-win-core-file-l1-1-0"),
     ("GetDiskFreeSpaceExW", "api-ms-win-core-file-l1-1-0"),
+    // Download path (sheets of spec-chrome-dl, ADR 0223).
+    ("GetVolumeInformationW", "api-ms-win-core-file-l1-1-0"),
+    ("GetVolumePathNameW", "api-ms-win-core-file-l1-1-0"),
+    ("PowerCreateRequest", "api-ms-win-core-kernel32-legacy-l1-1-0"),
+    ("PowerSetRequest", "api-ms-win-core-kernel32-legacy-l1-1-0"),
+    ("PowerClearRequest", "api-ms-win-core-kernel32-legacy-l1-1-0"),
     ("GetLogicalDrives", "api-ms-win-core-file-l1-1-0"),
     ("GetLogicalDriveStringsW", "api-ms-win-core-file-l1-1-0"),
     ("AreFileApisANSI", "api-ms-win-core-file-l1-2-2"),

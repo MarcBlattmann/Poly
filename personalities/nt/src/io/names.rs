@@ -24,8 +24,9 @@
 //! characters (`MaximumComponentNameLength` of our volumes). NT paths are
 //! not normalised: a `.` or `..` component is `STATUS_OBJECT_NAME_INVALID`
 //! (Win32 removes them before calling `NtCreateFile`; to be confirmed by the
-//! spec agent). Stream names (`file:stream`) are refused the same way: Poly
-//! has no alternate data streams.
+//! spec agent). A named stream (`file:stream[:$DATA]`, ADR 0223) is split
+//! off the last component first ([`split_stream`]); a colon anywhere else
+//! is an invalid name.
 
 use super::consts::*;
 use alloc::string::String;
@@ -47,15 +48,36 @@ pub fn component_to_vfs(name: &[u16]) -> Result<Vec<u8>, NtStatus> {
     Ok(s.into_bytes())
 }
 
-/// `name` without a `::$DATA` suffix (any case), the default data stream's
-/// full name (Learn: "File Streams (Local File Systems)"); other names as
-/// they are.
-pub fn without_default_stream(name: &[u16]) -> &[u16] {
-    let suffix: Vec<u16> = "::$DATA".encode_utf16().collect();
-    match name.len().checked_sub(suffix.len()) {
-        Some(at) if at > 0 && eq_fold(&name[at..], &suffix) => &name[..at],
-        _ => name,
+/// The last component of a path split into the file's name and the named
+/// stream it asks for (Learn: "File Streams (Local File Systems)": a full
+/// stream name is `file:stream:$DATA`, the type `$DATA` may be left out,
+/// and `file::$DATA` is the default stream, the file itself). `Ok((name,
+/// None))` for the file itself. An empty stream name (`file:`), a type
+/// other than `$DATA`, more than two colons or a stream name with a path
+/// separator or NUL is `STATUS_OBJECT_NAME_INVALID`. Stream names are
+/// otherwise freer than file names (`<` is one character of a name).
+pub fn split_stream(last: &[u16]) -> Result<(&[u16], Option<&[u16]>), NtStatus> {
+    let colon = b':' as u16;
+    let Some(at) = last.iter().position(|&c| c == colon) else { return Ok((last, None)) };
+    let (file, rest) = (&last[..at], &last[at + 1..]);
+    let data: Vec<u16> = "$DATA".encode_utf16().collect();
+    let (stream, kind) = match rest.iter().position(|&c| c == colon) {
+        Some(p) => (&rest[..p], Some(&rest[p + 1..])),
+        None => (rest, None),
+    };
+    if let Some(kind) = kind
+        && !eq_fold(kind, &data)
+    {
+        return Err(STATUS_OBJECT_NAME_INVALID);
     }
+    if stream.is_empty() {
+        // `file::$DATA` is the file; `file:` names nothing.
+        return if kind.is_some() { Ok((file, None)) } else { Err(STATUS_OBJECT_NAME_INVALID) };
+    }
+    if stream.len() > MAX_COMPONENT || stream.iter().any(|&c| c == 0 || c == b'\\' as u16 || c == b'/' as u16) {
+        return Err(STATUS_OBJECT_NAME_INVALID);
+    }
+    Ok((file, Some(stream)))
 }
 
 /// Check one component of a path that is opened or created.

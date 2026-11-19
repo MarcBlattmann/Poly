@@ -98,31 +98,25 @@ impl<F: PageFrame, L: RawLock + Default> CachedFs<F, L> {
     /// Drop this file system's clean pages that nobody holds. Returns how
     /// many went.
     pub fn evict_clean(&self) -> usize {
+        // The inodes with pages, each once (not a key per page).
         let keys: Vec<Ino> = {
             let index = self.core.index.lock();
             let lo = Key::new(self.st.id, 0, 0);
             let hi = Key::new(self.st.id, Ino::MAX, u64::MAX);
-            let mut inos: Vec<Ino> = index.pages.range(lo..=hi).map(|(k, _)| k.ino).collect();
-            inos.dedup();
+            let mut inos: Vec<Ino> = Vec::new();
+            for (k, _) in index.pages.range(lo..=hi) {
+                if inos.last() != Some(&k.ino) {
+                    inos.push(k.ino);
+                }
+            }
             inos
         };
         let mut evicted = 0;
         for ino in keys {
             let lock = self.core.inode_lock(self.st.id, ino);
             let _held = lock.lock();
-            let dropped: Vec<Arc<Page<F>>> = {
-                let mut index = self.core.index.lock();
-                let victims: Vec<Key> = index
-                    .keys_of(self.st.id, ino, 0)
-                    .into_iter()
-                    .filter(|k| {
-                        let page = &index.pages[k].page;
-                        !page.is_dirty() && Arc::strong_count(page) == 1
-                    })
-                    .collect();
-                victims.iter().filter_map(|k| index.remove(k)).collect()
-            };
-            evicted += dropped.len();
+            let clean_and_free = |page: &Arc<Page<F>>| !page.is_dirty() && Arc::strong_count(page) == 1;
+            evicted += self.core.remove_range(self.key(ino, 0), self.key(ino, u64::MAX), &clean_and_free);
         }
         self.core.c.evicted.fetch_add(evicted as u64, Relaxed);
         evicted
@@ -220,12 +214,9 @@ impl<F: PageFrame, L: RawLock + Default> CachedFs<F, L> {
     /// the edges are zeroed. The caller holds the inode's lock.
     fn punch_cached(&self, ino: Ino, offset: u64, end: u64) {
         let (first_whole, end_whole) = (offset.div_ceil(PAGE), end / PAGE);
-        let dropped: Vec<Arc<Page<F>>> = {
-            let mut index = self.core.index.lock();
-            let keys = index.keys_of(self.st.id, ino, first_whole);
-            keys.iter().filter(|k| k.index < end_whole).filter_map(|k| index.remove(k)).collect()
-        };
-        drop(dropped);
+        if end_whole > first_whole {
+            self.core.remove_range(self.key(ino, first_whole), self.key(ino, end_whole - 1), &|_| true);
+        }
         for i in [offset / PAGE, end.saturating_sub(1) / PAGE] {
             if (first_whole..end_whole).contains(&i) {
                 continue;
@@ -591,6 +582,20 @@ impl<F: PageFrame, L: RawLock + Default> FileSystem for CachedFs<F, L> {
     fn sync(&self) -> Result<()> {
         let written = self.writeback(None);
         let synced = self.st.inner.sync();
+        let earlier = self.st.error.lock().take();
+        written?;
+        synced?;
+        earlier.map_or(Ok(()), Err)
+    }
+
+    /// fsync(2) of one file: its dirty pages only, then the inner file
+    /// system's sync of it. (Writing back every file's pages for each
+    /// fsync made `dpkg`, which syncs its status files hundreds of times,
+    /// write a big download or copy again and again: `dpkg --configure -a`
+    /// next to a 600 MB copy took six minutes.)
+    fn sync_inode(&self, ino: Ino, data_only: bool) -> Result<()> {
+        let written = self.writeback(Some(ino));
+        let synced = self.st.inner.sync_inode(ino, data_only);
         let earlier = self.st.error.lock().take();
         written?;
         synced?;

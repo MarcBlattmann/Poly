@@ -6,6 +6,7 @@ oracle:
   machine: "homeserver2 (real hardware), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1, two runs each, identical; the SSH session is session 0 with its non-interactive window station, whose desktop is not visible; screen 1024x768, 32 bpp, 96 DPI, no shell (explorer) running"
   observed_by: spec-win-gui-a
   date: 2026-11-02
+oracle_200: "homeserver2 (real hardware, Intel UHD Graphics 630, one monitor without EDID) with its display temporarily set to 2560x1600 at a scale of 200 percent: the mode changed dynamically (ChangeDisplaySettingsEx, no registry write), the scale set to the 200 percent step through the display configuration API, and checked before the recording (a per-monitor aware process read GetDpiForSystem 192 and a 2560x1600 screen, an unaware one a 1280x800 screen); both put back to 1920x1080 and 100 percent afterwards and read back. Windows 11 Home 25H2 (build 26200.9974), the logged-on account in the interactive desktop session (session 1) through tools/pipeline/windows/poly-oracle.ps1 -Interactive, two runs of each test, identical; the taskbar is at the bottom and 96 physical pixels high (48 at 100 percent); the monitor has no EDID, so physical sizes assume 96 DPI (HORZSIZE 677 mm for 2560 pixels). Every test of this slice carries the session 'interactive-bottom/2560x1600/200' in its windows.json."
 sources: >
   Observations of our own test programs on the machine above. Microsoft
   Learn reference pages of the functions and messages named here, "About
@@ -26,6 +27,8 @@ rules:
   adjustwindowrect: "AdjustWindowRect = AdjustWindowRectEx with ex style 0"
   roundtrip: "a window created with the adjusted size has exactly the asked client size, except WS_OVERLAPPED alone (the system adds WS_CAPTION at creation); with the menu flag but no menu the client is 20 taller"
   return: "1"
+  at_200_units: "see AdjustWindowRectExForDpi: AdjustWindowRectEx gives the 96 DPI row to an unaware or GDI-scaled caller and the 192 DPI row to a system, per-monitor or per-monitor-v2 caller"
+
 errors:
   none: "no error cases observed"
 side_effects: "none beyond the rules above"

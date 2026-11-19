@@ -1,0 +1,48 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64",
+    "edition": "Core",
+    "display": "25H2",
+    "session": "interactive"
+  },
+  "bundle": "29c555d308a1",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:56:21Z",
+  "timeout_ms": 90000,
+  "test_timeouts_s": {},
+  "runs": 2,
+  "tests": [
+    {
+      "name": "dpi_shcore_1",
+      "exe_sha256": "43ae8d4fd87d2eb2f07c6973bf66b0d835ae9ce2cb1ef6356abd18684eb7d1c9",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "U2V0UHJvY2Vzc0RwaUF3YXJlbmVzcygzKSBociAweDgwMDcwMDU3ClNldFByb2Nlc3NEcGlBd2FyZW5lc3MoLTEpIGhyIDB4ODAwNzAwNTcKU2V0UHJvY2Vzc0RwaUF3YXJlbmVzcygxMDApIGhyIDB4ODAwNzAwNTcKU2V0UHJvY2Vzc0RwaUF3YXJlbmVzcygxKSBociAweDAKYSBzZWNvbmQgU2V0UHJvY2Vzc0RwaUF3YXJlbmVzcygxKSBociAweDgwMDcwMDA1ClNldFByb2Nlc3NEcGlBd2FyZW5lc3Mgb2YgYW5vdGhlciB2YWx1ZSBociAweDgwMDcwMDA1ClNldFByb2Nlc3NEcGlBd2FyZW5lc3NDb250ZXh0KHBlci1tb25pdG9yLXYyKSBhZnRlcndhcmRzIC0+IGZhbHNlIGVycm9yIDUKdGhyZWFkIGNvbnRleHQgc3lzdGVtCkdldFByb2Nlc3NEcGlBd2FyZW5lc3MoTlVMTCkgaHIgMHgwIHZhbHVlIDEKR2V0UHJvY2Vzc0RwaUF3YXJlbmVzcyhjdXJyZW50IHByb2Nlc3MpIGhyIDB4MCB2YWx1ZSAxCklzUHJvY2Vzc0RQSUF3YXJlIHRydWUKR2V0RHBpQXdhcmVuZXNzQ29udGV4dEZvclByb2Nlc3MoTlVMTCkgc3lzdGVtCkdldERwaUF3YXJlbmVzc0NvbnRleHRGb3JQcm9jZXNzKGN1cnJlbnQpIHN5c3RlbQpHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzKGN1cnJlbnQpIDE5MgpJc1ZhbGlkRHBpQXdhcmVuZXNzQ29udGV4dDogMHhmZmZmZmZmZmZmZmZmZmZmLT50cnVlIDB4ZmZmZmZmZmZmZmZmZmZmZS0+dHJ1ZSAweGZmZmZmZmZmZmZmZmZmZmQtPnRydWUgMHhmZmZmZmZmZmZmZmZmZmZjLT50cnVlIDB4ZmZmZmZmZmZmZmZmZmZmYi0+dHJ1ZSAweDAtPmZhbHNlIDB4MS0+ZmFsc2UgMHhmZmZmZmZmZmZmZmZmZmZhLT5mYWxzZSAweDEyMzQtPmZhbHNlCkdldERwaUZvclN5c3RlbSAxOTIKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQodW5hd2FyZSkgOTYKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQoc3lzdGVtKSAxOTIKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQocGVyLW1vbml0b3IpIDAKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQocGVyLW1vbml0b3ItdjIpIDAKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQoZ2RpLXNjYWxlZCkgOTYKYSBuZXcgdG9wLWxldmVsIHdpbmRvdzogY29udGV4dCBzeXN0ZW0gR2V0RHBpRm9yV2luZG93IDE5MgpkZXNrdG9wIHdpbmRvdzogY29udGV4dCBwZXItbW9uaXRvciBHZXREcGlGb3JXaW5kb3cgOTYKU01fQ1hTQ1JFRU4geCBTTV9DWVNDUkVFTiAyNTYweDE2MDAKR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5LCBlZmZlY3RpdmUpIGhyIDB4MCB4IDE5MiB5IDE5MgpHZXREcGlGb3JNb25pdG9yKHByaW1hcnksIGFuZ3VsYXIpIGhyIDB4MCB4IDk2IHkgOTYKR2V0RHBpRm9yTW9uaXRvcihwcmltYXJ5LCByYXcpIGhyIDB4ODAwNzAwMzIgeCAwIHkgMApHZXREcGlGb3JNb25pdG9yKHByaW1hcnksIDMpIGhyIDB4ODAwNzAwYTAgeCA3IHkgNwpHZXREcGlGb3JNb25pdG9yKHByaW1hcnksIC0xKSBociAweDgwMDcwMGEwIHggNyB5IDcKR2V0RHBpRm9yTW9uaXRvcihOVUxMLCBlZmZlY3RpdmUpIGhyIDB4ODAwNzAwMDYgeCA3IHkgNwpHZXRTY2FsZUZhY3RvckZvck1vbml0b3IocHJpbWFyeSkgaHIgMHgwIGZhY3RvciAxODAKR2V0U2NhbGVGYWN0b3JGb3JNb25pdG9yKE5VTEwpIGhyIDB4MCBmYWN0b3IgMTAwCnRoZSB3aW5kb3cncyBtb25pdG9yIGlzIHRoZSBwcmltYXJ5OiB0cnVlCkdldERwaUZvck1vbml0b3Iod2luZG93J3MgbW9uaXRvciwgZWZmZWN0aXZlKSBociAweDAgeCAxOTIgeSAxOTIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetProcessDpiAwareness(3) hr 0x80070057\nSetProcessDpiAwareness(-1) hr 0x80070057\nSetProcessDpiAwareness(100) hr 0x80070057\nSetProcessDpiAwareness(1) hr 0x0\na second SetProcessDpiAwareness(1) hr 0x80070005\nSetProcessDpiAwareness of another value hr 0x80070005\nSetProcessDpiAwarenessContext(per-monitor-v2) afterwards -> false error 5\nthread context system\nGetProcessDpiAwareness(NULL) hr 0x0 value 1\nGetProcessDpiAwareness(current process) hr 0x0 value 1\nIsProcessDPIAware true\nGetDpiAwarenessContextForProcess(NULL) system\nGetDpiAwarenessContextForProcess(current) system\nGetSystemDpiForProcess(current) 192\nIsValidDpiAwarenessContext: 0xffffffffffffffff->true 0xfffffffffffffffe->true 0xfffffffffffffffd->true 0xfffffffffffffffc->true 0xfffffffffffffffb->true 0x0->false 0x1->false 0xfffffffffffffffa->false 0x1234->false\nGetDpiForSystem 192\nGetDpiFromDpiAwarenessContext(unaware) 96\nGetDpiFromDpiAwarenessContext(system) 192\nGetDpiFromDpiAwarenessContext(per-monitor) 0\nGetDpiFromDpiAwarenessContext(per-monitor-v2) 0\nGetDpiFromDpiAwarenessContext(gdi-scaled) 96\na new top-level window: context system GetDpiForWindow 192\ndesktop window: context per-monitor GetDpiForWindow 96\nSM_CXSCREEN x SM_CYSCREEN 2560x1600\nGetDpiForMonitor(primary, effective) hr 0x0 x 192 y 192\nGetDpiForMonitor(primary, angular) hr 0x0 x 96 y 96\nGetDpiForMonitor(primary, raw) hr 0x80070032 x 0 y 0\nGetDpiForMonitor(primary, 3) hr 0x800700a0 x 7 y 7\nGetDpiForMonitor(primary, -1) hr 0x800700a0 x 7 y 7\nGetDpiForMonitor(NULL, effective) hr 0x80070006 x 7 y 7\nGetScaleFactorForMonitor(primary) hr 0x0 factor 180\nGetScaleFactorForMonitor(NULL) hr 0x0 factor 100\nthe window's monitor is the primary: true\nGetDpiForMonitor(window's monitor, effective) hr 0x0 x 192 y 192\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 403,
+      "session": "interactive-bottom/2560x1600/200"
+    },
+    {
+      "name": "dpi_shcore_2",
+      "exe_sha256": "09061171f51c23fd6046cd980e10c541d22989a96d297a00e22060efc163b396",
+      "status": "ran",
+      "exit_code": 0,
+      "output_b64": "U2V0UHJvY2Vzc0RwaUF3YXJlbmVzcygzKSBociAweDgwMDcwMDU3ClNldFByb2Nlc3NEcGlBd2FyZW5lc3MoLTEpIGhyIDB4ODAwNzAwNTcKU2V0UHJvY2Vzc0RwaUF3YXJlbmVzcygxMDApIGhyIDB4ODAwNzAwNTcKU2V0UHJvY2Vzc0RwaUF3YXJlbmVzcygyKSBociAweDAKYSBzZWNvbmQgU2V0UHJvY2Vzc0RwaUF3YXJlbmVzcygyKSBociAweDgwMDcwMDA1ClNldFByb2Nlc3NEcGlBd2FyZW5lc3Mgb2YgYW5vdGhlciB2YWx1ZSBociAweDgwMDcwMDA1ClNldFByb2Nlc3NEcGlBd2FyZW5lc3NDb250ZXh0KHBlci1tb25pdG9yLXYyKSBhZnRlcndhcmRzIC0+IGZhbHNlIGVycm9yIDUKdGhyZWFkIGNvbnRleHQgcGVyLW1vbml0b3IKR2V0UHJvY2Vzc0RwaUF3YXJlbmVzcyhOVUxMKSBociAweDAgdmFsdWUgMgpHZXRQcm9jZXNzRHBpQXdhcmVuZXNzKGN1cnJlbnQgcHJvY2VzcykgaHIgMHgwIHZhbHVlIDIKSXNQcm9jZXNzRFBJQXdhcmUgdHJ1ZQpHZXREcGlBd2FyZW5lc3NDb250ZXh0Rm9yUHJvY2VzcyhOVUxMKSBwZXItbW9uaXRvcgpHZXREcGlBd2FyZW5lc3NDb250ZXh0Rm9yUHJvY2VzcyhjdXJyZW50KSBwZXItbW9uaXRvcgpHZXRTeXN0ZW1EcGlGb3JQcm9jZXNzKGN1cnJlbnQpIDE5MgpJc1ZhbGlkRHBpQXdhcmVuZXNzQ29udGV4dDogMHhmZmZmZmZmZmZmZmZmZmZmLT50cnVlIDB4ZmZmZmZmZmZmZmZmZmZmZS0+dHJ1ZSAweGZmZmZmZmZmZmZmZmZmZmQtPnRydWUgMHhmZmZmZmZmZmZmZmZmZmZjLT50cnVlIDB4ZmZmZmZmZmZmZmZmZmZmYi0+dHJ1ZSAweDAtPmZhbHNlIDB4MS0+ZmFsc2UgMHhmZmZmZmZmZmZmZmZmZmZhLT5mYWxzZSAweDEyMzQtPmZhbHNlCkdldERwaUZvclN5c3RlbSAxOTIKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQodW5hd2FyZSkgOTYKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQoc3lzdGVtKSAxOTIKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQocGVyLW1vbml0b3IpIDAKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQocGVyLW1vbml0b3ItdjIpIDAKR2V0RHBpRnJvbURwaUF3YXJlbmVzc0NvbnRleHQoZ2RpLXNjYWxlZCkgOTYKYSBuZXcgdG9wLWxldmVsIHdpbmRvdzogY29udGV4dCBwZXItbW9uaXRvciBHZXREcGlGb3JXaW5kb3cgMTkyCmRlc2t0b3Agd2luZG93OiBjb250ZXh0IHBlci1tb25pdG9yIEdldERwaUZvcldpbmRvdyA5NgpTTV9DWFNDUkVFTiB4IFNNX0NZU0NSRUVOIDI1NjB4MTYwMApHZXREcGlGb3JNb25pdG9yKHByaW1hcnksIGVmZmVjdGl2ZSkgaHIgMHgwIHggMTkyIHkgMTkyCkdldERwaUZvck1vbml0b3IocHJpbWFyeSwgYW5ndWxhcikgaHIgMHgwIHggOTYgeSA5NgpHZXREcGlGb3JNb25pdG9yKHByaW1hcnksIHJhdykgaHIgMHg4MDA3MDAzMiB4IDAgeSAwCkdldERwaUZvck1vbml0b3IocHJpbWFyeSwgMykgaHIgMHg4MDA3MDBhMCB4IDcgeSA3CkdldERwaUZvck1vbml0b3IocHJpbWFyeSwgLTEpIGhyIDB4ODAwNzAwYTAgeCA3IHkgNwpHZXREcGlGb3JNb25pdG9yKE5VTEwsIGVmZmVjdGl2ZSkgaHIgMHg4MDA3MDAwNiB4IDcgeSA3CkdldFNjYWxlRmFjdG9yRm9yTW9uaXRvcihwcmltYXJ5KSBociAweDAgZmFjdG9yIDE4MApHZXRTY2FsZUZhY3RvckZvck1vbml0b3IoTlVMTCkgaHIgMHgwIGZhY3RvciAxMDAKdGhlIHdpbmRvdydzIG1vbml0b3IgaXMgdGhlIHByaW1hcnk6IHRydWUKR2V0RHBpRm9yTW9uaXRvcih3aW5kb3cncyBtb25pdG9yLCBlZmZlY3RpdmUpIGhyIDB4MCB4IDE5MiB5IDE5MgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SetProcessDpiAwareness(3) hr 0x80070057\nSetProcessDpiAwareness(-1) hr 0x80070057\nSetProcessDpiAwareness(100) hr 0x80070057\nSetProcessDpiAwareness(2) hr 0x0\na second SetProcessDpiAwareness(2) hr 0x80070005\nSetProcessDpiAwareness of another value hr 0x80070005\nSetProcessDpiAwarenessContext(per-monitor-v2) afterwards -> false error 5\nthread context per-monitor\nGetProcessDpiAwareness(NULL) hr 0x0 value 2\nGetProcessDpiAwareness(current process) hr 0x0 value 2\nIsProcessDPIAware true\nGetDpiAwarenessContextForProcess(NULL) per-monitor\nGetDpiAwarenessContextForProcess(current) per-monitor\nGetSystemDpiForProcess(current) 192\nIsValidDpiAwarenessContext: 0xffffffffffffffff->true 0xfffffffffffffffe->true 0xfffffffffffffffd->true 0xfffffffffffffffc->true 0xfffffffffffffffb->true 0x0->false 0x1->false 0xfffffffffffffffa->false 0x1234->false\nGetDpiForSystem 192\nGetDpiFromDpiAwarenessContext(unaware) 96\nGetDpiFromDpiAwarenessContext(system) 192\nGetDpiFromDpiAwarenessContext(per-monitor) 0\nGetDpiFromDpiAwarenessContext(per-monitor-v2) 0\nGetDpiFromDpiAwarenessContext(gdi-scaled) 96\na new top-level window: context per-monitor GetDpiForWindow 192\ndesktop window: context per-monitor GetDpiForWindow 96\nSM_CXSCREEN x SM_CYSCREEN 2560x1600\nGetDpiForMonitor(primary, effective) hr 0x0 x 192 y 192\nGetDpiForMonitor(primary, angular) hr 0x0 x 96 y 96\nGetDpiForMonitor(primary, raw) hr 0x80070032 x 0 y 0\nGetDpiForMonitor(primary, 3) hr 0x800700a0 x 7 y 7\nGetDpiForMonitor(primary, -1) hr 0x800700a0 x 7 y 7\nGetDpiForMonitor(NULL, effective) hr 0x80070006 x 7 y 7\nGetScaleFactorForMonitor(primary) hr 0x0 factor 180\nGetScaleFactorForMonitor(NULL) hr 0x0 factor 100\nthe window's monitor is the primary: true\nGetDpiForMonitor(window's monitor, effective) hr 0x0 x 192 y 192\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 408,
+      "session": "interactive-bottom/2560x1600/200"
+    }
+  ]
+}

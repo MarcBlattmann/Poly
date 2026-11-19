@@ -345,6 +345,16 @@ pub trait FileSystem: Send + Sync {
         Ok(())
     }
 
+    /// fsync(2) (`data_only`: fdatasync(2)) of `ino` opened without a
+    /// handle of the file system's own: at least `ino`'s data and what
+    /// names it made durable. The default is [`FileSystem::sync`]; a file
+    /// system with per-file state to write (the page cache) writes only
+    /// that file's before syncing.
+    fn sync_inode(&self, ino: Ino, data_only: bool) -> Result<()> {
+        let _ = (ino, data_only);
+        self.sync()
+    }
+
     /// Extended attribute `name` of `ino` (the full name, namespace
     /// prefix included; see [`crate::xattr`]): its value, `ENODATA` if the
     /// inode has none of that name. The default is a file system that

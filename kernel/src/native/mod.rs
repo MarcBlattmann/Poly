@@ -496,6 +496,16 @@ impl NativeKernel for Thread<'_> {
         }
         let vprot = vm_prot(prot);
         let placement = poly_vm::Placement::Hint(0);
+        // A layer buffer of the desktop link: the pages of the section an app presented, read
+        // only (ADR 0224).
+        if let Some(found) = crate::nt::link::mapping(&file, offset) {
+            let source = found.map_err(vfs_error)?;
+            if prot.write {
+                return Err(Error::PermissionDenied);
+            }
+            let req = poly_vm::MapRequest::file(len, vprot, FileRef::new(source), 0, shared);
+            return memory.map(req.at(placement)).map_err(memory_error);
+        }
         // A DRM dumb buffer or a dma-buf: its frames (ADR 0108).
         if let Some(found) = crate::drm::mapping(&file, offset, len) {
             let (source, start) = found.map_err(vfs_error)?;

@@ -224,20 +224,27 @@ pub const DEFAULT_STREAM: &str = "::$DATA";
 
 /// `FILE_STREAM_INFORMATION` (`ntifs.h`: `NextEntryOffset` 0,
 /// `StreamNameLength` 4, `StreamSize` 8, `StreamAllocationSize` 16,
-/// `StreamName` 24): Poly's volumes keep no named streams, so a file on one
-/// has its default data stream only and a directory none (an empty
-/// answer). A console or pipe has none either (to be confirmed).
-pub fn streams(f: &Facts, on_disk: bool) -> Vec<u8> {
-    if f.directory || !on_disk {
-        return Vec::new();
-    }
-    let name: Vec<u16> = DEFAULT_STREAM.encode_utf16().collect();
-    let mut b = alloc::vec![0u8; STREAM_INFO_FIXED];
-    put_u32(&mut b, 4, (2 * name.len()) as u32);
-    b[8..16].copy_from_slice(&f.size.to_le_bytes());
-    b[16..24].copy_from_slice(&f.allocation.to_le_bytes());
-    for c in name {
-        b.extend_from_slice(&c.to_le_bytes());
+/// `StreamName` 24) for `entries` (full stream name, size, allocation): each
+/// entry starts on an 8-byte boundary and the last has `NextEntryOffset` 0.
+/// A file lists its default stream `::$DATA` first, then its named streams
+/// (`:name:$DATA`); a directory only its named streams, so one with none
+/// gives an empty answer ([`super::IoState::stream_information`], ADR 0223).
+pub fn stream_entries(entries: &[(Vec<u16>, u64, u64)]) -> Vec<u8> {
+    let mut b = Vec::new();
+    for (i, (name, size, allocation)) in entries.iter().enumerate() {
+        let start = b.len();
+        b.resize(start + STREAM_INFO_FIXED, 0);
+        put_u32(&mut b, start + 4, (2 * name.len()) as u32);
+        b[start + 8..start + 16].copy_from_slice(&size.to_le_bytes());
+        b[start + 16..start + 24].copy_from_slice(&allocation.to_le_bytes());
+        for c in name {
+            b.extend_from_slice(&c.to_le_bytes());
+        }
+        if i + 1 < entries.len() {
+            b.resize(b.len().next_multiple_of(8), 0);
+            let next = (b.len() - start) as u32;
+            put_u32(&mut b, start, next);
+        }
     }
     b
 }
