@@ -79,7 +79,10 @@ As ADR 0171 made them, now visible with two levels:
   when the user is an administrator (a Limited token), from a token that is not elevated fails
   with `ERROR_ELEVATION_REQUIRED` (740) and creates nothing (`kernelbase/elevate.rs`).
   `CreateProcessW` never asks the user.
-- **`ShellExecuteExW` / `ShellExecuteW` / `ShellExecuteA`** (`shell32/elevate.rs`):
+- **`ShellExecuteExW` / `ShellExecuteW`** are ADR 0223's (`shell32/exec.rs`: programs,
+  documents by association, folders through the desktop). Its program path now also takes the
+  verb `runas` and calls `shell32/elevate.rs` (`caller_elevated`, `start_elevated`) for these
+  rules; `ShellExecuteA` and `IsUserAnAdmin` are `elevate.rs`'s:
   - First the call is checked: a missing file is 2 / `SE_ERR_FNF`, a verb other than `open`,
     `runas` or none is 1155 / `SE_ERR_NOASSOC`, a wrong `cbSize` is 5. No prompt comes before
     these pass.
@@ -90,9 +93,7 @@ As ADR 0171 made them, now visible with two levels:
   - An elevated caller starts the program without a prompt.
   - `IsUserAnAdmin` is TRUE when the effective token has Administrators enabled. An
     impersonation token below the impersonation level answers FALSE. The last error is kept.
-  - Documents and folders (associations, Files) are `ShellExecuteExW`'s own entry (ADR 0223,
-    `impl-chrome-dl`). Its open path calls the same rules (`elevate::gate`) when the two meet.
-    Until then this module serves programs only.
+  - A document opened with `runas` goes by its association as before (the verb's command).
 
 ### The consent broker (`personalities/nt/src/consent.rs`)
 
