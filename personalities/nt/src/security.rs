@@ -136,6 +136,30 @@ fn check_given_token(sys: &mut NtSystem, given: u64, creator: ProcessId, thread:
     Err(STATUS_PRIVILEGE_NOT_HELD)
 }
 
+/// Write `PEB.SessionId` of a new process from its primary token's session (ADR 0222): the
+/// interactive logon's processes are in session 1, services and the administrator of ADR 0171
+/// in session 0. Programs read the field straight from the PEB (`ProcessIdToSessionId`).
+pub fn write_session_id(
+    sys: &NtSystem,
+    proc: &crate::system::NtProcess,
+    b: &mut dyn crate::backend::Backend,
+) -> Result<()> {
+    let session = sys
+        .objects
+        .security
+        .process_token(proc.pid)
+        .and_then(|id| sys.objects.security.token(id))
+        .map_or(0, |t| t.session);
+    b.write(proc.peb + proc.layout().peb_session_id, &session.to_le_bytes())
+}
+
+/// Make process `pid` the session's shell stand-in (ADR 0222, `explorer.exe`): it holds the
+/// logon's filtered token, as the shell of an administrator's session does, so a program can
+/// start a process de-elevated with a copy of it (`CreateProcessWithTokenW`).
+pub fn become_shell(sys: &mut NtSystem, pid: ProcessId, thread: ThreadRef) -> Result<()> {
+    install_process_token(sys, pid, Token::uac_filtered(), thread, None).map(|_| ())
+}
+
 /// Give the objects of a new process their descriptors (the default of its
 /// creator's token): the process object and its first thread.
 pub fn assign_process_security(

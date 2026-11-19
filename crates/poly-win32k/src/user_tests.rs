@@ -1413,6 +1413,8 @@ fn the_client_rectangle_follows_a_frame_style_change_without_frame_changed() {
     });
 }
 
+#[path = "user_tests/dpi.rs"]
+mod dpi_hunt;
 #[path = "user_tests/focus.rs"]
 mod focus_hunt;
 #[path = "user_tests/input.rs"]
