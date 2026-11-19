@@ -25,6 +25,17 @@ summary: >
   writable: it gets 0 after the first call and 0x7fffffff once everything
   was read, where lseek(fd, 0, SEEK_CUR) also says 0x7fffffff; lseek to 0
   starts again with the same records.
+  More behaviour. A directory of 150 files read through a 1024-byte buffer
+  takes 6 calls (the last returns 0) and lists every entry once: 152
+  records of 32 bytes (4864 bytes). d_type is DT_DIR 4, DT_REG 8, DT_LNK
+  10 or DT_FIFO 1; /dev/null is DT_CHR 2; /dev/fd was DT_UNKNOWN 0 (a
+  value). d_ino is the inode lstat64 gives for the name, and "." has the
+  directory's own. A name of 255 bytes has d_namlen 255 and d_reclen 280.
+  Entries removed after the first batch was read do not show in the rest
+  of the listing. lseek to 0 starts again with the same records; an lseek
+  to 100 makes the next read return 0; lseek(SEEK_END) gives the
+  directory's size (128 for two files, a value); basep is 0 after a read
+  of 64 bytes.
 returns:
   success: "bytes of records placed in buf"
   end: "0"
@@ -41,5 +52,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

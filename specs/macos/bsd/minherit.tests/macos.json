@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 19:58:57",
+  "tests": [
+    {
+      "name": "minherit_errors",
+      "source_sha256": "b2614e6a3310ca612f6c2829f01279c865dfee0fa327c775f81bd72e6976d599",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b32cb17c4c60c4823e33923d801104338e275a72e36425aa01ef35ebf5f0f48c",
+          "exit_code": 0,
+          "stdout": "ok SHARE\nok COPY\nok NONE\nok DONATE_COPY (3): EINVAL\nok 4: EINVAL\nok 5: EINVAL\nvalue an unaligned address: errno 0\nvalue an address that is not mapped: errno 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "minherit_none",
+      "source_sha256": "b4815a2e0cff68f11f0a278a4c67886d13040f51de61bd13e977d6e1cf57c18a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2d85a1eb4c0836458daba11537f3dd41e0f7d63e3c676558924c0ce7e5af17de",
+          "exit_code": 0,
+          "stdout": "ok VM_INHERIT_NONE\nok the child dies when it touches the region\nvalue signal 11\nok the parent still has it\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

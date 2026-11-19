@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/sys_ulock_wake.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# sys_ulock_wake.tests/macos.json.
+id: macos/syscall/bsd/sys_ulock_wake
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 516,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 516, arguments in x0..x5 (x0..x7 for calls with
+  more; second result in x1). On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. ulock_wake(operation, address, wake value) wakes one
+  process or thread that waits on the address with the same operation
+  (ULF_WAKE_ALL 0x100 ORed into the operation wakes all of them) and
+  returns 0. With nobody waiting it fails with ENOENT (2), also with
+  ULF_WAKE_ALL and for the shared operation; with ULF_NO_ERRNO the result
+  is -2 and the carry flag is clear. An operation that does not exist (0,
+  99) and a NULL address are EINVAL (22). A waiter in another process
+  (UL_COMPARE_AND_WAIT_SHARED on shared memory) that is woken returns from
+  its wait without an error; one ULF_WAKE_ALL call woke two waiting
+  processes. A wake can only find a waiter that has already gone to sleep,
+  so a caller that races with the waiter repeats it until it gets 0.
+returns:
+  woken: "0"
+errors:
+  nobody_waiting: "ENOENT (2); -2 with ULF_NO_ERRNO"
+  bad_operation: "EINVAL (22): operation 0, 99; a NULL address"
+side_effects: "the waiters wake"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

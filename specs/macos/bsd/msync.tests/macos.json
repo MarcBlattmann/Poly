@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 19:58:57",
+  "tests": [
+    {
+      "name": "msync_flags",
+      "source_sha256": "866ed639bf1ee1b633d3cb63b03c71d8a52ccf3145e7c1dfd792559d3ad3b4cb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9f1e6a020bc77a43726dacf2102b4e1d618d9a1f4b85b4625d897146107e1fea",
+          "exit_code": 0,
+          "stdout": "ok MS_SYNC\nok MS_ASYNC\nok flags 0\nok MS_INVALIDATE\nok MS_SYNC|MS_ASYNC: EINVAL\nok anonymous memory\nvalue flag bit 0x100: errno 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "msync_ranges",
+      "source_sha256": "fc40eda4563d854cfb9d511454f0d8b334f327af3015c085c136bc3f35d5c293",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c78cbee8e3144b14d102e0cbcba2c01b7663e806dbde24727c95cecc59a21513",
+          "exit_code": 0,
+          "stdout": "ok pages that are not mapped: ENOMEM\nok an unaligned address: EINVAL\nok a length of 0: EINVAL\nok the whole mapping\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

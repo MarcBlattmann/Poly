@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/sys_ulock_wait.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# sys_ulock_wait.tests/macos.json.
+id: macos/syscall/bsd/sys_ulock_wait
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 515,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64 `svc
+  #0x80` with x16 = 515, arguments in x0..x5 (x0..x7 for calls with more;
+  second result in x1). On failure the carry flag is set and the result
+  register holds the errno (<sys/errno.h>); on success the carry flag is
+  clear. ulock_wait(operation, address, value, timeout) is the kernel side
+  of locks and condition waits in libSystem. Operations (numbers found by
+  experiment; there is no public header): UL_COMPARE_AND_WAIT 1,
+  UL_UNFAIR_LOCK 2, UL_COMPARE_AND_WAIT_SHARED 3 (between processes),
+  UL_COMPARE_AND_WAIT64 5 (an 8-byte word); flags ORed in: ULF_NO_ERRNO
+  0x1000000. The timeout is in microseconds (0 = none). If the word at
+  address equals value the caller sleeps until a ulock_wake or the timeout:
+  the timeout fails with ETIMEDOUT (60) after the time (at least 15 ms went
+  by for 20 ms on the oracle); if the word differs the call returns 0 at
+  once. With ULF_NO_ERRNO the errors come back as the negative number (-60)
+  in the result with the carry flag clear. A wait that a wake ends returns
+  without an error, the result a small number (0 or 1 on the oracle: the
+  others still waiting). The address must be 4-byte aligned (8 for the
+  64-bit operation) and not NULL (EINVAL), and mapped (address 8: EFAULT);
+  UL_UNFAIR_LOCK with a value that is not the id of a thread gave EOWNERDEAD
+  (105, a value). Shared waits: on memory two processes share, the process
+  that has not touched the page since fork gets EFAULT (14) from
+  UL_COMPARE_AND_WAIT_SHARED (the kernel does not fault the page in), and
+  the same wait after one read of the word works (ETIMEDOUT).
+returns:
+  woken: "a number >= 0 (0 or 1: other waiters left)"
+  value_differs: "0 at once"
+errors:
+  timeout: "ETIMEDOUT (60); -60 with ULF_NO_ERRNO"
+  bad_operation: "EINVAL (22): operation 0, 99"
+  bad_address: "EINVAL (22): unaligned or NULL address; EFAULT (14): address 8, or an untouched page of a shared mapping"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
