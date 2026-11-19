@@ -68,3 +68,30 @@ Simple types are inline: `(0x8000 | vt) << 16 | vt`; others are offsets into the
 Packed word of the function record (function kind, invoke kind: `0x4411` seen for a dispatch property get), optional record fields (doc strings, help contexts, entry points, default values, custom data), the
 type-descriptor encoding for `PTR`, `USERDEFINED`, `SAFEARRAY`, `CARRAY`, the variable block, custom-data encoding (the MIDL stamps are in every updater library), the dual interface layout, the hash functions,
 the remaining type-info words, coclass impl flags, alias types, a reader (Python) checked against `ITypeLib` dumps of all samples and of the six updater libraries, the test programs, sample files, the coverage entry and hand-off.
+
+## Update 2026-11-19 (still paused): what is now verified
+
+A reader written from these notes (kit `analysis/tlbread.py`) was compared field by field with what `ITypeLib`/`ITypeInfo` report: **0 differences on the updater's resources 2 and 5, and only
+loader behaviour (below) on 1, 3, 4, 6**, about 900 function records; also 0 on all sample libraries except the same loader behaviour. Corrections and additions to the tables above:
+
+- Header words 0x44..0x50 are: GUID hash slot count (0x20), name hash slot count (0x80), the import reference of IDispatch (-1 when not imported), the number of import-info entries.
+  Header 0x40 = first entry of the library custom-data chain (cdguid table entry: GUID offset, data, next).
+- Type record: word 0 bits 16+ = the type's index, bit 4 = dual (a type created as interface with FDUAL is stored as kind 4 with this bit); word 18 = type custom-data chain head (-1); words 21/22 as above
+  (single implemented type = its href; coclass, or several = offset of the first reference-table entry; word 22 = inherited function count << 16 | depth). Words 2-5, 7-10, 23: 0, 0, 3, 0, 0 constant.
+- Hrefs: local type = offset of its type record; imported = (import-info offset | 1). Import info: `kind << 24 | (1 if referenced by GUID) << 16 | running number`, import-file offset, GUID-table offset (or the type's index in the imported library when not by GUID: GUID 0, DISPPARAMS 1, EXCEPINFO 2 in stdole2).
+- Type descriptor table entries (8 bytes): `vt | flags << 16`, then an inline simple type (bit 31 set, low 16 = vt; `(0x8000 | base vt) << 16 | vt`, INT and UINT use base I4/UI4), or a table offset, or for userdefined (29) the href, or for carray (28) the array-descriptor offset.
+  Array descriptor: element type, `dims | (8 * dims) << 16`, then `(count, lower bound)` per dimension. Parameters, returns and variables hold either the inline form or a type-descriptor offset.
+- Function record: `[size | index << 16][return type][function flags][(0x34 + 0x10 * params + 8 per non-inline type, informational) << 16 | vtable offset][packed][params | optional params << 16]`
+  `[optional words][params: type, name offset, flags]`. Packed: bits 0-2 function kind (1 pure virtual, 3 static, 4 dispatch; a dual stores pure virtual), bits 3-6 invoke kind (1 get 2, ...: 1 func, 2 get, 4 put, 8 putref), bit 7 custom data, bits 8-11 calling convention, bit 12 default values, bit 13 entry is an ordinal (module), bit 14 has a retval/lcid parameter, bits 16+ the function index.
+  Optional words (count = (size - 24 - 12 * params) / 4): help context, doc string (string-table offset, -1), module entry (string offset or ordinal), -1, DLL name (string offset; absent = offset 0), help string context, then if bit 7: function custom-data chain head + one per parameter, then if bit 12: one default value per parameter (inline custom-data form or custom-data table offset). Trailing absent fields are left out.
+- After the records: member ids, name offsets, record offsets (u32 each per function). Variables follow the same pattern after the function part: `[size]`, records `[size | index << 16][type][var flags][size << 16 | var kind][value or instance offset][help context][doc]`, ids, names, offsets (enum constants: kind 2, value inline or custom-data table).
+- Custom data: inline when bit 31 is set (`0x80000000 | vt << 26 | value`), else a custom-data table entry: u16 vt, then 4 bytes (I4/UI4) or u32 length + text (BSTR), padded with `W`.
+- Property get/put with one member id share one name (the put's name word repeats the get's; a put added with a parameter-name list is refused by the writer, `nnames=1` works).
+
+Loader behaviour a reader must reproduce (seen against the real libraries): a dual (kind 4, flag 0x40) is reported with the seven IUnknown/IDispatch methods first (and the base dual's functions when it derives from a local dual, impl type reported as IDispatch);
+its pure-virtual records are reported as dispatch functions with the [retval] parameter turned into the return type (HRESULT without retval becomes void); type flags report 0x1040 for a file value 0x1140; a library with syskind 1 loaded by a 64-bit process is reported with
+8-byte slots (vtable offset 12 -> 24, size 4 -> 8); the alias type's GUID reads as all zeros; the helpfile reads as `<directory of the library>\<name>` plus a NUL.
+
+Still open: hash functions (not needed), field 24 of the type record, impl-type custom data, types holding both functions and variables, writer details (`DeleteFuncDesc` etc., not needed).
+Eight sample libraries made by our own tool are in `specs/windows/oleaut32.dll/TypeLibFile.samples/` (`lib_attrs`, `lib_win32`, `lib_empty`, `lib_many` (70 types), `kinds`, `updater_like` (the updater's shape, our own ids and text), `dual`, `funcs`).
+Not yet done: the sheet proper, the Rust test programs (dump through the API; the test library `tf.rs` was being written), coverage entries (`TypeLibFile.*` with a new source in `coverage/index.json`), `tests split`, hand-off records, PR.
