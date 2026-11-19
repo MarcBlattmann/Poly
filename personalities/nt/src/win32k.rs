@@ -334,6 +334,15 @@ fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: R
                 let w = &sys.win32k;
                 return Reply::Value { value: u64::from(w.surfaces.screen_pixel(&w.wm, &w.desktop, x, y)) };
             }
+            // A premultiplied DirectComposition swap chain shows in the window (ADR 0225).
+            Request::SurfaceAlpha { hwnd, premultiplied } => {
+                let w = &mut sys.win32k;
+                if !w.surfaces.set_premultiplied(&w.wm, hwnd, premultiplied) {
+                    return Reply::Error { code: 1400 };
+                }
+                w.sync();
+                return Reply::Ok {};
+            }
             // What UpdateLayeredWindow gave a layered window (ADR 0172).
             Request::LayeredContent { hwnd, width, height, pixels } => {
                 let w = &mut sys.win32k;

@@ -23,6 +23,19 @@ summary: >
   expected under Rosetta, not observed). A NULL oldp reports the size; a
   buffer too small is ENOMEM with *oldlenp set to 0. A node name ("kern")
   is not a value. The map names the entry sys_sysctlbyname.
+  More names. hw.memsize is 8 bytes and the same as by number;
+  hw.logicalcpu equals hw.ncpu; hw.physicalcpu is positive; hw.byteorder
+  is 1234; hw.pagesize32 equals hw.pagesize; kern.maxfilesperproc is
+  positive; vm.loadavg is 24 bytes (a 4-byte buffer is ENOMEM);
+  kern.version starts "Darwin Kernel Version "; kern.hostname is not
+  empty; kern.osversion and hw.machine are the same as by number;
+  kern.osproductversion is a string ("27.0", a value); kern.boottime is a
+  struct timeval of 16 bytes after 2023; values on the oracle:
+  hw.tbfrequency 24000000, hw.cachelinesize 128, kern.argmax 1048576,
+  hw.optional.arm64 1. The name-to-numbers call of sysctl ({CTL_SYSCTL 0,
+  3}) gives the numbers the plain call takes for the same value;
+  sysctlbyname with the length of a prefix of a name (7 of "kern.ostype")
+  is ENOENT.
 returns:
   success: "0, *oldlenp = bytes copied"
   size_query: "0 with oldp NULL, *oldlenp = the value's size"
@@ -39,5 +52,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 2  # count in <symbol>.tests/
-  held_out: 1  # count kept by the diff runner
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

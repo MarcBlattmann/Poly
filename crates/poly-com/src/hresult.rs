@@ -34,6 +34,22 @@ pub const DRAGDROP_E_ALREADYREGISTERED: Hresult = 0x8004_0101_u32 as i32;
 pub const DRAGDROP_E_INVALIDHWND: Hresult = 0x8004_0102_u32 as i32;
 /// `RPC_E_TOO_LATE`: `CoInitializeSecurity` after the first marshalling.
 pub const RPC_E_TOO_LATE: Hresult = 0x8001_0119_u32 as i32;
+/// `RPC_E_INVALID_OBJREF` (`winerror.h`): damaged or unknown OBJREF header.
+pub const RPC_E_INVALID_OBJREF: Hresult = 0x8001_011D_u32 as i32;
+/// `REGDB_E_IIDNOTREG` (`winerror.h`): no proxy/stub registered for the interface.
+pub const REGDB_E_IIDNOTREG: Hresult = 0x8004_0155_u32 as i32;
+/// `CO_E_OBJNOTREG` (`winerror.h`): table entry no longer registered.
+pub const CO_E_OBJNOTREG: Hresult = 0x8004_01FB_u32 as i32;
+/// `CO_E_OBJNOTCONNECTED` (`winerror.h`): marshalled data already used or released.
+pub const CO_E_OBJNOTCONNECTED: Hresult = 0x8004_01FD_u32 as i32;
+/// `STG_E_INVALIDFUNCTION` (`winerror.h`).
+pub const STG_E_INVALIDFUNCTION: Hresult = 0x8003_0001_u32 as i32;
+/// `STG_E_INVALIDPOINTER` (`winerror.h`).
+pub const STG_E_INVALIDPOINTER: Hresult = 0x8003_0009_u32 as i32;
+/// `STG_E_WRITEFAULT` (`winerror.h`).
+pub const STG_E_WRITEFAULT: Hresult = 0x8003_001D_u32 as i32;
+/// `STG_E_READFAULT` (`winerror.h`): stream ended before the expected bytes.
+pub const STG_E_READFAULT: Hresult = 0x8003_001E_u32 as i32;
 
 /// `HRESULT_FROM_WIN32` (`winerror.h`).
 pub const fn from_win32(code: u32) -> Hresult {

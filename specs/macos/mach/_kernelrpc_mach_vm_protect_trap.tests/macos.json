@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:04:55",
+  "tests": [
+    {
+      "name": "vm_protect_basic",
+      "source_sha256": "2c33678cec64c2434893f4e4992d311c285cab8230eff5e7e858dd5876a63a1a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "cca90f7445dfea4135aaf220b6bd18da71fb0b1384f1c41ade615d822ffac061",
+          "exit_code": 0,
+          "stdout": "ok RO: KERN_SUCCESS\nok a write kills a child\nvalue signal 10\nok RW again: KERN_SUCCESS\nok the content stayed\nok and it can be written\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "vm_protect_maximum",
+      "source_sha256": "9f4223e7cd0dd1b7801ce9807147fc86cb0bd6fa9aeefcc8aa4b55f7e4fcf63d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d036c492b0b357a4f8d6d6e9f8df91a2e70bc9d1fbd0758f832832f4bfcf78cd",
+          "exit_code": 0,
+          "stdout": "ok maximum to read-only: KERN_SUCCESS\nok the current protection read-only: fine\nok read-write is above the maximum: KERN_PROTECTION_FAILURE\nok mprotect cannot raise it either\nvalue mprotect to read-write: errno 13\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

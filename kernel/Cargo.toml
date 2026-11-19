@@ -34,6 +34,7 @@ poly-input = { path = "../crates/poly-input" }
 poly-drm = { path = "../crates/poly-drm" }
 poly-irq = { path = "../crates/poly-irq" }
 poly-line = { path = "../crates/poly-line" }
+poly-logline = { path = "../crates/poly-logline" }
 poly-fuse = { path = "../crates/poly-fuse" }
 poly-loop = { path = "../crates/poly-loop" }
 poly-overlayfs = { path = "../crates/poly-overlayfs" }
@@ -48,6 +49,7 @@ poly-pci = { path = "../crates/poly-pci" }
 poly-procfs = { path = "../crates/poly-procfs" }
 poly-random = { path = "../crates/poly-random" }
 poly-registry = { path = "../crates/poly-registry" }
+poly-com = { path = "../crates/poly-com" }
 poly-rtc = { path = "../crates/poly-rtc" }
 poly-term = { path = "../crates/poly-term" }
 poly-tty = { path = "../crates/poly-tty" }

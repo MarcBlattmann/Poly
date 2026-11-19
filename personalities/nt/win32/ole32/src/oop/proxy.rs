@@ -33,6 +33,9 @@ struct Proxy {
     /// Whether the object has `IClassFactory`: 0 not asked yet, 1 yes, 2 no.
     factory: AtomicU32,
     target: Target,
+    /// Interface proxies made by proxy/stub classes (B2b): (interface id, interface pointer,
+    /// its `IRpcProxyBuffer`). Their references count on this block.
+    ifaces: Locked<Vec<(Guid, usize, usize)>>,
 }
 
 const PTR: usize = core::mem::size_of::<usize>();
@@ -61,7 +64,15 @@ struct MarVtbl {
     qi: Qi,
     add_ref: Ref,
     release: Ref,
-    rest: [unsafe extern "system" fn() -> Hresult; 6],
+    get_unmarshal_class:
+        unsafe extern "system" fn(*mut c_void, *const Guid, *mut c_void, u32, *mut c_void, u32, *mut Guid) -> Hresult,
+    get_marshal_size_max:
+        unsafe extern "system" fn(*mut c_void, *const Guid, *mut c_void, u32, *mut c_void, u32, *mut u32) -> Hresult,
+    marshal_interface:
+        unsafe extern "system" fn(*mut c_void, *mut c_void, *const Guid, *mut c_void, u32, *mut c_void, u32) -> Hresult,
+    unmarshal_interface: unsafe extern "system" fn(*mut c_void, *mut c_void, *const Guid, *mut *mut c_void) -> Hresult,
+    release_marshal_data: unsafe extern "system" fn(*mut c_void, *mut c_void) -> Hresult,
+    disconnect_object: unsafe extern "system" fn(*mut c_void, u32) -> Hresult,
 }
 
 // SAFETY: tables of function pointers.
@@ -74,11 +85,17 @@ unsafe impl Sync for MarVtbl {}
 static UNK: UnkVtbl = UnkVtbl { qi: unk_qi, add_ref: unk_add_ref, release: unk_release };
 static FAC: FacVtbl =
     FacVtbl { qi: fac_qi, add_ref: fac_add_ref, release: fac_release, create: fac_create, lock: fac_lock };
-static MAR: MarVtbl = MarVtbl { qi: mar_qi, add_ref: mar_add_ref, release: mar_release, rest: [not_impl; 6] };
-
-unsafe extern "system" fn not_impl() -> Hresult {
-    E_NOTIMPL
-}
+static MAR: MarVtbl = MarVtbl {
+    qi: mar_qi,
+    add_ref: mar_add_ref,
+    release: mar_release,
+    get_unmarshal_class: marshal::proxy_get_unmarshal_class,
+    get_marshal_size_max: marshal::proxy_get_marshal_size_max,
+    marshal_interface: marshal::proxy_marshal_interface,
+    unmarshal_interface: marshal::proxy_unmarshal_interface,
+    release_marshal_data: marshal::proxy_release_marshal_data,
+    disconnect_object: marshal::proxy_disconnect_object,
+};
 
 /// The proxies of the process, for identity: (object key, proxy).
 #[derive(Clone, PartialEq, Eq)]
@@ -126,6 +143,7 @@ fn make(target: Target) -> *mut c_void {
         refs: AtomicU32::new(1),
         factory: AtomicU32::new(0),
         target,
+        ifaces: Locked::new(Vec::new()),
     }));
     // SAFETY: just made.
     let key = key_of(unsafe { &*p });
@@ -157,6 +175,28 @@ pub(crate) fn is_proxy(p: *mut c_void) -> bool {
     // SAFETY: a COM interface pointer: its first word is its vtable.
     let v = unsafe { *(p as *const usize) };
     v == (&raw const UNK) as usize || v == (&raw const FAC) as usize || v == (&raw const MAR) as usize
+}
+
+/// Marshalling target of one of our proxies.
+pub(crate) enum ProxyMarshalInfo {
+    Local { owner: Owner, object: usize },
+    Remote { endpoint: String, oid: u64 },
+}
+
+/// If `p` is one of our proxies, return its underlying target for marshalling.
+pub(crate) fn marshal_info(p: *mut c_void) -> Option<ProxyMarshalInfo> {
+    if !is_proxy(p) {
+        return None;
+    }
+    // SAFETY: one of our proxies' interfaces: find the block from its vtable.
+    let base = unsafe { base_of(p) };
+    // SAFETY: a live proxy.
+    match unsafe { &(*base).target } {
+        Target::Local { owner, object } => Some(ProxyMarshalInfo::Local { owner: *owner, object: *object }),
+        Target::Remote { endpoint, oid, .. } => {
+            Some(ProxyMarshalInfo::Remote { endpoint: endpoint.clone(), oid: *oid })
+        }
+    }
 }
 
 /// Whether `p` is a proxy of an object in another process.
@@ -253,12 +293,127 @@ unsafe fn qi(p: *mut Proxy, iid: *const Guid, out: *mut *mut c_void) -> Hresult 
         } else if iid == IID_ICLASS_FACTORY && has_factory(&*p) {
             1
         } else {
-            return E_NOINTERFACE;
+            return iface_proxy(p, &iid, out);
         };
         (*p).refs.fetch_add(1, Ordering::AcqRel);
         *out = (p as usize + slot * PTR) as *mut c_void;
     }
     S_OK
+}
+
+/// The proxy of interface `iid` of the object (B2b): one made earlier, or a new one from the
+/// interface's proxy/stub class, connected to a channel to the object. `E_NOINTERFACE` when the
+/// object does not have the interface or nothing can marshal it.
+unsafe fn iface_proxy(p: *mut Proxy, iid: &Guid, out: *mut *mut c_void) -> Hresult {
+    // SAFETY: a live proxy.
+    let proxy = unsafe { &*p };
+    if let Some(itf) = proxy.ifaces.with(|v| v.iter().find(|e| e.0 == *iid).map(|e| e.1)) {
+        // SAFETY: an interface of this block: its AddRef counts on the block.
+        unsafe {
+            add_ref(p);
+            *out = itf as *mut c_void;
+        }
+        return S_OK;
+    }
+    // Does the object have it?
+    let hr = match &proxy.target {
+        Target::Local { owner, object } => {
+            let o = *object as *mut c_void;
+            let g = *iid;
+            apt::run_in(*owner, || {
+                // SAFETY: the proxy's object; the query's reference is given back at once.
+                let (hr, q) = unsafe { query(o, &g) };
+                if !q.is_null() {
+                    // SAFETY: as above.
+                    unsafe { release_unknown(q) };
+                }
+                hr
+            })
+        }
+        Target::Remote { .. } => match call(proxy, Op::QueryInterface(*iid)) {
+            Ok(r) => r.hr,
+            Err(hr) => hr,
+        },
+    };
+    if hr < 0 {
+        return if hr == RPC_E_DISCONNECTED || hr == RPC_S_SERVER_UNAVAILABLE { hr } else { E_NOINTERFACE };
+    }
+    let Ok(f) = super::channel::ps_factory(iid) else { return E_NOINTERFACE };
+    let mut buf: *mut c_void = core::ptr::null_mut();
+    let mut pv: *mut c_void = core::ptr::null_mut();
+    // SAFETY: IPSFactoryBuffer::CreateProxy (slot 3) with this block's IUnknown as the outer object.
+    let hr = unsafe {
+        let v = *(f as *const *const usize);
+        let create: unsafe extern "system" fn(
+            *mut c_void,
+            *mut c_void,
+            *const Guid,
+            *mut *mut c_void,
+            *mut *mut c_void,
+        ) -> Hresult = core::mem::transmute(*v.add(3));
+        let hr = create(f, p.cast(), iid, &mut buf, &mut pv);
+        release_unknown(f);
+        hr
+    };
+    if hr < 0 || buf.is_null() {
+        return E_NOINTERFACE;
+    }
+    // The interface pointer: asked of the proxy buffer (its AddRef goes to this block).
+    // SAFETY: an IRpcProxyBuffer.
+    let (qhr, itf) = unsafe { query(buf, iid) };
+    if qhr < 0 || itf.is_null() {
+        // SAFETY: the buffer's reference.
+        unsafe { release_unknown(buf) };
+        return E_NOINTERFACE;
+    }
+    let target = match &proxy.target {
+        Target::Local { owner, object } => super::channel::Target::Local { owner: *owner, object: *object },
+        Target::Remote { endpoint, oid, .. } => {
+            super::channel::Target::Remote { endpoint: endpoint.clone(), oid: *oid }
+        }
+    };
+    let chan = super::channel::new_channel(*iid, target);
+    // SAFETY: IRpcProxyBuffer::Connect (slot 3); the channel keeps its own reference.
+    unsafe {
+        let v = *(buf as *const *const usize);
+        let connect: unsafe extern "system" fn(*mut c_void, *mut c_void) -> Hresult = core::mem::transmute(*v.add(3));
+        connect(buf, chan);
+        release_unknown(chan);
+    }
+    let raced = proxy.ifaces.with(|v| {
+        if let Some(e) = v.iter().find(|e| e.0 == *iid) {
+            Some(e.1)
+        } else {
+            v.push((*iid, itf as usize, buf as usize));
+            None
+        }
+    });
+    if let Some(other) = raced {
+        // Another thread made it first: use that one, drop ours.
+        // SAFETY: our interface reference (on this block) and our buffer.
+        unsafe {
+            release_unknown(itf);
+            disconnect_buffer(buf as usize);
+            add_ref(p);
+            *out = other as *mut c_void;
+        }
+        return S_OK;
+    }
+    // SAFETY: the caller's out pointer; the query added this block's reference.
+    unsafe { *out = itf };
+    S_OK
+}
+
+/// Disconnect and release an interface proxy's buffer.
+unsafe fn disconnect_buffer(buf: usize) {
+    let b = buf as *mut c_void;
+    // SAFETY: an IRpcProxyBuffer: Disconnect (slot 4), then its reference.
+    unsafe {
+        let v = *(b as *const *const usize);
+        let disconnect: unsafe extern "system" fn(*mut c_void) = core::mem::transmute(*v.add(4));
+        disconnect(b);
+        release_unknown(b);
+    }
 }
 
 unsafe fn add_ref(p: *mut Proxy) -> u32 {
@@ -284,6 +439,10 @@ unsafe fn release(p: *mut Proxy) -> u32 {
     if gone {
         // SAFETY: the last reference of a proxy made by `make`.
         let b = unsafe { Box::from_raw(p) };
+        for (_, _, buf) in b.ifaces.with(core::mem::take) {
+            // SAFETY: the block's interface proxies (their pointers' references were all on it).
+            unsafe { disconnect_buffer(buf) };
+        }
         match &b.target {
             Target::Local { object, .. } => {
                 // SAFETY: the proxy's reference of the object.
@@ -342,7 +501,9 @@ unsafe fn create(p: *mut Proxy, outer: *mut c_void, iid: *const Guid, out: *mut 
             unsafe { release_unknown(id as *mut c_void) };
             px
         }
-        Target::Remote { .. } => match call(proxy, Op::CreateInstance(iid)) {
+        // The server is asked for IUnknown; the interface comes from a query (recorded runs: the
+        // servers log `create IUnknown` whatever the client asked for).
+        Target::Remote { .. } => match call(proxy, Op::CreateInstance(IID_IUNKNOWN)) {
             Ok(r) => match r.obj {
                 Some(o) if r.hr >= 0 => remote(o),
                 _ => return r.hr,

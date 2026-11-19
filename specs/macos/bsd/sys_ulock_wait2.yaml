@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/sys_ulock_wait2.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# sys_ulock_wait2.tests/macos.json.
+id: macos/syscall/bsd/sys_ulock_wait2
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-17
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 544,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 544, arguments in x0..x5 (x0..x7 for calls with
+  more; second result in x1). On failure the carry flag is set and the
+  result register holds the errno (<sys/errno.h>); on success the carry
+  flag is clear. ulock_wait2(operation, address, value, timeout, value2)
+  is ulock_wait with the timeout in nanoseconds (and a second value for
+  the operations that take one): a word equal to value waits and fails
+  with ETIMEDOUT (60) (20 ms asked: at least 15 ms went by on the oracle),
+  a different word returns 0 at once, ULF_NO_ERRNO returns -60 with the
+  carry flag clear. The errors are those of ulock_wait: EINVAL for an
+  operation that does not exist and for a NULL or unaligned address,
+  EFAULT for an address that is not mapped. A wait on shared memory that a
+  ulock_wake ends returns without an error. It takes six arguments here
+  (x0..x5).
+returns:
+  woken: "a number >= 0"
+  value_differs: "0 at once"
+errors:
+  timeout: "ETIMEDOUT (60); -60 with ULF_NO_ERRNO"
+  bad_operation: "EINVAL (22): operation 99, a NULL or unaligned address; EFAULT (14): address 8"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:04:55",
+  "tests": [
+    {
+      "name": "port_mod_refs_destroy",
+      "source_sha256": "0c167a5c4ab55f5b41bab4f53e33040b3667e6b6cb09f178df8a745fb3a06ad0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ca79186ae7748a467ae08ce11e9b2fff5a50653da08084d0ba72a840a582594a",
+          "exit_code": 0,
+          "stdout": "ok destroy: KERN_SUCCESS\nok the name is gone\nok again: KERN_INVALID_NAME\nok an unknown name: KERN_INVALID_NAME\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "port_mod_refs_errors",
+      "source_sha256": "64deefb74d575393f65c89879e075bdee58d357a47e3eea586ec50605afe83b9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "15cb8271106ea59d5e3257d6d23033c63df9e57b5273ea7347914a9d75fe392b",
+          "exit_code": 0,
+          "stdout": "ok a send reference of a receive-only name: KERN_INVALID_RIGHT\nok a port-set reference of a receive right: KERN_INVALID_RIGHT\nok a right number 99: KERN_INVALID_VALUE\nvalue a receive delta of -2: kern_return 18\nvalue a receive delta of +1: kern_return 18\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

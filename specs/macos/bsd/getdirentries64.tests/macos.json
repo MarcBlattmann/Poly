@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 16:25:09",
   "tests": [
     {
       "name": "gde_errors",
@@ -36,6 +36,36 @@
           "executable_sha256": "0db3592046e1131e72d1b108ee7c81212f17d582cf9b5378d97a28b132ce35ee",
           "exit_code": 0,
           "stdout": "ok 5 entries of 32 bytes: 160\nok ., .., a, bb, sub with their types\nok each 32 bytes, name length, an inode\nok 5 records\nok at the end: 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "gde_many_entries",
+      "source_sha256": "6bc27d30a2335b807ec3ba1bccb5a0a8beee469084a88c9f5317bc08b11a3ef7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6eb9660797487050186f7323559a340e3f7c924be5d8f7a545d2a4569a18926f",
+          "exit_code": 0,
+          "stdout": "ok position after the first call: 0\nok every file once\nok \".\" and \"..\"\nok 152 records of 32 bytes: 4864 bytes in all\nok it took more than one call\nvalue calls (the last returned 0) 6\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "gde_types_inodes",
+      "source_sha256": "4dc3e92830f5989cbc2d00f0550f5f154c0a230e48a1a6db0270540c52603246",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "008521ee20e5d06cbe0e52d7ac2199c741ebe6823b77beb6345e57ea1ca2799e",
+          "exit_code": 0,
+          "stdout": "ok a FIFO (mknod)\nok reg: DT_REG, its inode\nok dir: DT_DIR, its inode\nok lnk: DT_LNK, its inode\nok fifo: DT_FIFO, its inode\nok a name of 255 bytes: d_namlen 255, d_reclen 280\nok a short name: d_reclen 32\nok /dev/null: DT_CHR\nok \".\" has the directory's own inode\nvalue the type of /dev/fd 0\nsummary 9 passed, 0 failed\n",
           "stderr": "",
           "runs": 3,
           "stable": true

@@ -4,7 +4,7 @@
  * themselves are a value (ad-hoc signed by the linker on this machine). */
 #include "poly_mtest.h"
 
-/* XNU bsd/sys/codesign.h (not installed in the SDK): operations and flags. */
+/* Operations and flags: no public header; found by experiment. */
 #define CS_OPS_STATUS 0
 #define CS_VALID 0x00000001u
 

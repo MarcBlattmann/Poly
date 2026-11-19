@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:08:30",
+  "tests": [
+    {
+      "name": "cvwait_timeout",
+      "source_sha256": "532a58ba9a5ec988d04f846407c33e20bd66d1b5ea0af990cd626b94564b3f5e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2a798466fee9130015c7208aa82002288d52a6bff4032768aa8426ed2cff91f9",
+          "exit_code": 0,
+          "stdout": "ok a wait that nobody signals fails with ETIMEDOUT in the low byte\nvalue the whole error 316\nok again\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cvwait_waits",
+      "source_sha256": "8a9393aa0353380e0df47038540b6af8992f8b9a531be3a3cf4f37d4d1238a83",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "92239651df0ac71a32468b25590a61816176a4cd11f9f7000a9e8ce5601e8a16",
+          "exit_code": 0,
+          "stdout": "ok 20 ms: at least 15 ms went by\nok and not a second\nok 1 ms: less than 15 ms\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

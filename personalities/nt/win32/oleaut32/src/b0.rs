@@ -1,8 +1,8 @@
 //! What Google's Chrome installers and their updater import from `oleaut32.dll` by ordinal (batch
-//! B0 of `docs/windows/chrome-installer-plan.md`): `LoadTypeLib` (161), `SystemTimeToVariantTime`
-//! (184) and `OleLoadPicturePath` (424). The decisions are `poly_kernelbase::oleauto`'s; the
-//! sheets are `specs/windows/oleaut32.dll/{LoadTypeLib,SystemTimeToVariantTime,
-//! OleLoadPicturePath}.yaml`.
+//! B0 of `docs/windows/chrome-installer-plan.md`): `SystemTimeToVariantTime` (184) and
+//! `OleLoadPicturePath` (424); `LoadTypeLib` (161) is the type library loader's (ADR 0220,
+//! `typelib/load.rs`). The decisions are `poly_kernelbase::oleauto`'s; the sheets are
+//! `specs/windows/oleaut32.dll/{SystemTimeToVariantTime,OleLoadPicturePath}.yaml`.
 
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -71,39 +71,6 @@ pub unsafe extern "system" fn SystemTimeToVariantTime(st: *const u16, out: *mut 
             1
         }
         None => 0,
-    }
-}
-
-// ----- LoadTypeLib (ordinal 161) ---------------------------------------------------------------
-
-/// `LoadTypeLib(szFile, pptlib)`: `*pptlib` is set to NULL first (the sheet: written even on
-/// failure). The empty name is `STG_E_FILENOTFOUND`. Every other name is
-/// `TYPE_E_CANTLOADLIBRARY`: a name of no file, a directory, a module without the `TYPELIB`
-/// resource the name asks for, and, for now, a type library itself, because the binary format of
-/// type library files is described by no source a clean-room implementation may use (the sheet's
-/// tests that load `stdole2.tlb` and `scrrun.dll` need it; an open item of the hand-back).
-#[unsafe(no_mangle)]
-pub unsafe extern "system" fn LoadTypeLib(file: *const u16, lib: *mut *mut c_void) -> u32 {
-    if lib.is_null() {
-        return E_POINTER;
-    }
-    // SAFETY: the caller's out-pointer.
-    unsafe { lib.write(core::ptr::null_mut()) };
-    if file.is_null() {
-        return E_INVALIDARG;
-    }
-    // SAFETY: the caller's NUL-terminated name.
-    let name = unsafe { wide_slice(file) };
-    let exists = |n: &[u16]| {
-        let mut z = n.to_vec();
-        z.push(0);
-        // SAFETY: a NUL-terminated name.
-        let a = unsafe { GetFileAttributesW(z.as_ptr()) };
-        a != INVALID_FILE_ATTRIBUTES && a & FILE_ATTRIBUTE_DIRECTORY == 0
-    };
-    match oleauto::split_type_lib_name(name, exists) {
-        Err(hr) => hr,
-        Ok(_) => oleauto::TYPE_E_CANTLOADLIBRARY,
     }
 }
 

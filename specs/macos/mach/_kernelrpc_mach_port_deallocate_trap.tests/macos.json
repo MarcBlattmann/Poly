@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-16 20:04:55",
+  "tests": [
+    {
+      "name": "port_deallocate_self_ports",
+      "source_sha256": "960b53e34b3999158b71f269985a0419cf414110f207ee26d3d0670030b63eec",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "41b3e694e08e6b9a3bf0914e5fb2c81b37b0c6689144647ddb3908fb8f40bd33",
+          "exit_code": 0,
+          "stdout": "ok the task's own name is a send right\nok deallocate one reference: KERN_SUCCESS\nvalue the task's own name after one deallocate: type 65536\nok a reply port is a receive right\nok destroying it: KERN_SUCCESS\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "port_deallocate_send",
+      "source_sha256": "6b436394d30be6b101acf6008b2a23fa3b29d0deab742a8ce8d3f5cb82ff165b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2fb9bd7fbb34c1aaeb3cf1047a894f9d6e35bae22dd81fa49b9f11bdfba18e00",
+          "exit_code": 0,
+          "stdout": "ok receive + send\nok the first deallocate: KERN_SUCCESS\nok one reference left: still receive + send\nok the second deallocate: KERN_SUCCESS\nok the send right is gone, the receive right stays\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

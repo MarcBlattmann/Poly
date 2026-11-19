@@ -424,7 +424,7 @@ fn handle(req: Request) -> Reply {
                 prune();
                 let t = now();
                 match STATE.with(|a| a.activate(&clsid, plan.as_ref(), t, started)) {
-                    Decision::Serve(p) => return Reply { hr: S_OK, obj: Some(p.factory) },
+                    Decision::Serve(p) => return Reply { hr: S_OK, obj: Some(p.factory), data: Vec::new() },
                     Decision::NotRegistered => return Reply::hr(REGDB_E_CLASSNOTREG),
                     Decision::TimedOut => return Reply::hr(CO_E_SERVER_EXEC_FAILURE),
                     Decision::Wait => {

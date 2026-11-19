@@ -38,6 +38,10 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-com"
+version = "0.0.1"
+
+[[package]]
 name = "poly-compress"
 version = "0.0.1"
 dependencies = [
@@ -127,6 +131,7 @@ dependencies = [
  "poly-binfmt",
  "poly-block",
  "poly-bochs-vbe",
+ "poly-com",
  "poly-cpio",
  "poly-drm",
  "poly-elf",
@@ -140,6 +145,7 @@ dependencies = [
  "poly-irq",
  "poly-ldr",
  "poly-line",
+ "poly-logline",
  "poly-loop",
  "poly-mem",
  "poly-net",
@@ -196,6 +202,10 @@ dependencies = [
 
 [[package]]
 name = "poly-line"
+version = "0.0.1"
+
+[[package]]
+name = "poly-logline"
 version = "0.0.1"
 
 [[package]]
