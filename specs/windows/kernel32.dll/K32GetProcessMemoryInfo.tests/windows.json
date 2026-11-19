@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "de66edf5cd5f",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T14:12:50Z",
+  "tests": [
+    {
+      "name": "pm_basic",
+      "exe_sha256": "aa7e91f8d959ccbf480e097ce3e640a73e59f223686357de3e6d46cd81a10f4a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2l6ZSBvZiB0aGUgZXh0ZW5kZWQgc3RydWN0dXJlOiA4MApleHRlbmRlZCBzdHJ1Y3R1cmUgKGNiIDgwKTogcmVzdWx0IHRydWUsIGxhc3QgZXJyb3IgLTIsIGNiIGtlcHQgdHJ1ZQp3b3JraW5nIHNldCA+IDA6IHRydWUsIHBlYWsgPj0gd29ya2luZyBzZXQ6IHRydWUsIHBhZ2VmaWxlIHVzYWdlID4gMDogdHJ1ZSwgcGVhayBwYWdlZmlsZSA+PSBwYWdlZmlsZTogdHJ1ZSwgcHJpdmF0ZSB1c2FnZSA+IDA6IHRydWUKcGFnZSBmYXVsdCBjb3VudCA+IDA6IHRydWUKYmFzaWMgc3RydWN0dXJlIChjYiA3Mik6IHJlc3VsdCB0cnVlLCBsYXN0IGVycm9yIC0yLCB0aGUgc2FtZSB3b3JraW5nIHNldCBvcmRlciBvZiBtYWduaXR1ZGU6IHRydWUsIHByaXZhdGUgdXNhZ2UgZmllbGQgbGVmdCBhbG9uZTogdHJ1ZQpWaXJ0dWFsQWxsb2MgMTYgTWlCOiB0cnVlCmFmdGVyIHRoZSBhbGxvY2F0aW9uOiBwcml2YXRlIHVzYWdlIGdyZXcgYnkgYXQgbGVhc3QgMTYgTWlCOiB0cnVlLCBwYWdlZmlsZSB1c2FnZSBncmV3IGJ5IGF0IGxlYXN0IDE2IE1pQjogdHJ1ZQphZnRlciB0b3VjaGluZyBldmVyeSBwYWdlOiB3b3JraW5nIHNldCBncmV3IGJ5IGF0IGxlYXN0IDE0IE1pQjogdHJ1ZSwgcGFnZSBmYXVsdHMgZ3JldyBieSBhdCBsZWFzdCAzMDAwOiB0cnVlLCBwZWFrIHdvcmtpbmcgc2V0ID49IHdvcmtpbmcgc2V0OiB0cnVlCmFmdGVyIHRoZSByZWxlYXNlOiBwcml2YXRlIHVzYWdlIGZlbGwgYnkgYXQgbGVhc3QgMTUgTWlCOiB0cnVlLCB0aGUgcGVhayB3b3JraW5nIHNldCBkaWQgbm90IGZhbGw6IHRydWUsIHBlYWsgcGFnZWZpbGUgdXNhZ2UgZGlkIG5vdCBmYWxsOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "size of the extended structure: 80\nextended structure (cb 80): result true, last error -2, cb kept true\nworking set > 0: true, peak >= working set: true, pagefile usage > 0: true, peak pagefile >= pagefile: true, private usage > 0: true\npage fault count > 0: true\nbasic structure (cb 72): result true, last error -2, the same working set order of magnitude: true, private usage field left alone: true\nVirtualAlloc 16 MiB: true\nafter the allocation: private usage grew by at least 16 MiB: true, pagefile usage grew by at least 16 MiB: true\nafter touching every page: working set grew by at least 14 MiB: true, page faults grew by at least 3000: true, peak working set >= working set: true\nafter the release: private usage fell by at least 15 MiB: true, the peak working set did not fall: true, peak pagefile usage did not fall: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

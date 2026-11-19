@@ -25,6 +25,10 @@ pub const BIND_RENDER_TARGET: u32 = bind::RENDER_TARGET;
 /// The bytes of a resource, shared by the objects opened from one shared handle.
 pub struct Store {
     bytes: UnsafeCell<Vec<u8>>,
+    /// Memory the bytes are in instead of `bytes` (a swap chain's buffer: a view of a section the
+    /// compositor maps, ADR 0224), or null. It outlives the store's use by a texture: the swap
+    /// chain gives the texture a store of its own before it unmaps the view.
+    outside: *mut u8,
     len: usize,
     /// What the resource is (an object opened from a shared handle is the same kind).
     pub kind: Kind,
@@ -43,6 +47,20 @@ impl Store {
     pub fn new(len: usize, kind: Kind) -> Arc<Store> {
         Arc::new(Store {
             bytes: UnsafeCell::new(Vec::new()),
+            outside: core::ptr::null_mut(),
+            len,
+            kind,
+            key: AtomicU64::new(0),
+            holder: core::sync::atomic::AtomicUsize::new(0),
+        })
+    }
+
+    /// A store whose `len` bytes are at `memory` (mapped by the caller, who keeps it mapped while
+    /// the store is in use).
+    pub fn outside(memory: *mut u8, len: usize, kind: Kind) -> Arc<Store> {
+        Arc::new(Store {
+            bytes: UnsafeCell::new(Vec::new()),
+            outside: memory,
             len,
             kind,
             key: AtomicU64::new(0),
@@ -53,6 +71,11 @@ impl Store {
     /// The bytes, allocated (zeroed) on first use.
     #[allow(clippy::mut_from_ref)]
     pub fn bytes(&self) -> &mut [u8] {
+        if !self.outside.is_null() {
+            // SAFETY: `outside` is `len` bytes the swap chain keeps mapped while this store is a
+            // texture's (`Store::outside`); see `Sync` for the access rule.
+            return unsafe { core::slice::from_raw_parts_mut(self.outside, self.len) };
+        }
         // SAFETY: see `Sync`: no two calls of the device touch one resource at once.
         let v = unsafe { &mut *self.bytes.get() };
         if v.len() != self.len {

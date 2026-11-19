@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CopyFileW.yaml
+id: windows/api/kernel32.dll/CopyFileW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon), on an NTFS volume. Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output) and Microsoft Learn's pages for CopyFileW, CopyFileExW, CreateFileW (sharing), SetFileTime, winerror.h and fileapi.h (attribute values). Chrome's own setup.exe copies its files with it (survey-chrome-installer, docs/windows/chrome-setup-plan.md). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Copies one file (its data, its alternate data streams, its attributes and its last write time) to a new name. The destination is a new file or an existing file that is overwritten; with bFailIfExists TRUE an existing destination is an error (80) and is not touched. The copy gets the source's read-only, hidden and system attributes and always the archive attribute; its creation and last access times are new (the time of the copy) but its last write time is the source's; an existing destination keeps its own creation time and gets the source's last write time. Directories cannot be copied (5), a destination that is a directory is 5, copying a file onto itself (also through another name, case or a hard link) is a sharing violation (32), a read-only destination is access denied (5, or 80 with bFailIfExists). A source that another handle holds without sharing is 32; one held for writing with full sharing copies. Bad names: a missing source 2, a missing destination directory 3, an empty name 3, the characters * ? < in a name 123, a destination ending in a backslash 267; relative names are resolved against the current directory; a trailing dot of the destination is dropped.
+interface:
+  signature: "BOOL CopyFileW(LPCWSTR lpExistingFileName, LPCWSTR lpNewFileName, BOOL bFailIfExists)"
+rules:
+  success: "TRUE; the destination holds exactly the source's bytes (checked for 0 bytes, 5000, 10000 and 3000000 bytes, so more than one internal buffer); the source is unchanged. Names with spaces, several dots, non-ASCII letters and the \\\\?\\ prefix work."
+  fail_if_exists: "bFailIfExists TRUE and the destination exists: FALSE, ERROR_FILE_EXISTS (80), the destination is not changed. FALSE: the destination is replaced, new contents and new size (a 300-byte source over a 10000-byte file leaves 300 bytes)."
+  failed_copy_leaves_destination: "every failure listed here leaves an existing destination as it was."
+  attributes: "the destination has the source's READONLY (1), HIDDEN (2) and SYSTEM (4) bits, and always ARCHIVE (0x20), also when the source has no archive bit (source attributes 0 give a copy with 0x20; read-only gives 0x21; hidden 0x22; system 0x24; all three 0x27). Copying a read-only source over an existing normal destination leaves the destination read-only (0x21)."
+  times: "last write time of the copy = the source's (to 100 ns, checked with a fixed time stamp). The creation time and the last access time of a NEW copy are not the source's (they are the time of the copy). An overwritten destination keeps its OWN creation time and gets the source's last write time."
+  streams: "alternate data streams of the source are copied (a stream \"name:ca_stream\" of 11 bytes arrives with the same data)."
+  directories: "the source is a directory: FALSE, ERROR_ACCESS_DENIED (5). The destination is an existing directory: FALSE, 5, also with bFailIfExists TRUE (not 80)."
+  same_file: "source and destination the same file (same name, the name in other case, or a hard link to it): FALSE, ERROR_SHARING_VIOLATION (32); with bFailIfExists TRUE on a hard link of the source: FALSE, 80. The file is intact afterwards."
+  read_only_destination: "an existing destination with the READONLY attribute: FALSE, ERROR_ACCESS_DENIED (5) with bFailIfExists FALSE and ERROR_FILE_EXISTS (80) with TRUE; it is not changed; after clearing the attribute the copy works."
+  sharing: "the source held by another handle opened with no sharing (and read/write access): FALSE, ERROR_SHARING_VIOLATION (32). The source held for reading with share-read, and held for reading and writing with full sharing: TRUE. A destination held by another handle with no sharing: FALSE, 32; held for reading with full sharing: TRUE (the destination is replaced)."
+  bad_names: "a source that does not exist: FALSE, ERROR_FILE_NOT_FOUND (2). A destination in a directory that does not exist: FALSE, ERROR_PATH_NOT_FOUND (3). An empty source or destination name: FALSE, 3. A NULL source: FALSE, 3. A name with '*' or '?' or '<' (destination or source): FALSE, ERROR_INVALID_NAME (123). A destination with a trailing backslash: FALSE, ERROR_DIRECTORY (267). A destination with a trailing '.' is accepted and the file is made without the dot."
+  relative_names: "relative names are resolved against the process's current directory (SetCurrentDirectoryW to the scratch directory; the copy appears there)."
+errors:
+  file_not_found: "2"
+  path_not_found: "3"
+  access_denied: "5"
+  sharing_violation: "32"
+  file_exists: "80"
+  invalid_name: "123"
+  directory: "267"
+side_effects: "creates or overwrites the destination file"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "about a millisecond for small files, a few milliseconds for 3 MB on the oracle"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: cf_basic (contents, fail-if-exists, errors of bad names and directories, the same file, sizes up to 3 MB, odd names), cf_attrs (attributes, time stamps, streams, read-only and locked files), cf_misc (NULL source, invalid characters, trailing backslash and dot, relative names, a hard link). Each declares what it calls from Learn's prototypes. Observations are return values, error codes and relations (equal / not equal contents and times), never times, paths or sizes of the machine. Each test deletes everything it made.
+not_covered: >
+  A NULL destination name (the call crashed the test process with an access violation on the oracle, so it cannot be tested: do not rely on any result), the security descriptor and its inheritance, encrypted, compressed, sparse and offline files, reparse points and symbolic links, network paths, files over 4 GB, a copy interrupted by a power loss, the copy of a file that is being written, CopyFileExW and CopyFile2 (callbacks, flags), 32-bit callers and the redirection of System32, the file's short name, extended attributes, and the creation and access time of a copy beyond "not the source's".

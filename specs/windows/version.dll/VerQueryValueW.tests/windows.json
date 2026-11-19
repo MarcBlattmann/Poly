@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "ver_q_sys",
+      "exe_sha256": "f72ef8ea7565b805e41bf6ec2154869d4c23ffc6329355d80166adb00350a9fe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "a2VybmVsMzIuZGxsOiBzaXplID4gMCB0cnVlOyBzaXplIDw9IDE2Mzg0IHRydWU7IGhhbmRsZSBvdXQgMAprZXJuZWwzMi5kbGw6IEdldEZpbGVWZXJzaW9uSW5mb1cgd2l0aCB0aGUgc2l6ZSBmcm9tIHRoZSBmaXJzdCBjYWxsOiBvayAxCmtlcm5lbDMyLmRsbDogd2l0aCBhIG5vbi16ZXJvIGhhbmRsZSBhcmd1bWVudDogb2sgMTsgc2FtZSBieXRlcyB0cnVlCmtlcm5lbDMyLmRsbDogYnVmZmVyIGxlbmd0aCA2NCAoc21hbGxlciB0aGFuIHRoZSBzaXplKTogb2sgMCBsYXN0IGVycm9yIDEyMiBmaXJzdCBieXRlcyB3cml0dGVuIGZhbHNlCmtlcm5lbDMyLmRsbDogYnVmZmVyIGxlbmd0aCAwOiBvayAwIGxhc3QgZXJyb3IgMTIyCmtlcm5lbDMyLmRsbCBmaXhlZCBpbmZvOiBzaWduYXR1cmUgb2sgdHJ1ZTsgc3RydWN0IHZlcnNpb24gMHgxMDAwMDsgb3MgMHg0MDAwNDsgdHlwZSAyCmtlcm5lbDMyLmRsbCB0cmFuc2xhdGlvbiBxdWVyeTogb2sgMTsgYXQgbGVhc3Qgb25lIHBhaXIgdHJ1ZTsgbGVuZ3RoIG11bHRpcGxlIG9mIDQgdHJ1ZQprZXJuZWwzMi5kbGwgUHJvZHVjdE5hbWUgdW5kZXIgdGhlIGZpcnN0IHRyYW5zbGF0aW9uOiBvayAxOyBub24tZW1wdHkgdHJ1ZQprZXJuZWwzMi5kbGwgRmlsZVZlcnNpb246IG9rIDE7IHN0YXJ0cyB3aXRoIDEwLjAuIHRydWUKVmVyUXVlcnlWYWx1ZVcgb24gYSBibG9jayBvZiB6ZXJvIGJ5dGVzOiBvayAwIGxhc3QgZXJyb3IgMTMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "kernel32.dll: size > 0 true; size <= 16384 true; handle out 0\nkernel32.dll: GetFileVersionInfoW with the size from the first call: ok 1\nkernel32.dll: with a non-zero handle argument: ok 1; same bytes true\nkernel32.dll: buffer length 64 (smaller than the size): ok 0 last error 122 first bytes written false\nkernel32.dll: buffer length 0: ok 0 last error 122\nkernel32.dll fixed info: signature ok true; struct version 0x10000; os 0x40004; type 2\nkernel32.dll translation query: ok 1; at least one pair true; length multiple of 4 true\nkernel32.dll ProductName under the first translation: ok 1; non-empty true\nkernel32.dll FileVersion: ok 1; starts with 10.0. true\nVerQueryValueW on a block of zero bytes: ok 0 last error 13\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

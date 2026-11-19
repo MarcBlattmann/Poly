@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "914dd74c1a3b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-17T13:49:46Z",
+  "tests": [
+    {
+      "name": "ver_info_a",
+      "exe_sha256": "d8291ff5eba016a256e6620f9e23fb9b063038d85696c558ea49a1f1314209c1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0RmlsZVZlcnNpb25JbmZvVyBvZiBhIHRleHQgZmlsZTogb2sgMCBsYXN0IGVycm9yIDE4MTIKR2V0RmlsZVZlcnNpb25JbmZvVyBvZiBhIG1pc3NpbmcgZmlsZTogb2sgMCBsYXN0IGVycm9yIDIKR2V0RmlsZVZlcnNpb25JbmZvVyBvZiBhbiBpbWFnZSB3aXRob3V0IHZlcnNpb24gcmVzb3VyY2U6IG9rIDAgbGFzdCBlcnJvciAxODEzCkdldEZpbGVWZXJzaW9uSW5mb1cgd2l0aCBhIE5VTEwgZmlsZSBuYW1lOiBvayAwIGxhc3QgZXJyb3IgMTgxMgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetFileVersionInfoW of a text file: ok 0 last error 1812\nGetFileVersionInfoW of a missing file: ok 0 last error 2\nGetFileVersionInfoW of an image without version resource: ok 0 last error 1813\nGetFileVersionInfoW with a NULL file name: ok 0 last error 1812\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}

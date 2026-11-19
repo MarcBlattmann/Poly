@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: advapi32.dll/RegLoadKeyW.yaml
+id: windows/api/advapi32.dll/RegLoadKeyW
+oracle:
+  os: 'Windows 11 Home 25H2 (build 26200.9974), x64'
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account "server" (member of Administrators) in the SSH logon session (session 0) with its elevated administrator token, in which SeBackupPrivilege and SeRestorePrivilege are already enabled; the *_std tests were recorded with -Token standard (the same account''s filtered token in its interactive session). Every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: 'Observations of our own test programs on the oracle machine (every test ran at least twice with identical output). Microsoft Learn''s pages for the registry functions, "Registry Hives", "Privilege Constants" and "Registry Key Security and Access Rights"; constants and error codes from winreg.h, winnt.h and winerror.h. Chrome''s own setup.exe (survey-chrome-installer, docs/windows/chrome-installer-plan.md) imports RegLoadKeyW and RegUnLoadKeyW together with AdjustTokenPrivileges to reach other users'' hives, and RegEnumValueA. Nothing of Windows, Wine or Google''s programs was read or disassembled.'
+summary: 'Loads a registry hive file (a file written by RegSaveKeyW) as a new key directly below HKEY_LOCAL_MACHINE or HKEY_USERS. The root of the file becomes the key named by lpSubKey: the values and subkeys of the key that was saved appear in it, not the saved key''s own name. The caller needs SeRestorePrivilege enabled in its token. Changes made through the loaded key are written to the file, which gets two log files (.LOG1, .LOG2) beside it.'
+interface:
+  signature: 'LSTATUS RegLoadKeyW(HKEY hKey, LPCWSTR lpSubKey, LPCWSTR lpFile)'
+rules:
+  privilege: 'Without SeRestorePrivilege enabled the call fails with ERROR_PRIVILEGE_NOT_HELD (1314) for HKLM and for HKU and for HKEY_CURRENT_USER. The SSH logon''s elevated token has the privilege enabled from the start. The filtered (standard) token does not hold it at all: LookupPrivilegeValueW works, AdjustTokenPrivileges returns TRUE and GetLastError is then ERROR_NOT_ALL_ASSIGNED (1300), and loading gives 1314. The argument checks come first: with the filtered token an empty file name and a NULL key name still give 87.'
+  load: 'With the privilege, RegLoadKeyW(HKEY_LOCAL_MACHINE, L"Name", file) returns 0 and HKLM\Name opens with every right. A file saved from key K (values S = REG_SZ ''text value'', D = REG_DWORD 42, subkey Sub with value X = REG_SZ ''inner'') shows S and D as values of HKLM\Name and Sub\X below it; opening Name\<the name of K> fails with 2 (the saved key''s own name is not part of the loaded tree). The same holds for HKEY_USERS.'
+  writes: 'Values and subkeys created in the loaded key succeed (0) and are in the file after the unload (see RegUnLoadKeyW). The two files <file>.LOG1 and <file>.LOG2 exist beside the hive after loading and unloading.'
+  twice: 'Loading the same name again from the same file returns 0 (nothing changes). Loading the same file under another name fails with ERROR_SHARING_VIOLATION (32) and the second name does not exist. A name loaded below HKLM is not visible below HKEY_USERS and the other way round (the same name can be used in both).'
+  bad_root: 'hKey must be HKEY_LOCAL_MACHINE or HKEY_USERS: HKEY_CURRENT_USER gives ERROR_ACCESS_DENIED (5) (with the privilege), a handle to an ordinary key such as HKLM\SOFTWARE gives 5, a NULL handle gives ERROR_INVALID_HANDLE (6). A key name with a backslash (HKLM\SOFTWARE\Name, to load below an existing key) gives 5; unloading it afterwards 87.'
+  bad_name: 'An empty or NULL lpSubKey, and an empty or NULL lpFile: ERROR_INVALID_PARAMETER (87).'
+  bad_file: 'A file that exists and is not a hive (some text): ERROR_REGISTRY_IO_FAILED (1016), and no key is created. A file in a directory or on a drive that does not exist: ERROR_PATH_NOT_FOUND (3). A hive file that another handle holds open without sharing: ERROR_SHARING_VIOLATION (32).'
+  missing_file: 'A file name that does not exist in an existing directory is not an error: the call returns 0, creates the file as an empty hive (the file exists afterwards) and the loaded key opens and has no values; RegUnLoadKeyW on it returns 0.'
+errors:
+  privilege: '1314 (also: 1300 from AdjustTokenPrivileges for the filtered token)'
+  sharing: '32'
+  not_a_hive: '1016'
+  path: '3'
+  access: '5 (root other than HKLM or HKU)'
+  invalid_handle: '6'
+  invalid_parameter: '87'
+side_effects: 'a hive is mounted below HKLM or HKU until RegUnLoadKeyW; the file and its .LOG1/.LOG2 files are created or changed'
+threading: 'may be called from any thread'
+ordering: []
+timing:
+  typical: 'well under a millisecond per call on the oracle'
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: 'Rust tests (ADR 0075), one file per test; each declares what it calls from Learn''s prototypes. They save a hive with RegSaveKeyW from a unique HKCU key (PolySpecB4*), load it under a unique name, and remove every key, loaded hive and file at the start and the end. Observations are return values, error codes and booleans, never paths or handles.'
+not_covered: 'Per-user hive loading of real profiles (ntuser.dat of another account), RegLoadKeyA and RegLoadAppKey, RegLoadMUIString, security descriptors and ownership of loaded keys, a hive whose file is on a network share, hive format versions, a 32-bit caller, and the effect on the registry watchers (RegNotifyChangeKeyValue).'

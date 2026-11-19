@@ -1,0 +1,44 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26200.0",
+    "build": "26200.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 2 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "sde_start_ssh",
+      "exe_sha256": "740c7024121a63d119b02c81312b62e5d8a0b48979e89dd60634535e0ecea836",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FsbGVyOiBlbGV2YXRpb24gMSwgZWxldmF0aW9uIHR5cGUgMSwgaW50ZWdyaXR5IDB4MzAwMApjYWxsZXI6IHNlc3Npb24gaXMgMDogdHJ1ZQp0aGUgZGVza3RvcCdzIHNoZWxsIHdpbmRvdyBleGlzdHM6IGZhbHNlOyBpdHMgcHJvY2VzcyBpcyA/CkEgU2hlbGxFeGVjdXRlRXhXOiBvayB0cnVlCkE6IGNoaWxkOiBlbGV2YXRpb24gMQpBOiBjaGlsZDogZWxldmF0aW9uIHR5cGUgMQpBOiBjaGlsZDogaW50ZWdyaXR5IDB4MzAwMApBOiBjaGlsZDogc2Vzc2lvbiBpcyAwOiB0cnVlCkE6IGNoaWxkOiBwYXJlbnQgaW1hZ2Ugc2RlX3N0YXJ0X3NzaC5leGUKQTogY2hpbGQ6IHBhcmVudCBpcyB0aGUgdGVzdCBwcm9jZXNzOiB0cnVlCkIgU2hlbGwuQXBwbGljYXRpb246IDB4MApCIFNoZWxsRXhlY3V0ZSB0aHJvdWdoIEludm9rZTogMHgwCkI6IGNoaWxkOiBlbGV2YXRpb24gMQpCOiBjaGlsZDogZWxldmF0aW9uIHR5cGUgMQpCOiBjaGlsZDogaW50ZWdyaXR5IDB4MzAwMApCOiBjaGlsZDogc2Vzc2lvbiBpcyAwOiB0cnVlCkI6IGNoaWxkOiBwYXJlbnQgaW1hZ2Ugc2RlX3N0YXJ0X3NzaC5leGUKQjogY2hpbGQ6IHBhcmVudCBpcyB0aGUgdGVzdCBwcm9jZXNzOiB0cnVlCkMgU2hlbGxXaW5kb3dzOiAweDAKQyBGaW5kV2luZG93U1coZGVza3RvcCk6IDB4MCwgd2luZG93IGZvdW5kIHRydWUKQyBjaGFpbjogc2VydmljZSBwcm92aWRlciAweDAsIHRvcC1sZXZlbCBicm93c2VyIDB4MCwgYWN0aXZlIHZpZXcgMHgwLCBiYWNrZ3JvdW5kIG9iamVjdCAweDAsIGZvbGRlciB2aWV3IDB4MCwgQXBwbGljYXRpb24gMHgwCkMgU2hlbGxFeGVjdXRlIHRocm91Z2ggSW52b2tlOiAweDAKQzogY2hpbGQ6IGVsZXZhdGlvbiAwCkM6IGNoaWxkOiBlbGV2YXRpb24gdHlwZSAzCkM6IGNoaWxkOiBpbnRlZ3JpdHkgMHgyMDAwCkM6IGNoaWxkOiBzZXNzaW9uIGlzIDA6IGZhbHNlCkM6IGNoaWxkOiBwYXJlbnQgaW1hZ2UgZXhwbG9yZXIuZXhlCkM6IGNoaWxkOiBwYXJlbnQgaXMgdGhlIHRlc3QgcHJvY2VzczogZmFsc2UKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caller: elevation 1, elevation type 1, integrity 0x3000\ncaller: session is 0: true\nthe desktop's shell window exists: false; its process is ?\nA ShellExecuteExW: ok true\nA: child: elevation 1\nA: child: elevation type 1\nA: child: integrity 0x3000\nA: child: session is 0: true\nA: child: parent image sde_start_ssh.exe\nA: child: parent is the test process: true\nB Shell.Application: 0x0\nB ShellExecute through Invoke: 0x0\nB: child: elevation 1\nB: child: elevation type 1\nB: child: integrity 0x3000\nB: child: session is 0: true\nB: child: parent image sde_start_ssh.exe\nB: child: parent is the test process: true\nC ShellWindows: 0x0\nC FindWindowSW(desktop): 0x0, window found true\nC chain: service provider 0x0, top-level browser 0x0, active view 0x0, background object 0x0, folder view 0x0, Application 0x0\nC ShellExecute through Invoke: 0x0\nC: child: elevation 0\nC: child: elevation type 3\nC: child: integrity 0x2000\nC: child: session is 0: false\nC: child: parent image explorer.exe\nC: child: parent is the test process: false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 520
+    },
+    {
+      "name": "sde_start_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "740c7024121a63d119b02c81312b62e5d8a0b48979e89dd60634535e0ecea836",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FsbGVyOiBlbGV2YXRpb24gMCwgZWxldmF0aW9uIHR5cGUgMywgaW50ZWdyaXR5IDB4MjAwMApjYWxsZXI6IHNlc3Npb24gaXMgMDogZmFsc2UKdGhlIGRlc2t0b3AncyBzaGVsbCB3aW5kb3cgZXhpc3RzOiB0cnVlOyBpdHMgcHJvY2VzcyBpcyBleHBsb3Jlci5leGUKQSBTaGVsbEV4ZWN1dGVFeFc6IG9rIHRydWUKQTogY2hpbGQ6IGVsZXZhdGlvbiAwCkE6IGNoaWxkOiBlbGV2YXRpb24gdHlwZSAzCkE6IGNoaWxkOiBpbnRlZ3JpdHkgMHgyMDAwCkE6IGNoaWxkOiBzZXNzaW9uIGlzIDA6IGZhbHNlCkE6IGNoaWxkOiBwYXJlbnQgaW1hZ2Ugc2RlX3N0YXJ0X3N0ZC5leGUKQTogY2hpbGQ6IHBhcmVudCBpcyB0aGUgdGVzdCBwcm9jZXNzOiB0cnVlCkIgU2hlbGwuQXBwbGljYXRpb246IDB4MApCIFNoZWxsRXhlY3V0ZSB0aHJvdWdoIEludm9rZTogMHgwCkI6IGNoaWxkOiBlbGV2YXRpb24gMApCOiBjaGlsZDogZWxldmF0aW9uIHR5cGUgMwpCOiBjaGlsZDogaW50ZWdyaXR5IDB4MjAwMApCOiBjaGlsZDogc2Vzc2lvbiBpcyAwOiBmYWxzZQpCOiBjaGlsZDogcGFyZW50IGltYWdlIHNkZV9zdGFydF9zdGQuZXhlCkI6IGNoaWxkOiBwYXJlbnQgaXMgdGhlIHRlc3QgcHJvY2VzczogdHJ1ZQpDIFNoZWxsV2luZG93czogMHgwCkMgRmluZFdpbmRvd1NXKGRlc2t0b3ApOiAweDAsIHdpbmRvdyBmb3VuZCB0cnVlCkMgY2hhaW46IHNlcnZpY2UgcHJvdmlkZXIgMHgwLCB0b3AtbGV2ZWwgYnJvd3NlciAweDAsIGFjdGl2ZSB2aWV3IDB4MCwgYmFja2dyb3VuZCBvYmplY3QgMHgwLCBmb2xkZXIgdmlldyAweDAsIEFwcGxpY2F0aW9uIDB4MApDIFNoZWxsRXhlY3V0ZSB0aHJvdWdoIEludm9rZTogMHgwCkM6IGNoaWxkOiBlbGV2YXRpb24gMApDOiBjaGlsZDogZWxldmF0aW9uIHR5cGUgMwpDOiBjaGlsZDogaW50ZWdyaXR5IDB4MjAwMApDOiBjaGlsZDogc2Vzc2lvbiBpcyAwOiBmYWxzZQpDOiBjaGlsZDogcGFyZW50IGltYWdlIGV4cGxvcmVyLmV4ZQpDOiBjaGlsZDogcGFyZW50IGlzIHRoZSB0ZXN0IHByb2Nlc3M6IGZhbHNlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caller: elevation 0, elevation type 3, integrity 0x2000\ncaller: session is 0: false\nthe desktop's shell window exists: true; its process is explorer.exe\nA ShellExecuteExW: ok true\nA: child: elevation 0\nA: child: elevation type 3\nA: child: integrity 0x2000\nA: child: session is 0: false\nA: child: parent image sde_start_std.exe\nA: child: parent is the test process: true\nB Shell.Application: 0x0\nB ShellExecute through Invoke: 0x0\nB: child: elevation 0\nB: child: elevation type 3\nB: child: integrity 0x2000\nB: child: session is 0: false\nB: child: parent image sde_start_std.exe\nB: child: parent is the test process: true\nC ShellWindows: 0x0\nC FindWindowSW(desktop): 0x0, window found true\nC chain: service provider 0x0, top-level browser 0x0, active view 0x0, background object 0x0, folder view 0x0, Application 0x0\nC ShellExecute through Invoke: 0x0\nC: child: elevation 0\nC: child: elevation type 3\nC: child: integrity 0x2000\nC: child: session is 0: false\nC: child: parent image explorer.exe\nC: child: parent is the test process: false\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 573
+    }
+  ]
+}

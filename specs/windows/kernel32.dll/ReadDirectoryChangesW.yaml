@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/ReadDirectoryChangesW.yaml
+id: windows/api/kernel32.dll/ReadDirectoryChangesW
+oracle:
+  os: "Windows 11 Home 25H2 (build 26200.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 as the local account \"server\" (member of Administrators, elevated token of the SSH logon), on an NTFS volume. Every test ran twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-17
+sources: >
+  Observations of our own test programs on the oracle machine (every test ran twice with identical output), Microsoft Learn's pages for ReadDirectoryChangesW and FILE_NOTIFY_INFORMATION, winnt.h (FILE_NOTIFY_CHANGE_*, FILE_ACTION_*) and winerror.h. Chrome's setup.exe imports it (survey-chrome-installer, docs/windows/chrome-setup-plan.md). Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  Watches a directory opened with FILE_LIST_DIRECTORY and FILE_FLAG_BACKUP_SEMANTICS. A call (overlapped, or synchronous on a handle opened without FILE_FLAG_OVERLAPPED) completes when something in the directory matches the filter, filling the buffer with FILE_NOTIFY_INFORMATION records (NextEntryOffset u32, Action u32, FileNameLength u32 in bytes, FileName UTF-16 not NUL-terminated, relative to the watched directory, with a backslash path for the subtree). Actions: ADDED 1, REMOVED 2, MODIFIED 3, RENAMED_OLD_NAME 4 and RENAMED_NEW_NAME 5 (a rename gives the two records in one completion, old first). A creation or deletion needs the FILE_NAME (1) filter for files and DIR_NAME (2) for directories; a write needs LAST_WRITE (0x10) or SIZE (8) (an overwrite with only the file-name filter gives nothing); an attribute change needs ATTRIBUTES (4). Without bWatchSubtree changes in subdirectories are not reported; with it the names are 'sub\\file'. Changes made while no call is pending are kept and reported by the next call on the same handle. A record that does not fit the buffer makes the call complete with 0 bytes (the overflow signal), also for buffers of 0, 3, 16 and 40 bytes. A filter of 0 or with only undefined bits is refused with 87; a file handle gives 87; a handle without FILE_LIST_DIRECTORY gives 5; NULL and -1 give 6. CancelIo completes the pending call with ERROR_OPERATION_ABORTED (995).
+interface:
+  signature: "BOOL ReadDirectoryChangesW(HANDLE hDirectory, LPVOID lpBuffer, DWORD nBufferLength, BOOL bWatchSubtree, DWORD dwNotifyFilter, LPDWORD lpBytesReturned, LPOVERLAPPED lpOverlapped, LPOVERLAPPED_COMPLETION_ROUTINE lpCompletionRoutine)"
+  filters: "FILE_NOTIFY_CHANGE_FILE_NAME 1, DIR_NAME 2, ATTRIBUTES 4, SIZE 8, LAST_WRITE 0x10, LAST_ACCESS 0x20, CREATION 0x40, SECURITY 0x100 (winnt.h)"
+  record: "FILE_NOTIFY_INFORMATION: u32 NextEntryOffset (0 for the last record), u32 Action, u32 FileNameLength (bytes), WCHAR FileName[]; records start 4-byte aligned"
+rules:
+  overlapped_call: "with an OVERLAPPED the call returns TRUE at once (last error not specified) and the operation stays pending: the event is not signalled while nothing happens (300 ms idle: no completion). GetOverlappedResult then gives the byte count of the records."
+  create_delete: "creating a file with the FILE_NAME filter: one record, action 1, name 'rd_a.txt'. Deleting it: action 2. A new directory with the DIR_NAME filter: action 1, name 'rd_newdir'; with only the FILE_NAME filter a new directory gives no completion."
+  rename: "one completion with two records in this order: action 4 (old name) then action 5 (new name), both in the same directory."
+  write: "overwriting a file's contents (the file exists): with the FILE_NAME filter only, nothing is reported (700 ms); with LAST_WRITE|SIZE: one record, action 3, the file's name."
+  attributes: "setting the hidden attribute with the ATTRIBUTES filter: one record, action 3."
+  subtree: "bWatchSubtree FALSE: a file made in a subdirectory is not reported; TRUE: one record, action 1, name 'sub\\rd_s.txt' (backslash separated, relative to the watched directory)."
+  changes_between_calls: "a change made after a completion and before the next call is reported by the next call (the delete of a file made while no call was pending came back with action 2 on the new call, completed at once)."
+  all_filters: "the filter 0x1FF with bWatchSubtree reports a created file: first record action 1."
+  overflow: "a buffer too small for the record (the record for 'rd_long_name_to_overflow.txt' needs 12 + 56 = 68 bytes): the call is ACCEPTED (also nBufferLength 0 and 3, which are not multiples of 4), and the change completes it with 0 bytes transferred and a success result (GetOverlappedResult TRUE, bytes 0): the caller must treat 0 bytes as 'changes were lost, rescan the directory'."
+  synchronous: "a handle opened without FILE_FLAG_OVERLAPPED and lpOverlapped NULL: the call blocks until a change (the test made one from another thread after 400 ms) and returns TRUE with lpBytesReturned > 0 and the record (action 1, the new file's name)."
+  cancel: "CancelIo on the handle completes the pending operation; GetOverlappedResult then fails with ERROR_OPERATION_ABORTED (995) (the event is signalled)."
+  errors: "a filter of 0: FALSE, ERROR_INVALID_PARAMETER (87); a filter with only an undefined bit (0x80000000): FALSE, 87; the handle of a file (not a directory): FALSE, 87; a directory handle opened with only FILE_READ_ATTRIBUTES: FALSE, ERROR_ACCESS_DENIED (5); hDirectory NULL or INVALID_HANDLE_VALUE: FALSE, ERROR_INVALID_HANDLE (6). Opening a directory with CreateFileW without FILE_FLAG_BACKUP_SEMANTICS fails with 5."
+errors:
+  invalid_parameter: "87"
+  access_denied: "5"
+  invalid_handle: "6"
+  operation_aborted: "995"
+side_effects: "a pending operation holds the buffer and the OVERLAPPED until it completes or is cancelled"
+threading: "completion is signalled on the OVERLAPPED's event (or the completion routine / port, not tested)"
+ordering:
+  - "records of one completion are in the order the changes happened (rename: old name first)"
+timing:
+  typical: "the completion followed the change within a millisecond; the tests allow 5 s"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file per test: rd_events (one fresh directory handle per scenario: create, delete, rename, writes with two filters, attributes, directories, subtree, a change between calls, a cancel) and rd_edge (errors of handles and filters, small buffers, the filter 0x1FF, the synchronous form with a helper thread). Observations are actions and names relative to the watched directory, never paths or times. Each test deletes everything it made.
+not_covered: >
+  Completion routines and I/O completion ports, LAST_ACCESS, CREATION and SECURITY filters, more than one change in one completion beyond the rename pair (batching depends on timing), long file names near MAX_PATH, network and non-NTFS volumes, a directory that is deleted or renamed while watched, several pending reads on one handle (nBufferLength 0 and 3 are accepted; the second is not tested), the watch of a drive's root, 32-bit callers, notifications of hard links and streams.
