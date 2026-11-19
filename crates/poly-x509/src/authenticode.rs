@@ -14,7 +14,7 @@
 //! chain to a trusted root; the prompt says so ("not verified") until it does.
 
 use crate::cert::Certificate;
-use crate::der::{Reader, parse_one, tag};
+use crate::der::{Reader, tag};
 use crate::name::names_match;
 use crate::oid;
 use alloc::string::String;
@@ -82,8 +82,9 @@ pub fn publisher(table: &[u8]) -> Option<String> {
 /// The subject name (common name, else organisation) of the certificate of the first signer of
 /// a DER `ContentInfo` holding a `SignedData`.
 pub fn signer_name(content_info: &[u8]) -> Option<String> {
-    let ci = parse_one(content_info).ok()?;
-    let mut ci = Reader::new(ci.expect(tag::SEQUENCE).ok()?);
+    // The first element: a certificate table pads each entry to 8 bytes after it.
+    let ci = Reader::new(content_info).read_tag(tag::SEQUENCE).ok()?;
+    let mut ci = ci.reader();
     if oid::to_dotted(ci.oid().ok()?)? != SIGNED_DATA {
         return None;
     }
@@ -148,6 +149,10 @@ mod tests {
         let want = leaf.subject.first(oid::COMMON_NAME).or_else(|| leaf.subject.first(oid::ORGANIZATION_NAME));
         assert!(want.is_some());
         assert_eq!(signer_name(&ci), want);
+        // Padding after the element (the table pads each entry to 8 bytes) is no obstacle.
+        let mut padded = ci.clone();
+        padded.extend_from_slice(&[0; 5]);
+        assert_eq!(signer_name(&padded), want);
         // In a certificate table: one WIN_CERTIFICATE entry, padded to 8.
         let mut table = Vec::new();
         table.extend_from_slice(&((8 + ci.len()) as u32).to_le_bytes());
@@ -191,3 +196,5 @@ mod tests {
         assert_eq!(certificate_table(b"MZ"), None);
     }
 }
+
+
