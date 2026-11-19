@@ -718,6 +718,8 @@ fn run(args: &[String]) -> Result<u8, String> {
     // The busy pointer ends when a window of the launched app (or of a
     // process it started) shows (ADR 0167).
     server.set_pid_parent(os::parent_pid);
+    // Or when the processes of a launch that Files started are gone (ADR 0234).
+    server.set_pid_alive(os::alive);
     println!("poly-compositor: listening on {path} ({width}x{height}, scale {scale})");
 
     let mut desk = if o.desktop {

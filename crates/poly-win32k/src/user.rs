@@ -662,8 +662,10 @@ pub fn create_window<E: Env + ?Sized>(env: &E, mut spec: CreateSpec, name: u64, 
     let (mut x, mut y, mut cx, mut cy) = (c.x, c.y, c.cx, c.cy);
     // The maximized size and position the window's procedure answered, for one created maximized.
     let mut asked_max = None;
+    // The DPI the window's frame is measured at (ADR 0231).
+    let dpi = info(env, h).map_or(96, |i| frame_dpi(&i));
     if c.minmax {
-        let [ms, mp, mt, xt] = metrics::minmax(style, c.ex_style, &screen(env));
+        let [ms, mp, mt, xt] = metrics::minmax_dpi(style, c.ex_style, &screen(env), dpi);
         let mut mmi = MinMaxInfo {
             reserved: CPoint::default(),
             max_size: CPoint { x: ms.0, y: ms.1 },
@@ -1208,10 +1210,15 @@ fn hide<E: Env + ?Sized>(env: &E, i: &WinInfo) {
     set_window_pos(env, h, 0, 0, 0, 0, 0, flags);
 }
 
+/// The DPI window `i`'s frame is measured at (`WinInfo::frame_dpi`, ADR 0231; 96 when unknown).
+fn frame_dpi(i: &WinInfo) -> u32 {
+    if i.frame_dpi == 0 { 96 } else { i.frame_dpi }
+}
+
 /// The size and position a window's procedure answers to `WM_GETMINMAXINFO`.
 fn ask_minmax<E: Env + ?Sized>(env: &E, i: &WinInfo) -> MinMaxInfo {
     let display = screen(env);
-    let [mut ms, mp, mt, xt] = metrics::minmax(i.style, i.ex_style, &display);
+    let [mut ms, mp, mt, xt] = metrics::minmax_dpi(i.style, i.ex_style, &display, frame_dpi(i));
     // A child is maximized over its parent's client area (observed:
     // maxsize 286,163 at -1,-1 for a bordered child of a 284x161 client).
     if i.style & WS_CHILD != 0
@@ -1375,12 +1382,13 @@ fn maximize<E: Env + ?Sized>(env: &E, i: &WinInfo) {
         mmi.max_position.y + mmi.max_size.y,
     );
     let fit = (!child).then(|| {
-        metrics::maximized_rect(
+        metrics::maximized_rect_dpi(
             i.style,
             i.ex_style,
             &display,
             (mmi.max_size.x, mmi.max_size.y),
             (mmi.max_position.x, mmi.max_position.y),
+            frame_dpi(i),
         )
     });
     let extra = shown_bit(env, i);
@@ -1443,12 +1451,13 @@ fn restore<E: Env + ?Sized>(env: &E, i: &WinInfo, cmd: i32) {
             mmi.max_position.x + mmi.max_size.x,
             mmi.max_position.y + mmi.max_size.y,
         );
-        let fit = metrics::maximized_rect(
+        let fit = metrics::maximized_rect_dpi(
             i.style,
             i.ex_style,
             &display,
             (mmi.max_size.x, mmi.max_size.y),
             (mmi.max_position.x, mmi.max_position.y),
+            frame_dpi(i),
         );
         (raw, (!child).then_some(fit))
     } else {
