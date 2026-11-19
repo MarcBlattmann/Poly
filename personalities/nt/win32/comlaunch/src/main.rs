@@ -3,6 +3,9 @@
 //! client's `CoCreateInstance(CLSCTX_LOCAL_SERVER)` asks here (`Activate`) for the class object,
 //! which is served at once, or after the server this process starts for it has registered.
 //!
+//! Before a class object is handed out, the client is checked against the `LaunchPermission` of the
+//! class's `AppID` (B2c, sheet `AppID.Security`).
+//!
 //! `ole32` starts it on demand; it runs until the machine stops. The decisions are
 //! `poly_com::activation::Activator`'s (host-tested); this file is the pipe, the threads, starting
 //! programs and services, and waiting. Functions from Microsoft Learn (prototypes) and the SDK
@@ -19,8 +22,10 @@ use core::cell::UnsafeCell;
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicBool, Ordering};
 use poly_com::activation::{Activator, Decision, Published};
+use poly_com::guid::Guid;
 use poly_com::hresult::{E_UNEXPECTED, Hresult, REGDB_E_CLASSNOTREG, S_OK, from_win32};
-use poly_com::wire::{ACTIVATION_PIPE, Op, Plan, Reply, Request, frame, frame_len};
+use poly_com::security::{E_ACCESSDENIED, REGDB_E_INVALIDVALUE, parse_self_relative};
+use poly_com::wire::{ACTIVATION_PIPE, Caller, Op, Plan, Reply, Request, frame, frame_len};
 
 poly_win32_rt::process_heap_allocator!();
 
@@ -82,6 +87,24 @@ unsafe extern "system" {
     fn LoadLibraryW(name: *const u16) -> usize;
     fn GetProcAddress(module: usize, name: *const u8) -> usize;
     fn ExitProcess(code: u32) -> !;
+}
+
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn GetNamedPipeClientProcessId(pipe: Handle, pid: *mut u32) -> i32;
+    fn OpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> i32;
+    fn DuplicateTokenEx(token: Handle, access: u32, sa: *const c_void, level: u32, kind: u32, out: *mut Handle) -> i32;
+    fn AccessCheck(
+        sd: *const u8,
+        token: Handle,
+        desired: u32,
+        mapping: *const [u32; 4],
+        privileges: *mut u8,
+        privileges_len: *mut u32,
+        granted: *mut u32,
+        status: *mut i32,
+    ) -> i32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -418,6 +441,94 @@ fn expand(s: &str) -> String {
     String::from_utf16_lossy(&out[..n.saturating_sub(1)])
 }
 
+/// A value of `HKLM\SOFTWARE\Classes\<path>` (else `HKCU\Software\Classes\<path>`) as bytes.
+fn class_value(path: &str, name: &str) -> Option<Vec<u8>> {
+    const HKCU: isize = 0x8000_0001_u32 as i32 as isize;
+    for (root, prefix) in [(HKLM, "SOFTWARE\\Classes\\"), (HKCU, "Software\\Classes\\")] {
+        let p = wide(&alloc::format!("{prefix}{path}"));
+        let n = wide(name);
+        let mut key = 0isize;
+        // SAFETY: NUL-terminated strings; the key is closed below.
+        unsafe {
+            if RegOpenKeyExW(root, p.as_ptr(), 0, KEY_READ, &mut key) != 0 {
+                continue;
+            }
+            let mut buf = alloc::vec![0u8; 4096];
+            let (mut kind, mut len) = (0u32, 4096u32);
+            let r =
+                RegQueryValueExW(key, n.as_ptr(), core::ptr::null_mut(), &mut kind, buf.as_mut_ptr().cast(), &mut len);
+            RegCloseKey(key);
+            if r == 0 {
+                buf.truncate(len as usize);
+                return Some(buf);
+            }
+        }
+    }
+    None
+}
+
+/// Whether the user of process `pid` holds `rights` under the self-relative descriptor `sd`
+/// (`None`: its token cannot be read).
+fn client_holds(sd: &[u8], pid: u32, rights: u32) -> Option<bool> {
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const TOKEN_DUPLICATE_QUERY: u32 = 0x2 | 0x8;
+    // GENERIC_MAPPING: COM's rights have no generic forms.
+    const MAPPING: [u32; 4] = [1, 1, 1, 0x1F];
+    // SAFETY: handles of ours, closed below; an identification token for the check; live out
+    // parameters.
+    unsafe {
+        let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if h == 0 {
+            return None;
+        }
+        let mut t: Handle = 0;
+        let ok = OpenProcessToken(h, TOKEN_DUPLICATE_QUERY, &mut t) != 0;
+        CloseHandle(h);
+        if !ok {
+            return None;
+        }
+        let mut imp: Handle = 0;
+        // SecurityIdentification (1), TokenImpersonation (2).
+        let ok = DuplicateTokenEx(t, 0xF_01FF, core::ptr::null(), 1, 2, &mut imp) != 0;
+        CloseHandle(t);
+        if !ok {
+            return None;
+        }
+        let mut privileges = [0u64; 32];
+        let mut plen = 256u32;
+        let (mut granted, mut status) = (0u32, 0i32);
+        let ok = AccessCheck(
+            sd.as_ptr(),
+            imp,
+            rights,
+            &MAPPING,
+            privileges.as_mut_ptr().cast(),
+            &mut plen,
+            &mut granted,
+            &mut status,
+        ) != 0;
+        CloseHandle(imp);
+        Some(ok && status != 0 && granted & rights == rights)
+    }
+}
+
+/// The `LaunchPermission` of the class's `AppID` against the client (sheet `AppID.Security`,
+/// rules `launch_permission_access`, `launch_permission_masks`): none admits everyone; entries
+/// without `COM_RIGHTS_EXECUTE` make it invalid.
+fn launch_check(clsid: &Guid, client: u32) -> Result<(), Hresult> {
+    let text = String::from_utf16_lossy(&clsid.to_text());
+    let Some(appid) = class_value(&alloc::format!("CLSID\\{text}"), "AppID") else { return Ok(()) };
+    let units: Vec<u16> =
+        appid.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
+    let appid = String::from_utf16_lossy(&units);
+    let Some(sd) = class_value(&alloc::format!("AppID\\{appid}"), "LaunchPermission") else { return Ok(()) };
+    let rights = parse_self_relative(&sd).ok_or(REGDB_E_INVALIDVALUE)?.launch_rights()?;
+    match client_holds(&sd, client, rights) {
+        Some(false) => Err(E_ACCESSDENIED),
+        _ => Ok(()),
+    }
+}
+
 /// Whether the exporter of `p`'s server still has its factory: a call that needs no apartment
 /// (giving back no references) answers `RPC_E_DISCONNECTED` for a withdrawn one; a pipe that is
 /// gone means the server is.
@@ -437,7 +548,7 @@ fn factory_alive(p: &Published) -> bool {
     if h == INVALID_HANDLE {
         return false;
     }
-    let req = Request::Call { oid: p.factory.oid, op: Op::Release(0) };
+    let req = Request::Call { oid: p.factory.oid, op: Op::Release(0), caller: Caller::DIRECT };
     let reply = if write_all(h, &frame(&req.encode())) {
         let mut head = [0u8; 4];
         if read_exact(h, &mut head) {
@@ -459,8 +570,8 @@ fn factory_alive(p: &Published) -> bool {
     }
 }
 
-/// Answer one request.
-fn handle(req: Request) -> Reply {
+/// Answer one request from process `client`.
+fn handle(req: Request, client: u32) -> Reply {
     match req {
         Request::Register { clsid, pid, cookie, factory, single } => {
             watch(pid);
@@ -472,6 +583,9 @@ fn handle(req: Request) -> Reply {
             Reply::hr(S_OK)
         }
         Request::Activate { clsid, plan } => {
+            if let Err(hr) = launch_check(&clsid, client) {
+                return Reply::hr(hr);
+            }
             let mut started: Option<u64> = None;
             // A registration that arrives while this request waits is fresh: it is handed out at
             // once, without the check below (a server may leave soon after it registered; Windows
@@ -523,8 +637,11 @@ unsafe extern "system" fn connection(arg: *mut c_void) -> u32 {
         read_exact(h, &mut payload).then_some(payload)
     });
     if let Some(payload) = payload {
+        let mut client = 0u32;
+        // SAFETY: the connection's pipe handle.
+        unsafe { GetNamedPipeClientProcessId(h, &mut client) };
         let reply = match Request::decode(&payload) {
-            Ok(r) => handle(r),
+            Ok(r) => handle(r, client),
             Err(_) => Reply::hr(E_UNEXPECTED),
         };
         if write_all(h, &frame(&reply.encode())) {
