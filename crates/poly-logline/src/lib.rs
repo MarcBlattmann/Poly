@@ -15,10 +15,11 @@
 //! A [`Gate`] sits in front of the port, under the port's lock, and fixes
 //! both:
 //!
-//! - Kernel text is collected per writer ([`Gate::kernel`] takes a slot: a
+//! - Kernel text is collected per writer ([`Gate::kernel`] names it: a
 //!   thread, or a CPU's interrupt handlers) and goes out only as whole
-//!   lines. Text without its line end goes out after the window
-//!   ([`Gate::poll`]), or when its slot is full.
+//!   lines. A writer with an unfinished line has a slot of its own; text
+//!   without its line end goes out after the window ([`Gate::poll`]), when
+//!   its slot is full, or when every slot is taken and it is the oldest.
 //! - While a program's terminal row is open (it printed text since the last
 //!   line feed or cursor-position sequence, [`Row`]) and the program wrote
 //!   within the window, whole kernel lines wait. They go out at the
@@ -122,12 +123,14 @@ impl Row {
 struct Slot<const CAP: usize> {
     buf: [u8; CAP],
     len: usize,
+    /// The writer, while `len > 0`.
+    owner: u64,
     /// When its first byte came.
     since: u64,
 }
 
 impl<const CAP: usize> Slot<CAP> {
-    const EMPTY: Slot<CAP> = Slot { buf: [0; CAP], len: 0, since: 0 };
+    const EMPTY: Slot<CAP> = Slot { buf: [0; CAP], len: 0, owner: 0, since: 0 };
 }
 
 /// The terminal's state and the whole kernel lines waiting for its row.
@@ -200,8 +203,8 @@ impl<const PENDING: usize> Out<PENDING> {
 }
 
 /// The gate in front of a shared serial port (see the crate documentation).
-/// `SLOTS` writers can each have `SLOT_CAP` bytes of an unfinished kernel
-/// line; `PENDING` bytes of whole kernel lines can wait for the terminal.
+/// `SLOTS` writers at a time can each have `SLOT_CAP` bytes of an unfinished
+/// kernel line; `PENDING` bytes of whole kernel lines can wait for the terminal.
 #[derive(Debug)]
 pub struct Gate<const SLOTS: usize, const SLOT_CAP: usize, const PENDING: usize> {
     slots: [Slot<SLOT_CAP>; SLOTS],
@@ -224,20 +227,19 @@ impl<const SLOTS: usize, const SLOT_CAP: usize, const PENDING: usize> Gate<SLOTS
         self.busy == 0 && self.out.pending_len == 0
     }
 
-    /// Kernel log text from writer `slot` (taken modulo `SLOTS`).
-    pub fn kernel(&mut self, slot: usize, text: &[u8], now: u64, port: &mut impl Port) {
+    /// Kernel log text from `writer` (any number that tells writers apart).
+    pub fn kernel(&mut self, writer: u64, text: &[u8], now: u64, port: &mut impl Port) {
         self.poll(now, port);
-        let slot = slot % SLOTS;
         let mut rest = text;
         while !rest.is_empty() {
             match rest.iter().position(|&b| b == b'\n') {
                 Some(nl) => {
                     let (line, after) = rest.split_at(nl + 1);
-                    self.push(slot, line, true, now, port);
+                    self.push(writer, line, true, now, port);
                     rest = after;
                 }
                 None => {
-                    self.push(slot, rest, false, now, port);
+                    self.push(writer, rest, false, now, port);
                     break;
                 }
             }
@@ -291,16 +293,46 @@ impl<const SLOTS: usize, const SLOT_CAP: usize, const PENDING: usize> Gate<SLOTS
         self.busy -= 1;
     }
 
-    /// Add `bytes` to slot `i`; `complete` when they end with the line's `\n`.
-    fn push(&mut self, i: usize, bytes: &[u8], complete: bool, now: u64, port: &mut impl Port) {
-        if self.slots[i].len + bytes.len() > SLOT_CAP {
-            self.spill(i, now, port);
+    /// The slot holding `writer`'s unfinished line.
+    fn find(&self, writer: u64) -> Option<usize> {
+        if self.busy == 0 {
+            return None;
         }
-        if self.slots[i].len == 0 && (complete || bytes.len() > SLOT_CAP) {
+        (0..SLOTS).find(|&i| self.slots[i].len > 0 && self.slots[i].owner == writer)
+    }
+
+    /// A slot for `writer`: a free one, or the oldest one's text goes on first.
+    fn claim(&mut self, writer: u64, now: u64, port: &mut impl Port) -> usize {
+        let i = match (0..SLOTS).find(|&i| self.slots[i].len == 0) {
+            Some(i) => i,
+            None => {
+                let oldest = (0..SLOTS).min_by_key(|&i| self.slots[i].since).unwrap_or(0);
+                self.spill(oldest, now, port);
+                oldest
+            }
+        };
+        self.slots[i].owner = writer;
+        i
+    }
+
+    /// Add `writer`'s `bytes`; `complete` when they end with the line end.
+    fn push(&mut self, writer: u64, bytes: &[u8], complete: bool, now: u64, port: &mut impl Port) {
+        let mut held = self.find(writer);
+        if let Some(i) = held
+            && self.slots[i].len + bytes.len() > SLOT_CAP
+        {
+            self.spill(i, now, port);
+            held = None;
+        }
+        if held.is_none() && (complete || bytes.len() > SLOT_CAP) {
             // A whole line, or more than a slot holds: on as it is.
             self.out.deliver(bytes, now, port);
             return;
         }
+        let i = match held {
+            Some(i) => i,
+            None => self.claim(writer, now, port),
+        };
         let s = &mut self.slots[i];
         if s.len == 0 {
             s.since = now;
@@ -388,6 +420,49 @@ mod tests {
     }
 
     #[test]
+    fn writers_never_share_a_slot() {
+        let (mut g, mut w) = (Gate::<2, 32, 256>::new(WINDOW_NS), Wire::default());
+        // Writers 0 and 4 (the same slot modulo anything) both have half a line.
+        g.kernel(0, b"zero ", 0, &mut w);
+        g.kernel(4, b"four ", 1, &mut w);
+        g.kernel(
+            4, b"done
+", 2, &mut w,
+        );
+        g.kernel(
+            0, b"done
+", 3, &mut w,
+        );
+        assert_eq!(
+            w.text(),
+            "four done
+zero done
+"
+        );
+        // Every slot taken: the oldest unfinished line goes on first, whole so far.
+        let mut w = Wire::default();
+        g.kernel(1, b"a", 10, &mut w);
+        g.kernel(2, b"b", 11, &mut w);
+        g.kernel(3, b"c", 12, &mut w);
+        assert_eq!(w.text(), "a");
+        g.kernel(
+            2, b"!
+", 13, &mut w,
+        );
+        g.kernel(
+            3, b"!
+", 14, &mut w,
+        );
+        assert_eq!(
+            w.text(),
+            "ab!
+c!
+"
+        );
+        assert!(g.is_idle());
+    }
+
+    #[test]
     fn an_unfinished_line_goes_out_after_the_window() {
         let (mut g, mut w) = (Small::new(WINDOW_NS), Wire::default());
         g.kernel(0, b"prompt: ", 0, &mut w);
@@ -423,10 +498,7 @@ mod tests {
         g.kernel(2, b"fs: more noise\n", 3 * MS, &mut w);
         g.tty(b"b0", 4 * MS, &mut w);
         g.tty(b"\x1b[7;1Hnext", 5 * MS, &mut w);
-        assert_eq!(
-            w.text(),
-            "\x1b[6;1HLAUNCH-SHA256 stdout e3b0\x1b[7;1Hnt: pid 3: noise\nfs: more noise\nnext"
-        );
+        assert_eq!(w.text(), "\x1b[6;1HLAUNCH-SHA256 stdout e3b0\x1b[7;1Hnt: pid 3: noise\nfs: more noise\nnext");
     }
 
     #[test]
@@ -493,7 +565,7 @@ mod tests {
             // The row in 3-byte pieces, kernel text from three writers between them.
             for (n, piece) in row.as_bytes().chunks(3).enumerate() {
                 g.tty(piece, t, &mut w);
-                let writer = n % 3;
+                let writer = (n % 3) as u64;
                 let line = std::format!("k{writer} {i} {n}\n");
                 let (a, b) = line.as_bytes().split_at(2);
                 g.kernel(writer, a, t, &mut w);
@@ -511,8 +583,7 @@ mod tests {
         for (i, l) in results.iter().enumerate() {
             assert_eq!(*l, std::format!("RESULT {i} {:08x}", i * 2654435761usize % (1 << 32)));
         }
-        let kernel: Vec<String> =
-            lines.iter().filter(|l| l.starts_with('k')).map(|l| std::format!("{l}\n")).collect();
+        let kernel: Vec<String> = lines.iter().filter(|l| l.starts_with('k')).map(|l| std::format!("{l}\n")).collect();
         assert_eq!(kernel, want_kernel);
         assert_eq!(results.len() + kernel.len(), lines.len());
     }

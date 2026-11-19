@@ -165,6 +165,8 @@ pub(super) fn on_tick() {
     this.ticks().fetch_add(1, Ordering::Relaxed);
     if this.index() == 0 {
         TICKS.fetch_add(1, Ordering::Relaxed);
+        // Kernel log lines that waited for a program's terminal row (ADR 0228).
+        crate::log::poll();
     }
     // A narrow reference counter (32-bit HPET, 24-bit PM timer) must be
     // read at least once per wrap for the clock to extend it; reading it
