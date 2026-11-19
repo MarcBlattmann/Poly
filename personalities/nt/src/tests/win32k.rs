@@ -200,6 +200,40 @@ fn a_shown_window_gets_a_surface_its_pixels_are_committed_to() {
     assert_eq!(raw(&mut f, commit_area, &[u64::from(h), g, w, hgt, stride, wide]), (Outcome::Handled, 0));
     assert_eq!(records(&mut f), alloc::vec![ToCompositor::Damage { surface, x: 0, y: 8, width: 20, height: 2 }]);
 
+    // PolyUserPresentBuffer (ADR 0224): a pagefile section holding a frame becomes a layer buffer
+    // of the window's surface; its dirty rectangle is the damage; nothing is copied. win32k's
+    // reference keeps the section after the app closes its handle, and the compositor finds its
+    // pages by the buffer; section 0 removes the layer and lets the section go.
+    let out = f.alloc(8);
+    let size = f.put_u64(4096);
+    let attrs = [out, u64::from(poly_ntobj::access::SECTION_ALL_ACCESS), 0, size, 0x04, 0x0800_0000, 0];
+    assert_eq!(f.call(crate::services::Service::CreateSection, &attrs), STATUS_SUCCESS);
+    let section = f.u64_at(out);
+    let sections = f.with_state(|sys, _, _| sys.section_count());
+    let dirty = f.put(&[1i32, 2, 4, 6].iter().flat_map(|v| v.to_le_bytes()).collect::<alloc::vec::Vec<u8>>());
+    let present = Win32kService::PresentBuffer.number();
+    assert_eq!(raw(&mut f, present, &[u64::from(h), section, w, hgt, w * 4, dirty, 1]), (Outcome::Handled, 0));
+    let r = records(&mut f);
+    let ToCompositor::LayerBuffer { layer, buffer: lb, .. } = r[0] else { panic!("{r:?}") };
+    assert_eq!(
+        r,
+        alloc::vec![
+            ToCompositor::LayerBuffer { surface, layer, buffer: lb, width: 20, height: 10, stride: 80 },
+            ToCompositor::LayerPlace { surface, layer, x: 0, y: 0, clip: (0, 0, 20, 10) },
+            ToCompositor::LayerDamage { surface, layer, buffer: lb, x: 1, y: 2, width: 3, height: 4 },
+        ]
+    );
+    // A frame larger than the section is refused.
+    let big = [u64::from(h), section, w, 100, w * 4, 0, 0];
+    assert_eq!(raw(&mut f, present, &big).1, poly_ntobj::status::STATUS_INVALID_PARAMETER.0);
+    assert_eq!(f.call(crate::services::Service::Close, &[section]), STATUS_SUCCESS);
+    assert_eq!(f.with_state(|sys, _, _| sys.section_count()), sections, "win32k's reference keeps it");
+    assert!(f.with_state(|sys, _, _| sys.win32k.link_layer_backing(lb)).is_some());
+    assert_eq!(raw(&mut f, present, &[u64::from(h), 0, 0, 0, 0, 0, 0]), (Outcome::Handled, 0));
+    assert_eq!(records(&mut f), alloc::vec![ToCompositor::LayerGone { surface, layer }]);
+    assert_eq!(f.with_state(|sys, _, _| sys.section_count()), sections - 1, "let go of");
+    assert!(f.with_state(|sys, _, _| sys.win32k.link_layer_backing(lb)).is_none());
+
     // A compositor move updates Win32's screen geometry; its title-bar
     // close is queued as WM_CLOSE on the owning GUI thread.
     let surface = f.with_state(|sys, _, _| sys.win32k.surfaces.surface(h)).expect("a Windows surface");

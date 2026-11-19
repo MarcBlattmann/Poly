@@ -16,6 +16,20 @@ pub struct ObjectId {
     pub(crate) generation: u32,
 }
 
+impl ObjectId {
+    /// The id as one number (index and generation), for tables outside the object manager that
+    /// keep objects by number (win32k's layers, ADR 0224).
+    pub fn raw(self) -> u64 {
+        u64::from(self.index) | u64::from(self.generation) << 32
+    }
+
+    /// The id [`ObjectId::raw`] gave. An id of a deleted object stays dead: the generation is
+    /// checked wherever an id is used.
+    pub fn from_raw(raw: u64) -> ObjectId {
+        ObjectId { index: raw as u32, generation: (raw >> 32) as u32 }
+    }
+}
+
 impl fmt::Debug for ObjectId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "obj{}.{}", self.index, self.generation)
