@@ -2,6 +2,7 @@
 //! `ICreateTypeInfo`), loading and registration, and `ITypeInfo::Invoke`.
 
 pub(crate) mod desc;
+pub(crate) mod ext;
 pub(crate) mod invoke;
 pub(crate) mod load;
 pub(crate) mod objects;

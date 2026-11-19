@@ -102,6 +102,22 @@ pub(crate) fn registered_path(guid: &Guid, major: u16, minor: u16, lcid: u32) ->
     Err(TYPE_E_LIBNOTREGISTERED)
 }
 
+/// The highest registered version of a library (`TYPE_E_LIBNOTREGISTERED` when none), loaded.
+pub(crate) fn load_registered_any(guid: &Guid) -> Result<*mut TypeLib, Hresult> {
+    let base = format!("TypeLib\\{}", guid_text(guid));
+    let mut versions: Vec<(u16, u16)> = Vec::new();
+    for &(root, prefix) in &CLASS_ROOTS {
+        if let Some(k) = Key::open(root, &format!("{prefix}{base}")) {
+            versions.extend(k.subkeys().iter().filter_map(|s| parse_version(s)));
+        }
+    }
+    let best = versions.into_iter().max();
+    match best {
+        Some((ma, mi)) => load_registered(guid, ma, mi, 0),
+        None => load_registered(guid, if *guid == stdole::LIBID { 2 } else { 1 }, 0, 0),
+    }
+}
+
 /// `LoadRegTypeLib`'s work: the registered file, loaded.
 pub(crate) fn load_registered(guid: &Guid, major: u16, minor: u16, lcid: u32) -> Result<*mut TypeLib, Hresult> {
     let path = match registered_path(guid, major, minor, lcid) {
