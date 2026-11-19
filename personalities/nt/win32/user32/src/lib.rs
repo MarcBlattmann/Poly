@@ -1999,7 +1999,14 @@ pub unsafe extern "system" fn AdjustWindowRectEx(rect: *mut i32, style: u32, men
     // SAFETY: the caller's RECT.
     unsafe {
         let r = Rect::new(*rect, *rect.add(1), *rect.add(2), *rect.add(3));
-        put_rect(rect, metrics::adjust_window_rect(r, style, menu != 0, ex));
+        // At the caller's system DPI (AdjustWindowRectEx.yaml `at_200_units`, ADR 0231).
+        let dpi = u::system_dpi(&SYS);
+        let out = if dpi == 96 {
+            metrics::adjust_window_rect(r, style, menu != 0, ex)
+        } else {
+            metrics::adjust_window_rect_dpi(r, style, menu != 0, ex, dpi)
+        };
+        put_rect(rect, out);
     }
     1
 }

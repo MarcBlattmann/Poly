@@ -214,8 +214,6 @@ pub const USER32_EXPORTS: &[&str] = &[
     "LogicalToPhysicalPointForPerMonitorDPI",
     "PhysicalToLogicalPointForPerMonitorDPI",
     "DisplayConfigSetDeviceInfo",
-    "PolyUserDpiForMonitor",
-    "PolyUserScaleFactorForMonitor",
     "EnableNonClientDpiScaling",
     "AdjustWindowRectExForDpi",
     "GetSysColorBrush",

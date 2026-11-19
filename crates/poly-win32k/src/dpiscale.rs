@@ -31,10 +31,7 @@ pub fn step_of(percent: u32) -> usize {
 
 /// The largest step a display of `width` x `height` physical pixels offers.
 pub fn max_step(width: u32, height: u32) -> usize {
-    STEPS
-        .iter()
-        .rposition(|&s| width * 100 / s >= MIN_LOGICAL.0 && height * 100 / s >= MIN_LOGICAL.1)
-        .unwrap_or(0)
+    STEPS.iter().rposition(|&s| width * 100 / s >= MIN_LOGICAL.0 && height * 100 / s >= MIN_LOGICAL.1).unwrap_or(0)
 }
 
 /// `GetScaleFactorForMonitor`'s `DEVICE_SCALE_FACTOR` (shtypes.h) for a scale in percent. The
@@ -251,19 +248,26 @@ mod tests {
                 "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\"><application xmlns=\"urn:schemas-microsoft-com:asm.v3\"><windowsSettings>{inner}</windowsSettings></application></assembly>"
             )
         };
-        let dpi_aware = |v: &str| m(&alloc::format!("<dpiAware xmlns=\"http://schemas.microsoft.com/SMI/2005/WindowsSettings\">{v}</dpiAware>"));
-        let awareness =
-            |v: &str| alloc::format!("<dpiAwareness xmlns=\"http://schemas.microsoft.com/SMI/2016/WindowsSettings\">{v}</dpiAwareness>");
+        let dpi_aware = |v: &str| {
+            m(&alloc::format!(
+                "<dpiAware xmlns=\"http://schemas.microsoft.com/SMI/2005/WindowsSettings\">{v}</dpiAware>"
+            ))
+        };
+        let awareness = |v: &str| {
+            alloc::format!(
+                "<dpiAwareness xmlns=\"http://schemas.microsoft.com/SMI/2016/WindowsSettings\">{v}</dpiAwareness>"
+            )
+        };
         assert_eq!(manifest_awareness(dpi_aware("false").as_bytes()), Some(AWARE_UNAWARE));
         assert_eq!(manifest_awareness(dpi_aware("true").as_bytes()), Some(AWARE_SYSTEM));
         assert_eq!(manifest_awareness(dpi_aware("True/PM").as_bytes()), Some(AWARE_PER_MONITOR));
-        assert_eq!(manifest_awareness(m(&awareness("PerMonitorV2, PerMonitor")).as_bytes()), Some(AWARE_PER_MONITOR_V2));
+        assert_eq!(
+            manifest_awareness(m(&awareness("PerMonitorV2, PerMonitor")).as_bytes()),
+            Some(AWARE_PER_MONITOR_V2)
+        );
         assert_eq!(manifest_awareness(m(&awareness("bogus, system")).as_bytes()), Some(AWARE_SYSTEM));
         assert_eq!(manifest_awareness(m(&awareness("permonitor")).as_bytes()), Some(AWARE_PER_MONITOR));
-        let both = m(&alloc::format!(
-            "<dpiAware>true/pm</dpiAware>{}",
-            awareness("system")
-        ));
+        let both = m(&alloc::format!("<dpiAware>true/pm</dpiAware>{}", awareness("system")));
         assert_eq!(manifest_awareness(both.as_bytes()), Some(AWARE_SYSTEM));
         let prefixed = m("<ws2:dpiAwareness>PerMonitorV2</ws2:dpiAwareness>");
         assert_eq!(manifest_awareness(prefixed.as_bytes()), Some(AWARE_PER_MONITOR_V2));

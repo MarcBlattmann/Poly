@@ -168,6 +168,16 @@ impl Content {
     }
 }
 
+/// A physical size in a buffer's units (`scale`: buffer units, physical pixels), rounded down.
+fn own_units(v: u32, (num, den): (u32, u32)) -> u32 {
+    if num == den { v } else { (u64::from(v) * u64::from(num) / u64::from(den.max(1))) as u32 }
+}
+
+/// A physical coordinate in a buffer's units, rounded to the nearest.
+fn own_coord(v: i32, (num, den): (u32, u32)) -> i32 {
+    if num == den { v } else { crate::dpiscale::mul_div_round(v, num, den) }
+}
+
 /// Whether Poly frames a top-level window (ADR 0183 addendum "Windows apps"): it has a
 /// caption (`WS_CAPTION`), and its client area, as its `WM_NCCALCSIZE` answer placed it, leaves
 /// room for one above it. A window whose client area starts less than a caption's height
@@ -186,6 +196,8 @@ pub struct Surfaces {
     buffers: BTreeMap<BufferId, Buffer>,
     /// The contents of `UpdateLayeredWindow`-ed windows.
     contents: BTreeMap<u32, Content>,
+    /// Each surface's buffer units against physical pixels (`Wm::buffer_scale`, ADR 0231).
+    scales: BTreeMap<u32, (u32, u32)>,
 }
 
 impl Surfaces {
@@ -220,6 +232,7 @@ impl Surfaces {
         let tops = wm.top_levels();
         // Gone, or no longer top-level: the surface goes.
         let gone: Vec<u32> = self.windows.keys().filter(|h| !tops.contains(h)).copied().collect();
+        self.scales.retain(|h, _| tops.contains(h));
         for h in gone {
             if let Some(s) = self.windows.remove(&h) {
                 desktop.destroy(s);
@@ -264,6 +277,11 @@ impl Surfaces {
                 let bar = i.menu_bar.max(0);
                 let (cw, ch) = ((client.right - client.left) as u32, (client.bottom - client.top + bar) as u32);
                 desktop.set_geometry(s, client.left, client.top - bar, cw, ch);
+                // A window the system scales (unaware, GDI-scaled) draws in its own units: its
+                // buffer is that size and the compositor enlarges it (ADR 0231).
+                let scale = wm.buffer_scale(h);
+                self.scales.insert(h, scale);
+                let (cw, ch) = (own_units(cw, scale).max(1), own_units(ch, scale).max(1));
                 let current = desktop.surface(s).and_then(|x| x.buffer).map(|b| (b.id, b.width, b.height));
                 if current.map(|c| (c.1, c.2)) != Some((cw, ch))
                     && cw <= MAX_SIDE
@@ -426,6 +444,8 @@ impl Surfaces {
     /// The `COLORREF` of window `hwnd`'s surface at (`x`, `y`) in client
     /// coordinates.
     fn client_pixel(&self, desktop: &Desktop, hwnd: u32, x: i32, y: i32) -> Option<u32> {
+        let scale = self.scale_of(hwnd);
+        let (x, y) = (own_coord(x, scale), own_coord(y, scale));
         let s = self.surface(hwnd)?;
         let b = desktop.surface(s)?.buffer?;
         let buf = self.buffers.get(&b.id)?;
@@ -434,6 +454,11 @@ impl Surfaces {
         }
         let p = buf.pixel(x as u32, y as u32)?;
         Some(u32::from(p[2]) | u32::from(p[1]) << 8 | u32::from(p[0]) << 16)
+    }
+
+    /// The units of window `hwnd`'s buffer against physical pixels (`Wm::buffer_scale`).
+    fn scale_of(&self, hwnd: u32) -> (u32, u32) {
+        self.scales.get(&hwnd).copied().unwrap_or((1, 1))
     }
 
     /// The size of window `hwnd`'s surface buffer, for its DCs.
@@ -461,12 +486,14 @@ impl Surfaces {
             t = wm.info(top)?;
         }
         let (sw, sh) = self.size(desktop, top)?;
+        // In the units of the top-level window's buffer (ADR 0231).
+        let scale = self.scale_of(top);
         Some(ChildArea {
             top,
-            x: i.client.left - t.client.left,
-            y: i.client.top - t.client.top,
-            width: i.client.width().max(0) as u32,
-            height: i.client.height().max(0) as u32,
+            x: own_coord(i.client.left - t.client.left, scale),
+            y: own_coord(i.client.top - t.client.top, scale),
+            width: own_units(i.client.width().max(0) as u32, scale),
+            height: own_units(i.client.height().max(0) as u32, scale),
             surface: (sw, sh),
         })
     }

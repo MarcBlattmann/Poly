@@ -589,11 +589,8 @@ pub fn hidden_frame_dpi(style: u32, ex: u32, dpi: u32) -> i32 {
         0
     };
     let line = i32::from(style & (WS_BORDER | WS_DLGFRAME) != 0 || ex & WS_EX_DLGMODALFRAME != 0);
-    let sizing = if style & WS_THICKFRAME != 0 || has_caption(style) {
-        frame_for_dpi(dpi) + padded_for_dpi(dpi) - 3
-    } else {
-        0
-    };
+    let sizing =
+        if style & WS_THICKFRAME != 0 || has_caption(style) { frame_for_dpi(dpi) + padded_for_dpi(dpi) - 3 } else { 0 };
     edge + line + sizing
 }
 

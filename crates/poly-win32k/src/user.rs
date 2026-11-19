@@ -528,7 +528,16 @@ fn def_dpi_changed<E: Env + ?Sized>(env: &E, hwnd: u64, l: u64) {
         if l != 0 {
             // SAFETY: lParam of WM_DPICHANGED is the suggested RECT.
             let r = unsafe { *(l as *const CRect) };
-            set_window_pos(env, hwnd, 0, r.left, r.top, r.right - r.left, r.bottom - r.top, SWP_NOZORDER | SWP_NOACTIVATE);
+            set_window_pos(
+                env,
+                hwnd,
+                0,
+                r.left,
+                r.top,
+                r.right - r.left,
+                r.bottom - r.top,
+                SWP_NOZORDER | SWP_NOACTIVATE,
+            );
         }
     }
 }
@@ -1910,7 +1919,13 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
                 // SAFETY: lParam starts with a RECT (NCCALCSIZE_PARAMS for TRUE).
                 let r = unsafe { &mut *(l as *mut CRect) };
                 let bar = i.style & WS_CHILD == 0 && i.id != 0 && env.menu_bar_shown(i.id);
-                *r = CRect::from(metrics::default_client_dpi(Rect::from(*r), i.style, i.ex_style, bar, i.frame_dpi.max(1)));
+                *r = CRect::from(metrics::default_client_dpi(
+                    Rect::from(*r),
+                    i.style,
+                    i.ex_style,
+                    bar,
+                    i.frame_dpi.max(1),
+                ));
             }
             0
         }

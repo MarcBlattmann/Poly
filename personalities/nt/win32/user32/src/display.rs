@@ -878,7 +878,8 @@ unsafe fn per_monitor_point(hwnd: H, pt: *mut i32, to_phys: bool) -> i32 {
         }
         // The window in its own units and in physical pixels (a per-monitor window's units
         // are physical).
-        let wu = if matches!(i.dpi, guic::AWARE_PER_MONITOR | guic::AWARE_PER_MONITOR_V2) { phys_dpi } else { i.dpi_value };
+        let wu =
+            if matches!(i.dpi, guic::AWARE_PER_MONITOR | guic::AWARE_PER_MONITOR_V2) { phys_dpi } else { i.dpi_value };
         let caller = poly_win32k::dpiscale::Units::new(d.monitor_dpi, phys_dpi);
         let phys = caller.rect_to_phys(i.window);
         let own = poly_win32k::dpiscale::Units::new(wu, phys_dpi);

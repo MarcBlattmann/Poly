@@ -357,8 +357,13 @@ impl WindowsSurfaces {
                         actions.push(Action::Send(FromCompositor::Released { buffer: old }));
                     }
                     // A buffer in Windows pixels: `units` of them a logical pixel. One the
-                    // output enlarges is enlarged smoothly, not in blocks (ADR 0219).
-                    scene.resize_content(s.window, width, height, self.units as u32);
+                    // output enlarges is enlarged smoothly, not in blocks (ADR 0219). A window
+                    // Windows scales for its app (DPI unaware) has a buffer in its own units, as
+                    // many pixels as the surface has logical ones: buffer scale 1 (ADR 0231).
+                    let u = self.units.max(1) as u32;
+                    let logical = s.geometry.2;
+                    let scale = if logical > 0 { width.div_ceil(logical).clamp(1, u) } else { u };
+                    scene.resize_content(s.window, width, height, scale);
                     scene.set_smooth(s.window, true);
                     actions.push(Action::TakeBuffer(buffer));
                 }
@@ -995,6 +1000,20 @@ mod tests {
         assert_eq!(fb.pixel(40, 80), Some(0x40_4040));
         assert_eq!(fb.pixel(47, 85), Some(0x40_4040));
         assert_ne!(fb.pixel(48, 80), Some(0x40_4040), "8 output pixels wide, not 16");
+
+        // ADR 0231: a DPI-unaware window's buffer is in its own units, half the surface's
+        // Windows pixels: shown at buffer scale 1, enlarged to the surface.
+        let s2 = d.create(SurfaceKind::TopLevel, 0, false);
+        d.set_geometry(s2, 200, 200, 8, 6);
+        let b2 = d.attach_buffer(s2, 4, 3, 16, PixelFormat::Xrgb8888).unwrap();
+        mem.0.insert(b2, vec![0x60; 4 * 3 * 4]);
+        d.damage(s2, 0, 0, 4, 3);
+        d.set_visible(s2, true);
+        pump(&mut d, &mut ws, &mut scene, &mem);
+        let w2 = ws.window(s2).unwrap();
+        let c = content_of(&scene, w2).unwrap();
+        assert_eq!((c.width, c.height, c.scale), (4, 3, 1));
+        assert_eq!(c.logical_size(), (4, 3), "as large as the aware window's");
     }
 
     #[test]

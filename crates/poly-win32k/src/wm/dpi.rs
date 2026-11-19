@@ -77,6 +77,14 @@ impl Wm {
         self.get(u64::from(h)).map_or(self.monitor_dpi, |w| self.awareness_dpi(w.dpi))
     }
 
+    /// The units of a top-level window's surface buffer against physical pixels: a window the
+    /// system scales draws in its own units and the compositor enlarges its buffer; (1, 1) for a
+    /// window in physical pixels.
+    pub fn buffer_scale(&self, h: u32) -> (u32, u32) {
+        let units = self.window_units(h);
+        if units == self.monitor_dpi { (1, 1) } else { (units, self.monitor_dpi) }
+    }
+
     /// The desktop as thread `key` sees it.
     pub(super) fn desktop_reply(&self, key: Key) -> Reply {
         let u = self.units_of(key);
@@ -177,7 +185,9 @@ impl Wm {
             (2, Reply::Value { value }) => {
                 let x = u.to_caller(i32::from((value >> 32) as u16 as i16));
                 let y = u.to_caller(i32::from((value >> 48) as u16 as i16));
-                Reply::Value { value: (value & 0xFFFF_FFFF) | (u64::from(x as u16) << 32) | (u64::from(y as u16) << 48) }
+                Reply::Value {
+                    value: (value & 0xFFFF_FFFF) | (u64::from(x as u16) << 32) | (u64::from(y as u16) << 48),
+                }
             }
             (_, r) => r,
         };
@@ -331,7 +341,8 @@ impl Wm {
             if let Some(w) = self.get_mut(u64::from(h)) {
                 w.window_rel = u.rect_to_phys(wr);
                 w.client_rel = u.rect_to_phys(cr);
-                w.own = Some(Own { window_rel: wr, client_rel: cr, phys: (w.window_rel, w.client_rel), monitor, units });
+                w.own =
+                    Some(Own { window_rel: wr, client_rel: cr, phys: (w.window_rel, w.client_rel), monitor, units });
             }
         }
         // The top-level windows, topmost first, each told through its thread.
