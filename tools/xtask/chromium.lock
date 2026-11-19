@@ -36,6 +36,7 @@ fontconfig 2.15.0-2.3 debian 463312 09794b188e042c90b4a89fcb5afeb276bc231b74ddf8
 fontconfig-config 2.15.0-2.3 debian 318308 0475c00d02660c07a15085051818625331bb502e053242106aaaa1f2ddb41225 disk pool/main/f/fontconfig/fontconfig-config_2.15.0-2.3_amd64.deb
 fonts-dejavu-core 2.37-8 debian 840460 86635b3d25b3655fc11cb3ecc3af59f0bf19643b02b94f2de48bd10253cdba12 disk pool/main/f/fonts-dejavu/fonts-dejavu-core_2.37-8_all.deb
 fonts-dejavu-mono 2.37-8 debian 488808 3003e98a5debfdeadc7040a7f715fe9fe6fb67f68deacf6049b54e30f07fc014 disk pool/main/f/fonts-dejavu/fonts-dejavu-mono_2.37-8_all.deb
+fonts-droid-fallback 1:8.1.0r7-1~1.gbp36536b debian 1807416 7603265fad00f4f2cee75e25a3c1a44c8c751e15fba45714b5c954404c042c7c disk pool/main/f/fonts-android/fonts-droid-fallback_8.1.0r7-1~1.gbp36536b_all.deb
 galculator 2.1.4-2 debian 170720 bd80f82dd1f505c23efb2be6e8810e5b4e2791d71a1dbd758a87ef7ab0fa9122 install pool/main/g/galculator/galculator_2.1.4-2_amd64.deb
 gawk 1:5.2.1-2+b1 debian 673696 0e3b376e74cadfa5049bc8248c563efe89fd45e31466f8891c094c65c0879f5c disk pool/main/g/gawk/gawk_5.2.1-2+b1_amd64.deb
 gcc-14-base 14.2.0-19 debian 49432 5b6825de4263824b78c4c51f6476414f3b4e89c2ab63e81dc8b9b5501e867cf6 disk pool/main/g/gcc-14/gcc-14-base_14.2.0-19_amd64.deb
