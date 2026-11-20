@@ -606,8 +606,9 @@ fn qemu_on(
     cmd
 }
 
-/// How long the slow test device takes for every request, in nanoseconds.
-const SLOW_DISK_LATENCY: u64 = 300_000_000;
+/// How long the slow test device takes for every request, in nanoseconds: three times the
+/// watchdog limit of its test (`virtio_blk::SLOW_LIMIT_NS`, 50 ms), so every request is late.
+const SLOW_DISK_LATENCY: u64 = 150_000_000;
 
 /// Whether QEMU can open a window: on macOS (Cocoa) and Windows always,
 /// elsewhere when an X11 or Wayland display is set. Without one, QEMU's

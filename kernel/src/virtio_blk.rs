@@ -635,7 +635,7 @@ fn lost_request(disk: &'static block::Disk, interrupt_driven: bool) -> TestResul
 
 /// The watchdog's limit in the slow-device test: far below the device's
 /// answer time (`poly.test.disk`'s fifth virtio-blk function answers every
-/// request, flushes too, after 300 ms: `tools/xtask`'s `SLOW_DISK_LATENCY`).
+/// request, flushes too, after 150 ms: `tools/xtask`'s `SLOW_DISK_LATENCY`).
 const SLOW_LIMIT_NS: u64 = 50 * time::NANOS_PER_MILLI;
 /// Threads and rounds of the slow-device test.
 const SLOW_THREADS: usize = 4;
