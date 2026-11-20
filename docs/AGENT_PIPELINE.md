@@ -687,6 +687,18 @@ cargo xtask pipeline mac run --tests-dir specs/macos/bsd/write.tests --record
 cargo xtask pipeline mac run --tests-dir ~/poly-heldout/macos/syscall/bsd/write --record
 ```
 
+**Tests about CoreFoundation itself** (`specs/macos/CoreFoundation.framework/<symbol>.tests/`): a
+test whose header comment has the line `poly-mac: corefoundation` is linked with
+`-framework CoreFoundation`, may load that one library besides libSystem and may import
+CoreFoundation's own symbols (`CF...`, `kCF...`, `__CFConstantStringClassReference`); `mac
+build` still refuses every other import. It includes `poly_mcf.h` (`tests/macos/include`),
+which has the same `check`/`value`/`finish` output through raw system calls as `poly_mtest.h`
+(the two headers cannot be included together: `poly_mtest.h` redefines system constants) and a
+few helpers: a counting allocator, `cf_enter_app` (builds `T.app` in the scratch directory and
+starts a copy of the test from inside it, so that the main bundle is a real application) and
+`cf_prefs_clean`. Preferences tests use domains named `test.poly.cfspec.<name>` only and remove
+their keys.
+
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.
 

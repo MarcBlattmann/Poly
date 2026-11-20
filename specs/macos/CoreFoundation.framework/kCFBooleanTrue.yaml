@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/kCFBooleanTrue.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in kCFBooleanTrue.tests/macos.json.
+id: macos/api/CoreFoundation.framework/kCFBooleanTrue
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  kCFBooleanTrue and kCFBooleanFalse are the two Boolean objects: constant, distinct, of type
+  CFBooleanGetTypeID (not CFNumber), never counted or freed (CFGetRetainCount above 1000, any number
+  of CFRetain/CFRelease changes nothing), with the same pointer for the life of the process and in
+  every property list read from XML. Each is equal only to itself, except the number rule of CFEqual:
+  the number 1 equals true and 0 equals false, with equal hashes (hash of true 2654435761, of false
+  0); true and false differ in hash. They are ordinary elements of arrays, dictionaries and sets (a
+  dictionary value comes out as the same constant; a set of true, true, false has count 2). The symbol
+  is an exported pointer variable of type CFBooleanRef.
+returns:
+  value: "the constant objects"
+errors: {}
+side_effects: "none"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "a few nanoseconds to microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFRunLoopGetCurrent.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFRunLoopGetCurrent.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFRunLoopGetCurrent
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFRunLoopGetCurrent() returns the run loop of the calling thread, created on first use, the same
+  object on every call, a CFRunLoop (type CFRunLoopGetTypeID), not retained for the caller. On the
+  main thread it is the main run loop (CFRunLoopGetMain). On another thread (observed in a probe with
+  pthreads, not in a test: tests may not use libSystem) it is a different object from the main one,
+  CFRunLoopGetMain still gives the main loop from there, and a run of its default mode with nothing
+  added returns kCFRunLoopRunFinished at once. CFRunLoopCopyCurrentMode(rl) is NULL when the loop is
+  not running; inside a callback of a running loop it is the name of the mode being run (a string
+  equal to the mode name: 'PolyMode', 'kCFRunLoopDefaultMode'), and NULL again after the run.
+  kCFRunLoopDefaultMode is the string 'kCFRunLoopDefaultMode' and kCFRunLoopCommonModes
+  'kCFRunLoopCommonModes'. CFRunLoopIsWaiting is false outside a run.
+returns:
+  success: "the thread's run loop (never NULL, not owned)"
+errors: {}
+side_effects: "creates the thread's run loop on first use"
+threading: "per thread: each thread has its own run loop, objects may be shared but running one is the owning thread's job"
+ordering: []
+timing:
+  typical: "a few nanoseconds to microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

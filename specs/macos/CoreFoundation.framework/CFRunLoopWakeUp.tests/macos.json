@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfrunloopwakeup_no_effect_on_idle",
+      "source_sha256": "8a66f68e6c34e588bde060f9b7246bb9de1073b5f0f062d5b1faf1a811bb7258",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c698106c664dc4df55050cc00613a144495d332b3bad2d2d73228a92b9ba0b68",
+          "exit_code": 0,
+          "stdout": "ok CFRunLoopRunInMode(CFSTR(\"PolyWake\"), 0.1, false) == kCFRunLoopRunFinished\nok CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, false) == kCFRunLoopRunTimedOut\nok perf == 0\nok CFRunLoopRunInMode(CFSTR(\"PolyWake\"), 0.2, false) == kCFRunLoopRunTimedOut\nok CFAbsoluteTimeGetCurrent() - t0 >= 0.15\nok fired == 0\nok CFRunLoopRunInMode(CFSTR(\"PolyWake\"), 0.1, true) == kCFRunLoopRunHandledSource\nok perf == 1\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9fda516c272e5120db8f659422b4952388a914d5d69231b4052ae325d6c25070",
+          "exit_code": 0,
+          "stdout": "ok CFRunLoopRunInMode(CFSTR(\"PolyWake\"), 0.1, false) == kCFRunLoopRunFinished\nok CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, false) == kCFRunLoopRunTimedOut\nok perf == 0\nok CFRunLoopRunInMode(CFSTR(\"PolyWake\"), 0.2, false) == kCFRunLoopRunTimedOut\nok CFAbsoluteTimeGetCurrent() - t0 >= 0.15\nok fired == 0\nok CFRunLoopRunInMode(CFSTR(\"PolyWake\"), 0.1, true) == kCFRunLoopRunHandledSource\nok perf == 1\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
