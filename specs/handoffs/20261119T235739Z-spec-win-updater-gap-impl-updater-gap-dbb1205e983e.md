@@ -1,14 +1,14 @@
 # Hand-off of windows/api/gdi32.dll/RoundRect
 
-Date (UTC): 2026-11-19 20:56:59
+Date (UTC): 2026-11-19 23:57:39
 Entry id: windows/api/gdi32.dll/RoundRect
-Spec revision (git): c56158f051315e2cd5206c1c6b9fb39bd6caa31b
+Spec revision (git): f615e50199c8ee52faab6884f89431ef18f0554c
 Spec agent: spec-win-updater-gap
 Implementer agent: impl-updater-gap
 
 Files handed over:
 
-- `specs/windows/gdi32.dll/RoundRect.yaml` sha256:3d74226d27334e0dfe3395d71e7b6bbac532ff417847d2c4320f1ad6e3281205
+- `specs/windows/gdi32.dll/RoundRect.yaml` sha256:d0478342e232a24d25e7b3e98251e36ea08c808082937567319ebff31c531102
 - `specs/windows/gdi32.dll/RoundRect.tests/rr_brushes.rs` sha256:88401cba67142ac84eda3499a8be8bc5f168f21033630ff02a4bac82b358c9b0
 - `specs/windows/gdi32.dll/RoundRect.tests/rr_fill.rs` sha256:349d4029ef860da2f1ce11e9ab8e78a477b248b507dba6c40081d71511632c3d
 - `specs/windows/gdi32.dll/RoundRect.tests/rr_fill_b.rs` sha256:f3fbdc6fe1306c28046b17fd8eb6bb96409d47158e65a587572eb63b6a1c6f4e

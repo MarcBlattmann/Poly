@@ -96,8 +96,8 @@ pub unsafe extern "system" fn IsDialogMessageA(dlg: H, msg: *mut CMsg) -> i32 {
     if msg.is_null() {
         return 0;
     }
-    // SAFETY: the caller's MSG.
-    let mut m = unsafe { *msg };
+    // SAFETY: the caller's MSG, read in its own size.
+    let mut m = unsafe { poly_win32k::user::get_msg(msg) };
     if matches!(m.message, ansi::WM_CHAR | ansi::WM_DEADCHAR | ansi::WM_SYSCHAR | ansi::WM_SYSDEADCHAR) {
         m.w = ansi::enter(m.hwnd, Form::Ansi, Form::Wide, m.message, m.w, m.l as isize).w;
     }

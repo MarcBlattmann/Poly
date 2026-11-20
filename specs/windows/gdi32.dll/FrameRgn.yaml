@@ -33,6 +33,7 @@ rules:
   brush: "the brush argument is used, not the one selected into the DC (a green brush selected, a blue one passed: blue is painted, no green); the brush selected may even be the null brush. The brush origin and the pattern of a hatch brush are applied as for FillRgn: a cross hatch (HS_CROSS) in red on white paints 40 of the 112 border pixels of the 20x12 rectangle with w=h=3."
   rop2: "the DC's raster operation applies: with R2_BLACK or R2_NOT on a white bitmap the painted pixels turn black (112 pixels), not blue."
   not_consumed: "the region and the brush are not changed or consumed: painting the same region twice gives the same pixels."
+  x86: "the same programs built for 32-bit (i686, run under WOW64 on the same machine, in the SSH session) printed exactly the lines the 64-bit ones did, line for line (verified outside the recorded tests: the pipeline's test build is 64-bit only), so the rules hold for the 32-bit DLL as they are (shapes, complex regions, arguments, extreme widths, device context state, brushes)."
 errors:
   invalid_dc: "NULL or a made-up handle as the DC: FALSE (0), last error ERROR_INVALID_HANDLE (6)"
   invalid_region_or_brush: "NULL or a made-up handle as the region or the brush: FALSE (0), nothing painted, the last error is not set (stays 0)"

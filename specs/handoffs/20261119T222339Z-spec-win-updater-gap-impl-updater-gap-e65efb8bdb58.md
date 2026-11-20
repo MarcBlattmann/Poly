@@ -1,14 +1,14 @@
 # Hand-off of windows/api/gdi32.dll/FrameRgn
 
-Date (UTC): 2026-11-19 20:55:59
+Date (UTC): 2026-11-19 22:23:39
 Entry id: windows/api/gdi32.dll/FrameRgn
-Spec revision (git): c56158f051315e2cd5206c1c6b9fb39bd6caa31b
+Spec revision (git): 82ccbb8fb6b4f98a55e9208cc2e28b6ecd5b15a0
 Spec agent: spec-win-updater-gap
 Implementer agent: impl-updater-gap
 
 Files handed over:
 
-- `specs/windows/gdi32.dll/FrameRgn.yaml` sha256:bf416e5aaac3aeccae9681586485f5583286b93c396ab1d6d21774e837728964
+- `specs/windows/gdi32.dll/FrameRgn.yaml` sha256:c1ee6ad13b839566646fb29f5dc676e0220a265662bc3bdaa32fc804175d14bb
 - `specs/windows/gdi32.dll/FrameRgn.tests/fr_args.rs` sha256:469b369d2888aeeb2a329be2f0cdb08f7b60d52c1664c7ebcb9ab0ecd7fb93ed
 - `specs/windows/gdi32.dll/FrameRgn.tests/fr_brushes.rs` sha256:a85a15467bcac3113720fc79362cf46d01d046c1931a212feb73f4e96e5d1a4c
 - `specs/windows/gdi32.dll/FrameRgn.tests/fr_complex.rs` sha256:b7b19ededb227930b9b114a913877da045870aca4ed573768ac04fd75ad1a129

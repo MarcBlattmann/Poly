@@ -237,6 +237,35 @@ pub struct CMsg {
     pub private: u32,
 }
 
+/// The bytes of a `MSG` in the calling process: 28 on x86, where `winuser.h` has no `lPrivate`
+/// (it is `_MAC` only), and the whole 48 on x64, where [`CMsg::private`] lies in the structure's
+/// tail padding. Writing a `CMsg` whole into a 32-bit caller's `MSG` overran it by 4 bytes, the
+/// stack cookie behind a message loop's `MSG` (`wow64-gui-overrun`, Google's 32-bit installer).
+pub const MSG_BYTES: usize = if core::mem::size_of::<usize>() == 4 { 28 } else { 48 };
+
+const _: () = assert!(core::mem::size_of::<CMsg>() >= MSG_BYTES);
+const _: () = assert!(core::mem::size_of::<usize>() == 4 || core::mem::size_of::<CMsg>() == MSG_BYTES);
+
+/// Write `m` into a caller's `MSG`: [`MSG_BYTES`] bytes, not one more.
+///
+/// # Safety
+/// `dst` points at a writable `MSG` of the calling process.
+pub unsafe fn put_msg(dst: *mut CMsg, m: &CMsg) {
+    // SAFETY: the caller's promise; `CMsg` holds at least `MSG_BYTES` bytes.
+    unsafe { core::ptr::copy_nonoverlapping(m as *const CMsg as *const u8, dst as *mut u8, MSG_BYTES) };
+}
+
+/// Read a caller's `MSG`: [`MSG_BYTES`] bytes (on x86 `private` is 0).
+///
+/// # Safety
+/// `src` points at a readable `MSG` of the calling process.
+pub unsafe fn get_msg(src: *const CMsg) -> CMsg {
+    let mut m = CMsg::default();
+    // SAFETY: the caller's promise; `CMsg` holds at least `MSG_BYTES` bytes.
+    unsafe { core::ptr::copy_nonoverlapping(src as *const u8, &mut m as *mut CMsg as *mut u8, MSG_BYTES) };
+    m
+}
+
 /// What these functions need from the process they run in.
 pub trait Env {
     /// The `PolyUserCall` system call.

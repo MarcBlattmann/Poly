@@ -970,8 +970,8 @@ pub unsafe extern "system" fn IsDialogMessageW(dlg: H, msg: *mut CMsg) -> i32 {
     if msg.is_null() || info(dlg).is_none() {
         return 0;
     }
-    // SAFETY: the caller's MSG.
-    let m = unsafe { *msg };
+    // SAFETY: the caller's MSG, read in its own size.
+    let m = unsafe { poly_win32k::user::get_msg(msg) };
     let target = m.hwnd as H;
     if target == 0 || (target != dlg && super::IsChild(dlg, target) == 0) {
         return 0;
