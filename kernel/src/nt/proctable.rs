@@ -69,6 +69,9 @@ impl ProcTable {
     /// Add `proc` as process `pid` (`pid` is not in the table).
     pub fn insert(&mut self, pid: ProcessId, proc: NtProcess) {
         let cell = Arc::new(Mutex::new(proc));
+        if crate::timeline::on() {
+            crate::timeline::name_queue(cell.queue_address(), &alloc::format!("nt-process-lock-p{}", pid.0));
+        }
         CELLS.lock().insert(pid, Arc::clone(&cell));
         self.map.insert(pid, cell);
     }
