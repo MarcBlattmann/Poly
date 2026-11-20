@@ -75,6 +75,7 @@ class Names:
     def __init__(self, serial):
         self.thread, self.proc, self.sys, self.queue = {}, {}, {}, {}
         self.modules = collections.defaultdict(list)
+        self.user32 = {}
         for line in serial.splitlines():
             i = line.find('timeline: ')
             if i < 0:
@@ -94,6 +95,10 @@ class Names:
                 parts = rest[7:].split(' ', 3)
                 if len(parts) == 4:
                     self.modules[int(parts[0])].append((int(parts[1], 16), int(parts[2], 16), parts[3].strip()))
+            elif rest.startswith('user32 '):
+                parts = rest[7:].split()
+                if len(parts) == 2 and parts[0].isdigit():
+                    self.user32[int(parts[0])] = parts[1]
             elif rest.startswith('queue '):
                 parts = rest[6:].split()
                 if len(parts) == 2:
@@ -123,6 +128,13 @@ class Names:
             if base <= rip < base + size:
                 return name
         return 'kernel?' if rip >= 1 << 47 else '(no module)'
+
+    def label(self, r):
+        """A system call record's name; `PolyUserCall` with its request (`PolyUserCall:PeekMessage`)."""
+        name = self.call(r.a)
+        if name == 'PolyUserCall' and r.b in self.user32:
+            name += ':' + self.user32[r.b]
+        return name
 
     def who(self, ident):
         pid, tid = ident >> 32, ident & 0xFFFFFFFF
@@ -169,7 +181,7 @@ def replay(recs, names):
             frm, to = threads[r.a], threads[r.ident]
             left = LEFT.get(r.b, 'other')
             if left == 'blocked':
-                what = names.call(frm.call[0]) if frm.call else 'kernel wait'
+                what = frm.call[0] if frm.call else 'kernel wait'
                 if frm.queue is not None:
                     q = names.queue.get(frm.queue)
                     what += f' [{q}]' if q else ''
@@ -183,15 +195,15 @@ def replay(recs, names):
         elif r.kind == 'wake':
             th = threads[r.ident]
             waker = threads.get(r.a)
-            wcall = names.call(waker.call[0]) if waker is not None and waker.call else None
+            wcall = waker.call[0] if waker is not None and waker.call else None
             intr = bool(r.flags & IN_INTERRUPT)
             th.wakes.append((r.t, r.a, wcall, intr))
             if th.state != 'run':
                 th.to('ready', r.t, ('woken', r.a, wcall, intr))
         elif r.kind == 'enter':
             th = threads[r.ident]
-            th.call = (r.a, r.t)
-            th.calls[names.call(r.a)] += 1
+            th.call = (names.label(r), r.t)
+            th.calls[th.call[0]] += 1
         elif r.kind == 'exit':
             threads[r.ident].call = None
         elif r.kind == 'block':
@@ -360,16 +372,16 @@ def calls(recs, names, match, t0, t1):
                     if cur is None:
                         user_run += b - a
                     else:
-                        inside.setdefault(names.call(cur[0]), [0, 0, 0])[2] += b - a
+                        inside.setdefault(cur[0], [0, 0, 0])[2] += b - a
                 running_since = None
             elif r.kind == 'enter' and r.ident == ident:
                 if running_since is not None and r.t > t0:
                     user_run += r.t - max(running_since, t0)
                     running_since = r.t
-                cur = (r.a, r.t)
+                cur = (names.label(r), r.t)
             elif r.kind == 'exit' and r.ident == ident and cur is not None:
                 if r.t >= t0:
-                    e = inside.setdefault(names.call(cur[0]), [0, 0, 0])
+                    e = inside.setdefault(cur[0], [0, 0, 0])
                     e[0] += 1
                     e[1] += r.t - max(cur[1], t0)
                     if running_since is not None:

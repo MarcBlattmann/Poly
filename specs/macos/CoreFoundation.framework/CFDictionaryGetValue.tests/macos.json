@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfdictionarygetvalue_key_equality",
+      "source_sha256": "9c55f0de69fac969fc69f2c5b766218435148ff5793923aa61dd9b9cf2c0afb8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "226ea2bb4b4da166bc721420e0addab3f23845cbe3e0b03796fda66108abb85a",
+          "exit_code": 0,
+          "stdout": "ok cf_is(CFDictionaryGetValue(d, CFNumberCreate(kCFAllocatorDefault, kCFNumberLongLongType, &one64)), \"num\")\nok cf_is(CFDictionaryGetValue(d, S(\"Key\")), \"str\")\nok CFDictionaryGetValue(d, S(\"key\")) == NULL\nok CFDictionaryGetValue(d, S(\"1\")) == NULL\nok CFDictionaryGetCount(d) == 2\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f1ff6c52bd5aed472a4d8ec8c070161c565395237152ef0d42565ca910656291",
+          "exit_code": 0,
+          "stdout": "ok cf_is(CFDictionaryGetValue(d, CFNumberCreate(kCFAllocatorDefault, kCFNumberLongLongType, &one64)), \"num\")\nok cf_is(CFDictionaryGetValue(d, S(\"Key\")), \"str\")\nok CFDictionaryGetValue(d, S(\"key\")) == NULL\nok CFDictionaryGetValue(d, S(\"1\")) == NULL\nok CFDictionaryGetCount(d) == 2\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

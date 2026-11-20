@@ -706,6 +706,7 @@ mod com;
 mod delayed;
 mod dispatch;
 mod exec;
+mod fileinfo;
 mod fileop;
 mod folder;
 mod idle;

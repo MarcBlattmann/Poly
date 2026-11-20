@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "kcftypesetcallbacks_in_use",
+      "source_sha256": "f39f57265d4c2ea5a82aa5204f0b32b554d2ff40ccf7978e4b3476309ba82317",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "26dd6cb28448562c80f7db4c5b06ca816f8a10c45d63996722b12da80be25005",
+          "exit_code": 0,
+          "stdout": "ok CFSetGetCount(s) == 2\nok CFSetGetCount(s) == 3\nok CFSetContainsValue(s, S(\"different\")) && !CFSetContainsValue(s, S(\"Different\"))\nok CFGetRetainCount(d) == 2\nok CFGetRetainCount(d) == 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c5c85b7110988afd8cf302967d64320c06ec5c426e8863c6bf16df31d064b24e",
+          "exit_code": 0,
+          "stdout": "ok CFSetGetCount(s) == 2\nok CFSetGetCount(s) == 3\nok CFSetContainsValue(s, S(\"different\")) && !CFSetContainsValue(s, S(\"Different\"))\nok CFGetRetainCount(d) == 2\nok CFGetRetainCount(d) == 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

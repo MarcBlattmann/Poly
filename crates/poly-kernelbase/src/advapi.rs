@@ -133,6 +133,9 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
     ("AdjustTokenPrivileges", SECURITY_BASE),
     ("GetFileSecurityW", SECURITY_BASE),
     ("SetFileSecurityW", SECURITY_BASE),
+    // specs/windows/advapi32.dll/SetFileSecurityA.yaml, GetFileSecurityA.yaml.
+    ("GetFileSecurityA", SECURITY_BASE),
+    ("SetFileSecurityA", SECURITY_BASE),
 ];
 
 /// The functions `advapi32.dll` implements itself.

@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfnumbergetvalue_narrowing",
+      "source_sha256": "2e2a966de518a5aa057ff3ab5822989fabd3cacda19cf4e943c262144dc7735c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c1b99b63b4cf40aa237ced68bab3a98517dc76b4faa0ffce43ea5a468e6c5048",
+          "exit_code": 0,
+          "stdout": "ok CFNumberGetValue(I(300), kCFNumberCharType, &uc) && uc == 44\nok CFNumberGetValue(I(-129), kCFNumberSInt8Type, &sc) && sc == 127\nok CFNumberGetValue(I(127), kCFNumberSInt8Type, &sc) && sc == 127\nok CFNumberGetValue(I(70000), kCFNumberShortType, &sh) && sh == 4464\nok !CFNumberGetValue(D(2.75), kCFNumberIntType, &i) && i == 2\nok !CFNumberGetValue(D(-2.75), kCFNumberIntType, &i) && i == -2\nok CFNumberGetValue(D(1e30), kCFNumberIntType, &i)\nok CFNumberGetValue(D(1e30), kCFNumberLongLongType, &ll)\nok !CFNumberGetValue(kCFNumberNaN, kCFNumberIntType, &i)\nok !CFNumberGetValue(D(0.1), kCFNumberFloatType, &f)\nok CFNumberGetValue(D(0.5), kCFNumberFloatType, &f) && f == 0.5f\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6ee8e36d474d9d1ed81b3cc76d7418277be7dfc9e24dca524e664bee8fbd643f",
+          "exit_code": 0,
+          "stdout": "ok CFNumberGetValue(I(300), kCFNumberCharType, &uc) && uc == 44\nok CFNumberGetValue(I(-129), kCFNumberSInt8Type, &sc) && sc == 127\nok CFNumberGetValue(I(127), kCFNumberSInt8Type, &sc) && sc == 127\nok CFNumberGetValue(I(70000), kCFNumberShortType, &sh) && sh == 4464\nok !CFNumberGetValue(D(2.75), kCFNumberIntType, &i) && i == 2\nok !CFNumberGetValue(D(-2.75), kCFNumberIntType, &i) && i == -2\nok CFNumberGetValue(D(1e30), kCFNumberIntType, &i)\nok CFNumberGetValue(D(1e30), kCFNumberLongLongType, &ll)\nok !CFNumberGetValue(kCFNumberNaN, kCFNumberIntType, &i)\nok !CFNumberGetValue(D(0.1), kCFNumberFloatType, &f)\nok CFNumberGetValue(D(0.5), kCFNumberFloatType, &f) && f == 0.5f\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

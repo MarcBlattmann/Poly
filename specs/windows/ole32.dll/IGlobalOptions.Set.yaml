@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/IGlobalOptions.Set.yaml
+id: windows/api/ole32.dll/IGlobalOptions.Set
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave identical output."
+  observed_by: spec-win-com-globaloptions
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs (64-bit and 32-bit builds, a COM server and client in one image) on the machine above. Microsoft Learn: "IGlobalOptions interface (objidl.h)", "IGlobalOptions::Set", "IGlobalOptions::Query", "GLOBALOPT_PROPERTIES enumeration (objidl.h)" (COMGLB_EXCEPTION_HANDLING 1, COMGLB_APPID 2, COMGLB_RPC_THREADPOOL_SETTING 3, COMGLB_RO_SETTINGS 4, COMGLB_UNMARSHALING_POLICY 5, COMGLB_PROPERTIES_RESERVED1..3 6..8), "CoCreateInstance", "CoGetClassObject", "CLSCTX enumeration", "IClassFactory", "RaiseException", "SetUnhandledExceptionFilter", "AddVectoredExceptionHandler"; objidl.h, combaseapi.h, winerror.h for the interface and error constants (CLSID_GlobalOptions {0000034B-0000-0000-C000-000000000046}, the interface id {0000015B-0000-0000-C000-000000000046} was confirmed by creating the object with it). The numeric values of the values of each property (the GLOBALOPT_* value enumerations) are not in Learn's text: the sheet gives the numbers the oracle accepted and refused. Google's 32-bit updater: Poly's run of it stops right after it asks for this class (coordinator's report); what it sets is not known. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  IGlobalOptions::Set(dwProperty, ULONG_PTR dwValue) sets one process-wide option. Which values are accepted, whether a value can be changed or set back, and what makes Set fail differ per property; Query shows the result at once. The rules below are what the oracle did; the names of the values are the documented ones, the numbers are what was accepted or refused.
+interface:
+  signature: "HRESULT IGlobalOptions::Set(GLOBALOPT_PROPERTIES dwProperty, ULONG_PTR dwValue); vtable order: QueryInterface, AddRef, Release, Set, Query"
+installer: "Google's updater.exe 157 (32-bit) asks COM for CLSID_GlobalOptions during its start-up and Poly's COM does not have the class (the point where a Poly run of it breaks). The updater's calls on the object are not known; this sheet therefore gives the behaviour of every documented property. Nothing was observed of what Google's programs pass to Set."
+rules:
+  exception_handling: "COMGLB_EXCEPTION_HANDLING (1): the default is 0 (COMGLB_EXCEPTION_HANDLE). Set(1) (COMGLB_EXCEPTION_DONOT_HANDLE_FATAL, also named COMGLB_EXCEPTION_DONOT_HANDLE) and Set(2) (COMGLB_EXCEPTION_DONOT_HANDLE_ANY) return S_OK and Query shows the value; the same value again is S_OK; 1 can be changed to 2 and 2 to 1, any number of times; Set(0) always fails with E_FAIL 0x80004005 (also in a process where nothing was set, and after 1 or 2: the setting cannot be taken back); 3 and 0xFFFFFFFF fail with E_INVALIDARG 0x80070057; a failed Set leaves the value; the same in a single-threaded apartment. What the setting changes is in GlobalOptions.ExceptionHandling"
+  appid: "COMGLB_APPID (2): Set failed with E_FAIL 0x80004005 for every pointer tried (a pointer to a made-up GUID, to GUID_NULL, NULL; with and without an AppID key of that GUID in the registry; in either apartment; twice) and Query kept failing with E_FAIL"
+  rpc_threadpool: "COMGLB_RPC_THREADPOOL_SETTING (3): the default is 1. Set(1) is S_OK (any number of times); Set(0), Set(2) and 0xFFFFFFFF fail with E_INVALIDARG 0x80070057 (the value stays 1). After the process marshalled an interface into a stream, after a failed activation of a local class, and after CoInitializeSecurity, Set(1) fails with 0x800106E4 (Query still 1); after creating an in-process class, after Set of the exception-handling property it is still S_OK; Set(0) after a marshal fails with E_INVALIDARG"
+  ro_settings: "COMGLB_RO_SETTINGS (4): the default is 0. Set accepts the values 0, 1, 2, 3, 4, 5, 8, 9, 0x10, 0x20, 0x40, 0x80, 0x100, 0x180 and 0x200 (Query shows exactly the value) and refuses 6, 7, 0x400, 0x800, 0x1000, 0x8000, 0x10000, 0xFFFF and 0xFFFFFFFF with E_INVALIDARG (the value stays). The values 1..5 can be replaced by one another and cleared with Set(0); 0x80 and 0x200 can be cleared with Set(0) too. Once 8, 0x10, 0x20 or 0x40 is set it stays: a later Set(0), Set(1) or Set of another of these bits fails with RPC_E_TOO_LATE 0x80010119 and Query keeps the value. After 0x100, Set(0) returns S_OK but the value stays 0x100, and Set(0x200) makes it 0x300"
+  unmarshaling_policy: "COMGLB_UNMARSHALING_POLICY (5): the default is 2 (COMGLB_UNMARSHALING_POLICY_HYBRID). Set accepts 0 (NORMAL), 1 (STRONG) and 2 in any order and any number of times, including back to 0; 3 and 0xFFFFFFFF fail with E_INVALIDARG; it is still accepted after the process marshalled an interface"
+  reserved: "reserved property 8 accepts 0, 1 and 0xFFFFFFFF (Query shows them; 1 can be set back to 0) and refuses 2 with E_INVALIDARG; Set of the reserved properties 6 and 7 raised an access violation in the process in the exploration (not part of the tests); property numbers 0, 9, 0x100, 0xFFFF and 0xFFFFFFFF fail with E_INVALIDARG for Set and for Query"
+  per_process: "every Set is seen by every object of the class in the process and by no other process (see CLSID_GlobalOptions)"
+  apartments: "the same results in a multithreaded and in a single-threaded apartment"
+errors:
+  fail: "E_FAIL 0x80004005 (exception handling set back to 0; COMGLB_APPID)"
+  invalid_argument: "E_INVALIDARG 0x80070057"
+  too_late_rundown: "RPC_E_TOO_LATE 0x80010119 (a sticky COMGLB_RO_SETTINGS bit changed again)"
+  too_late_rpc: "0x800106E4 (the RPC thread pool setting after the process used RPC)"
+side_effects: "changes a process-wide option; some can never be changed back"
+threading: "process-wide; any thread of any apartment may call it"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file each; every sequence of calls runs in a child process of the same image (`--child gseq ...` and `--child gord ...`, so each starts from the defaults) whose lines the parent prints.
+not_covered: >
+  remote or non-local contexts; the effects of COMGLB_RPC_THREADPOOL_SETTING, COMGLB_RO_SETTINGS (modal-loop and rundown behaviour) and COMGLB_UNMARSHALING_POLICY on marshalling (only what Set and Query report is specified); COMGLB_APPID (Set failed in every circumstance tried); Set of the reserved properties 6 and 7 (it raised an access violation in the process); custom marshalling.

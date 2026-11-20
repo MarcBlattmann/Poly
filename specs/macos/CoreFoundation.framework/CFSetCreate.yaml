@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFSetCreate.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFSetCreate.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFSetCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFSetCreate(alloc, values, numValues, callBacks) makes an immutable set of the distinct values
+  (duplicates by the callbacks' equal function are stored once: 'a','a','b' give count 2; for the
+  standard table equal numbers of different types are one member, 'Different' is not 'different'),
+  count 0 allowed also with NULL list; retain callback once per distinct member, release once per
+  member when freed; NULL callbacks compare by pointer. CFSetGetCount, ContainsValue, GetValue (the
+  stored member that is equal, or NULL), GetCountOfValue (1 or 0), GetValues(buffer) in unspecified
+  order. Mutable sets (CFSetCreateMutable(alloc, capacity, callBacks)) start empty and grow: AddValue
+  (ignored when an equal member exists), SetValue (adds or replaces), RemoveValue (a missing value
+  ignored), RemoveAllValues. Members are retained when added and released when removed.
+returns:
+  success: "a new set"
+errors:
+  null_list_with_count: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "allocates; retain callbacks once per distinct member"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds; linear in numValues"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

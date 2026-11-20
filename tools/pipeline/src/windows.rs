@@ -497,6 +497,15 @@ fn token_of(source: &Path, name: &str) -> Option<String> {
 /// answered No at once (`poly.uac.answer=no`), as the oracle's unanswered prompt ended. A test
 /// with no token kind was recorded with the SSH logon's elevated administrator without a split
 /// token, which Poly gives with `admin` (ADR 0171).
+/// The extra kernel arguments of `POLY_WIN_EXTRA_ARGS` (`value`), with a space before them;
+/// empty when unset or blank.
+pub fn extra_kernel_args(value: Option<&str>) -> String {
+    match value.map(str::trim) {
+        Some(v) if !v.is_empty() => format!(" {v}"),
+        _ => String::new(),
+    }
+}
+
 pub fn token_kernel_args(token: Option<&str>) -> &'static str {
     match token {
         Some("standard") => " poly.win.token=standard poly.uac.answer=no",
@@ -1059,15 +1068,19 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     /// thread to each of the first four.
     const WINDOWS_TEST_CPUS: u32 = 4;
     let virtio_sound = manifest.tests.iter().any(|t| t.sound.as_deref() == Some("card")) && qemu_has_virtio_sound();
+    // `POLY_WIN_EXTRA_ARGS`: kernel arguments added to every boot (debugging: `poly.nt.trace`,
+    // `poly.debug.timeline`, ...); they do not change what a test is compared with.
+    let extra_args = extra_kernel_args(std::env::var("POLY_WIN_EXTRA_ARGS").ok().as_deref());
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
         let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
         let image = poly::initramfs_at(&test_exe(&t.exe), &bytes, &fonts)?;
         let args = format!(
-            "{}{}{}",
+            "{}{}{}{}",
             poly_kernel_args(&t.exe),
             session_kernel_args(t.session.as_deref()),
-            token_kernel_args(t.token.as_deref())
+            token_kernel_args(t.token.as_deref()),
+            extra_args
         );
         let devices = sound_devices(t.sound.as_deref(), virtio_sound);
         let (done, log, _) = target.boot_log_devices(&t.name, &image, work, &args, WINDOWS_TEST_CPUS, &devices)?;
@@ -1693,6 +1706,9 @@ mod tests {
         assert!(serde_json::to_string(&h.system).unwrap().contains("\"token\":\"standard\""));
         assert!(!serde_json::to_string(&f.system).unwrap().contains("token"));
         assert_eq!(token_kernel_args(Some("standard")), " poly.win.token=standard poly.uac.answer=no");
+        assert_eq!(extra_kernel_args(None), "");
+        assert_eq!(extra_kernel_args(Some("  ")), "");
+        assert_eq!(extra_kernel_args(Some("poly.nt.trace ")), " poly.nt.trace");
         assert_eq!(token_kernel_args(Some("elevated")), " poly.win.token=elevated");
         assert_eq!(token_kernel_args(None), " poly.win.token=admin");
         let t = f.test("t").unwrap();

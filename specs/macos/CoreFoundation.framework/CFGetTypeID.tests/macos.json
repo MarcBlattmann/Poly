@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfcopytypeiddescription_names",
+      "source_sha256": "26430348cf572ac4876b8fa9b35e58368f8ce14aa6d2f0f865e520090a706f5e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "739f515be653e59f18548be9c35faa9ca917fa82b5f1a236c65915f66323ed2b",
+          "exit_code": 0,
+          "stdout": "ok CFString\nok CFArray\nok CFDictionary\nok CFSet\nok CFData\nok CFNumber\nok CFBoolean\nok CFNull\nok CFDate\nok CFBundle\nok CFRunLoop\nok CFRunLoopSource\nok CFRunLoopTimer\nok CFURL\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "be048b60d826331a4930bdd9a6f5a82ee9448e9391db9af69793c9b8a12ba3da",
+          "exit_code": 0,
+          "stdout": "ok CFString\nok CFArray\nok CFDictionary\nok CFSet\nok CFData\nok CFNumber\nok CFBoolean\nok CFNull\nok CFDate\nok CFBundle\nok CFRunLoop\nok CFRunLoopSource\nok CFRunLoopTimer\nok CFURL\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfgettypeid_mutable_shares_id",
+      "source_sha256": "69cfa4e97f6ed47347688781d1f7a773f631134469f4f1b03bd23aaff4410ad1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5dbf66799ef92073966ceddcc1488e1848ea52ebbc56af7026524e1d2c7c4ee4",
+          "exit_code": 0,
+          "stdout": "ok CFGetTypeID(CFStringCreateMutable(kCFAllocatorDefault, 0)) == CFStringGetTypeID()\nok CFGetTypeID(CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks)) == CFArrayGetTypeID()\nok CFGetTypeID(CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks)) == CFDictionaryGetTypeID()\nok CFGetTypeID(CFSetCreateMutable(kCFAllocatorDefault, 0, &kCFTypeSetCallBacks)) == CFSetGetTypeID()\nok CFGetTypeID(CFDataCreateMutable(kCFAllocatorDefault, 0)) == CFDataGetTypeID()\nok CFGetTypeID(CFStringCreateMutableCopy(kCFAllocatorDefault, 0, s)) == CFStringGetTypeID()\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0c68f4bfe3e1d50e7a4dd6dd6449a22dc7d53dc04602b284d6c5a9a336acd1fb",
+          "exit_code": 0,
+          "stdout": "ok CFGetTypeID(CFStringCreateMutable(kCFAllocatorDefault, 0)) == CFStringGetTypeID()\nok CFGetTypeID(CFArrayCreateMutable(kCFAllocatorDefault, 0, &kCFTypeArrayCallBacks)) == CFArrayGetTypeID()\nok CFGetTypeID(CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks)) == CFDictionaryGetTypeID()\nok CFGetTypeID(CFSetCreateMutable(kCFAllocatorDefault, 0, &kCFTypeSetCallBacks)) == CFSetGetTypeID()\nok CFGetTypeID(CFDataCreateMutable(kCFAllocatorDefault, 0)) == CFDataGetTypeID()\nok CFGetTypeID(CFStringCreateMutableCopy(kCFAllocatorDefault, 0, s)) == CFStringGetTypeID()\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfgettypeid_types_are_distinct",
+      "source_sha256": "6eeade5927bc0700f84c81a2ad56d17eb099813972813d4ab2a006058bee0434",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "87226446eb7f318d72e5a715b3b6c1331f001b46ceddb74fa64a11300fb3119e",
+          "exit_code": 0,
+          "stdout": "ok distinct\nok nonzero\nok CFGetTypeID(CFSTR(\"\")) != CFGetTypeID(kCFNull)\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "dabccd36e9931c304ebb1c6345f147ff46c57979e497af6b5448eee454e36ac8",
+          "exit_code": 0,
+          "stdout": "ok distinct\nok nonzero\nok CFGetTypeID(CFSTR(\"\")) != CFGetTypeID(kCFNull)\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
