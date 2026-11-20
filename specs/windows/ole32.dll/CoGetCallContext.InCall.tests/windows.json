@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "cgcc_ctx",
-      "exe_sha256": "79cddffa5481e811716574286be74b0ae3f3738713a8ce98de3aefd739cb1b85",
+      "exe_sha256": "e800b19932db258642e6c43cb527b7474ee082956dcb90946d471cfd51a40df7",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -28,7 +28,7 @@
     },
     {
       "name": "cgcc_thr",
-      "exe_sha256": "424e582368c074d761ae6585b6e3b6d1138889562eb2d3a3b6727d68eb138bd3",
+      "exe_sha256": "b22e3e85d436f7a9aadf6d696a935169a70aa6fd5836447bb59a49ba28be2a2f",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

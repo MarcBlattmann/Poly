@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "rev_outside",
-      "exe_sha256": "40fb2afdb8c15581d9b799a44c6efc4c73a63ba925c2eb9ffe7a422a02afce68",
+      "exe_sha256": "c935bed33802979f2f1e36ccfc6609cb2081f53a592d8167863d46c2c2cbfce7",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
