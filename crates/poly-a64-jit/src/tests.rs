@@ -407,7 +407,9 @@ fn random_word(rng: &mut Rng) -> u32 {
     let r = rng.next() as u32;
     let (rd, rn, rm, ra) = (rng.below(32), rng.below(32), rng.below(32), rng.below(32));
     let ft = rng.below(2) << 22;
-    match rng.below(14) {
+    match rng.below(15) {
+        // Data processing, one source: RBIT, REV16, REV32/REV, REV, CLZ, CLS.
+        14 => 0x5AC0_0000 | (rng.below(2) << 31) | (rng.below(6) << 10) | (rn << 5) | rd,
         // Scalar floating point.
         10 => match rng.below(6) {
             0 => 0x1E20_0800 | ft | (rm << 16) | (rng.below(9) << 12) | (rn << 5) | rd,

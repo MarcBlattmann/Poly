@@ -111,6 +111,7 @@ pub fn guest_loop(mut cpu: Cpu) -> ! {
                 if let Some(status) = s.bridge.exit {
                     if s.stats {
                         say(&run::stats_line(s.kind, &s.engine, s.bridge.calls, crate::now().wrapping_sub(s.started)));
+                        say(&run::profile_lines(&s.engine));
                     }
                     exit(status);
                 }

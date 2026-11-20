@@ -1,6 +1,10 @@
 -- A small benchmark for the arm64 translator (ADR 0257 addendum): the
 -- kinds of work Lua programs do. Prints one checksum per part, so a run
 -- under the JIT and one under the interpreter can be compared exactly.
+-- `lua bench.lua <scale>`: the amount of work (1 by default).
+local scale = tonumber(arg and arg[1]) or 1
+local function n(x) return math.max(1, math.floor(x * scale)) end
+
 local function fib(n) if n < 2 then return n end return fib(n - 1) + fib(n - 2) end
 
 local function tables(n)
@@ -43,10 +47,10 @@ local function sort(n)
   return t[1] + t[n // 2] + t[n]
 end
 
-print("bench: fib", fib(24))
-print("bench: tables", tables(30000))
-print("bench: strings", strings(4000))
-print("bench: closures", closures(40000))
-print("bench: floats", floats(20000))
-print("bench: sort", sort(20000))
+print("bench: fib", fib(math.min(24, 14 + n(10))))
+print("bench: tables", tables(n(30000)))
+print("bench: strings", strings(n(4000)))
+print("bench: closures", closures(n(40000)))
+print("bench: floats", floats(n(20000)))
+print("bench: sort", sort(n(20000)))
 print("bench: done")

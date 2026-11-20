@@ -708,6 +708,11 @@ impl Asm {
         self.b(0x50 + r.lo());
     }
 
+    /// `pushfq`: the flags onto the stack.
+    pub fn pushfq(&mut self) {
+        self.b(0x9C);
+    }
+
     /// `pop r`.
     pub fn pop(&mut self, r: R) {
         self.rex(false, 0, 0, r.hi(), false);

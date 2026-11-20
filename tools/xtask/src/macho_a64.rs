@@ -125,7 +125,7 @@ pub(crate) fn run_ending(
 }
 
 /// The runtime's statistics line: (the line, its cycle count).
-fn stats(program: &str, b: &Boot) -> Result<(String, u64)> {
+pub(crate) fn stats(program: &str, b: &Boot) -> Result<(String, u64)> {
     let line = b
         .output
         .lines()

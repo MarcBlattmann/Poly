@@ -175,12 +175,15 @@ extern "C" fn start(handoff: u64) -> ! {
             exit(127);
         }
     };
-    let engine = match h.engine {
+    let mut engine = match h.engine {
         // SAFETY: the kernel mapped the code area readable, writable and
         // executable for this runtime alone; it lives as long as the process.
         EngineKind::Jit if h.code_size > 0 => unsafe { Engine::with_code(h.code as *mut u8, h.code_size as usize) },
         _ => Engine::interpreter(),
     };
+    if h.profile {
+        engine.profile();
+    }
     let mut bridge = Bridge::new(Kernel, &h);
     // Calls to the kernel are made outside the run loop, without the lock.
     bridge.defer = true;

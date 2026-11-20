@@ -388,6 +388,7 @@ pub(crate) fn cases() -> Vec<Case> {
         }
     }
     v.push(("cmc".into(), Box::new(|s: &mut Asm| s.cmc())));
+    v.push(("pushfq".into(), Box::new(|s: &mut Asm| s.pushfq())));
     v.push(("ret".into(), Box::new(|s: &mut Asm| s.ret())));
     v.push(("cqo".into(), Box::new(|s: &mut Asm| s.cqo(Sz::Q))));
     v.push(("cdq".into(), Box::new(|s: &mut Asm| s.cdq_())));

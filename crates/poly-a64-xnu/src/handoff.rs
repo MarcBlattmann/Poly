@@ -69,6 +69,9 @@ pub struct Handoff {
     pub engine: EngineKind,
     /// Print counters and the time taken when the guest exits.
     pub stats: bool,
+    /// Also count what the interpreter runs, by kind, and print the most
+    /// frequent with the counters.
+    pub profile: bool,
     /// The guest's mapped memory.
     pub regions: Vec<Region>,
     /// The program's path (for messages).
@@ -82,6 +85,14 @@ pub struct Handoff {
 pub const ENGINE_VAR: &[u8] = b"POLY_A64_ENGINE";
 /// The environment variable that turns the exit statistics on (`1`).
 pub const STATS_VAR: &[u8] = b"POLY_A64_STATS";
+/// The environment variable that turns the interpreter profile on (`1`;
+/// implies the statistics).
+pub const PROFILE_VAR: &[u8] = b"POLY_A64_PROFILE";
+
+/// Whether the environment asks for the interpreter profile.
+pub fn profile_from_env(envp: &[&[u8]]) -> bool {
+    envp.iter().any(|e| e.strip_prefix(PROFILE_VAR).and_then(|r| r.strip_prefix(b"=")) == Some(b"1"))
+}
 
 /// The engine and statistics settings from a program's environment.
 pub fn settings_from_env(envp: &[&[u8]]) -> (EngineKind, bool) {
@@ -119,7 +130,7 @@ impl Handoff {
                 EngineKind::Jit => 0,
                 EngineKind::Interpreter => 1,
             },
-            u64::from(self.stats),
+            u64::from(self.stats) | u64::from(self.profile) << 1,
             path.len() as u64,
             self.regions.len() as u64,
         ]);
@@ -188,7 +199,8 @@ impl Handoff {
                 1 => EngineKind::Interpreter,
                 _ => return None,
             },
-            stats: w(15)? != 0,
+            stats: w(15)? & 1 != 0,
+            profile: w(15)? & 2 != 0,
             regions,
             path: String::from(core::str::from_utf8(path).ok()?),
             tlv,
@@ -216,6 +228,7 @@ mod tests {
             code_size: 1 << 25,
             engine: EngineKind::Interpreter,
             stats: true,
+            profile: true,
             regions: vec![Region { addr: 0x1_0000_0000, len: 0x4000, prot: 5 }, Region { addr: 2, len: 3, prot: 3 }],
             path: String::from("/bin/a64-hello"),
             tlv: vec![TlvImage { slot: 1, template: 0x1_0000_8000, init_size: 4, size: 16 }],

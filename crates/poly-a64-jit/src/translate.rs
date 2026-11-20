@@ -59,6 +59,26 @@ pub struct Features {
     pub fma: bool,
     /// SSE4.2: the `crc32` instruction (CRC-32C).
     pub sse42: bool,
+    /// The address of the flag tables in the code area (0: none): two
+    /// 64 KiB tables, after an addition and after a subtraction, from the
+    /// low 16 bits of RFLAGS to the top byte of `NZCV` ([`flag_table`]).
+    pub flag_tables: u64,
+}
+
+/// The size of one flag table: indexed by the low 16 bits of RFLAGS.
+pub const FLAG_TABLE: usize = 1 << 16;
+
+/// The flag table of `sub` (A64's carry is "no borrow" after a
+/// subtraction, x86's is the borrow): entry `i` is the top byte of `NZCV`
+/// for RFLAGS `i` (CF bit 0, ZF bit 6, SF bit 7, OF bit 11).
+pub fn flag_table(sub: bool) -> alloc::vec::Vec<u8> {
+    (0..FLAG_TABLE)
+        .map(|i| {
+            let (cf, zf, sf, of) = (i & 1, (i >> 6) & 1, (i >> 7) & 1, (i >> 11) & 1);
+            let c = if sub { cf ^ 1 } else { cf };
+            (sf << 7 | zf << 6 | c << 5 | of << 4) as u8
+        })
+        .collect()
 }
 
 impl Features {
@@ -82,6 +102,7 @@ impl Features {
                 Features {
                     fma: l1.ecx & (1 << 12) != 0 && l1.ecx & (1 << 28) != 0 && avx_state,
                     sse42: l1.ecx & (1 << 20) != 0,
+                    flag_tables: 0,
                 }
             }
         }
@@ -111,7 +132,7 @@ pub(crate) mod ctx {
 }
 
 /// log2 of the indirect branch cache's entries.
-pub const IBTC_BITS: u32 = 12;
+pub const IBTC_BITS: u32 = 14;
 
 const RCPU: R = R::Rbx;
 const RCTX: R = R::Rbp;
@@ -193,7 +214,7 @@ pub fn translatable(inst: &Inst) -> bool {
         Inst::FpUnary { op, ft, .. } => fp(ft) && matches!(op, Fp1Op::Mov | Fp1Op::Abs | Fp1Op::Neg | Fp1Op::Sqrt),
         Inst::FpCmp { ft, .. } | Inst::FpCondSel { ft, .. } | Inst::FpMovImm { ft, .. } => fp(ft),
         Inst::FpCvt { from, to, .. } => fp(from) && fp(to),
-        Inst::IntToFp { ft, w, unsigned, fbits, .. } => fp(ft) && fbits == 0 && !(unsigned && w == Width::X),
+        Inst::IntToFp { ft, fbits, .. } => fp(ft) && fbits == 0,
         Inst::FpToInt { ft, unsigned, round, fbits, .. } => fp(ft) && fbits == 0 && !unsigned && round == FpRound::Zero,
         Inst::Vec3Same { op, size, .. } => match op {
             V3Op::And | V3Op::Orr | V3Op::Eor | V3Op::Bic | V3Op::Add | V3Op::Sub => true,
@@ -232,7 +253,7 @@ pub fn translatable(inst: &Inst) -> bool {
         | Inst::Pac { .. }
         | Inst::FmovToGen { .. }
         | Inst::FmovFromGen { .. } => true,
-        Inst::Bit1 { op, .. } => matches!(op, Bit1Op::Rev16 | Bit1Op::Rev32 | Bit1Op::Rev64 | Bit1Op::Clz),
+        Inst::Bit1 { .. } => true,
         Inst::Hint { crm_op2 } => crm_op2 != 7, // XPACLRI changes x30
         Inst::Barrier { kind, .. } => kind != poly_a64::Barrier::Clrex,
         Inst::LoadStore { kind, size, addr, .. } => {
@@ -299,6 +320,8 @@ struct Tr {
     /// Set when `cond` evaluated a condition from memory (and so changed the
     /// host flags).
     cond_clobbered: bool,
+    /// [`Features::flag_tables`].
+    flag_tables: u64,
 }
 
 /// Translate the block of decoded instructions `insts` (at most up to the
@@ -338,8 +361,15 @@ pub fn translate(pc: u64, insts: &[Inst], exit_routine: usize, feat: Features) -
         }
     }
 
-    let mut t =
-        Tr { a: Asm::new(), exits: Vec::new(), exit_routine, hflags: None, slow: Vec::new(), cond_clobbered: false };
+    let mut t = Tr {
+        a: Asm::new(),
+        exits: Vec::new(),
+        exit_routine,
+        hflags: None,
+        slow: Vec::new(),
+        cond_clobbered: false,
+        flag_tables: feat.flag_tables,
+    };
     // Budget check at entry: leave with PC at the block when it runs out.
     {
         let a = &mut t.a;
@@ -418,6 +448,21 @@ impl Tr {
     /// Write the host flags (from an operation of kind `k`) to the Cpu's
     /// NZCV, leaving the host flags as they are.
     fn materialize(&mut self, k: HostFlags) {
+        if self.flag_tables != 0 {
+            // RFLAGS through the stack, its low 16 bits as the index into
+            // the kind's table, the byte into NZCV's top byte: seven
+            // instructions, none of which changes the host flags.
+            let table = self.flag_tables + if k == HostFlags::Sub { FLAG_TABLE as u64 } else { 0 };
+            let a = &mut self.a;
+            a.pushfq();
+            a.pop(R::Rax);
+            a.zx_rr(Sz::H, R::Rax, R::Rax);
+            a.mov_imm(R::Rcx, table);
+            a.load_zx(Sz::B, R::Rax, M { base: R::Rcx, index: Some((R::Rax, 0)), disp: 0 });
+            a.store_imm(Sz::D, mem(RCPU, onzcv()), 0);
+            a.store(Sz::B, mem(RCPU, onzcv() + 3), R::Rax);
+            return;
+        }
         let a = &mut self.a;
         a.setcc(Cc::S, R::R8);
         a.setcc(Cc::E, R::R9);
@@ -933,13 +978,41 @@ impl Tr {
                         self.a.shift_ri(Sz::Q, Sh::Shl, R::Rcx, 8);
                         self.a.alu_rr(Sz::Q, Alu::Or, R::Rax, R::Rcx);
                     }
-                    _ => {
-                        // CLZ: width - 1 - bsr(x), and width for 0.
+                    Bit1Op::Rbit => {
+                        // Reverse the bytes, then swap nibbles, pairs and
+                        // bits within each byte.
                         let s = sz(w);
+                        self.a.bswap(s, R::Rax);
+                        let wide = w == Width::X;
+                        for (shift, mask) in
+                            [(4u8, 0x0F0F_0F0F_0F0F_0F0Fu64), (2, 0x3333_3333_3333_3333), (1, 0x5555_5555_5555_5555)]
+                        {
+                            let m = if wide { mask } else { mask & 0xFFFF_FFFF };
+                            self.a.mov_imm(R::Rdx, m);
+                            self.a.mov_rr(Sz::Q, R::Rcx, R::Rax);
+                            self.a.shift_ri(Sz::Q, Sh::Shr, R::Rax, shift);
+                            self.a.alu_rr(Sz::Q, Alu::And, R::Rax, R::Rdx);
+                            self.a.alu_rr(Sz::Q, Alu::And, R::Rcx, R::Rdx);
+                            self.a.shift_ri(Sz::Q, Sh::Shl, R::Rcx, shift);
+                            self.a.alu_rr(Sz::Q, Alu::Or, R::Rax, R::Rcx);
+                        }
+                    }
+                    _ => {
+                        let s = sz(w);
+                        if op == Bit1Op::Cls {
+                            // CLS(x) = CLZ(x XOR (x ASR 1)) - 1 (the top bit
+                            // of the XOR is 0, so its leading zeros count the
+                            // sign bit once more than CLS does).
+                            self.a.mov_rr(Sz::Q, R::Rcx, R::Rax);
+                            self.a.shift_ri(s, Sh::Sar, R::Rcx, 1);
+                            self.a.alu_rr(s, Alu::Xor, R::Rax, R::Rcx);
+                        }
+                        // CLZ: width - 1 - bsr(x), and width for 0.
                         self.a.mov_imm(R::Rdx, u64::MAX);
                         self.a.bsr(s, R::Rcx, R::Rax);
                         self.a.cmov(Sz::Q, Cc::E, R::Rcx, R::Rdx);
-                        self.a.mov_r32_imm(R::Rax, w.bits() - 1);
+                        let top = if op == Bit1Op::Cls { w.bits() - 2 } else { w.bits() - 1 };
+                        self.a.mov_r32_imm(R::Rax, top);
                         self.a.alu_rr(Sz::Q, Alu::Sub, R::Rax, R::Rcx);
                     }
                 }
@@ -1246,8 +1319,30 @@ impl Tr {
                 if w == Width::W && !unsigned {
                     self.a.sx_rr(Sz::D, Sz::Q, R::Rax, R::Rax);
                 }
-                // A W source is now a non-negative or sign-extended 64-bit value.
-                self.a.cvtsi2(ft == FpType::D, true, x0, R::Rax);
+                let double = ft == FpType::D;
+                if unsigned && w == Width::X {
+                    // A value with the top bit set: halve it keeping the
+                    // low bit (so the rounding is the same), convert, and
+                    // double the result; below 2^63 a plain conversion.
+                    let big = self.a.label();
+                    let done = self.a.label();
+                    self.a.test_rr(Sz::Q, R::Rax, R::Rax);
+                    self.a.jcc(Cc::S, big);
+                    self.a.cvtsi2(double, true, x0, R::Rax);
+                    self.a.jmp(done);
+                    self.a.bind(big);
+                    self.a.mov_rr(Sz::Q, R::Rcx, R::Rax);
+                    self.a.shift_ri(Sz::Q, Sh::Shr, R::Rax, 1);
+                    self.a.alu_ri(Sz::Q, Alu::And, R::Rcx, 1);
+                    self.a.alu_rr(Sz::Q, Alu::Or, R::Rax, R::Rcx);
+                    self.a.cvtsi2(double, true, x0, R::Rax);
+                    self.a.sse_scalar(double, 0x58, x0, x0);
+                    self.a.bind(done);
+                } else {
+                    // A W source is now a non-negative or sign-extended
+                    // 64-bit value.
+                    self.a.cvtsi2(double, true, x0, R::Rax);
+                }
                 if ft == FpType::D {
                     self.a.movq_rx(R::Rax, x0);
                 } else {

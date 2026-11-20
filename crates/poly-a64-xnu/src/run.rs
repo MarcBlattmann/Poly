@@ -591,6 +591,27 @@ pub fn stop_signal(stop: Stop, mem: &GuestMem, bad_svc: Option<u16>) -> u32 {
     }
 }
 
+/// The profile lines: how translated code was left, and the kinds of
+/// instruction the interpreter ran most.
+pub fn profile_lines(engine: &Engine) -> String {
+    let s = engine.stats;
+    let mut out = format!(
+        "poly-a64: exits: {} direct (then chained), {} indirect, {} to the interpreter, {} system calls\n",
+        s.exits_direct, s.exits_indirect, s.exits_interpret, s.exits_svc
+    );
+    if let Some(p) = &engine.profile {
+        let mut kinds: Vec<(&String, &u64)> = p.iter().collect();
+        kinds.sort_by(|a, b| b.1.cmp(a.1));
+        out.push_str("poly-a64: interpreted most:");
+        for (k, n) in kinds.iter().take(16) {
+            out.push_str(&format!(" {k} {n},"));
+        }
+        out.pop();
+        out.push('\n');
+    }
+    out
+}
+
 /// The statistics line: the engine, its counters, the system calls and the
 /// time taken (`cycles` of the host's time stamp counter).
 pub fn stats_line(kind: EngineKind, engine: &Engine, calls: u64, cycles: u64) -> String {

@@ -133,6 +133,7 @@ pub fn load(t: &mut dyn Target, program: &Program, args: &Args<'_>) -> Result<Ha
     t.map(l.mmap_lo, l.mmap_end - l.mmap_lo)?;
 
     let (engine, stats) = crate::handoff::settings_from_env(args.envp);
+    let profile = crate::handoff::profile_from_env(args.envp);
     Ok(Handoff {
         pc,
         sp: stack.sp,
@@ -146,7 +147,8 @@ pub fn load(t: &mut dyn Target, program: &Program, args: &Args<'_>) -> Result<Ha
         code: 0,
         code_size: 0,
         engine,
-        stats,
+        stats: stats || profile,
+        profile,
         regions,
         path: args.path.to_string(),
         tlv,

@@ -101,6 +101,13 @@ pub struct Stats {
     pub invalidated: u64,
     /// Times the whole cache was flushed.
     pub flushes: u64,
+    /// Exits from translated code back to the run loop, by reason: a direct
+    /// branch not chained yet, an indirect branch the cache did not know,
+    /// an instruction for the interpreter, a system call.
+    pub exits_direct: u64,
+    pub exits_indirect: u64,
+    pub exits_interpret: u64,
+    pub exits_svc: u64,
 }
 
 #[derive(Debug)]
@@ -118,6 +125,8 @@ struct Code {
     base: *mut u8,
     len: usize,
     used: usize,
+    /// Where translations start (after the routines and the flag tables).
+    first_block: usize,
     exit_routine: usize,
     #[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
     entry_routine: usize,
@@ -139,6 +148,9 @@ pub struct Engine {
     pub max_block: usize,
     ctx_arg: u64,
     features: translate::Features,
+    /// With [`Engine::profile`]: the instructions the interpreter ran, by
+    /// kind (the decoded instruction's variant).
+    pub profile: Option<BTreeMap<alloc::string::String, u64>>,
 }
 
 impl Default for Engine {
@@ -160,6 +172,7 @@ impl Engine {
             max_block: 64,
             ctx_arg: 0,
             features: translate::Features::default(),
+            profile: None,
         }
     }
 
@@ -193,13 +206,42 @@ impl Engine {
             a.pop(r);
         }
         a.ret();
-        assert!(a.buf.len() <= len);
-        // SAFETY: the caller gave us `len` writable bytes at `base`.
-        unsafe { core::ptr::copy_nonoverlapping(a.buf.as_ptr(), base, a.buf.len()) };
-        let used = (a.buf.len() + 15) & !15;
-        e.code = Some(Code { base, len, used, exit_routine, entry_routine });
-        e.features = translate::Features::host();
+        // The flag tables after the routines (translate::flag_table).
+        let tables = (a.buf.len() + 63) & !63;
+        let first_block = tables + 2 * translate::FLAG_TABLE;
+        assert!(first_block <= len);
+        // SAFETY: the caller gave us `len` writable bytes at `base`; the
+        // tables end before `first_block`.
+        unsafe {
+            core::ptr::copy_nonoverlapping(a.buf.as_ptr(), base, a.buf.len());
+            for (i, sub) in [false, true].into_iter().enumerate() {
+                let t = translate::flag_table(sub);
+                core::ptr::copy_nonoverlapping(t.as_ptr(), base.add(tables + i * translate::FLAG_TABLE), t.len());
+            }
+        }
+        e.code = Some(Code { base, len, used: first_block, first_block, exit_routine, entry_routine });
+        e.features = translate::Features { flag_tables: base as u64 + tables as u64, ..translate::Features::host() };
         e
+    }
+
+    /// Count the instructions the interpreter runs, by kind (for finding
+    /// what to translate next).
+    pub fn profile(&mut self) {
+        self.profile = Some(BTreeMap::new());
+    }
+
+    fn note_interpreted(&mut self, cpu: &Cpu, mem: &mut GuestMem) {
+        let Some(p) = self.profile.as_mut() else { return };
+        let name = match mem.fetch(cpu.pc) {
+            Ok(w) => {
+                // The variant and its first field (an operation, for most).
+                let d = alloc::format!("{:?}", decode(w));
+                let end = d.find(',').unwrap_or(d.len());
+                alloc::string::String::from(&d[..end])
+            }
+            Err(_) => alloc::string::String::from("(fault)"),
+        };
+        *p.entry(name).or_insert(0) += 1;
     }
 
     /// Whether this engine translates.
@@ -216,7 +258,7 @@ impl Engine {
             *e = [u64::MAX, 0];
         }
         if let Some(c) = &mut self.code {
-            c.used = (c.exit_routine + 64) & !15;
+            c.used = c.first_block;
             self.stats.flushes += 1;
         }
     }
@@ -334,6 +376,9 @@ impl Engine {
                 // Interpret one instruction.
                 left -= 1;
                 self.stats.interpreted += 1;
+                if self.profile.is_some() {
+                    self.note_interpreted(cpu, mem);
+                }
                 match cpu.step(mem) {
                     Outcome::Continue => {}
                     Outcome::Svc(imm) => {
@@ -361,11 +406,18 @@ impl Engine {
             match r {
                 (exit::NEXT, site) => {
                     if site >= 0 {
+                        self.stats.exits_direct += 1;
                         pending_site = Some(site as usize);
+                    } else {
+                        self.stats.exits_indirect += 1;
                     }
                 }
                 (exit::INTERPRET, _) => {
                     self.stats.interpreted += 1;
+                    self.stats.exits_interpret += 1;
+                    if self.profile.is_some() {
+                        self.note_interpreted(cpu, mem);
+                    }
                     match cpu.step(mem) {
                         Outcome::Continue => {}
                         Outcome::Svc(imm) => {
@@ -381,6 +433,7 @@ impl Engine {
                 }
                 (_, _) => {
                     // exit::SVC
+                    self.stats.exits_svc += 1;
                     let imm = self.ctx_arg as u16;
                     if let Some(code) = kernel.svc(imm, cpu, mem) {
                         return Stop::Exit(code);

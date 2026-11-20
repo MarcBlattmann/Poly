@@ -15411,6 +15411,7 @@ c4e239bfd1	vfnmsub231ss xmm2, xmm8, xmm1
 660f75d1	pcmpeqw xmm2, xmm1
 660f76d1	pcmpeqd xmm2, xmm1
 f5	cmc
+9c	pushfq
 c3	ret
 4899	cqo
 99	cdq
