@@ -215,6 +215,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0240](0240-a-small-cmd-exe.md) | A small `cmd.exe` in `C:\Windows\System32` | Accepted |
 | [0242](0242-user-mode-locks-wake-and-compete.md) | User-mode locks wake a waiter and let it compete (no convoys) | Accepted |
 | [0243](0243-a-page-flip-copies-nothing-in-the-guest-and-does-not-wait-for-the-device.md) | A page flip copies nothing in the guest and does not wait for the device | Accepted |
+| [0244](0244-the-windows-side-reaches-the-mixer-through-a-poly-audio-device.md) | The Windows side reaches the mixer through a Poly audio device | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions
