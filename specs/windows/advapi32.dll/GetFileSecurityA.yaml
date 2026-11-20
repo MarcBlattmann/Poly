@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/GetFileSecurityA.yaml
+id: windows/api/advapi32.dll/GetFileSecurityA
+oracle:
+  os: Windows 11 Home 26H2 (build 26300.9974), x64
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-remote-thread-2
+  date: '2026-11-20'
+sources: 'Observations of our own test programs on the machine above (files made in the directory of the test image; descriptors written as SDDL text and read back as SDDL text through ConvertStringSecurityDescriptorToSecurityDescriptorW and ConvertSecurityDescriptorToStringSecurityDescriptorW, with the caller''s own SIDs printed as <user> and <group>). Microsoft Learn: SetFileSecurityA/W, GetFileSecurityA/W, SECURITY_INFORMATION, Security Descriptor Control, Mandatory Integrity Control, Security Descriptor String Format, Privilege Constants, Access Rights for Files, winerror.h. No Microsoft binary was decompiled or disassembled; Wine''s and ReactOS''s sources were not read.'
+summary: 'The ANSI form of GetFileSecurityW: the path is a narrow string; everything else is as in GetFileSecurityW. Observed with ASCII paths only.'
+interface:
+  signature: BOOL GetFileSecurityA(LPCSTR lpFileName, SECURITY_INFORMATION RequestedInformation, PSECURITY_DESCRIPTOR pSecurityDescriptor, DWORD nLength, LPDWORD lpnLengthNeeded)
+  result: TRUE, or FALSE with the last error set
+rules:
+  same_as_wide: owner, group, DACL and their combination, the label, the SACL (elevated administrator) and the combination SACL+label, DACL+label and everything come back as for GetFileSecurityW (the descriptors are valid; the SDDL of the label read is 'S:(ML;;NW;;;ME)', of the SACL 'S:(AU;SA;FA;;;WD)', of SACL+label 'S:(AU;SA;FA;;;WD)(ML;;NW;;;ME)', of everything 'O:BAG:<group>D:(A;;FA;;;BA)S:(AU;SA;FA;;;WD)(ML;;NW;;;ME)').
+  buffer: a length of 0 gives ERROR_INSUFFICIENT_BUFFER (122) and a length needed above 0.
+errors:
+  file_not_found: missing file ERROR_FILE_NOT_FOUND (2), missing directory ERROR_PATH_NOT_FOUND (3)
+  bad_arguments: 'NULL name ERROR_INVALID_NAME (123); information 0 or 0x200: ERROR_ACCESS_DENIED (5)'
+side_effects: none
+threading: may be called from any thread
+ordering: []
+timing:
+  typical: well under a millisecond per call
+  guarantees: none
+building_tests: As GetFileSecurityW; two tests with ASCII paths.
+not_covered: Paths with non-ASCII characters.
+tests:
+  visible: 1
+  held_out: 1
