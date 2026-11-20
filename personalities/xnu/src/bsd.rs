@@ -123,70 +123,140 @@ impl ChildStatus {
 }
 
 /// What the BSD calls need from the kernel, for the calling thread. Errors
-/// are Darwin errno values ([`errno::from_linux`] maps the kernel's).
+/// are Darwin errno values ([`errno::from_linux`] maps the kernel's). Only
+/// the user-memory copies and `exit` are required: every other service
+/// defaults to `ENOSYS` (or a neutral value), so a test kernel or a
+/// translator's harness implements what it needs.
 pub trait BsdKernel {
-    /// Copy from user memory; `Err` if it is not readable.
+    /// Copy from user memory; `Err` if it is not readable (a fault says
+    /// nothing more: the call answers `EFAULT`).
+    #[allow(clippy::result_unit_err)]
     fn copy_in(&self, addr: u64, buf: &mut [u8]) -> Result<(), ()>;
     /// Copy to user memory; `Err` if it is not writable.
+    #[allow(clippy::result_unit_err)]
     fn copy_out(&mut self, addr: u64, buf: &[u8]) -> Result<(), ()>;
 
     /// End the process with exit status `status`; does not come back to
     /// user mode.
     fn exit(&mut self, status: u8);
 
-    fn write(&mut self, fd: i32, buf: &[u8], offset: Option<u64>) -> Result<usize, u32>;
+    fn write(&mut self, _fd: i32, _buf: &[u8], _offset: Option<u64>) -> Result<usize, u32> {
+        Err(ENOSYS32)
+    }
     /// Read into `buf` at the descriptor's offset or at `offset`; blocks.
-    fn read(&mut self, fd: i32, buf: &mut [u8], offset: Option<u64>) -> Result<usize, u32>;
-    fn open(&mut self, dirfd: i32, path: &[u8], how: &OpenHow) -> Result<i32, u32>;
-    fn close(&mut self, fd: i32) -> Result<(), u32>;
+    fn read(&mut self, _fd: i32, _buf: &mut [u8], _offset: Option<u64>) -> Result<usize, u32> {
+        Err(ENOSYS32)
+    }
+    fn open(&mut self, _dirfd: i32, _path: &[u8], _how: &OpenHow) -> Result<i32, u32> {
+        Err(ENOSYS32)
+    }
+    fn close(&mut self, _fd: i32) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
     /// `whence`: 0 set, 1 current, 2 end.
-    fn lseek(&mut self, fd: i32, offset: i64, whence: u32) -> Result<u64, u32>;
-    fn stat(&mut self, of: StatOf<'_>) -> Result<Stat, u32>;
+    fn lseek(&mut self, _fd: i32, _offset: i64, _whence: u32) -> Result<u64, u32> {
+        Err(ENOSYS32)
+    }
+    fn stat(&mut self, _of: StatOf<'_>) -> Result<Stat, u32> {
+        Err(ENOSYS32)
+    }
     /// Read directory entries from `fd`'s position on; `emit` returns
     /// whether the entry was taken (the position moves past taken ones).
-    fn read_dir(&mut self, fd: i32, emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<(), u32>;
+    fn read_dir(&mut self, _fd: i32, _emit: &mut dyn FnMut(&DirEntry<'_>) -> bool) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
     /// A copy of `fd` at the lowest free descriptor `>= min`.
-    fn dup(&mut self, fd: i32, min: i32, cloexec: bool) -> Result<i32, u32>;
-    fn dup2(&mut self, old: i32, new: i32) -> Result<i32, u32>;
-    fn cloexec(&self, fd: i32) -> Result<bool, u32>;
-    fn set_cloexec(&mut self, fd: i32, on: bool) -> Result<(), u32>;
-    fn status(&self, fd: i32) -> Result<Status, u32>;
-    fn set_status(&mut self, fd: i32, append: bool, nonblock: bool) -> Result<(), u32>;
+    fn dup(&mut self, _fd: i32, _min: i32, _cloexec: bool) -> Result<i32, u32> {
+        Err(ENOSYS32)
+    }
+    fn dup2(&mut self, _old: i32, _new: i32) -> Result<i32, u32> {
+        Err(ENOSYS32)
+    }
+    fn cloexec(&self, _fd: i32) -> Result<bool, u32> {
+        Err(ENOSYS32)
+    }
+    fn set_cloexec(&mut self, _fd: i32, _on: bool) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+    fn status(&self, _fd: i32) -> Result<Status, u32> {
+        Err(ENOSYS32)
+    }
+    fn set_status(&mut self, _fd: i32, _append: bool, _nonblock: bool) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
     /// The absolute path of the file open on `fd`.
-    fn path_of(&self, fd: i32) -> Result<Vec<u8>, u32>;
-    fn chdir(&mut self, path: &[u8]) -> Result<(), u32>;
-    fn fchdir(&mut self, fd: i32) -> Result<(), u32>;
+    fn path_of(&self, _fd: i32) -> Result<Vec<u8>, u32> {
+        Err(ENOSYS32)
+    }
+    fn chdir(&mut self, _path: &[u8]) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+    fn fchdir(&mut self, _fd: i32) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
     /// A pipe: (read end, write end).
-    fn pipe(&mut self) -> Result<(i32, i32), u32>;
+    fn pipe(&mut self) -> Result<(i32, i32), u32> {
+        Err(ENOSYS32)
+    }
 
-    fn mmap(&mut self, req: &MapRequest) -> Result<u64, u32>;
+    fn mmap(&mut self, _req: &MapRequest) -> Result<u64, u32> {
+        Err(ENOSYS32)
+    }
     /// Unmap whole pages; nothing mapped there is no error.
-    fn munmap(&mut self, addr: u64, len: u64) -> Result<(), u32>;
-    fn page_size(&self) -> u64;
+    fn munmap(&mut self, _addr: u64, _len: u64) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+    fn page_size(&self) -> u64 {
+        4096
+    }
 
-    fn pid(&self) -> u32;
-    fn ppid(&self) -> u32;
-    fn thread_id(&self) -> u64;
+    fn pid(&self) -> u32 {
+        1
+    }
+    fn ppid(&self) -> u32 {
+        0
+    }
+    fn thread_id(&self) -> u64 {
+        1
+    }
     /// (uid, gid) the process runs as (real and effective are the same).
-    fn ids(&self) -> (u32, u32);
+    fn ids(&self) -> (u32, u32) {
+        (0, 0)
+    }
     /// Whether a process `pid` exists.
-    fn process_exists(&self, pid: u32) -> bool;
-    fn random(&mut self, buf: &mut [u8]);
-    fn system(&self) -> sysctl::System;
+    fn process_exists(&self, _pid: u32) -> bool {
+        false
+    }
+    fn random(&mut self, _buf: &mut [u8]) {
+        _buf.fill(0)
+    }
+    fn system(&self) -> sysctl::System {
+        sysctl::System::default()
+    }
 
     /// Work on the calling process's signal state.
-    fn with_signals(&mut self, f: &mut dyn FnMut(&mut Signals));
+    fn with_signals(&mut self, _f: &mut dyn FnMut(&mut Signals)) {
+        _f(&mut Signals::default())
+    }
     /// End the calling process as killed by `sig` (a default action).
-    fn exit_signal(&mut self, sig: u32);
+    fn exit_signal(&mut self, _sig: u32) {
+        self.exit(128 + _sig as u8)
+    }
     /// Send `sig` (1 to 31) to process `pid` (not the caller): `ESRCH`,
     /// `EPERM`, or done as that process's state says.
-    fn kill(&mut self, pid: u32, sig: u32) -> Result<(), u32>;
+    fn kill(&mut self, _pid: u32, _sig: u32) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
     /// Start `path` as a child with these arguments and environment;
     /// returns its pid.
-    fn spawn(&mut self, path: &[u8], argv: &[Vec<u8>], envp: &[Vec<u8>]) -> Result<u32, u32>;
+    fn spawn(&mut self, _path: &[u8], _argv: &[Vec<u8>], _envp: &[Vec<u8>]) -> Result<u32, u32> {
+        Err(ENOSYS32)
+    }
     /// Wait for the child `pid` (-1: any). `Ok(None)`: `nohang` and nothing
     /// to report. `ECHILD` without such a child.
-    fn wait(&mut self, pid: i32, nohang: bool) -> Result<Option<(u32, ChildStatus)>, u32>;
+    fn wait(&mut self, _pid: i32, _nohang: bool) -> Result<Option<(u32, ChildStatus)>, u32> {
+        Err(ENOSYS32)
+    }
 }
 
 /// A call's result before the registers.
@@ -264,6 +334,9 @@ fn read_strings(k: &dyn BsdKernel, addr: u64, total: &mut usize) -> Result<Vec<V
 
 /// `E2BIG` (`<sys/errno.h>`).
 pub const E2BIG: u32 = 7;
+
+/// `ENOSYS` as a Darwin errno value.
+const ENOSYS32: u32 = errno::ENOSYS;
 
 /// Run BSD call `number` with arguments `a`; `None` if this layer does not
 /// have it.
@@ -481,7 +554,7 @@ fn mmap(k: &mut dyn BsdKernel, a: &[u64; 8]) -> Result<Ret, u32> {
         return Err(ENOMEM);
     }
     let fixed = flags & map::FIXED != 0;
-    if fixed && addr % page != 0 {
+    if fixed && !addr.is_multiple_of(page) {
         return Err(EINVAL);
     }
     let shared = flags & map::SHARED != 0;
@@ -513,7 +586,7 @@ fn mmap(k: &mut dyn BsdKernel, a: &[u64; 8]) -> Result<Ret, u32> {
 
 fn munmap(k: &mut dyn BsdKernel, addr: u64, len: u64) -> Result<Ret, u32> {
     let page = k.page_size();
-    if addr % page != 0 || len == 0 || (len as i64) < 0 {
+    if !addr.is_multiple_of(page) || len == 0 || (len as i64) < 0 {
         return Err(EINVAL);
     }
     // Past the end of the address space: nothing to remove.
@@ -763,4 +836,4 @@ pub fn dispatch_with(k: &mut dyn BsdKernel, regs: &mut SyscallRegs) -> Option<Ou
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -11,23 +11,29 @@ use std::vec::Vec;
 const BASE: u64 = 0x10000;
 const SIZE: usize = 0x10000;
 
+/// A spawn the fake kernel saw: path, argv, envp.
+type Spawned = (Vec<u8>, Vec<Vec<u8>>, Vec<Vec<u8>>);
+
 #[derive(Default)]
-struct Fake {
+pub(crate) struct Fake {
     mem: Vec<u8>,
     files: BTreeMap<i32, (Vec<u8>, u64, bool)>, // contents, offset, is a directory
     cloexec: BTreeMap<i32, bool>,
-    out: Vec<u8>,
-    exited: Option<u8>,
+    pub(crate) out: Vec<u8>,
+    pub(crate) exited: Option<u8>,
     killed_by: Option<u32>,
     signals: Signals,
     maps: Vec<MapRequest>,
-    spawned: Vec<(Vec<u8>, Vec<Vec<u8>>, Vec<Vec<u8>>)>,
+    spawned: Vec<Spawned>,
     children: Vec<(u32, ChildStatus)>,
     dir_pos: usize,
 }
 
 impl Fake {
-    fn new() -> Fake {
+    /// A buffer address in the fake user memory.
+    pub(crate) const BUF: u64 = BUF;
+
+    pub(crate) fn new() -> Fake {
         let mut f = Fake { mem: vec![0; SIZE], ..Fake::default() };
         f.files.insert(0, (Vec::new(), 0, false));
         f.files.insert(1, (Vec::new(), 0, false));
