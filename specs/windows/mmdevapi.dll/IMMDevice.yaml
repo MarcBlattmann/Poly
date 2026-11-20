@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/mmdevapi.dll/IMMDevice.yaml
+id: windows/api/mmdevapi.dll/IMMDevice
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; the audio service runs and Core Audio reaches the card from there; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-wasapi
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only), and of Chrome for Testing 157.0.8103.38 playing a Web Audio page on it through a logging COM wrapper (docs/windows/wasapi-trace.md, specs/windows/apps/chrome/traces/s6-audio.trace.json). Microsoft Learn: "Core Audio APIs", "IMMDeviceEnumerator", "IMMDeviceCollection", "IMMDevice", "IMMNotificationClient", "IAudioClient", "IAudioClient2", "IAudioClient3", "IAudioRenderClient", "IAudioClock", "IAudioSessionControl", "IAudioSessionEvents", "WAVEFORMATEXTENSIBLE", "Rendering a Stream", "Audio Client Return Codes"; constants and layouts from mmdeviceapi.h, audioclient.h, audiopolicy.h, audiosessiontypes.h, mmreg.h, ksmedia.h, winerror.h. No Wine, ReactOS or Chromium source was read and no Microsoft or Google binary was disassembled or debugged.
+summary: >
+  One endpoint: GetState, GetId, Activate (OpenPropertyStore was not used by Chrome's audio path and is not specified).
+interface:
+  signature: "interface IMMDevice : IUnknown (slots: 3 Activate, 4 OpenPropertyStore, 5 GetId, 6 GetState)"
+chrome: "Chrome for Windows' audio service makes these calls (the COM-level oracle trace): it creates the enumerator, opens a client on the default render device in shared mode with an event callback, and renders silence-or-tone in a loop of one 480-frame write per event."
+rules:
+  state_id: "GetState of the sound card is DEVICE_STATE_ACTIVE (1). GetId returns a CoTaskMemAlloc'ed wide string of the form {0.0.0.00000000}.{guid} (55 characters), equal on every call, a separate allocation each time; GetState(NULL) and GetId(NULL) are E_POINTER"
+  query_interface: "IMMDevice and IUnknown (same pointer); IMMDeviceEnumerator is E_NOINTERFACE with no output"
+  activate: "Activate(IAudioClient, CLSCTX_INPROC_SERVER) is S_OK, also with context 0 and CLSCTX_ALL; IAudioClient2 and IAudioClient3 can be activated too; IAudioRenderClient, ISimpleAudioVolume, IAudioSessionControl and made-up interfaces are E_NOINTERFACE with no output; a NULL output pointer is E_POINTER; every activation is a new object"
+  independent_clients: "two clients of the same device report the same mix format, can both be initialised and run, and keep working after the device and the enumerator have been released"
+errors:
+  no_interface: "E_NOINTERFACE (0x80004002)"
+  null_pointer: "E_POINTER (0x80004003)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "Activate: 0.1 to 2 ms"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing ole32.dll and kernel32.dll by name and calling the COM interfaces through their vtables (slot numbers from the interface headers). Every test but the two that exercise COM before it is initialised needs a sound device and COM initialised; audio data is silence only (the SILENT buffer flag, or zero bytes). Observations are result codes, counts, sizes in frames, flags and relations ("the position equals the bytes written", "about fifty events in 500 ms"), never pointers, handles, thread ids or times. The values that belong to the oracle's device are the mix format (48000 Hz, two channels, 32-bit float), the engine period (480 frames = 10 ms) and what follows from them; a device with another mix format would give other numbers by the same formulas. Waits are bounded (a second or less per condition).
+not_covered: >
+  Exclusive mode (the oracle's endpoint refuses it with AUDCLNT_E_UNSUPPORTED_FORMAT); capture endpoints and the capture client; other devices than the default render endpoint; a sandboxed audio process; device removal while a stream runs; ISimpleAudioVolume, IAudioStreamVolume and IAudioEndpointVolume; IAudioClient2's offload methods; ActivateAudioInterfaceAsync (mmdevapi ordinal 17, which chrome.dll delay-loads; Chrome activated through IMMDevice::Activate in every run).

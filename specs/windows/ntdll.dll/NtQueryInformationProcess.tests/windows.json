@@ -2,13 +2,13 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "3d0d153d3e89",
+  "bundle": "398805815985",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-16T16:57:28Z",
+  "started": "2026-11-20T06:20:57Z",
   "tests": [
     {
       "name": "h58_child",
@@ -22,7 +22,7 @@
       "output": "suspended child, handle from CreateProcessW: status=0x0 entries>0=true well formed=true count = ProcessHandleCount: true\naccess 0x40: status=0xc0000022 return length unchanged\naccess 0x1040: status=0xc0000022 return length unchanged\naccess 0x1440: status=0x0 return length a non-zero multiple of 4 within the buffer\naccess 0x20: status=0xc0000022 return length unchanged\nrunning child, length 3: status=0xc0000004 return length unchanged bytes written=0\nrunning child, length 8: status=0x0 return length 8 bytes written=8\nended child, opened before: status=0xc000010a return length 0\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 604
+      "ms": 620
     },
     {
       "name": "h58_child_b",
@@ -36,7 +36,7 @@
       "output": "the inherited pipe end is listed in the child with the value it has here: true\naccess 0x1000: status=0xc0000022 return length unchanged\naccess 0x1400: status=0xc0000022 return length unchanged\naccess 0x1fffff: status=0x0 return length a non-zero multiple of 4 within the buffer\naccess 0x8: status=0xc0000022 return length unchanged\nrunning child, length 4: status=0x0 return length 4 bytes written=4\nrunning child, 0x1068: status=0x0 return length = 4 x entries: true\nended child, handle from CreateProcessW: status=0xc000010a return length 0\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 578
+      "ms": 583
     },
     {
       "name": "h58_entries",
@@ -50,7 +50,7 @@
       "output": "start: status=0x0 well formed=true\nevent: duplicate (made=true) adds an entry=true both values listed=true\nsemaphore: ProcessHandleCount agrees: true type name reported for it: Semaphore\nmutex: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\nmutex: closed: back to the count before=true the value is gone=true\ntimer: duplicate (made=true) adds an entry=true both values listed=true\nsection: ProcessHandleCount agrees: true type name reported for it: Section\nfile: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\nfile: closed: back to the count before=true the value is gone=true\nkey: duplicate (made=true) adds an entry=true both values listed=true\nthread: ProcessHandleCount agrees: true type name reported for it: Thread\nprocess: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\nprocess: closed: back to the count before=true the value is gone=true\njob: duplicate (made=true) adds an entry=true both values listed=true\ncompletion port: ProcessHandleCount agrees: true type name reported for it: IoCompletion\ntoken: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\ntoken: closed: back to the count before=true the value is gone=true\npipe: duplicate (made=true) adds an entry=true both values listed=true\ninheritable and non-inheritable handles are both listed: true\nthe closed value is handed out again within 600 new handles: true and listed again: true\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 81
+      "ms": 65
     },
     {
       "name": "h58_entries_b",
@@ -64,7 +64,7 @@
       "output": "event: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\nevent: closed: back to the count before=true the value is gone=true\nsemaphore: duplicate (made=true) adds an entry=true both values listed=true\nmutex: ProcessHandleCount agrees: true type name reported for it: Mutant\ntimer: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\ntimer: closed: back to the count before=true the value is gone=true\nsection: duplicate (made=true) adds an entry=true both values listed=true\nfile: ProcessHandleCount agrees: true type name reported for it: File\nkey: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\nkey: closed: back to the count before=true the value is gone=true\nthread: duplicate (made=true) adds an entry=true both values listed=true\nprocess: ProcessHandleCount agrees: true type name reported for it: Process\njob: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\njob: closed: back to the count before=true the value is gone=true\ncompletion port: duplicate (made=true) adds an entry=true both values listed=true\ntoken: ProcessHandleCount agrees: true type name reported for it: Token\npipe: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\npipe: closed: back to the count before=true the value is gone=true\n200 more events: entries = before + 200: true well formed=true all listed=true\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 57
+      "ms": 59
     },
     {
       "name": "h58_entries_c",
@@ -78,7 +78,7 @@
       "output": "event: ProcessHandleCount agrees: true type name reported for it: Event\nsemaphore: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\nsemaphore: closed: back to the count before=true the value is gone=true\nmutex: duplicate (made=true) adds an entry=true both values listed=true\ntimer: ProcessHandleCount agrees: true type name reported for it: Timer\nsection: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\nsection: closed: back to the count before=true the value is gone=true\nfile: duplicate (made=true) adds an entry=true both values listed=true\nkey: ProcessHandleCount agrees: true type name reported for it: Key\nthread: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\nthread: closed: back to the count before=true the value is gone=true\nprocess: duplicate (made=true) adds an entry=true both values listed=true\njob: ProcessHandleCount agrees: true type name reported for it: Job\ncompletion port: one more entry=true the new handle is listed=true it was not listed before=true still well formed=true\ncompletion port: closed: back to the count before=true the value is gone=true\ntoken: duplicate (made=true) adds an entry=true both values listed=true\npipe: ProcessHandleCount agrees: true type name reported for it: File\nprotected from close: listed=true\nall closed again: back to the start count=true\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 57
+      "ms": 59
     },
     {
       "name": "h58_lists",
@@ -106,11 +106,11 @@
       "output": "length 1: status=0xc0000004 return length unchanged bytes written=0\nlength 4: status=0x0 return length 4 bytes written=4\nlength 7: status=0x0 return length 4 bytes written=4\nlength 11: status=0x0 return length 8 bytes written=8\nlength 16: status=0x0 return length 16 bytes written=16\nmore than 3 entries: true\nthree bytes over: status=0x0 return length = whole entries that fit: true bytes written = return length: true\n0x4000: status=0x0 return length = whole entries that fit: true bytes written = return length: true\nevery entry of the first list is in the second: true\nhandles of the list that answer NtQueryObject(ObjectTypeInformation): all=true\nNULL buffer, length 8: status=0xc0000005\nbuffer at offset 2 of an 8-byte aligned block: status=0x80000002\nbuffer at offset 5 of an 8-byte aligned block: status=0x80000002\nunmapped return length pointer: status=0xc0000005\na closed handle value: status=0xc0000008\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 57
+      "ms": 55
     },
     {
       "name": "h58_locked",
-      "exe_sha256": "883b0fd3edf0b2adeadc6e769f603c5ea137762eaeef76844da54e579af62e86",
+      "exe_sha256": "c05e486706fbb8b816531a2e6e07d9193030750304c401d463c4e6548ff48079",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -120,11 +120,11 @@
       "output": "granting read access to the image: 0\nchild: length 3: status=0xc0000004 return length unchanged bytes written=0\nchild: length 12: status=0x0 return length 12 bytes written=12\nchild: every entry answers NtQueryObject(ObjectTypeInformation): true\nchild: an event made and closed: one more entry=true listed=true then gone=true\nchild: length 0: status=0xc0000004 return length unchanged bytes written=0\nchild: length 8: status=0x0 return length 8 bytes written=8\nchild: the inherited report handle is listed: true\nchild: real handle: status=0x0 entries = before + 1: true lists the real handle: true\nlow integrity token: child exit code 0\nchild: length 4: status=0x0 return length 4 bytes written=4\nchild: full: status=0x0 entries = ProcessHandleCount: true return length = 4 x entries: true well formed=true more than 3 entries: true\nchild: 0x1068 bytes: status=0x0 return length = 4 x entries (or the buffer when full): true\nrestricted and low integrity token made: true integrity level 0x1000 IsRestricted=Some(1)\nchild: length 3: status=0xc0000004 return length unchanged bytes written=0\nchild: length 12: status=0x0 return length 12 bytes written=12\nchild: every entry answers NtQueryObject(ObjectTypeInformation): true\nchild: an event made and closed: one more entry=true listed=true then gone=true\nchild: length 0: status=0xc0000004 return length unchanged bytes written=0\nchild: length 8: status=0x0 return length 8 bytes written=8\nchild: the inherited report handle is listed: true\nchild: real handle: status=0x0 entries = before + 1: true lists the real handle: true\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 152
+      "ms": 154
     },
     {
       "name": "h58_locked_c",
-      "exe_sha256": "359dce223acb9ea5a83d9b466dadf3a30d46d26516603fbe0585949bd157e388",
+      "exe_sha256": "4f830e18667661c3324ad6aaaaeb8aa9ae55f6f14484439fa56e1741010bc891",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -134,7 +134,7 @@
       "output": "child: length 0: status=0xc0000004 return length unchanged bytes written=0\nchild: length 8: status=0x0 return length 8 bytes written=8\nchild: the inherited report handle is listed: true\nchild: real handle: status=0x0 entries = before + 1: true lists the real handle: true\nrestricted token: child exit code 0\nchild: length 4: status=0x0 return length 4 bytes written=4\nchild: full: status=0x0 entries = ProcessHandleCount: true return length = 4 x entries: true well formed=true more than 3 entries: true\nchild: 0x1068 bytes: status=0x0 return length = 4 x entries (or the buffer when full): true\nlow integrity token made: true integrity level 0x1000\nchild: length 3: status=0xc0000004 return length unchanged bytes written=0\nchild: length 12: status=0x0 return length 12 bytes written=12\nchild: every entry answers NtQueryObject(ObjectTypeInformation): true\nchild: an event made and closed: one more entry=true listed=true then gone=true\nchild: length 0: status=0xc0000004 return length unchanged bytes written=0\nchild: length 8: status=0x0 return length 8 bytes written=8\nchild: the inherited report handle is listed: true\nchild: real handle: status=0x0 entries = before + 1: true lists the real handle: true\nappcontainer: child exit code 0\nchild: length 4: status=0x0 return length 4 bytes written=4\nchild: full: status=0x0 entries = ProcessHandleCount: true return length = 4 x entries: true well formed=true more than 3 entries: true\nchild: 0x1068 bytes: status=0x0 return length = 4 x entries (or the buffer when full): true\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 153
+      "ms": 155
     },
     {
       "name": "nqip_classes",
@@ -148,7 +148,7 @@
       "output": "class 0 ProcessBasicInformation, 48 bytes: 0x0 returned length 48\nclass 0 with length 8: 0xc0000004 returned length unchanged\nclass 0 with length 64: 0x0 returned length 64\nclass 24 with length 1: 0xc0000004 returned length unchanged\nclass 24 with length 8: 0xc0000004 returned length unchanged\nclass 3 VmCounters, 128 bytes: 0xc0000004 returned length unchanged\nclass 5 BasePriority, 4 bytes: 0xc0000003 returned length unchanged\nclass 8 ExceptionPort, 8 bytes: 0xc0000003 returned length unchanged\nclass 18 PriorityClass, 2 bytes: 0x0 returned length 2\nclass 22 PriorityBoost, 4 bytes: 0x0 returned length 4\nclass 30 DebugObjectHandle, 8 bytes: 0xc0000353 returned length 8\nclass 33 IoPriority, 4 bytes: 0x0 returned length 4\nclass 37 ImageInformation (37), 64 bytes: 0x0 returned length 64\ndebug port with no debugger: 0x0 value 0\nWOW64 information of a 64-bit process: 0x0 length 8 value 0\nhandle with PROCESS_QUERY_LIMITED_INFORMATION, class 24: 0x0\nhandle with SYNCHRONIZE only, class 24: 0xc0000022\nhandle with PROCESS_QUERY_INFORMATION, class 24: 0x0\nthe thread pseudo-handle: 0xc0000024\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 64
+      "ms": 47
     },
     {
       "name": "nqip_classes_b",
@@ -162,11 +162,11 @@
       "output": "  exit status 0x103 (STILL_ACTIVE) own pid matches 1 PEB pointer set 1 parent pid set 1 base priority 8\nclass 0 with length 47: 0xc0000004 returned length unchanged\nclass 24 ProcessSessionInformation, 4 bytes: 0x0 returned length 4 value is the session id 1\nclass 24 with length 3: 0xc0000004 returned length unchanged\nclass 1 QuotaLimits, 40 bytes: 0xc0000004 returned length unchanged\nclass 3 VmCounters (VM_COUNTERS_EX), 144 bytes: 0xc0000004 returned length unchanged\nclass 6 RaisePriority, 4 bytes: 0xc0000003 returned length unchanged\nclass 9 AccessToken, 16 bytes: 0xc0000003 returned length unchanged\nclass 20 HandleCount, 4 bytes: 0x0 returned length 4\nclass 26 WOW64 information, 8 bytes: 0x0 returned length 8\nclass 31 DebugFlags, 4 bytes: 0x0 returned length 4\nclass 34 ExecuteFlags, 4 bytes: 0x0 returned length 4\nclass 127 invalid class 127, 8 bytes: 0xc0000003 returned length unchanged\ndebug flags: 0x0 value 1\nimage file name: 0x0 length field plausible 1 string in the buffer ends with .exe 1 returned length covers the used part 1\nhandle with PROCESS_QUERY_LIMITED_INFORMATION, class 27: 0x0\nhandle with SYNCHRONIZE only, class 27: 0xc0000022\nhandle with PROCESS_QUERY_INFORMATION, class 27: 0x0\nNULL buffer: 0xc0000005\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 62
+      "ms": 45
     },
     {
       "name": "pbi_peb_b",
-      "exe_sha256": "7fa00357d3f64c66d4be8b1d66aa7ca663acf7eff38b82eed143be75b3f8db89",
+      "exe_sha256": "e1c1825a6d6bc4b67baf74a0ba14ba3fb6f579d8df00f75434529902013303ea",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -176,11 +176,11 @@
       "output": "self, length 47: status=0xc0000004 return length=0\nsuspended child: status=0x0 length=48 PEB non-null=true pid = its id=true parent = this process=true\nwrite 0 into the child's slot: ok=true copied=8\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 71
+      "ms": 72
     },
     {
       "name": "pbi_peb_c",
-      "exe_sha256": "7cf55448d0cab8930a50cf23d9602bfd08fee537f4e58951c4184152ad10cd06",
+      "exe_sha256": "b58d17e3122a75877d8411f0be4ce9dff96ce7051ef24c97c487bb99e5df4eaa",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -190,7 +190,7 @@
       "output": "self: slot non-null=true type=MEM_PRIVATE state=0x1000 protect=0x4 allocprotect=0x4 region size=0x2000 starts at the pointer=true allocation base = pointer=true\nsuspended child: slot non-null=true type=MEM_PRIVATE state=0x1000 protect=0x4 allocprotect=0x4 region size=0x2000 starts at the pointer=true allocation base = pointer=true\nchild: slot 0 at start=true loaded version.dll=true still 0 after=true exit code=7\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 69
+      "ms": 67
     }
   ]
 }

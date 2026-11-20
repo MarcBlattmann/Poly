@@ -173,6 +173,94 @@ pub unsafe extern "system" fn lstrlenW(s: *const u16) -> i32 {
     unsafe { wide(s) }.len() as i32
 }
 
+/// `lstrcpyW` (Learn): `src` and its NUL copied to `dst`; `dst`, or NULL when either is NULL.
+/// Windows apps survey batch W1 (Notepad++); no sheet yet.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrcpyW(dst: *mut u16, src: *const u16) -> *mut u16 {
+    if dst.is_null() || src.is_null() {
+        return core::ptr::null_mut();
+    }
+    // SAFETY: the caller's string and a buffer that holds it with its NUL (Learn's contract).
+    unsafe {
+        let s = wide(src);
+        core::ptr::copy(s.as_ptr(), dst, s.len());
+        *dst.add(s.len()) = 0;
+    }
+    dst
+}
+
+/// `lstrcpyA`: as `lstrcpyW` for bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrcpyA(dst: *mut u8, src: *const u8) -> *mut u8 {
+    if dst.is_null() || src.is_null() {
+        return core::ptr::null_mut();
+    }
+    // SAFETY: the caller's string and a buffer that holds it with its NUL.
+    unsafe {
+        let n = poly_kernelbase::text::strlen(src);
+        core::ptr::copy(src, dst, n);
+        *dst.add(n) = 0;
+    }
+    dst
+}
+
+/// `lstrcpynW` (Learn): at most `max - 1` characters of `src` copied to `dst`, which always
+/// ends with a NUL (`max` counts it); nothing is written for a `max` of 0. `dst`, or NULL when
+/// either is NULL.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrcpynW(dst: *mut u16, src: *const u16, max: i32) -> *mut u16 {
+    if dst.is_null() || src.is_null() {
+        return core::ptr::null_mut();
+    }
+    if max > 0 {
+        // SAFETY: the caller's string; `dst` holds `max` characters. Only the characters that
+        // are copied are read, so `src` need not end within `max`.
+        unsafe {
+            let mut i = 0usize;
+            while i + 1 < max as usize && *src.add(i) != 0 {
+                *dst.add(i) = *src.add(i);
+                i += 1;
+            }
+            *dst.add(i) = 0;
+        }
+    }
+    dst
+}
+
+/// `lstrcpynA`: as `lstrcpynW` for bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrcpynA(dst: *mut u8, src: *const u8, max: i32) -> *mut u8 {
+    if dst.is_null() || src.is_null() {
+        return core::ptr::null_mut();
+    }
+    if max > 0 {
+        // SAFETY: as `lstrcpynW`.
+        unsafe {
+            let mut i = 0usize;
+            while i + 1 < max as usize && *src.add(i) != 0 {
+                *dst.add(i) = *src.add(i);
+                i += 1;
+            }
+            *dst.add(i) = 0;
+        }
+    }
+    dst
+}
+
+/// `lstrcatW` (Learn): `more` and its NUL appended to `dst`; `dst`, or NULL when either is NULL.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn lstrcatW(dst: *mut u16, more: *const u16) -> *mut u16 {
+    if dst.is_null() || more.is_null() {
+        return core::ptr::null_mut();
+    }
+    // SAFETY: `dst` is the caller's NUL-terminated string in a buffer that holds both.
+    unsafe {
+        let end = wide(dst).len();
+        lstrcpyW(dst.add(end), more);
+    }
+    dst
+}
+
 /// `lstrlenA`: the length in bytes, without the NUL.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn lstrlenA(s: *const u8) -> i32 {

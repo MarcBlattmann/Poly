@@ -153,7 +153,7 @@ itself as on Windows; see
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,582 | 1,087 | 3,474 | 3,737 | 52,988 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,594 | 1,087 | 3,474 | 3,749 | 52,988 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 96 | 421 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 
@@ -181,6 +181,7 @@ Seeded from (names only):
 - `ms-learn-volume`: Microsoft Learn volume management and CreateFile reference (opening a volume as \\.\C: or \??\C:), observed by the spec agents (spec-win-elevation); entries named by operation @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-winuser`: Microsoft Learn window messages and system commands of user32 (winuser.h): behaviour that is not an export, entries named by message or command (WM_NCHITTEST, WM_ENTERSIZEMOVE, WM_MOUSEHWHEEL, SC_MAXIMIZE; spec-win-input) @ `Windows SDK 10.0.26100.0`
 - `poly-adr-0132`: Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents @ `ADR 0132`
+- `windows-audio-w2`: The COM audio interfaces of mmdevapi and audioses that Chrome for Windows calls for shared-mode output (device enumerator, devices, IAudioClient, render client, clock, session control), found by a COM-level trace of Chrome on the Windows oracle (spec-win-wasapi); names from Microsoft Learn, mmdeviceapi.h, audioclient.h and audiopolicy.h @ `Windows 11 26H2 build 26300.9974`
 - `windows-com-state`: COM state of a thread and process observed by spec agents on the Windows oracle where Chrome's browser process reaches it (TEB.ReservedForOle, the global interface table, BITS); the names come from Microsoft Learn, objidl.h and bits.h (spec-com-ole-tls) @ `Windows 11 25H2 build 26200.9974`
 - `windows-export-probe`: Exported names of Windows 11 system DLLs (kernelbase.dll, userenv.dll) found by spec agents on the oracle where Chrome's sandbox set-up reaches them; names only (spec-chrome-win-s2b) @ `Windows 11 25H2 build 26200.9974`
 - `windows-typelib-file`: The binary type-library file (.tlb and the TYPELIB resource of an exe or dll) as ITypeLib and ITypeInfo read it, by black-box observation of files written with CreateTypeLib2 and of the updater's own libraries (docs/windows/typelib-file-format.md; spec-win-typelib-format) @ `Windows 11 25H2 build 26200.9974`

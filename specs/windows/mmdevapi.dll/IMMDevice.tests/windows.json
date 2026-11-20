@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_dev_clients",
+      "exe_sha256": "ec18ca712ec62bdecbde4a17d6cdabd5cd97facf8270307b8e40615af636dc05",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYSBzZWNvbmQgY2xpZW50CmZpcnN0IEdldE1peEZvcm1hdCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIGZpcnN0IEdldE1peEZvcm1hdApzZWNvbmQgR2V0TWl4Rm9ybWF0ID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgc2Vjb25kIEdldE1peEZvcm1hdApvayBzYW1lIGZvcm1hdApJbml0aWFsaXplIHRoZSBmaXJzdCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEluaXRpYWxpemUgdGhlIGZpcnN0CkluaXRpYWxpemUgdGhlIHNlY29uZCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEluaXRpYWxpemUgdGhlIHNlY29uZApHZXRCdWZmZXJTaXplIGFmdGVyIHRoZSBkZXZpY2UgaXMgcmVsZWFzZWQgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRCdWZmZXJTaXplIGFmdGVyIHRoZSBkZXZpY2UgaXMgcmVsZWFzZWQKb2sgc2FtZSBidWZmZXIgc2l6ZQpzdW1tYXJ5IDggcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok a second client\nfirst GetMixFormat = S_OK (0x00000000)\nok first GetMixFormat\nsecond GetMixFormat = S_OK (0x00000000)\nok second GetMixFormat\nok same format\nInitialize the first = S_OK (0x00000000)\nok Initialize the first\nInitialize the second = S_OK (0x00000000)\nok Initialize the second\nGetBufferSize after the device is released = S_OK (0x00000000)\nok GetBufferSize after the device is released\nok same buffer size\nsummary 8 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 170
+    },
+    {
+      "name": "ws_dev_state_id",
+      "exe_sha256": "c87679b03f15896f6045cf58dfb4c5c61894e1851d04058b41262134b886013c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgY3JlYXRlCmRlZmF1bHQgZGV2aWNlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgZGVmYXVsdCBkZXZpY2UKR2V0U3RhdGUgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRTdGF0ZQpvayBhY3RpdmUKR2V0SWQgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRJZApvayBmb3JtCm9rIHNhbWUgc3RyaW5nIHR3aWNlCm9rIGEgc2VwYXJhdGUgYWxsb2NhdGlvbiBlYWNoIHRpbWUKR2V0U3RhdGUoTlVMTCkgPSBFX1BPSU5URVIgKDB4ODAwMDQwMDMpCm9rIEdldFN0YXRlKE5VTEwpCkdldElkKE5VTEwpID0gRV9QT0lOVEVSICgweDgwMDA0MDAzKQpvayBHZXRJZChOVUxMKQpRdWVyeUludGVyZmFjZShJTU1EZXZpY2UpID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgUXVlcnlJbnRlcmZhY2UoSU1NRGV2aWNlKQpvayBzYW1lIG9iamVjdApRdWVyeUludGVyZmFjZShJVW5rbm93bikgPSBTX09LICgweDAwMDAwMDAwKQpvayBRdWVyeUludGVyZmFjZShJVW5rbm93bikKUXVlcnlJbnRlcmZhY2UoSU1NRGV2aWNlRW51bWVyYXRvcikgPSBFX05PSU5URVJGQUNFICgweDgwMDA0MDAyKQpvayBRdWVyeUludGVyZmFjZShJTU1EZXZpY2VFbnVtZXJhdG9yKQpvayBubyBvYmplY3QKc3VtbWFyeSAxNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create = S_OK (0x00000000)\nok create\ndefault device = S_OK (0x00000000)\nok default device\nGetState = S_OK (0x00000000)\nok GetState\nok active\nGetId = S_OK (0x00000000)\nok GetId\nok form\nok same string twice\nok a separate allocation each time\nGetState(NULL) = E_POINTER (0x80004003)\nok GetState(NULL)\nGetId(NULL) = E_POINTER (0x80004003)\nok GetId(NULL)\nQueryInterface(IMMDevice) = S_OK (0x00000000)\nok QueryInterface(IMMDevice)\nok same object\nQueryInterface(IUnknown) = S_OK (0x00000000)\nok QueryInterface(IUnknown)\nQueryInterface(IMMDeviceEnumerator) = E_NOINTERFACE (0x80004002)\nok QueryInterface(IMMDeviceEnumerator)\nok no object\nsummary 15 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}
