@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "wv_delw_views",
-      "exe_sha256": "dc8c4adbd7a659c3dea529de9a26a2fc103d487434abcb078498931ee73079de",
+      "exe_sha256": "4ca45566553c4ef929aafcba49fc8c311320e4a854190847bb64298cd2d39316",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
