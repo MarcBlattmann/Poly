@@ -360,7 +360,7 @@ pub const fn key_access(desired: u64) -> AccessMask {
 /// reaches (for [`remember_view`]; `None`: no bit chose one, the caller's default view).
 ///
 /// The view: `KEY_WOW64_32KEY` in `access` is the 32-bit one; `KEY_WOW64_64KEY` the native one,
-/// except below an open key that physically lies below a `Wow6432Node` (the view is part of the
+/// except below an open key of the 32-bit view that physically lies below a `Wow6432Node` (the view is part of the
 /// open key's place: a vendor key below `Software` opened in the 32-bit view stays there); no
 /// bit, the view of the open key the name is relative to, or the caller's default for an
 /// absolute name (a 32-bit caller's is the 32-bit view). In the 32-bit view the full path (the
@@ -393,7 +393,11 @@ pub fn apply_view(
         // The open key itself again, in its view (`RegCreateKeyExW.yaml` `empty_subkey`).
         return base_view;
     }
-    let inside = base.as_deref().is_some_and(wow64::has_node);
+    // An open key of the 32-bit view that lies below a `Wow6432Node` keeps its keys there; one
+    // opened in the native view at a path naming the node is a plain physical key
+    // (`RegistryDefaults.Wow6432Node.yaml` `one_key_64`: `KEY_WOW64_64KEY` below
+    // `Classes\Wow6432Node` opened with it makes the key there).
+    let inside = base.as_deref().is_some_and(wow64::has_node) && base_view.unwrap_or(default) == View::X86;
     let chosen = match access as u32 & KEY_WOW64_RES {
         KEY_WOW64_32KEY => Some(View::X86),
         KEY_WOW64_64KEY if inside => Some(View::X86),
@@ -415,6 +419,46 @@ pub fn apply_view(
         attrs.name = Some(target);
     }
     chosen
+}
+
+/// Before a create whose name [`apply_view`] moved into the 32-bit view: the `Wow6432Node` key
+/// the new name goes through (right below `\REGISTRY\MACHINE\SOFTWARE` or below a `Classes` key),
+/// made when its parent exists and it does not. A 32-bit program makes
+/// `HKCU\Software\Classes\CLSID\{id}` one level at a time on a machine whose user classes have no
+/// `Wow6432Node` yet, and finds it there (`RegistryDefaults.ClassesRoots.yaml` `hkcu_clsid`).
+pub fn make_view_node(sys: &mut crate::system::NtSystem, name: &[u16], now: u64) {
+    let sep = u16::from(b'\\');
+    let parts: Vec<&[u16]> = name.split(|&c| c == sep).filter(|c| !c.is_empty()).collect();
+    let is =
+        |c: &[u16], s: &str| c.len() == s.len() && c.iter().zip(s.bytes()).all(|(&a, b)| fold(a) == fold(u16::from(b)));
+    let ends = |c: &[u16], s: &str| c.len() >= s.len() && is(&c[c.len() - s.len()..], s);
+    if parts.first().is_none_or(|c| !is(c, "REGISTRY")) {
+        return;
+    }
+    let Some(at) = (1..parts.len()).find(|&i| {
+        is(parts[i], WOW6432_NODE)
+            && (i == 3 && is(parts[1], "MACHINE") && is(parts[2], "SOFTWARE") || ends(parts[i - 1], "Classes"))
+    }) else {
+        return;
+    };
+    let reg = &mut sys.registry.reg;
+    let mut parent: Vec<u16> = Vec::new();
+    for (n, c) in parts[1..at].iter().enumerate() {
+        if n > 0 {
+            parent.push(sep);
+        }
+        parent.extend_from_slice(c);
+    }
+    if let Ok(Resolved::Found(key)) = reg.resolve(reg.root(), &parent, false)
+        && reg.child(key, parts[at]).is_none()
+    {
+        let _ = reg.create_key(key, parts[at], CreateOptions::default(), now);
+    }
+}
+
+/// ASCII case folding, enough for the registry's own names.
+fn fold(c: u16) -> u16 {
+    if (u16::from(b'a')..=u16::from(b'z')).contains(&c) { c - 32 } else { c }
 }
 
 /// Keep the view [`apply_view`] chose for the key behind the new handle `h` (`None`: the

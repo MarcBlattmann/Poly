@@ -112,7 +112,7 @@ pub struct DefaultHive {
 
 use Data::*;
 
-const fn k(path: &'static str, values: &'static [(&'static str, Data)]) -> DefaultKey {
+pub(crate) const fn k(path: &'static str, values: &'static [(&'static str, Data)]) -> DefaultKey {
     DefaultKey { path, values }
 }
 
@@ -171,47 +171,40 @@ pub const SYSTEM_KEYS: &[DefaultKey] = &[
 
 pub const SOFTWARE_KEYS: &[DefaultKey] = &[
     k("Classes", &[]),
-    // COM marshalling through type libraries (ADR 0220, B2b; Learn: "Type Library Registration",
-    // "Interface Key"; sheets `CoGetPSClsid`, `LoadRegTypeLib`, `QueryPathOfRegTypeLib`): the standard
-    // library `stdole` 2.0 (Poly's own `stdole2.tlb`), the proxy/stub classes of the system
-    // interfaces, and the automation marshaller's class in `oleaut32.dll`.
-    k("Classes\\TypeLib\\{00020430-0000-0000-C000-000000000046}\\2.0", &[("", Sz("OLE Automation"))]),
-    k(
-        "Classes\\TypeLib\\{00020430-0000-0000-C000-000000000046}\\2.0\\0\\win32",
-        &[("", Sz("C:\\Windows\\System32\\stdole2.tlb"))],
-    ),
-    k("Classes\\TypeLib\\{00020430-0000-0000-C000-000000000046}\\2.0\\FLAGS", &[("", Sz("0"))]),
-    k("Classes\\TypeLib\\{00020430-0000-0000-C000-000000000046}\\2.0\\HELPDIR", &[("", Sz("C:\\Windows\\System32"))]),
-    k("Classes\\Interface\\{00020400-0000-0000-C000-000000000046}", &[("", Sz("IDispatch"))]),
-    k(
-        "Classes\\Interface\\{00020400-0000-0000-C000-000000000046}\\ProxyStubClsid32",
-        &[("", Sz("{00020420-0000-0000-C000-000000000046}"))],
-    ),
-    k("Classes\\Interface\\{00000001-0000-0000-C000-000000000046}", &[("", Sz("IClassFactory"))]),
-    k(
-        "Classes\\Interface\\{00000001-0000-0000-C000-000000000046}\\ProxyStubClsid32",
-        &[("", Sz("{00000320-0000-0000-C000-000000000046}"))],
-    ),
-    k("Classes\\Interface\\{0000000C-0000-0000-C000-000000000046}", &[("", Sz("IStream"))]),
-    k(
-        "Classes\\Interface\\{0000000C-0000-0000-C000-000000000046}\\ProxyStubClsid32",
-        &[("", Sz("{00000320-0000-0000-C000-000000000046}"))],
-    ),
-    k("Classes\\Interface\\{1CF2B120-547D-101B-8E65-08002B2BD119}", &[("", Sz("IErrorInfo"))]),
-    k(
-        "Classes\\Interface\\{1CF2B120-547D-101B-8E65-08002B2BD119}\\ProxyStubClsid32",
-        &[("", Sz("{B196B286-BAB4-101A-B69C-00AA00341D07}"))],
-    ),
-    k("Classes\\CLSID\\{00020424-0000-0000-C000-000000000046}", &[("", Sz("PSOAInterface"))]),
-    k(
-        "Classes\\CLSID\\{00020424-0000-0000-C000-000000000046}\\InprocServer32",
-        &[("", Sz("oleaut32.dll")), ("ThreadingModel", Sz("Both"))],
-    ),
-    k("Classes\\CLSID\\{00020420-0000-0000-C000-000000000046}", &[("", Sz("PSDispatch"))]),
-    k(
-        "Classes\\CLSID\\{00020420-0000-0000-C000-000000000046}\\InprocServer32",
-        &[("", Sz("oleaut32.dll")), ("ThreadingModel", Sz("Both"))],
-    ),
+    // The class-registration roots a Windows machine has below `Classes` in both views
+    // (`RegistryDefaults.ClassesRoots.yaml` `names`). The standard COM registrations below
+    // `CLSID`, `Interface` and `TypeLib` are [`crate::comdefaults`]'s, seeded per view by
+    // [`wow64_view_keys`].
+    k("Classes\\CLSID", &[]),
+    k("Classes\\Interface", &[]),
+    k("Classes\\TypeLib", &[]),
+    k("Classes\\AppID", &[]),
+    k("Classes\\Installer", &[]),
+    k("Classes\\MIME", &[]),
+    k("Classes\\Local Settings", &[]),
+    k("Classes\\Media Type", &[]),
+    k("Classes\\MediaFoundation", &[]),
+    k("Classes\\DirectShow", &[]),
+    k("Classes\\Drive", &[]),
+    k("Classes\\Directory", &[]),
+    k("Classes\\Folder", &[]),
+    k("Classes\\*", &[]),
+    k("Classes\\exefile", &[]),
+    k("Classes\\dllfile", &[]),
+    k("Classes\\.exe", &[]),
+    k("Classes\\.dll", &[]),
+    k("Classes\\.tlb", &[]),
+    k("Classes\\.lnk", &[]),
+    k("Classes\\http", &[]),
+    k("Classes\\https", &[]),
+    k("Classes\\SystemFileAssociations", &[]),
+    // `RegistryDefaults.Wow6432Node.yaml` `software_64`, `microsoft`.
+    k("Clients", &[]),
+    k("Policies", &[]),
+    k("RegisteredApplications", &[]),
+    k("Microsoft\\Ole", &[]),
+    k("Microsoft\\COM3", &[]),
+    k("Microsoft\\Rpc", &[]),
     k(
         "Microsoft\\Windows NT\\CurrentVersion",
         &[
@@ -231,20 +224,85 @@ pub const SOFTWARE_KEYS: &[DefaultKey] = &[
             ("SystemRoot", Sz("C:\\Windows")),
             ("RegisteredOwner", Sz(POLY_USER_NAME)),
             ("RegisteredOrganization", Sz("")),
+            // `RegistryDefaults.CurrentVersion.yaml` `nt_values`: the edition of the oracle (Home,
+            // "Core"), `PathName` equal to `SystemRoot`, and the build lab strings, which are
+            // machine data (Poly's own).
+            ("EditionID", Sz("Core")),
+            ("CompositionEditionID", Sz("Core")),
+            ("PathName", Sz("C:\\Windows")),
+            ("BuildLab", Sz("26200.poly")),
+            ("BuildLabEx", Sz("26200.9974.poly")),
         ],
     ),
-    k(
-        "Microsoft\\Windows\\CurrentVersion",
-        &[
-            ("ProgramFilesDir", Sz("C:\\Program Files")),
-            ("ProgramFilesDir (x86)", Sz("C:\\Program Files (x86)")),
-            ("ProgramW6432Dir", Sz("C:\\Program Files")),
-            ("CommonFilesDir", Sz("C:\\Program Files\\Common Files")),
-        ],
-    ),
+    k("Microsoft\\Windows\\CurrentVersion", CURRENT_VERSION_64),
+    k("Microsoft\\Windows\\CurrentVersion\\Installer", INSTALLER_64),
     k("Microsoft\\Windows\\CurrentVersion\\App Paths", &[]),
     k("Microsoft\\Windows\\CurrentVersion\\Run", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\RunOnce", &[]),
     k("Microsoft\\Windows\\CurrentVersion\\Uninstall", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Policies", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Explorer", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Setup", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Internet Settings", &[]),
+];
+
+/// `Microsoft\Windows\CurrentVersion`'s folders, as the 64-bit view has them
+/// (`RegistryDefaults.CurrentVersion.yaml` `folders_64`).
+const CURRENT_VERSION_64: &[(&str, Data)] = &[
+    ("ProgramFilesDir", Sz("C:\\Program Files")),
+    ("ProgramFilesDir (x86)", Sz("C:\\Program Files (x86)")),
+    ("ProgramW6432Dir", Sz("C:\\Program Files")),
+    ("CommonFilesDir", Sz("C:\\Program Files\\Common Files")),
+    ("CommonFilesDir (x86)", Sz("C:\\Program Files (x86)\\Common Files")),
+    ("CommonW6432Dir", Sz("C:\\Program Files\\Common Files")),
+    ("ProgramFilesPath", ExpandSz("%ProgramFiles%")),
+    ("DevicePath", ExpandSz("%SystemRoot%\\inf")),
+    ("MediaPathUnexpanded", ExpandSz("%SystemRoot%\\Media")),
+];
+
+/// The same key as the 32-bit view has it: a 32-bit program's program folders are the `(x86)`
+/// ones (`folders_32`).
+const CURRENT_VERSION_32: &[(&str, Data)] = &[
+    ("ProgramFilesDir", Sz("C:\\Program Files (x86)")),
+    ("ProgramFilesDir (x86)", Sz("C:\\Program Files (x86)")),
+    ("ProgramW6432Dir", Sz("C:\\Program Files")),
+    ("CommonFilesDir", Sz("C:\\Program Files (x86)\\Common Files")),
+    ("CommonFilesDir (x86)", Sz("C:\\Program Files (x86)\\Common Files")),
+    ("CommonW6432Dir", Sz("C:\\Program Files\\Common Files")),
+    ("ProgramFilesPath", ExpandSz("%ProgramFiles%")),
+    ("DevicePath", ExpandSz("%SystemRoot%\\inf")),
+    ("MediaPathUnexpanded", ExpandSz("%SystemRoot%\\Media")),
+];
+
+/// `CurrentVersion\Installer` in each view (`installer`).
+const INSTALLER_64: &[(&str, Data)] = &[
+    ("InstallerLocation", Sz("C:\\Windows\\System32\\")),
+    ("MsiExecCA32", Sz("C:\\Windows\\syswow64\\msiexec.exe")),
+    ("MsiExecCA64", Sz("C:\\Windows\\System32\\msiexec.exe")),
+];
+const INSTALLER_32: &[(&str, Data)] = &[("InstallerLocation", Sz("C:\\Windows\\SysWOW64\\"))];
+
+/// The keys of the 32-bit view of `HKLM\SOFTWARE` other than `Classes`, below the physical
+/// `WOW6432Node` (`RegistryDefaults.Wow6432Node.yaml` `software_64`, `microsoft`;
+/// `RegistryDefaults.CurrentVersion.yaml`). `Windows NT\CurrentVersion` is copied there from
+/// [`SOFTWARE_KEYS`] (the same values in both views).
+const SOFTWARE_32_KEYS: &[DefaultKey] = &[
+    k("Clients", &[]),
+    k("Policies", &[]),
+    k("RegisteredApplications", &[]),
+    k("Microsoft\\Ole", &[]),
+    k("Microsoft\\COM3", &[]),
+    k("Microsoft\\Rpc", &[]),
+    k("Microsoft\\Windows\\CurrentVersion", CURRENT_VERSION_32),
+    k("Microsoft\\Windows\\CurrentVersion\\Installer", INSTALLER_32),
+    k("Microsoft\\Windows\\CurrentVersion\\App Paths", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Run", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\RunOnce", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Uninstall", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Policies", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Explorer", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Setup", &[]),
+    k("Microsoft\\Windows\\CurrentVersion\\Internet Settings", &[]),
 ];
 
 const USER_TEMP: Data = ExpandSz("%USERPROFILE%\\AppData\\Local\\Temp");
@@ -322,29 +380,14 @@ pub fn make_path(reg: &mut Registry, parent: KeyId, path: &str, volatile: bool, 
 /// Keys Affected by WOW64": the others, `TypeLib` and `AppID` among them, are shared).
 const CLASSES_REDIRECTED: [&str; 5] = ["CLSID", "Interface", "DirectShow", "Media Type", "MediaFoundation"];
 
-/// The 32-bit view's keys in the software hive `root` (ADR 0186), made in a new hive and in one
-/// loaded from a file older than them alike (Learn: "Registry Redirector"):
-///
-/// - `WOW6432Node` (the 32-bit view of `HKLM\SOFTWARE`) and, below `Classes\WOW6432Node`, the
-///   five redirected `Classes` subkeys (`RegCreateKeyExW.yaml` `level_by_level`: a 32-bit
-///   `CLSID` exists on Windows).
-/// - The default registrations below a redirected `Classes` subkey ([`SOFTWARE_KEYS`]: the
-///   proxy/stub classes and interfaces of COM marshalling) in the 32-bit view too, as a Windows
-///   install has them for its 32-bit programs: their servers are named without a path, so each
-///   view's process loads its own `oleaut32.dll`. A key the hive already has keeps its values.
-fn wow64_view_keys(reg: &mut Registry, root: KeyId, now: u64) -> Result<(), NtStatus> {
-    make_path(reg, root, WOW6432_NODE, false, now)?;
-    for sub in CLASSES_REDIRECTED {
-        make_path(reg, root, &alloc::format!("Classes\\{WOW6432_NODE}\\{sub}"), false, now)?;
-    }
-    for key in SOFTWARE_KEYS {
-        let Some(rest) = key.path.strip_prefix("Classes\\") else { continue };
-        if !CLASSES_REDIRECTED.iter().any(|s| rest.split('\\').next() == Some(s)) {
-            continue;
-        }
-        let mut cur = make_path(reg, root, &alloc::format!("Classes\\{WOW6432_NODE}"), false, now)?;
+/// Make each of `keys` below `prefix` (a path below `root`) if it is missing, and give a key
+/// that was made its values; a key the hive has already keeps its own.
+fn seed(reg: &mut Registry, root: KeyId, prefix: &str, keys: &[DefaultKey], now: u64) -> Result<(), NtStatus> {
+    let base = make_path(reg, root, prefix, false, now)?;
+    for key in keys {
+        let mut cur = base;
         let mut created = false;
-        for c in rest.split('\\').filter(|c| !c.is_empty()) {
+        for c in key.path.split('\\').filter(|c| !c.is_empty()) {
             let (k, d) = reg.create_key(cur, &wide(c), CreateOptions::default(), now)?;
             (cur, created) = (k, d == crate::tree::Disposition::Created);
         }
@@ -353,6 +396,63 @@ fn wow64_view_keys(reg: &mut Registry, root: KeyId, now: u64) -> Result<(), NtSt
         }
     }
     Ok(())
+}
+
+/// The keys of both registry views in the software hive `root` (ADR 0186 addenda; the sheets of
+/// `spec-win-wow64-defaults`, `docs/windows/registry-defaults.md` section 6), made in a new hive
+/// and in one loaded from a file older than them alike; a key the hive has keeps its values:
+///
+/// - `WOW6432Node` (the 32-bit view of `HKLM\SOFTWARE`) with [`SOFTWARE_32_KEYS`] and a copy of
+///   `Microsoft\Windows NT\CurrentVersion` (the same values in both views).
+/// - `Classes\WOW6432Node` with the five redirected `Classes` subkeys (`TypeLib` and `AppID`
+///   there, and `WOW6432Node\Classes`, are links: [`volatile_keys`]).
+/// - The standard COM registrations ([`crate::comdefaults`]): the interfaces in both views, the
+///   proxy/stub classes with each view's server paths, `stdole` once (shared).
+fn wow64_view_keys(reg: &mut Registry, root: KeyId, now: u64) -> Result<(), NtStatus> {
+    use crate::comdefaults::{CLASSES_32, CLASSES_64, INTERFACES, STDOLE};
+    seed(reg, root, WOW6432_NODE, SOFTWARE_32_KEYS, now)?;
+    let nt = "Microsoft\\Windows NT\\CurrentVersion";
+    if let Some(key) = SOFTWARE_KEYS.iter().find(|k| k.path == nt) {
+        let node_nt = alloc::format!("{WOW6432_NODE}\\{nt}");
+        let made = reg.find(root, &node_nt).is_none();
+        let id = make_path(reg, root, &node_nt, false, now)?;
+        if made {
+            set(reg, id, key.values, now)?;
+            // The install date of the 64-bit key, or this boot for a hive without one.
+            let date = reg
+                .find(root, nt)
+                .and_then(|k| reg.value(k, &wide("InstallDate")).ok().map(|v| v.data.clone()))
+                .unwrap_or_else(|| install_date(now).to_le_bytes().to_vec());
+            reg.set_value(id, &wide("InstallDate"), REG_DWORD, &date, now)?;
+        }
+    }
+    let classes_node = alloc::format!("Classes\\{WOW6432_NODE}");
+    for sub in CLASSES_REDIRECTED {
+        make_path(reg, root, &alloc::format!("{classes_node}\\{sub}"), false, now)?;
+    }
+    seed(reg, root, "Classes", INTERFACES, now)?;
+    seed(reg, root, &classes_node, INTERFACES, now)?;
+    seed(reg, root, "Classes", CLASSES_64, now)?;
+    seed(reg, root, &classes_node, CLASSES_32, now)?;
+    seed(reg, root, "Classes", STDOLE, now)?;
+    Ok(())
+}
+
+/// `InstallDate`: seconds since 1970 at `now` (a FILETIME).
+fn install_date(now: u64) -> u32 {
+    (now.saturating_sub(FILETIME_UNIX_EPOCH) / 10_000_000) as u32
+}
+
+/// A volatile symbolic link `name` below `parent` to the NT path `target`, unless `parent` has a
+/// key of that name already (a hive from a file where a program made one keeps it).
+fn link(reg: &mut Registry, parent: KeyId, name: &str, target: &str, now: u64) -> Result<(), NtStatus> {
+    if reg.child(parent, &wide(name)).is_some() {
+        return Ok(());
+    }
+    let opts = CreateOptions { volatile: true, link: true, class: &[] };
+    let (key, _) = reg.create_key(parent, &wide(name), opts, now)?;
+    let bytes: Vec<u8> = target.encode_utf16().flat_map(u16::to_le_bytes).collect();
+    reg.set_value(key, &wide(SYMBOLIC_LINK_VALUE), REG_LINK, &bytes, now)
 }
 
 fn set(reg: &mut Registry, key: KeyId, values: &[(&str, Data)], now: u64) -> Result<(), NtStatus> {
@@ -370,8 +470,7 @@ pub fn populate(reg: &mut Registry, root: KeyId, spec: &DefaultHive, now: u64) -
         let id = make_path(reg, root, key.path, false, now)?;
         set(reg, id, key.values, now)?;
         if spec.file == "SOFTWARE" && key.path == "Microsoft\\Windows NT\\CurrentVersion" {
-            let unix = now.saturating_sub(FILETIME_UNIX_EPOCH) / 10_000_000;
-            reg.set_value(id, &wide("InstallDate"), REG_DWORD, &(unix as u32).to_le_bytes(), now)?;
+            reg.set_value(id, &wide("InstallDate"), REG_DWORD, &install_date(now).to_le_bytes(), now)?;
         }
     }
     Ok(())
@@ -435,6 +534,27 @@ pub fn volatile_keys(reg: &mut Registry, now: u64) -> Result<(), NtStatus> {
         let target: Vec<u8> =
             "\\REGISTRY\\MACHINE\\SYSTEM\\ControlSet001".encode_utf16().flat_map(u16::to_le_bytes).collect();
         reg.set_value(link, &wide(SYMBOLIC_LINK_VALUE), REG_LINK, &target, now)?;
+    }
+    // The names Windows keeps for one key in the physical registry (`RegistryDefaults.Wow6432Node.yaml`
+    // `one_key_64`): `SOFTWARE\WOW6432Node\Classes` is `SOFTWARE\Classes\WOW6432Node`, and below
+    // that `TypeLib` and `AppID` are the shared `Classes\TypeLib` and `Classes\AppID`. (The 32-bit
+    // view reaches the same keys by its own rule: `personalities/nt/src/registry/wow64.rs`.)
+    if let Some(software) = reg.find(machine, "SOFTWARE") {
+        let node = alloc::format!("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\{WOW6432_NODE}");
+        if let Some(wow) = reg.find(software, WOW6432_NODE) {
+            link(reg, wow, "Classes", &node, now)?;
+        }
+        if let Some(classes_node) = reg.find(software, &alloc::format!("Classes\\{WOW6432_NODE}")) {
+            for shared in ["TypeLib", "AppID"] {
+                link(
+                    reg,
+                    classes_node,
+                    shared,
+                    &alloc::format!("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\{shared}"),
+                    now,
+                )?;
+            }
+        }
     }
     let user = reg.user();
     if let Some(me) = reg.find(user, POLY_USER_SID) {

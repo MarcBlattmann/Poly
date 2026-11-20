@@ -65,7 +65,13 @@ pub fn create_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
     let caller = k.caller();
     let (handle, d) = k.with_state(|sys, p, b| {
         // The 32-bit or 64-bit view of the name (ADR 0186, stage 2).
+        let named = (attrs.root, attrs.name.clone());
         let view = super::apply_view(sys, &caller, p.wow64, access, &mut attrs);
+        if (attrs.root, &attrs.name) != (named.0, &named.1)
+            && let Some(name) = attrs.name.clone()
+        {
+            super::make_view_node(sys, &name, now);
+        }
         let r = (|| {
             let root = match attrs.root {
                 Some(h) => root_key(sys, &caller, h)?,

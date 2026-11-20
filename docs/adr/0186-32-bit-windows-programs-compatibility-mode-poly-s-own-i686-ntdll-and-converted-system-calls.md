@@ -661,3 +661,38 @@ put the two on different keys (`SOFTWARE\Wow6432Node\Classes\CLSID\...` and
 - **Not covered by the sheets, chosen alike**: a 64-bit process follows the same rules with its
   default view native (`KEY_WOW64_32KEY` on a key makes the keys below it 32-bit ones); keys
   opened below a key that came through `HKEY_CLASSES_ROOT` are not in the table.
+
+## Addendum: the default registry of both views (`impl-win-wow64-defaults`)
+
+The sheets of `spec-win-wow64-defaults` (`RegistryDefaults.Wow6432Node`, `.ClassesRoots`,
+`.CurrentVersion`, `ComDefaults.Interfaces`, `.ProxyStubClasses`, `.StdOleTypeLib`;
+`docs/windows/registry-defaults.md`) say what a Windows machine holds in each view before any
+program ran. Poly's default `SOFTWARE` hive now has it:
+
+- **`WOW6432Node`** with `Classes`, `Clients`, `Microsoft`, `Policies`, `RegisteredApplications`;
+  **`Classes\WOW6432Node`** with `CLSID`, `Interface`, `TypeLib`, `AppID`, `DirectShow`,
+  `Media Type`, `MediaFoundation`; the class roots both views list below `Classes` (`.exe`,
+  `http`, `Installer`, ... as empty keys); `Microsoft\Windows\CurrentVersion` in each view (the
+  32-bit one with the `(x86)` program folders and its own `InstallerLocation`) and
+  `Microsoft\Windows NT\CurrentVersion` in both (the same values; `EditionID` "Core" as on the
+  oracle, Poly's own build lab strings).
+- **The standard COM registrations**, generated from the sheets' recorded outputs
+  (`poly_registry::comdefaults`): the 82 interfaces in both views, the 27 proxy/stub and marshaller
+  classes with each view's server (`System32` or `SysWOW64` for an absolute path, `combase.dll`
+  bare), `stdole` once (shared) with `win32` = SysWOW64 and `win64` = System32; Poly installs its
+  `stdole2.tlb` in both directories. `combase.dll`'s classes name a DLL Poly does not ship: the
+  interfaces they marshal did not marshal before either (most were not registered).
+- A hive loaded from an older file gets the keys it lacks; a key it has keeps its values.
+- **One key, several names** (`one_key_64`): Windows keeps them as registry links, and so does
+  Poly, made at every boot like `CurrentControlSet` (`volatile_keys`): `WOW6432Node\Classes` is
+  `Classes\WOW6432Node`, and below that `TypeLib` and `AppID` are `Classes\TypeLib` and
+  `Classes\AppID`. The user's classes have no such links (`hkcu_shared`: the 32-bit view's own rule
+  gives the 32-bit names).
+- **The 32-bit view, sharpened**: after the view's own `Wow6432Node` is taken out of a path, one
+  that is left is an ordinary key name (`SOFTWARE\Wow6432Node\Wow6432Node` does not exist there,
+  `Classes\Wow6432Node\Wow6432Node` is `Classes\Wow6432Node`). `KEY_WOW64_64KEY` stays in the
+  32-bit view only below an open key *of the 32-bit view* that lies below a node; a key opened in
+  the native view at a path naming the node is a plain physical key. A create that the 32-bit
+  view moves below a `Wow6432Node` that does not exist yet makes that node (`hkcu_clsid`: a user's
+  classes have none until a 32-bit program registers a class), so the user hive gets none by
+  default and `HKEY_CLASSES_ROOT` keeps finding the machine's `CLSID` first.
