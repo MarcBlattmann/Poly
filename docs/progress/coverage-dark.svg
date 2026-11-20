@@ -447,6 +447,7 @@
 </g>
 <g><title>libsystem_kernel: 0 / 1,625 done (0.0%)</title>
 <rect x="677.9" y="236.6" width="20.0" height="22.1" fill="#21262d"/>
+<rect x="677.9" y="236.6" width="0.1" height="22.1" fill="#388bfd"/>
 <rect x="676.9" y="235.6" width="22.0" height="24.1" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>Tcl: 0 / 1,585 done (0.0%)</title>
