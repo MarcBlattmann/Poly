@@ -3,7 +3,7 @@
  * program's start-up and work need: files, directories, mmap, sysctl, ids,
  * signals, a pipe, and a child started with posix_spawn and reaped with
  * wait4. Prints one line per check; main returns the number of failures.
- * Run as "bsd child" it is the child: it writes to fd 3 and exits 7.
+ * Run as "bsd child" it is the child: it writes to fd 9 and exits 7.
  * Written for Poly; numbers from the macOS SDK headers named. */
 #include "sys.h"
 
@@ -175,14 +175,14 @@ static void signals(void) {
 static void child_process(char *self) {
     struct ret p = sys(SYS_pipe, 0);
     check("pipe", p.err == 0);
-    /* The child gets the write end as fd 3: dup2 it there. */
-    sys(90, p.v2, 3); /* dup2 */
+    /* The child inherits the write end as fd 9 too. */
+    sys(90, p.v2, 9); /* dup2 */
     char *argv[] = {self, "child", 0};
     char *envp[] = {"MBSD=1", 0};
     int pid = 0;
     struct ret r = sys(SYS_posix_spawn, &pid, self, 0, argv, envp);
     check("posix_spawn", r.err == 0 && pid > 0);
-    sys(SYS_close, 3);
+    sys(SYS_close, 9);
     sys(SYS_close, p.v2);
     r = sys(SYS_read, p.v, buf, 64);
     check("the child writes through the inherited pipe", r.v == 9 && eq(buf, "child hi\n", 9));
@@ -195,7 +195,7 @@ static void child_process(char *self) {
 
 int main(int argc, char **argv) {
     if (argc > 1 && eq(argv[1], "child", 6)) {
-        poly_write(3, "child hi\n", 9);
+        poly_write(9, "child hi\n", 9);
         return 7;
     }
     files();

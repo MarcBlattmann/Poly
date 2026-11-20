@@ -415,7 +415,9 @@ impl BsdKernel for Thread<'_> {
     }
 
     fn path_of(&self, fd: i32) -> Result<Vec<u8>, u32> {
-        self.process.files.readlink_fd(fd).map_err(de)
+        let file = self.process.files.file(fd).map_err(de)?;
+        let ctx = self.process.files.context();
+        fs::vfs().file_path(&ctx, &file).map_err(de)
     }
 
     fn chdir(&mut self, path: &[u8]) -> Result<(), u32> {
@@ -542,9 +544,7 @@ impl BsdKernel for Thread<'_> {
     }
 
     fn spawn(&mut self, path: &[u8], argv: &[Vec<u8>], envp: &[Vec<u8>]) -> Result<u32, u32> {
-        let argv: Vec<&[u8]> = argv.iter().map(Vec::as_slice).collect();
-        let envp: Vec<&[u8]> = envp.iter().map(Vec::as_slice).collect();
-        let prepared = program::prepare_child(path, &argv, &envp, self.process).map_err(|e| match e {
+        let prepared = prepare_child_deep(path, argv, envp, self.process).map_err(|e| match e {
             program::ExecPathError::Open(e) => de(e),
             program::ExecPathError::Unsupported(_) => errno::ENOEXEC,
             program::ExecPathError::Exec(e) => errno::from_linux(e.linux_errno() as u32),
@@ -599,6 +599,45 @@ impl BsdKernel for Thread<'_> {
         };
         Ok(Some((child.pid, status)))
     }
+}
+
+/// What [`prepare_child_deep`] hands its helper thread, and what comes
+/// back.
+struct SpawnJob<'a> {
+    path: &'a [u8],
+    argv: &'a [Vec<u8>],
+    envp: &'a [Vec<u8>],
+    parent: &'a Process,
+    result: Option<Result<program::Prepared, program::ExecPathError>>,
+}
+
+fn spawn_job(arg: usize) -> usize {
+    // SAFETY: `arg` is the address of the `SpawnJob` of `prepare_child_deep`,
+    // which waits for this thread before the job goes away, and nothing
+    // else touches the job meanwhile.
+    let job = unsafe { &mut *(arg as *mut SpawnJob<'_>) };
+    let argv: Vec<&[u8]> = job.argv.iter().map(Vec::as_slice).collect();
+    let envp: Vec<&[u8]> = job.envp.iter().map(Vec::as_slice).collect();
+    job.result = Some(program::prepare_child(job.path, &argv, &envp, job.parent));
+    0
+}
+
+/// `program::prepare_child` on a kernel thread of its own: loading a
+/// program (dyld's linking above all) is deep, and a system call already
+/// sits deep in its thread's 16 KiB kernel stack.
+fn prepare_child_deep(
+    path: &[u8],
+    argv: &[Vec<u8>],
+    envp: &[Vec<u8>],
+    parent: &Process,
+) -> Result<program::Prepared, program::ExecPathError> {
+    let mut job = SpawnJob { path, argv, envp, parent, result: None };
+    let addr = &raw mut job as usize;
+    let unsupported = || program::ExecPathError::Unsupported("no thread to load the program on".into());
+    let tid = thread::spawn_named("xnu-spawn", spawn_job, addr).map_err(|_| unsupported())?;
+    // The job lives until the helper has ended.
+    let _ = thread::join(tid);
+    job.result.take().unwrap_or_else(|| Err(unsupported()))
 }
 
 /// A new XNU process record for a Mach-O program.
