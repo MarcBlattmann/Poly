@@ -145,6 +145,10 @@ pub struct ProcessCreate {
     /// opened before they apply.
     pub process_security: Option<alloc::vec::Vec<u8>>,
     pub thread_security: Option<alloc::vec::Vec<u8>>,
+    /// The process it is created as a child of (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`): its
+    /// parent, whose token it gets a copy of (Learn, "UpdateProcThreadAttribute": the process
+    /// token is inherited from the specified process). `None`: the creator.
+    pub parent: Option<poly_ntobj::ProcessId>,
 }
 
 /// What [`NtKernel::create_process`] produced: handles in the caller's

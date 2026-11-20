@@ -243,3 +243,50 @@ rather than pop anything.
 
 So a 32-bit program loads like a 64-bit one, and the serial log names the first function it
 really needs. A name gets its slots in the table when a program reaches it.
+
+## Addendum (2026-11-20): the shell window and the shell's children
+
+Programs find the shell through `GetShellWindow`, and an elevated one uses it to start a program as
+the user would. The sheets are `CreateProcessWithTokenW.yaml` (`shell_token`) and
+`ShellDispatch.ShellExecute.yaml` (`child_of_the_desktop_chain`, `caller_facts`). Before this, the
+shell window was the lowest stand-in window of the reproduced interactive desktop, with a made-up
+process id, so its process could not be opened.
+
+- **The shell window answers as the shell process.**
+  - win32k's `Wm::shell_window` is the same window as before: none in session 0, and in the
+    interactive session the lowest window of another process.
+  - Once the kernel has started the `explorer.exe` stand-in, it names that process and its first
+    thread (`Wm::set_shell_process`). The window then reports them (`GetWindowThreadProcessId`,
+    `ThreadHasWindows`), until the stand-in ends.
+  - Messages to the window still run in their sender, as for the other stand-in windows, so nothing
+    waits on a process that never reads its queue.
+  - `user32!GetShellWindow` asks win32k (`Request::ShellWindow`).
+- **`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS` is honoured**, where before it was accepted and ignored:
+  - The handle needs `PROCESS_CREATE_PROCESS`.
+  - The child is that process's child (`InheritedFromUniqueProcessId`) and gets a copy of its token
+    (Learn, "UpdateProcThreadAttribute": the process token is inherited from the specified process),
+    and with it the token's session.
+  - The kernel gets the handle as Poly's attribute record kind 7.
+  - Inheritable handles still come from the creator. Learn names the parent for them too, but no
+    sheet covers that, so it is not done.
+- **The desktop chain's `ShellExecute` starts a program as the shell's child**
+  (`shell32::shellchild`):
+  - The `Shell.Application` that `ShellWindows`' desktop chain hands out starts it with the stand-in
+    as its parent, so it runs with the shell's filtered token in the interactive session, as
+    Explorer's child does on Windows.
+  - The stand-in is found through the shell window. A caller in session 0 has none, so there it is
+    the `explorer.exe` of a session other than 0.
+  - Without a shell process (the `admin` logon of the older recordings), and for anything that is
+    not a program, the chain does what `Shell.Application` created in the caller does.
+- **`CreateProcessWithTokenW` without `lpDesktop`** names the caller's own station and desktop for
+  the child (`WinSta0\Default` in the interactive session).
+- **The Windows test runner keeps a test's file name**: `C:\PolyTests\<name>.exe`, no longer
+  `test-binary.exe`. A child's report of its parent's image name is then the recording's.
+
+Still open (not this change):
+- `ShellDispatch.ShellExecute` `sde_start_ssh` needs a shell process in the `admin` logon (on Windows
+  the user's Explorer runs in session 1 whatever the SSH session does). Today only the standard and
+  elevated logons start the stand-in (ADR 0235).
+- `CreateProcessWithTokenW` `cpwt_ssh_session0` needs session-0 programs to live on their logon's
+  own window station (`Service-0x…$`), not on `WinSta0`. Then the child's desktop name is not
+  `WinSta0\Default`.

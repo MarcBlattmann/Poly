@@ -6,11 +6,12 @@
 //! through `IDispatch`).
 //!
 //! On Windows `ShellWindows` lives in Explorer, so a program started through that chain is
-//! Explorer's child with the user's own token. Poly's desktop is no Windows process: the objects
-//! live in the caller (`poly_com::inproc`'s desktop classes) and `ShellExecute` starts the program
-//! with `ShellExecuteExW`, as `Shell.Application` created in the caller does. Starting it from
-//! Poly's session with the user's token instead is the session manager's work (the sheet's
-//! `not_covered`: B5).
+//! Explorer's child with the user's own token. The objects live in the caller here
+//! (`poly_com::inproc`'s desktop classes), but the `Application` the chain hands out starts a
+//! program as a child of the session's shell process, the `explorer.exe` stand-in
+//! ([`crate::shellchild`]), so it gets the shell's token and session as on Windows; with no shell
+//! process (the administrator logon of the older recordings), and for what is not a program, it
+//! does what `Shell.Application` created in the caller does: `ShellExecuteExW`.
 //!
 //! Interface ids, method orders and constants: `exdisp.h`, `shldisp.h`, `shobjidl_core.h`,
 //! `servprov.h`, `oaidl.h`, `winerror.h` (the sheet's `interface`).
@@ -189,6 +190,8 @@ unsafe extern "system" fn no_object(_: *mut c_void, out: *mut *mut c_void) -> Hr
 #[repr(C)]
 struct ShellApp {
     head: Head,
+    /// Handed out by the desktop's chain (`get_Application`): it starts programs as the shell does.
+    desktop: bool,
 }
 
 static APP_IIDS: [Guid; 1] = [IID_IDISPATCH];
@@ -205,9 +208,15 @@ static APP_VTBL: Vtbl<7> = Vtbl([
     app_invoke as *const c_void,
 ]);
 
-/// The class factory's `CreateInstance` for `CLSID_Shell`, and `Application` of the objects below.
+/// The class factory's `CreateInstance` for `CLSID_Shell`.
 pub unsafe fn create_shell_app(iid: *const Guid, out: *mut *mut c_void) -> Hresult {
-    let object = into_raw(ShellApp { head: Head::new(&APP_VTBL, &APP_IIDS, drop_box::<ShellApp>) });
+    // SAFETY: the caller's arguments.
+    unsafe { new_shell_app(false, iid, out) }
+}
+
+/// A `Shell.Application`; `desktop`: the one of the desktop's chain.
+unsafe fn new_shell_app(desktop: bool, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    let object = into_raw(ShellApp { head: Head::new(&APP_VTBL, &APP_IIDS, drop_box::<ShellApp>), desktop });
     // SAFETY: a fresh object; the caller's out parameter.
     unsafe { hand_out(object.cast(), iid, out) }
 }
@@ -275,8 +284,9 @@ unsafe fn arg_of(v: &Variant) -> Result<Arg, Hresult> {
 }
 
 /// `IShellDispatch2::ShellExecute(File, vArgs, vDir, vOperation, vShow)`: the arguments come in
-/// reverse order in `DISPPARAMS`.
-unsafe fn shell_execute(params: &DispParams) -> Hresult {
+/// reverse order in `DISPPARAMS`. `desktop`: the desktop chain's object, which starts a program
+/// as the shell's child.
+unsafe fn shell_execute(params: &DispParams, desktop: bool) -> Hresult {
     let count = params.count as usize;
     if count == 0 || count > 5 || params.named_count != 0 || params.args.is_null() {
         return DISP_E_BADPARAMCOUNT;
@@ -301,6 +311,15 @@ unsafe fn shell_execute(params: &DispParams) -> Hresult {
     let params_text = params_text.map(|t| nul(&t));
     let dir = dir.map(|t| nul(&t));
     let verb = verb.map(|t| nul(&t));
+    if desktop
+        && let Some(done) =
+            crate::exec::start_from_shell(&file, params_text.as_deref(), dir.as_deref(), verb.as_deref(), show)
+    {
+        return match done {
+            Ok(()) => S_OK,
+            Err(e) => (0x8007_0000 | (e & 0xFFFF)) as Hresult,
+        };
+    }
     let ptr = |v: &Option<alloc::vec::Vec<u16>>| v.as_ref().map_or(core::ptr::null(), |t| t.as_ptr());
     // SAFETY: NUL-terminated strings (or NULL) that live through the call.
     let inst = unsafe { crate::exec::ShellExecuteW(0, ptr(&verb), file.as_ptr(), ptr(&params_text), ptr(&dir), show) };
@@ -316,7 +335,7 @@ unsafe fn shell_execute(params: &DispParams) -> Hresult {
 
 #[allow(clippy::too_many_arguments)] // IDispatch::Invoke's eight
 unsafe extern "system" fn app_invoke(
-    _this: *mut c_void,
+    this: *mut c_void,
     id: i32,
     _iid: *const Guid,
     _lcid: u32,
@@ -337,7 +356,7 @@ unsafe extern "system" fn app_invoke(
         if !result.is_null() {
             (*result).vt = VT_EMPTY;
         }
-        shell_execute(&*params)
+        shell_execute(&*params, (*this.cast::<ShellApp>()).desktop)
     }
 }
 
@@ -702,7 +721,7 @@ unsafe extern "system" fn application(_this: *mut c_void, out: *mut *mut c_void)
         return E_POINTER;
     }
     // SAFETY: the caller's out parameter.
-    unsafe { create_shell_app(&IID_IDISPATCH, out) }
+    unsafe { new_shell_app(true, &IID_IDISPATCH, out) }
 }
 
 /// `PopupItemMenu(pfi, vx, vy, pbs)`: no menus.

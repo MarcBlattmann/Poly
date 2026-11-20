@@ -1412,6 +1412,16 @@ struct HandlesFor {
     /// `lpThreadAttributes`), applied once the creator's handles are open.
     process_security: Option<Vec<u8>>,
     thread_security: Option<Vec<u8>>,
+    /// The process it is a child of (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`): its parent and the
+    /// source of its token; else the creator.
+    parent: Option<ProcessId>,
+}
+
+impl HandlesFor {
+    /// The process it is a child of and inherits its token from.
+    fn parent(&self) -> ProcessId {
+        self.parent.unwrap_or(self.caller.process)
+    }
 }
 
 /// Handles to a new process and its first thread.
@@ -1448,7 +1458,7 @@ fn start_params(
         s.finished.remove(&pid);
         s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
-        proc.parent = handles.map_or(0, |h| h.caller.process.0);
+        proc.parent = handles.map_or(0, |h| h.parent().0);
         if let Some(h) = handles {
             proc.set_mitigation(h.mitigation);
             s.sys.winsta.begin(pid, h.desktop.clone());
@@ -1477,7 +1487,7 @@ fn start_params(
             poly_personality_nt::security::inherit_token(
                 &mut s.sys,
                 pid,
-                handles.map(|h| h.caller.process),
+                handles.map(HandlesFor::parent),
                 handles.and_then(|h| h.token),
                 thread,
             )?;
@@ -1587,9 +1597,10 @@ fn create_process(
     // The first thread's id is its own (GetThreadId of the main thread differs from the process id).
     let tid = crate::process::alloc_nt_id();
     let format = Format::Pe { bits: Bits::B64, arch: Arch::X86_64 };
-    // The process that created it is its parent in /proc (ADR 0230).
+    // The process that created it (or the one it was created as a child of) is its parent in
+    // /proc (ADR 0230).
     let mut nt = Process::new_nt(pid, format, traced);
-    nt.ppid = creator_process.as_ref().map_or(0, |p| p.pid);
+    nt.ppid = req.parent.map_or_else(|| creator_process.as_ref().map_or(0, |p| p.pid), |p| p.0);
     let process = Arc::new(nt);
     let want = HandlesFor {
         caller: creator,
@@ -1605,6 +1616,7 @@ fn create_process(
         error_mode: req.error_mode,
         process_security: req.process_security,
         thread_security: req.thread_security,
+        parent: req.parent,
     };
     let (start, handles) = start_params(&process, &memory, req.image, tid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");
@@ -1836,7 +1848,14 @@ fn shell_main(_: usize) -> usize {
         p.start()
     });
     match started {
-        Ok(p) => crate::kprintln!("nt: explorer.exe started (p{}) with the filtered token", p.pid),
+        Ok(p) => {
+            // The session's shell window answers as this process's (`GetShellWindow`).
+            with(|s| {
+                let tid = s.processes.get(&ProcessId(p.pid)).and_then(|q| q.threads.first()).map_or(0, |t| t.thread.0);
+                s.sys.win32k.wm.set_shell_process(p.pid, tid as u32);
+            });
+            crate::kprintln!("nt: explorer.exe started (p{}) with the filtered token", p.pid)
+        }
         Err(e) => crate::kprintln!("nt: explorer.exe could not start: {e}"),
     }
     0
