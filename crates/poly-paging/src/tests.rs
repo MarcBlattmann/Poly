@@ -20,6 +20,8 @@ const RW: PageFlags = PageFlags::WRITABLE;
 #[derive(Debug, Default)]
 struct Sim {
     tables: HashMap<u64, Box<[u64; ENTRIES]>>,
+    /// Entries read so far.
+    reads: core::cell::Cell<u64>,
 }
 
 impl Sim {
@@ -30,6 +32,7 @@ impl Sim {
 
 impl PhysMemory for Sim {
     fn read_entry(&self, table: u64, index: usize) -> u64 {
+        self.reads.set(self.reads.get() + 1);
         self.table(table)[index]
     }
 
@@ -392,6 +395,40 @@ fn prune_frees_empty_tables_only() {
 
     // A large page fits where the 4 KiB pages were.
     pt.map(0, 0, Size1G, RW, &mut frames).unwrap();
+}
+
+#[test]
+fn pruning_a_range_page_by_page_reads_a_few_entries_per_page() {
+    // Two page tables' worth of 4 KiB pages, unmapped upwards, then mapped again and unmapped
+    // downwards: every table goes exactly when its last page does, and the emptiness checks do
+    // not scan the tables page after page.
+    for downwards in [false, true] {
+        let (mut pt, mut frames) = setup();
+        let pages: Vec<u64> = (0..2 * ENTRIES as u64).map(|i| 0x20_0000 + i * K4).collect();
+        for &v in &pages {
+            pt.map(v, v, Size4K, RW, &mut frames).unwrap();
+        }
+        let order: Vec<u64> = if downwards { pages.iter().rev().copied().collect() } else { pages.clone() };
+        let before = pt.memory().reads.get();
+        let mut freed_tables = 0;
+        for (n, &v) in order.iter().enumerate() {
+            let (u, freed) = pt.unmap_and_prune(v).unwrap();
+            assert_eq!(u.frame, v);
+            // The first table goes with its 512th page; the second, its PD and PDPT with the last.
+            let expected = match n + 1 {
+                x if x == ENTRIES => 1,
+                x if x == 2 * ENTRIES => 3,
+                _ => 0,
+            };
+            assert_eq!(freed.len(), expected, "page {n} ({v:#x}), downwards {downwards}");
+            freed_tables += freed.len();
+            frames.give_back(freed);
+        }
+        assert_eq!(freed_tables, 4);
+        assert_eq!(frames.live.len(), 1);
+        let reads = pt.memory().reads.get() - before;
+        assert!(reads < 16 * pages.len() as u64, "{reads} reads for {} pages", pages.len());
+    }
 }
 
 #[test]
