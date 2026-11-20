@@ -95,8 +95,13 @@ struct Factory {
 // SAFETY: the object is immutable.
 unsafe impl Sync for Factory {}
 
-static FACTORY_VTBL: FactoryVtbl =
-    FactoryVtbl { qi: factory_qi, add_ref: static_ref, release: static_ref, create: factory_create, lock: factory_lock };
+static FACTORY_VTBL: FactoryVtbl = FactoryVtbl {
+    qi: factory_qi,
+    add_ref: static_ref,
+    release: static_ref,
+    create: factory_create,
+    lock: factory_lock,
+};
 static FACTORY: Factory = Factory { vtbl: &FACTORY_VTBL };
 
 unsafe extern "system" fn factory_qi(this: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult {

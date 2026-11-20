@@ -58,14 +58,7 @@ unsafe extern "C" {
 #[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
-    fn RtlUnwindEx(
-        frame: u64,
-        target_ip: u64,
-        record: *mut u8,
-        value: u64,
-        context: *mut u8,
-        history: *mut u8,
-    ) -> !;
+    fn RtlUnwindEx(frame: u64, target_ip: u64, record: *mut u8, value: u64, context: *mut u8, history: *mut u8) -> !;
 }
 
 /// The guard's frame handler (`EXCEPTION_ROUTINE`): during the search, an exception the setting
