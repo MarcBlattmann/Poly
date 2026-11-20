@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_pid_for_task_refused",
+      "source_sha256": "177e430ad3e2cafbd54478866e952129aa67188256de43f088aab1e5e3280755",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c80a0b78d2a55326a9642897914769b961137b3818ad8dfbc7a0a403d50a44e9",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL: KERN_FAILURE\nok a name that does not exist: KERN_FAILURE\nok MACH_PORT_DEAD: KERN_FAILURE\nok a receive right that is not a task: KERN_FAILURE\nok the out pid is set to -1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2d0a115dcf866557e9c79350ae584bf34dda3da26539955951394f3205d8bac5",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL: KERN_FAILURE\nok a name that does not exist: KERN_FAILURE\nok MACH_PORT_DEAD: KERN_FAILURE\nok a receive right that is not a task: KERN_FAILURE\nok the out pid is set to -1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_pid_for_task_self",
+      "source_sha256": "0c3fb1e5f33dae80d9a410c357653e0b5f8b5006a139e32f8b29018f6f417737",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4af3b074f6697290771e6397252433cff9bb8ca0b185104ffdd2ca549f65c81a",
+          "exit_code": 0,
+          "stdout": "ok the own task port succeeds\nok and gives the own pid\nok the own name port gives the own pid\nok a child's name port gives the child's pid\nvalue after the child ended, its name port 5\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ce03c8f5ca1f0a2f284f069514f27a2fa54d7fa860f2fd15fa5537c505ec36c4",
+          "exit_code": 0,
+          "stdout": "ok the own task port succeeds\nok and gives the own pid\nok the own name port gives the own pid\nok a child's name port gives the child's pid\nvalue after the child ended, its name port 5\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

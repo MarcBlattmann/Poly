@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/mach_port_guard.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in mach_port_guard.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/mach_port_guard
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  mach_port_guard(task, name, guard, strict) guards a receive right: the guard becomes the port's context
+  (mach_port_get_context returns it; 0 when strict is 1). It needs a port whose context is 0 (a port with another context is
+  KERN_INVALID_ARGUMENT (4)); guarding an already guarded port is KERN_INVALID_ARGUMENT and leaves the guard. Guard 0 is
+  accepted and guards nothing. mach_port_unguard with the guard undoes it (context 0 again) and the port can be guarded anew.
+  What a guarded receive right does not allow, each ending the process with SIGKILL: mach_port_destruct, mach_port_destroy
+  and mach_port_mod_refs(-1) on the receive right without the guard. What it allows: send rights come and go, notification
+  requests, set membership, mach_port_set_context (which replaces the guard: afterwards the new value is the guard). Names
+  not in the task and dead names are KERN_INVALID_NAME (15); a send right only, a port set: KERN_INVALID_RIGHT (17); an
+  invalid task: MACH_SEND_INVALID_DEST. The violations were observed to end the process with SIGKILL; macOS writes a crash
+  report for them.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  already_guarded: "KERN_INVALID_ARGUMENT (4): the port is guarded or has a context"
+  invalid_name: "KERN_INVALID_NAME (15)"
+  invalid_right: "KERN_INVALID_RIGHT (17)"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "the context of the port becomes the guard"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

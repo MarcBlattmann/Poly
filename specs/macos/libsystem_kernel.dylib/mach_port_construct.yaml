@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/mach_port_construct.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in mach_port_construct.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/mach_port_construct
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  mach_port_construct(task, &options, context, &name) makes a receive right in task and stores its name in *name. With
+  empty options (flags 0) the port is a receive right and nothing else, queue limit 5, context 0, an empty receive status;
+  each call gives a different name. options.flags: MPO_INSERT_SEND_RIGHT (0x10) also makes a send right with one user
+  reference (type 0x30000); MPO_QLIMIT (0x02) sets the queue limit from options.mpl.mpl_qlimit (0 and 1..1024 are accepted,
+  1025 is KERN_INVALID_VALUE and *name is left alone; with 0 the limit reads 0); MPO_CONTEXT_AS_GUARD (0x01) makes context the
+  port's guard (mach_port_get_context returns it); with MPO_STRICT (0x20) as well the guard reads as context 0; flag bits that
+  mean nothing (0x8000) and MPO_STRICT without a guard are ignored. A guarded port must be given its guard to
+  mach_port_destruct: with another value or 0 the process is ended with SIGKILL (a guard violation, not an error return);
+  the same for mach_port_mod_refs(-1) of its receive right. Unguarded again with mach_port_unguard it takes guard 0. A task
+  argument that is no task port (MACH_PORT_NULL, 0x4321, a receive right) is MACH_SEND_INVALID_DEST; options or out pointers that
+  cannot be used are KERN_MEMORY_ERROR (10).
+returns:
+  success: "KERN_SUCCESS (0); *name is a receive right (plus a send right with MPO_INSERT_SEND_RIGHT)"
+errors:
+  invalid_value: "KERN_INVALID_VALUE (18): queue limit above 1024"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+  bad_pointer: "KERN_MEMORY_ERROR (10): NULL options or NULL out pointer"
+side_effects: "a port is created in the task"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

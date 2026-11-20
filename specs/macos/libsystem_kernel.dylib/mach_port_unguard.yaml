@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/mach_port_unguard.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in mach_port_unguard.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/mach_port_unguard
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  mach_port_unguard(task, name, guard) removes a guard set with mach_port_guard or MPO_CONTEXT_AS_GUARD (strict ones too): the
+  context is 0 afterwards, mach_port_destruct with guard 0 works again, and the port can be guarded and unguarded any number of
+  times. Called on a port that is not guarded (with the guard or with 0), with a wrong guard, or a second time, it does not
+  return an error: it ends the process with SIGKILL. Names not in the task are KERN_INVALID_NAME (15); a send right only, a
+  port set: KERN_INVALID_RIGHT (17); an invalid task: MACH_SEND_INVALID_DEST.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  invalid_name: "KERN_INVALID_NAME (15)"
+  invalid_right: "KERN_INVALID_RIGHT (17)"
+  bad_guard: "SIGKILL for the process: wrong guard, not guarded, or unguarded already"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "the guard is removed"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

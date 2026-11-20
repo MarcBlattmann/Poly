@@ -100,10 +100,14 @@ pub fn name_queue(address: u64, name: &str) {
     }
 }
 
-/// A timer tick interrupted the current thread in user mode at `rip` (interrupt context).
-pub fn sample(rip: u64) {
+/// A timer tick interrupted the current thread at `rip` (interrupt context): in user mode (`b`
+/// 0), or in the kernel (a system call, a page fault, the idle loop ...), where `b` is the
+/// interrupted function's caller (its frame's return address, 1 when unknown) and the reader
+/// looks both up in the kernel's symbols.
+pub fn sample(rip: u64, user: bool, caller: impl FnOnce() -> Option<u64>) {
     if on() {
-        push(Kind::Sample, current(), rip, 0);
+        let b = if user { 0 } else { caller().filter(|&c| c > 1).unwrap_or(1) };
+        push(Kind::Sample, current(), rip, b);
     }
 }
 

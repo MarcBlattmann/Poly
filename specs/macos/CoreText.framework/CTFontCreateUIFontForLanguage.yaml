@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreText.framework/CTFontCreateUIFontForLanguage.yaml. Observed with C test programs linked against CoreText
+# (tests/macos/include/poly_mct.h, ADR 0182); results per architecture in CTFontCreateUIFontForLanguage.tests/macos.json.
+id: "macos/api/CoreText.framework/CTFontCreateUIFontForLanguage"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the CoreText, CoreGraphics and CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes, and the two architectures gave the same results. Tests are C programs that link CoreText (the line `poly-mac: coretext`, tests/macos/include/poly_mct.h). The results do not depend on Apple's fonts: tests use the PolyTest TrueType fonts embedded in poly_mct.h (made by tests/macos/fonts/mkfont.py) and DejaVu Sans 2.37 files the runner copies into the scratch directory (`poly-mac: fonts`); the few tests about Apple's own fonts are named sys_ and described as SYSTEM-DEPENDENT; results and output go through raw system calls"
+  observed_by: spec-macos-coretext
+  date: 2026-11-20
+summary: >
+  CTFontCreateUIFontForLanguage(uiType, size, language) makes the font of an interface role:
+  SYSTEM-DEPENDENT, the values are Apple's of this macOS. kCTFontUIFontSystem gives '.SFNS-Regular'
+  (family '.AppleSystemUIFont', full name 'System Font Regular', symbolic traits 0),
+  kCTFontUIFontEmphasizedSystem '.SFNS-Bold' (bold trait), kCTFontUIFontUserFixedPitch
+  'Menlo-Regular', menu item, message, tool tip and most other roles '.SFNS-Regular';
+  kCTFontUIFontNone gives NULL; the roles 0 to 19 all give a font. A size of 0 gives the role's
+  default size (system 13, menu item 13, label 10, fixed pitch 10, user 12); another size is kept; a
+  language ('en', 'de') does not change the Latin font. The font created with
+  CTFontCreateWithName('.AppleSystemUIFont', 13) is the same face (same PostScript name and metrics)
+  but not a CFEqual object. The font has glyphs for Latin letters and positive advances. For Poly: an
+  implementation answers with its own system UI font; Chrome only needs a font that works and the
+  names above are not required (the tests are marked sys_ for this reason).
+returns:
+  success: "a new CTFont"
+  none_role: "NULL"
+errors: {}
+side_effects: "none"
+threading: "CoreText objects are immutable once made and may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

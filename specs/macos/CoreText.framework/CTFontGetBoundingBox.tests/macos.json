@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontgetboundingbox_matrix_and_copies",
+      "source_sha256": "dde536e5fbb65f1c76b2d07bc7761dd68f0371a3dd58c5ec67cc077402d54683",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1c537029f062083608f0a216ad9b58f30bb156b0a7751d2ce47ff942a19707ea",
+          "exit_code": 0,
+          "stdout": "ok c.size.width is 70\nok c.size.height is 50\nok m.size.width is 280\nok m.size.height is 100\nok b.origin.x <= u.origin.x + 0.01 && b.origin.y <= u.origin.y + 0.01\nok b.origin.x + b.size.width >= u.origin.x + u.size.width - 0.01\nok b.origin.y + b.size.height >= u.origin.y + u.size.height - 0.01\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d35686fdeff752c7057cd90f7f0b85ced936366e69bed164cad3aba551dea561",
+          "exit_code": 0,
+          "stdout": "ok c.size.width is 70\nok c.size.height is 50\nok m.size.width is 280\nok m.size.height is 100\nok b.origin.x <= u.origin.x + 0.01 && b.origin.y <= u.origin.y + 0.01\nok b.origin.x + b.size.width >= u.origin.x + u.size.width - 0.01\nok b.origin.y + b.size.height >= u.origin.y + u.size.height - 0.01\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontgetboundingbox_polytest",
+      "source_sha256": "ccd183b5387241780c563c61d52a0a48b75959199831735d6ab39a5e626072d6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "832a6c1e143af3d656061ae4cad5f91188ecdbe40ac029b6d5963a6f6ac55a45",
+          "exit_code": 0,
+          "stdout": "ok b.origin.x is 0\nok b.origin.y is -20\nok b.size.width is 140\nok b.size.height is 100\nok s.origin.y is -2\nok s.size.width is 14\nok s.size.height is 10\nok bold.size.width is 140\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e0e41b1c36b8b75616c39a16f5670b94f6746e4f8792b263fff2693ae047d0c1",
+          "exit_code": 0,
+          "stdout": "ok b.origin.x is 0\nok b.origin.y is -20\nok b.size.width is 140\nok b.size.height is 100\nok s.origin.y is -2\nok s.size.width is 14\nok s.size.height is 10\nok bold.size.width is 140\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

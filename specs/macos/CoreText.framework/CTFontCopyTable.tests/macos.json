@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontcopytable_available_tables",
+      "source_sha256": "9efab603891bfe9da6201e3081ea7f3d92de04f1278dea0713ae829ccfad2976",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c971d2739f7f231bbcd574f4bae01dfc345464995b73012498148df823b806c5",
+          "exit_code": 0,
+          "stdout": "ok tags != NULL && CFArrayGetCount(tags) == 11\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok bt != NULL && CFArrayGetCount(bt) == 11\nsummary 24 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "797615d5b96c231a660a726a285c5c63b1fcc5a3914404d752d33a9a76755fa0",
+          "exit_code": 0,
+          "stdout": "ok tags != NULL && CFArrayGetCount(tags) == 11\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok str_eq(t, want[i])\nok d != NULL && CFDataGetLength(d) > 0\nok bt != NULL && CFArrayGetCount(bt) == 11\nsummary 24 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontcopytable_dejavu",
+      "source_sha256": "c2178b1d091754e4524a65a7ce00d68ec1453e65180932517f73ffdb5b0b53c5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ec89b085881721db8a26f5e022dea6a4835fa84f7adce41bd7ae0e5c6cee8a1a",
+          "exit_code": 0,
+          "stdout": "ok CTFontCopyTable(f, kCTFontTableGSUB, 0) != NULL && CTFontCopyTable(f, kCTFontTableGPOS, 0) != NULL && CTFontCopyTable(f, kCTFontTableGDEF, 0) != NULL\nok head != NULL && be16(CFDataGetBytePtr(head), 18) == 2048 && be32(CFDataGetBytePtr(head), 12) == 0x5F0F3CF5\nok maxp != NULL && be16(CFDataGetBytePtr(maxp), 4) == 6253\nok CTFontCopyTable(f, kCTFontTableCFF, 0) == NULL\nok file != NULL && CFDataGetLength(file) > 700000\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "19e5e95a6fd7ed89dbafd2e04dea0366fe6896ec3124375626086c0cd40fde36",
+          "exit_code": 0,
+          "stdout": "ok CTFontCopyTable(f, kCTFontTableGSUB, 0) != NULL && CTFontCopyTable(f, kCTFontTableGPOS, 0) != NULL && CTFontCopyTable(f, kCTFontTableGDEF, 0) != NULL\nok head != NULL && be16(CFDataGetBytePtr(head), 18) == 2048 && be32(CFDataGetBytePtr(head), 12) == 0x5F0F3CF5\nok maxp != NULL && be16(CFDataGetBytePtr(maxp), 4) == 6253\nok CTFontCopyTable(f, kCTFontTableCFF, 0) == NULL\nok file != NULL && CFDataGetLength(file) > 700000\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
