@@ -117,7 +117,8 @@ pub(crate) fn transact(endpoint: &str, req: &Request) -> Result<Reply, Failure> 
     let ok = write_all(h, &frame(&req.encode()));
     let reply = if ok { read_frame(h) } else { None };
     close(h);
-    let reply = reply.ok_or(Failure::Broken(RPC_S_SERVER_UNAVAILABLE))?;
+    // A request that went out and got no reply: the server ended while it served the call.
+    let reply = reply.ok_or(Failure::Broken(if ok { RPC_S_CALL_FAILED } else { RPC_S_SERVER_UNAVAILABLE }))?;
     Reply::decode(&reply).map_err(|_| Failure::Broken(RPC_S_SERVER_UNAVAILABLE))
 }
 

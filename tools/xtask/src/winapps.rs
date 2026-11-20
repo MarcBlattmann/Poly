@@ -808,8 +808,24 @@ pub fn desktop_check(
 /// (`type:data:text/html,<b>x</b>`).
 fn split_steps(s: &str) -> Vec<String> {
     const KINDS: &[&str] = &[
-        "launch", "sleep", "wait", "waitn", "shot", "pixel", "near", "type", "wtype", "key", "chord", "click",
-        "dclick", "rclick", "drag", "wheel", "move",
+        "launch",
+        "sleep",
+        "wait",
+        "waitn",
+        "shot",
+        "pixel",
+        "waitpixel",
+        "near",
+        "type",
+        "wtype",
+        "key",
+        "chord",
+        "click",
+        "dclick",
+        "rclick",
+        "drag",
+        "wheel",
+        "move",
     ];
     let mut out: Vec<String> = Vec::new();
     for piece in s.split(',') {
@@ -847,6 +863,10 @@ enum Step {
     Shot(String),
     /// The screen's pixel at X|Y must be this colour (RRGGBB): the step fails otherwise.
     Pixel(i32, i32, [u8; 3]),
+    /// The screen's pixel at X|Y must become this colour within SECS (`waitpixel:X|Y|RRGGBB|SECS`),
+    /// looked at every quarter second: a page that is painted a little later under load passes,
+    /// one that never is fails as `pixel` does.
+    WaitPixel(i32, i32, [u8; 3], u64),
     /// The screen's pixel at X|Y must be this colour (RRGGBB) within T in each channel
     /// (`near:X|Y|RRGGBB|T`): the page seen through a popup's soft shadow, which a popup composed
     /// without its alpha shows near black (ADR 0225).
@@ -899,6 +919,17 @@ impl Step {
                     return Err(format!("step {s:?}: X|Y|RRGGBB|T"));
                 };
                 Step::Near(x, y, [(c >> 16) as u8, (c >> 8) as u8, c as u8], t)
+            }
+            "waitpixel" => {
+                let v: Vec<&str> = arg.split('|').collect();
+                let [x, y, rgb, secs] = v[..] else { return Err(format!("step {s:?}: X|Y|RRGGBB|SECS")) };
+                let colour = u32::from_str_radix(rgb.trim(), 16).ok().filter(|_| rgb.trim().len() == 6);
+                let (Ok(x), Ok(y), Some(c), Ok(secs)) =
+                    (x.trim().parse(), y.trim().parse(), colour, secs.trim().parse())
+                else {
+                    return Err(format!("step {s:?}: X|Y|RRGGBB|SECS"));
+                };
+                Step::WaitPixel(x, y, [(c >> 16) as u8, (c >> 8) as u8, c as u8], secs)
             }
             "pixel" => {
                 let v: Vec<&str> = arg.split('|').collect();
@@ -1128,6 +1159,27 @@ impl Driver {
                 self.qmp.screendump(&png)?;
                 eprintln!("==> screenshot {}", png.display());
             }
+            Step::WaitPixel(x, y, want, secs) => {
+                let ppm = self.out.join(format!("{}-pixel.ppm", self.name));
+                let start = std::time::Instant::now();
+                loop {
+                    self.qmp.screendump(&ppm)?;
+                    let image = crate::screen::Image::read_ppm(&ppm)?;
+                    let (px, py) = (u32::try_from(*x).unwrap_or(u32::MAX), u32::try_from(*y).unwrap_or(u32::MAX));
+                    if px >= image.width || py >= image.height {
+                        return Err(format!("pixel {x},{y} is outside the {}x{} screen", image.width, image.height));
+                    }
+                    let got = image.pixel(px, py);
+                    if got == *want {
+                        eprintln!("==> pixel {x},{y} is {got:02x?} after {:.1} s", start.elapsed().as_secs_f64());
+                        break;
+                    }
+                    if start.elapsed() >= Duration::from_secs(*secs) {
+                        return Err(format!("pixel {x},{y} is {got:02x?}, wanted {want:02x?}"));
+                    }
+                    std::thread::sleep(Duration::from_millis(250));
+                }
+            }
             Step::Pixel(x, y, want) | Step::Near(x, y, want, _) => {
                 let ppm = self.out.join(format!("{}-pixel.ppm", self.name));
                 self.qmp.screendump(&ppm)?;
@@ -1291,6 +1343,8 @@ mod tests {
         assert_eq!(qcodes_de(':'), Some(vec!["shift".to_string(), "dot".to_string()]));
         assert_eq!(qcodes_de('/'), Some(vec!["shift".to_string(), "7".to_string()]));
         assert_eq!(Step::parse("pixel:200|400|008000"), Ok(Step::Pixel(200, 400, [0, 128, 0])));
+        assert_eq!(Step::parse("waitpixel:200|400|0000ff|60"), Ok(Step::WaitPixel(200, 400, [0, 0, 255], 60)));
+        assert!(Step::parse("waitpixel:200|400|0000ff").is_err());
         assert!(Step::parse("pixel:200|400|8000").is_err());
         assert_eq!(Step::parse("near:496|300|0000ff|64"), Ok(Step::Near(496, 300, [0, 0, 255], 64)));
         assert!(Step::parse("near:496|300|0000ff").is_err());
