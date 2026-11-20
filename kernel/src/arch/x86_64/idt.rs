@@ -607,6 +607,8 @@ extern "C" fn irq_entry(frame: *mut TrapFrame) {
         if from_user {
             crate::timeline::sample(rip);
         }
+        // Shootdowns waiting for this CPU (ADR 0254): also at every tick, in case an IPI is late.
+        super::tlb::service();
     }
     super::irq::dispatch(vector as u8);
 }

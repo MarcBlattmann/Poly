@@ -53,6 +53,21 @@ mod tests {
         }
     }
 
+    kernel_test! {
+        /// A child created suspended whose first thread ends before `ResumeThread` has given
+        /// up the creation's hold still ends as a process: its wait is satisfied at once and
+        /// its exit code is its own (the CI flakes of `vae_thunks_b`, `qij_basic`,
+        /// `wpm_rules_c`, `pbi_peb_c`: a loaded machine gave that order, and the process
+        /// object was never signalled). The resume pauses 1.5 s at that point.
+        fn nt_suspended_child_that_ends_during_resume_is_signalled() -> TestResult {
+            use core::sync::atomic::Ordering;
+            super::super::sched::RESUME_PAUSE_MS.store(1500, Ordering::Relaxed);
+            let result = run("--resume-race");
+            super::super::sched::RESUME_PAUSE_MS.store(0, Ordering::Relaxed);
+            result
+        }
+    }
+
     /// Install and run `k32test.exe` with argument `arg`; it must pass.
     fn run(arg: &str) -> crate::ktest::TestResult {
         {

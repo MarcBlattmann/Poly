@@ -29,6 +29,7 @@
 //! coverage show <id>...          one entry: status, sources, tests, seeds (seeds hidden from implementers)
 //! ```
 
+mod childwait;
 mod generated;
 mod import;
 mod model;
@@ -273,6 +274,16 @@ fn check(args: &[String]) -> Result<(), String> {
             duplicates.len()
         ));
     }
+    let early = childwait::check(&root(), names::heldout_store(&root()).as_deref());
+    for h in early.iter().take(20) {
+        eprintln!(
+            "coverage: warning: {}:{}: `{}` reads an exit code before any wait (a test must wait for its child first; if it is on purpose, add `{}:{}` to tools/coverage/childwait-baseline.txt)",
+            h.path, h.line, h.function, h.path, h.function
+        );
+    }
+    if early.len() > 20 {
+        eprintln!("coverage: warning: ... and {} more exit-code reads before a wait", early.len() - 20);
+    }
     let stale = c.stale_files(&coverage_dir())?;
     if !stale.is_empty() {
         let names: Vec<String> = stale.iter().take(5).map(|p| p.display().to_string()).collect();
@@ -296,8 +307,15 @@ fn readme(args: &[String]) -> Result<(), String> {
     let current = std::fs::read_to_string(&readme_path).map_err(|e| format!("{}: {e}", readme_path.display()))?;
 
     let mut files = readme::assets(&coverage, &roadmap);
-    let updated = readme::splice(&current, &readme::render(&coverage, &roadmap))?;
-    files.push(("README.md".into(), readme::splice_phases(&updated, &readme::render_phases(&roadmap))?));
+    files.push(("README.md".into(), readme::splice_badges(&current, &readme::render_badges(&coverage, &roadmap))?));
+    let progress_path = root().join(readme::PROGRESS_DOC);
+    let progress_current =
+        std::fs::read_to_string(&progress_path).map_err(|e| format!("{}: {e}", progress_path.display()))?;
+    let progress_updated = readme::splice(&progress_current, &readme::render(&coverage, &roadmap))?;
+    files.push((
+        readme::PROGRESS_DOC.into(),
+        readme::splice_phases(&progress_updated, &readme::render_phases(&roadmap))?,
+    ));
     // The ADR index, once its markers are in the file (ADR 0213).
     let adr_path = root().join(generated::ADR_INDEX);
     let adr_current = std::fs::read_to_string(&adr_path).map_err(|e| format!("{}: {e}", adr_path.display()))?;

@@ -15,4 +15,6 @@ against `src/system.c`, a stand-in for libSystem of ours, never Apple's.
 
 The expected offsets in `tests/fixtures.rs` were recorded with
 `llvm-objdump --macho --dyld-info --exports-trie` and `otool -lv`. The boot
-test group `macho` (`tools/xtask/src/macho.rs`) runs the x86-64 ones on Poly.
+test group `macho` (`tools/xtask/src/macho.rs`) runs the x86-64 ones on Poly,
+`macho-a64` (`tools/xtask/src/macho_a64.rs`, ADR 0257) runs `hello_a64` with
+`libgreet_a64.dylib` through the arm64 translator.

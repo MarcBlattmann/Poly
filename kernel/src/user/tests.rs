@@ -608,3 +608,136 @@ kernel_test! {
         released(&space)
     }
 }
+
+// --- Unmapping without waiting (ADR 0254) -------------------------------------
+
+/// The stale check's control page and its slots.
+const STALE_CTRL: u64 = 0x7a_0000;
+const STALE_SLOTS: [u64; 4] = [0x7b_0000, 0x7b_1000, 0x7b_2000, 0x7b_3000];
+/// Publications the stale check makes.
+const STALE_ROUNDS: u64 = 3000;
+
+/// Start [`Program::StaleCheck`] number `i` on CPU `cpu`.
+fn stale_reader(space: &Arc<AddressSpace>, i: u64, cpu: usize) -> TestResult<ThreadId> {
+    let t = start(space, Program::StaleCheck, [STALE_CTRL, i, 0])?;
+    let _ = thread::set_affinity(t, thread::CpuSet::one(cpu));
+    Ok(t)
+}
+
+kernel_test! {
+    fn a_remapped_page_is_never_seen_through_a_stale_translation() -> TestResult {
+        // Readers on every other CPU read the published slot again and again, so their TLBs hold
+        // translations of all four slots. This CPU takes the slot published four rounds ago out
+        // without waiting for the other CPUs (`unmap_async`), maps a fresh page there with the
+        // next generation in it, and publishes it. A reader that finds another generation in the
+        // slot while the publication is unchanged read it through a translation from before the
+        // unmap: the mapping must have waited for the shootdown, and the old frame must not have
+        // been reused while a translation to it was alive.
+        let pin = thread::pin_current();
+        let others: alloc::vec::Vec<usize> = thread::online_cpus().without(thread::CpuSet::one(pin.cpu())).iter().collect();
+        if others.is_empty() {
+            return Ok(());
+        }
+        let space = new_space()?;
+        space.map_zeroed(STALE_CTRL, PAGE_SIZE, Prot::RW).map_err(|_| "could not map the control page")?;
+        for (k, &slot) in STALE_SLOTS.iter().enumerate() {
+            space.map_zeroed(slot, PAGE_SIZE, Prot::RW).map_err(|_| "could not map a slot")?;
+            write_u64(&space, slot, k as u64 + 1)?;
+        }
+        let publish = |slot: u64, generation: u64| -> TestResult {
+            let seq = read_u64(&space, STALE_CTRL)?;
+            write_u64(&space, STALE_CTRL, seq + 1)?;
+            write_u64(&space, STALE_CTRL + 8, slot)?;
+            write_u64(&space, STALE_CTRL + 16, generation)?;
+            write_u64(&space, STALE_CTRL, seq + 2)
+        };
+        publish(STALE_SLOTS[3], 4)?;
+        let mut readers: alloc::vec::Vec<ThreadId> = alloc::vec::Vec::new();
+        for (i, &cpu) in others.iter().enumerate() {
+            readers.push(stale_reader(&space, i as u64, cpu)?);
+        }
+        let stop = |readers: &[ThreadId]| {
+            let _ = write_u64(&space, STALE_CTRL + 24, 1);
+            readers.iter().map(|&t| thread::join(t).unwrap_or(0)).collect::<alloc::vec::Vec<_>>()
+        };
+        let start_ns = time::now_ns();
+        let mut restarts = 0;
+        for generation in 5..5 + STALE_ROUNDS {
+            let slot = STALE_SLOTS[(generation % 4) as usize];
+            space.unmap_async(slot, PAGE_SIZE).map_err(|_| "could not unmap a slot")?;
+            space.map_zeroed(slot, PAGE_SIZE, Prot::RW).map_err(|_| "could not map a slot again")?;
+            write_u64(&space, slot, generation)?;
+            publish(slot, generation)?;
+            // Let every reader see this publication (and cache the slot) before the next.
+            for (i, t) in readers.iter_mut().enumerate() {
+                let turns = STALE_CTRL + 64 + 8 * i as u64;
+                let before = read_u64(&space, turns)?;
+                let since = time::now_ns();
+                while read_u64(&space, turns)? < before + 4 {
+                    if !matches!(thread::state(*t), Some(State::Runnable | State::Running | State::Blocked)) {
+                        // It ended: a stale read (BAD) or a page fault on a slot it reached late.
+                        match thread::join(*t) {
+                            Ok(BAD) => {
+                                let _ = stop(&readers);
+                                return Err("a CPU read a remapped page through a stale translation");
+                            }
+                            Ok(code) if code == killed(PF) => {
+                                restarts += 1;
+                                *t = stale_reader(&space, i as u64, others[i])?;
+                            }
+                            _ => {
+                                let _ = stop(&readers);
+                                return Err("a stale-check reader ended for another reason");
+                            }
+                        }
+                        break;
+                    }
+                    if time::now_ns() - since > OTHER_CPU_DEADLINE_NS {
+                        let _ = stop(&readers);
+                        return Err("a stale-check reader made no progress");
+                    }
+                    core::hint::spin_loop();
+                }
+            }
+        }
+        // What an unmap costs while the other CPUs run the space, as an allocator unmaps one
+        // range and maps another: unmap page i of 64 and map page i + 32 (unmapped 32 turns
+        // ago), waiting for the shootdowns (`unmap`) and not (`unmap_async`).
+        const BENCH: u64 = 2000;
+        const BENCH_BASE: u64 = 0x7c_0000;
+        for k in 0..32 {
+            space.map_zeroed(BENCH_BASE + k * PAGE_SIZE, PAGE_SIZE, Prot::RW).map_err(|_| "could not map a bench page")?;
+        }
+        let mut per_unmap = [0u64; 2];
+        for (mode, cost) in per_unmap.iter_mut().enumerate() {
+            let t0 = time::now_ns();
+            for i in mode as u64 * BENCH..(mode as u64 + 1) * BENCH {
+                let page = BENCH_BASE + (i % 64) * PAGE_SIZE;
+                if mode == 0 {
+                    space.unmap(page, PAGE_SIZE).map_err(|_| "could not unmap a bench page")?;
+                } else {
+                    space.unmap_async(page, PAGE_SIZE).map_err(|_| "could not unmap a bench page")?;
+                }
+                let next = BENCH_BASE + ((i + 32) % 64) * PAGE_SIZE;
+                space.map_zeroed(next, PAGE_SIZE, Prot::RW).map_err(|_| "could not map a bench page again")?;
+            }
+            *cost = (time::now_ns() - t0) / BENCH;
+        }
+        crate::kprintln!(
+            "stale check bench: unmap + map with {} other CPUs in the space: waiting {} ns, not waiting {} ns",
+            others.len(),
+            per_unmap[0],
+            per_unmap[1]
+        );
+        let codes = stop(&readers);
+        if codes.contains(&BAD) {
+            return Err("a CPU read a remapped page through a stale translation");
+        }
+        crate::kprintln!(
+            "stale check: {STALE_ROUNDS} remaps with {} readers in {} ms, {restarts} readers restarted after a late read",
+            others.len(),
+            (time::now_ns() - start_ns) / 1_000_000
+        );
+        released(&space)
+    }
+}

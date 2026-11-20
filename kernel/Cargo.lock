@@ -3,6 +3,30 @@
 version = 4
 
 [[package]]
+name = "poly-a64"
+version = "0.0.1"
+
+[[package]]
+name = "poly-a64-jit"
+version = "0.0.1"
+dependencies = [
+ "poly-a64",
+ "poly-macho",
+]
+
+[[package]]
+name = "poly-a64-xnu"
+version = "0.0.1"
+dependencies = [
+ "poly-a64",
+ "poly-a64-jit",
+ "poly-abi",
+ "poly-dyld",
+ "poly-macho",
+ "poly-personality-xnu",
+]
+
+[[package]]
 name = "poly-abi"
 version = "0.0.1"
 
@@ -131,6 +155,7 @@ dependencies = [
 name = "poly-kernel"
 version = "0.0.1"
 dependencies = [
+ "poly-a64-xnu",
  "poly-abi",
  "poly-acpi",
  "poly-audio",
