@@ -170,6 +170,7 @@ mod libsystem;
 mod linuxchrome;
 mod macho;
 mod macho_a64;
+mod macho_specs;
 mod macimports;
 mod mesa;
 mod native;
@@ -621,8 +622,9 @@ fn qemu_on(
     cmd
 }
 
-/// How long the slow test device takes for every request, in nanoseconds.
-const SLOW_DISK_LATENCY: u64 = 300_000_000;
+/// How long the slow test device takes for every request, in nanoseconds: three times the
+/// watchdog limit of its test (`virtio_blk::SLOW_LIMIT_NS`, 50 ms), so every request is late.
+const SLOW_DISK_LATENCY: u64 = 150_000_000;
 
 /// Whether QEMU can open a window: on macOS (Cocoa) and Windows always,
 /// elsewhere when an X11 or Wayland display is set. Without one, QEMU's
@@ -1706,6 +1708,10 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // The Mach core's visible spec tests that run on Poly today, x86-64
     // builds, output compared with macOS's (macho.rs, ADR 0238).
     ("macho-mach", macho::mach_boot_test),
+    // Every visible macOS system call test, x86-64 and arm64, compared with
+    // macOS's output; a list of passing runs is the ratchet (macho_specs.rs,
+    // ADR 0246).
+    ("macho-specs", macho_specs::boot_test),
     // arm64 Mach-O programs on x86-64 through the translator's runtime:
     // static, universal, dynamically linked, malloc-heavy under the JIT and
     // the interpreter (macho_a64.rs, ADR 0257).
@@ -1878,6 +1884,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "dynamic",
             "macho",
             "macho-mach",
+            "macho-specs",
             "macho-a64",
             "libsystem",
             "corefoundation",

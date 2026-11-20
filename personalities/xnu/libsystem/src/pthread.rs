@@ -60,11 +60,14 @@ extern "C" fn pthread_equal(a: usize, b: usize) -> i32 {
     i32::from(a == b)
 }
 
-fn kind(sig: i64) -> i32 {
+/// The kind a mutex's signature names; `None` for one not initialized or
+/// destroyed (`EINVAL`).
+fn kind(sig: i64) -> Option<i32> {
     match sig {
-        SIG_ERRORCHECK => ERRORCHECK,
-        SIG_RECURSIVE => RECURSIVE,
-        _ => NORMAL,
+        SIG_NORMAL => Some(NORMAL),
+        SIG_ERRORCHECK => Some(ERRORCHECK),
+        SIG_RECURSIVE => Some(RECURSIVE),
+        _ => None,
     }
 }
 
@@ -129,6 +132,9 @@ unsafe extern "C" fn pthread_mutex_init(m: *mut Mutex, a: *const i64) -> i32 {
 unsafe extern "C" fn pthread_mutex_destroy(m: *mut Mutex) -> i32 {
     // SAFETY: as above.
     let m = unsafe { &mut *m };
+    if kind(m.sig).is_none() {
+        return EINVAL;
+    }
     if m.lock.load(Ordering::Relaxed) != 0 {
         return EBUSY;
     }
@@ -139,14 +145,16 @@ unsafe extern "C" fn pthread_mutex_destroy(m: *mut Mutex) -> i32 {
 unsafe fn acquire(m: *mut Mutex, wait: bool) -> i32 {
     // SAFETY: the caller's mutex.
     let m = unsafe { &mut *m };
-    let k = kind(m.sig);
+    let Some(k) = kind(m.sig) else { return EINVAL };
     if m.lock.load(Ordering::Relaxed) != 0 && m.owner == me() {
+        // The pthread_mutex_trylock sheet: trylock of a normal or
+        // error-checking mutex the caller holds is EBUSY.
         match k {
             RECURSIVE => {
                 m.count += 1;
                 return 0;
             }
-            ERRORCHECK => return EDEADLK,
+            ERRORCHECK if wait => return EDEADLK,
             _ => {}
         }
     }
@@ -179,7 +187,7 @@ unsafe extern "C" fn pthread_mutex_trylock(m: *mut Mutex) -> i32 {
 unsafe extern "C" fn pthread_mutex_unlock(m: *mut Mutex) -> i32 {
     // SAFETY: the caller's mutex.
     let m = unsafe { &mut *m };
-    let k = kind(m.sig);
+    let Some(k) = kind(m.sig) else { return EINVAL };
     if k != NORMAL && (m.lock.load(Ordering::Relaxed) == 0 || m.owner != me()) {
         return EPERM;
     }
@@ -212,8 +220,11 @@ unsafe extern "C" fn pthread_once(o: *mut i64, f: extern "C" fn()) -> i32 {
     }
 }
 
-/// `PTHREAD_KEYS_MAX` (`<limits.h>`).
-const KEYS: usize = 512;
+/// `PTHREAD_KEYS_MAX` (`<limits.h>`) is 512; the pthread_key_create sheet
+/// saw the first keys a program makes numbered 258 and 259, and 507 more
+/// after those two: keys 258 to 766.
+const FIRST_KEY: usize = 258;
+const KEYS: usize = 509;
 
 /// The keys: whether each is in use, its destructor, the main thread's
 /// value.
@@ -239,32 +250,36 @@ unsafe extern "C" fn pthread_key_create(key: *mut usize, dtor: usize) -> i32 {
     t.dtor[k] = dtor;
     t.value[k] = 0;
     // SAFETY: the C contract: `key` points to a `pthread_key_t`.
-    unsafe { *key = k };
+    unsafe { *key = FIRST_KEY + k };
     0
 }
 
+/// A key's index in the table, if it is one.
+fn index(key: usize) -> Option<usize> {
+    key.checked_sub(FIRST_KEY).filter(|&k| k < KEYS)
+}
+
+/// `pthread_key_delete`: no destructor runs; the value is forgotten.
 #[unsafe(no_mangle)]
 extern "C" fn pthread_key_delete(key: usize) -> i32 {
     let t = keys();
-    if key >= KEYS || !t.used[key] {
-        return EINVAL;
-    }
-    t.used[key] = false;
+    let Some(k) = index(key).filter(|&k| t.used[k]) else { return EINVAL };
+    t.used[k] = false;
+    t.value[k] = 0;
     0
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn pthread_getspecific(key: usize) -> usize {
-    keys().value.get(key).copied().unwrap_or(0)
+    let t = keys();
+    index(key).filter(|&k| t.used[k]).map_or(0, |k| t.value[k])
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn pthread_setspecific(key: usize, value: usize) -> i32 {
     let t = keys();
-    if key >= KEYS || !t.used[key] {
-        return EINVAL;
-    }
-    t.value[key] = value;
+    let Some(k) = index(key).filter(|&k| t.used[k]) else { return EINVAL };
+    t.value[k] = value;
     0
 }
 

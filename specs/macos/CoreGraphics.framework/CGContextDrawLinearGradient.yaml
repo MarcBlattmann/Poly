@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextDrawLinearGradient.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextDrawLinearGradient.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextDrawLinearGradient
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextDrawLinearGradient(context, gradient, start, end, options) paints the gradient along the axis from start to end: colours interpolate linearly in the gradient's colour space and the result is converted into the bitmap's. Pixel columns of a red to blue sRGB gradient over 17 pixels (x 0..17): fb 00 05 / ea 00 15 / d8 00 26 / ... / 05 00 fb (the colour at the pixel centre; each channel rounded). Vertical: red at y = 0 (the bottom row of the buffer). Without options nothing is drawn beyond the end points (alpha 0 outside 2..6 for the end points 2 and 6); kCGGradientDrawsBeforeStartLocation (1) extends the start colour backwards, kCGGradientDrawsAfterEndLocation (2) extends the end colour; both is 3. A clip (circle) and a CTM scale apply (under Scale(2,1) the gradient spans twice the width).
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "writes pixels"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextSetLineDash.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextSetLineDash.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextSetLineDash
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextSetLineDash(context, phase, lengths, count) sets the dash pattern: lengths alternate on and off (an odd count repeats the pattern with on and off swapped: [4] is 4 on, 4 off); phase moves the start into the pattern (positive: skip that much). On a width 2 horizontal line, [3 2] gives alpha ff ff ff 00 00 ff ff ff 00 00 ... starting at x = 0; fractional lengths and phases give antialiased dash ends (e.g. [2.25 1.75] phase 0.5). Count 0 (NULL pattern) restores a solid line. The pattern is saved and restored with the graphics state. [0 3] with butt caps draws nothing. Caps apply to every dash (round caps give each dash round ends, alpha c4 c3 at the end pixels of a width 2 dash); the pattern continues around corners.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "changes the graphics state"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

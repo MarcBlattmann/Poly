@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgmask_more",
+      "source_sha256": "937769f2661fc9c0f017a7ea00741600b6fe493818bebfaf7c91cfdbff7622ba",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "28146881fdf2d3f7dcedd530c437a187d0b6be4313b20667cb0df30ad760c656",
+          "exit_code": 0,
+          "stdout": "value an alpha-only bitmap context is made (1) or not (0) 0\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d0e387853c5213d546781c4a0bbc8e88f9f94651f370a05e1193d4441c8c80f9",
+          "exit_code": 0,
+          "stdout": "value an alpha-only bitmap context is made (1) or not (0) 0\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgcap_more",
+      "source_sha256": "1f40afeffea6cda9ce4ee35d9eca8a3343c0109b8c671bd40eda2469725cbe0a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c98314f2d716feb41df1f5217ed99e1e9f040cb9501df2b512ed7fb073cf41d5",
+          "exit_code": 0,
+          "stdout": "value a zero-length line with butt caps 00 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 01 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 02 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 03 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 04 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 05 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 06 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 07 00 00 00 00 00 00 00 00\nvalue a zero-length line with round caps: a dot 00 00 00 00 00 00 00 00 00\nvalue a zero-length line with round caps: a dot 01 00 00 00 00 00 00 00 00\nvalue a zero-length line with round caps: a dot 02 00 00 49 e3 e3 49 00 00\nvalue a zero-length line with round caps: a dot 03 00 00 e3 ff ff e3 00 00\nvalue a zero-length line with round caps: a dot 04 00 00 e3 ff ff e3 00 00\nvalue a zero-length line with round caps: a dot 05 00 00 49 e3 e3 49 00 00\nvalue a zero-length line with round caps: a dot 06 00 00 00 00 00 00 00 00\nvalue a zero-length line with round caps: a dot 07 00 00 00 00 00 00 00 00\nvalue a zero-length line with square caps: a square 00 00 00 00 00 00 00 00 00\nvalue a zero-length line with square caps: a square 01 00 00 00 57 57 00 00 00\nvalue a zero-length line with square caps: a square 02 00 00 57 fc fc 57 00 00\nvalue a zero-length line with square caps: a square 03 00 57 fc ff ff fc 57 00\nvalue a zero-length line with square caps: a square 04 00 57 fc ff ff fc 57 00\nvalue a zero-length line with square caps: a square 05 00 00 57 fc fc 57 00 00\nvalue a zero-length line with square caps: a square 06 00 00 00 57 57 00 00 00\nvalue a zero-length line with square caps: a square 07 00 00 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "39f32db0f4960f3a9c5d31f3a2261a4be46c2ca3dbea4a44e830105f15ab0713",
+          "exit_code": 0,
+          "stdout": "value a zero-length line with butt caps 00 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 01 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 02 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 03 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 04 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 05 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 06 00 00 00 00 00 00 00 00\nvalue a zero-length line with butt caps 07 00 00 00 00 00 00 00 00\nvalue a zero-length line with round caps: a dot 00 00 00 00 00 00 00 00 00\nvalue a zero-length line with round caps: a dot 01 00 00 00 00 00 00 00 00\nvalue a zero-length line with round caps: a dot 02 00 00 49 e3 e3 49 00 00\nvalue a zero-length line with round caps: a dot 03 00 00 e3 ff ff e3 00 00\nvalue a zero-length line with round caps: a dot 04 00 00 e3 ff ff e3 00 00\nvalue a zero-length line with round caps: a dot 05 00 00 49 e3 e3 49 00 00\nvalue a zero-length line with round caps: a dot 06 00 00 00 00 00 00 00 00\nvalue a zero-length line with round caps: a dot 07 00 00 00 00 00 00 00 00\nvalue a zero-length line with square caps: a square 00 00 00 00 00 00 00 00 00\nvalue a zero-length line with square caps: a square 01 00 00 00 57 57 00 00 00\nvalue a zero-length line with square caps: a square 02 00 00 57 fc fc 57 00 00\nvalue a zero-length line with square caps: a square 03 00 57 fc ff ff fc 57 00\nvalue a zero-length line with square caps: a square 04 00 57 fc ff ff fc 57 00\nvalue a zero-length line with square caps: a square 05 00 00 57 fc fc 57 00 00\nvalue a zero-length line with square caps: a square 06 00 00 00 57 57 00 00 00\nvalue a zero-length line with square caps: a square 07 00 00 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

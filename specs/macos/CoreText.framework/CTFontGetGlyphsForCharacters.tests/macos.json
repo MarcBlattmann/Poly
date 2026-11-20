@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontgetglyphsforcharacters_bmp",
+      "source_sha256": "1d82e1ea68943516af5babbd0d27ef2f996bfbfef5c773288052250d8f846d33",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "eab5fa87def33cc54205f487263cb6501a2bd83f9cbd42b24fa06d47e79c29e1",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphsForCharacters(f, all, g, 10)\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok !CTFontGetGlyphsForCharacters(f, mixed, m, 3)\nok m[0] == 2 && m[1] == 0 && m[2] == 3\nok CTFontGetGlyphsForCharacters(f, all, none, 0)\nok none[0] == 77\nok CTFontGetGlyphsForCharacters(pt_font(1, 7), &a, b, 1) && b[0] == 2\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f17550115907ea0b4396148026eda023dff3898053a1f4bae52e97d2c94f9e2d",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphsForCharacters(f, all, g, 10)\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok g[i] == want[i]\nok !CTFontGetGlyphsForCharacters(f, mixed, m, 3)\nok m[0] == 2 && m[1] == 0 && m[2] == 3\nok CTFontGetGlyphsForCharacters(f, all, none, 0)\nok none[0] == 77\nok CTFontGetGlyphsForCharacters(pt_font(1, 7), &a, b, 1) && b[0] == 2\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontgetglyphsforcharacters_surrogates",
+      "source_sha256": "caec396175636fbc214a2a74941c057db62628f62f966e58493d3b9bb6d341bb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0493a5298535e759a423d30f20eeb3450ee1f11aa118a2fbbea6e1cd669f4914",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphsForCharacters(f, pair, g, 2)\nok g[0] == 10 && g[1] == 0\nok CTFontGetGlyphsForCharacters(f, mix, m, 4)\nok m[0] == 2 && m[1] == 10 && m[2] == 0 && m[3] == 3\nok !CTFontGetGlyphsForCharacters(f, missing, x, 2)\nok x[0] == 0\nok !CTFontGetGlyphsForCharacters(f, lone, l, 1)\nok l[0] == 0\nok !CTFontGetGlyphsForCharacters(f, lowlone, l, 1)\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ab3433be729da129de77e131640d79c5e62064d4ade892f109227e779029bbf8",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphsForCharacters(f, pair, g, 2)\nok g[0] == 10 && g[1] == 0\nok CTFontGetGlyphsForCharacters(f, mix, m, 4)\nok m[0] == 2 && m[1] == 10 && m[2] == 0 && m[3] == 3\nok !CTFontGetGlyphsForCharacters(f, missing, x, 2)\nok x[0] == 0\nok !CTFontGetGlyphsForCharacters(f, lone, l, 1)\nok l[0] == 0\nok !CTFontGetGlyphsForCharacters(f, lowlone, l, 1)\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

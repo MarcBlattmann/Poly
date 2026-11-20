@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgimg_formats",
+      "source_sha256": "9ffd5f2be54e316c78925d83a0e746ef45770fd69a34b21c4e9c4dc936339633",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c0059c3a3b9e6c1d76e608062fe7455867d32c2ae5ee0d7333cc778bad35f165",
+          "exit_code": 0,
+          "stdout": "value RGBA bytes, premultiplied last 4080c0ff\nvalue BGRA bytes: premultiplied first + 32 little 4080c0ff\nvalue ARGB bytes: premultiplied first (default big order) 4080c0ff\nvalue ABGR bytes: premultiplied last + 32 little 4080c0ff\nvalue RGBX bytes, alpha skipped last 4080c0ff\nvalue premultiplied RGBA with alpha 0x80 (stored 20 40 60) 20406080\nvalue non-premultiplied RGBA with alpha 0x80 (stored 40 80 c0) 20406080\nvalue premultiplied RGBA with a colour above its alpha (ff ff ff, alpha 40) ffffff40\nvalue non-premultiplied, alpha 0: nothing 00000000\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e15cd8a0bfacf234fd8af8ab114dacf706fbb85bc1fa3a70370b1fe195006f3f",
+          "exit_code": 0,
+          "stdout": "value RGBA bytes, premultiplied last 4080c0ff\nvalue BGRA bytes: premultiplied first + 32 little 4080c0ff\nvalue ARGB bytes: premultiplied first (default big order) 4080c0ff\nvalue ABGR bytes: premultiplied last + 32 little 4080c0ff\nvalue RGBX bytes, alpha skipped last 4080c0ff\nvalue premultiplied RGBA with alpha 0x80 (stored 20 40 60) 20406080\nvalue non-premultiplied RGBA with alpha 0x80 (stored 40 80 c0) 20406080\nvalue premultiplied RGBA with a colour above its alpha (ff ff ff, alpha 40) ffffff40\nvalue non-premultiplied, alpha 0: nothing 00000000\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgimg_props",
+      "source_sha256": "76028d1511dc1afdf89c3bd8edd542f239a40e3c0dd3d5e6a42bfcdaa43c34d7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0d01079a3f2b091e11a30ddf2e7a462555766e2ea3987aa175fa12f351de562e",
+          "exit_code": 0,
+          "stdout": "ok an image is made\nok width 4\nok height 3\nok 8 bits per component\nok 32 bits per pixel\nok 16 bytes per row\nok bitmap info is what was given\nok alpha info\nok not a mask\nok no decode array\nok should interpolate is as given (false)\nvalue rendering intent 0\nok the colour space is sRGB's (same object)\nok the data provider gives the 48 bytes back\nok an image with interpolate = true reports it\nok width 0: NULL\nok bytes per row too small: NULL\nok bits per pixel not a multiple of bits per component: NULL\nok a NULL provider: NULL\nok a NULL colour space (not a mask): NULL\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fe2508b3236401c59239efe94964aebfb864b87d30fab0ec62cda5fd9cc55dd5",
+          "exit_code": 0,
+          "stdout": "ok an image is made\nok width 4\nok height 3\nok 8 bits per component\nok 32 bits per pixel\nok 16 bytes per row\nok bitmap info is what was given\nok alpha info\nok not a mask\nok no decode array\nok should interpolate is as given (false)\nvalue rendering intent 0\nok the colour space is sRGB's (same object)\nok the data provider gives the 48 bytes back\nok an image with interpolate = true reports it\nok width 0: NULL\nok bytes per row too small: NULL\nok bits per pixel not a multiple of bits per component: NULL\nok a NULL provider: NULL\nok a NULL colour space (not a mask): NULL\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_async_f_more",
+      "source_sha256": "ce906c19d5bbd2df3ddf7105f454731009034aa7c6b0471a7c5d459f53da7f4e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3e212ae87ceba98d2ffc25a68e5996cbeae8d5ba25a6ab1e9f88863665a014d0",
+          "exit_code": 0,
+          "stdout": "ok a NULL context arrives as NULL\nok the function runs on the queue it was submitted to\nok a pointer arrives unchanged\nok any pointer value arrives unchanged (not dereferenced)\nok on the utility global queue\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8460d82ea3215b5ea7a11174c795dde31d77ab5c590b3a5cf1cb7628796bc341",
+          "exit_code": 0,
+          "stdout": "ok a NULL context arrives as NULL\nok the function runs on the queue it was submitted to\nok a pointer arrives unchanged\nok any pointer value arrives unchanged (not dereferenced)\nok on the utility global queue\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

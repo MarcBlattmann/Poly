@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_unguard_errors",
+      "source_sha256": "c7f8bf5fd037822def9b2cf8aed9804c30ea834933557af411bb7da39adc8c83",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7ad82d72414d3612e4963c5a265564bb75ba223e23f4b606ac539404362bd239",
+          "exit_code": 0,
+          "stdout": "ok a name that does not exist: KERN_INVALID_NAME\nok MACH_PORT_NULL: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "37e3124e00a0cc47fc6df3b6a958cb104bddbdede7b6aea7d3d96d5e49c47d8a",
+          "exit_code": 0,
+          "stdout": "ok a name that does not exist: KERN_INVALID_NAME\nok MACH_PORT_NULL: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_unguard_violations",
+      "source_sha256": "31c418a0252b58a53b4ec94d49c828628b2e361f31f95e4591177a3fb56e9724",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "aaf4c0e214b62c5cc0e8bb05812bf6a45ad77cbb559db4ef5761c7ec40c5524d",
+          "exit_code": 0,
+          "stdout": "ok the right guard: the child ends normally\nok a port that is not guarded: SIGKILL\nok guard 0 on a port that is not guarded: SIGKILL\nok a wrong guard: SIGKILL\nok a second unguard: SIGKILL\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "230b4e5ba09092757de502068f3f8e5859dfc61f54b1b926a5715708c6908ff2",
+          "exit_code": 0,
+          "stdout": "ok the right guard: the child ends normally\nok a port that is not guarded: SIGKILL\nok guard 0 on a port that is not guarded: SIGKILL\nok a wrong guard: SIGKILL\nok a second unguard: SIGKILL\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

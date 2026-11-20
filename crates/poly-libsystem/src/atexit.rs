@@ -21,8 +21,9 @@ impl Handler {
     }
 }
 
-/// How many functions can be registered. C11 asks for at least 32.
-pub const MAX: usize = 256;
+/// How many functions can be registered. C11 asks for at least 32; the
+/// atexit sheet saw 1000 registrations succeed (and 500 `__cxa_atexit`).
+pub const MAX: usize = 4096;
 
 /// The table of registered functions.
 #[derive(Debug)]

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "c6_ver_module",
+      "exe_sha256": "7a8b4b81b1b8cec6addf80ce8ad4526cb64f0d8d5ee163b0073fec880f2892c5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y29tY3RsMzIgbG9hZGVkOiB0cnVlCm9rIGNvbWN0bDMyIGlzIGxvYWRlZCAodGhlIHByb2dyYW0gaW1wb3J0cyBpdCkKc2lkZS1ieS1zaWRlIHBhdGggdHJ1ZSBTeXN0ZW0zMiBwYXRoIGZhbHNlCm9rIHRoZSBzaWRlLWJ5LXNpZGUgdmVyc2lvbiA2Cm9rIG5vdCBTeXN0ZW0zMidzCkRsbEdldFZlcnNpb246IGV4cG9ydGVkIHRydWUgb3JkaW5hbCAyNyByZXNvbHZlcyB0byB0aGUgc2FtZSBmdW5jdGlvbiB0cnVlCm9rIERsbEdldFZlcnNpb24KSW5pdENvbW1vbkNvbnRyb2xzRXg6IGV4cG9ydGVkIHRydWUgb3JkaW5hbCA5NCByZXNvbHZlcyB0byB0aGUgc2FtZSBmdW5jdGlvbiB0cnVlCm9rIEluaXRDb21tb25Db250cm9sc0V4CkluaXRDb21tb25Db250cm9sczogZXhwb3J0ZWQgdHJ1ZSBvcmRpbmFsIDE3IHJlc29sdmVzIHRvIHRoZSBzYW1lIGZ1bmN0aW9uIHRydWUKb2sgSW5pdENvbW1vbkNvbnRyb2xzClNldFdpbmRvd1N1YmNsYXNzOiBleHBvcnRlZCB0cnVlIG9yZGluYWwgNDEwIHJlc29sdmVzIHRvIHRoZSBzYW1lIGZ1bmN0aW9uIHRydWUKb2sgU2V0V2luZG93U3ViY2xhc3MKR2V0V2luZG93U3ViY2xhc3M6IGV4cG9ydGVkIHRydWUgb3JkaW5hbCA0MTEgcmVzb2x2ZXMgdG8gdGhlIHNhbWUgZnVuY3Rpb24gdHJ1ZQpvayBHZXRXaW5kb3dTdWJjbGFzcwpSZW1vdmVXaW5kb3dTdWJjbGFzczogZXhwb3J0ZWQgdHJ1ZSBvcmRpbmFsIDQxMiByZXNvbHZlcyB0byB0aGUgc2FtZSBmdW5jdGlvbiB0cnVlCm9rIFJlbW92ZVdpbmRvd1N1YmNsYXNzCkRlZlN1YmNsYXNzUHJvYzogZXhwb3J0ZWQgdHJ1ZSBvcmRpbmFsIDQxMyByZXNvbHZlcyB0byB0aGUgc2FtZSBmdW5jdGlvbiB0cnVlCm9rIERlZlN1YmNsYXNzUHJvYwpMb2FkSWNvbk1ldHJpYzogZXhwb3J0ZWQgdHJ1ZSBvcmRpbmFsIDM4MCByZXNvbHZlcyB0byB0aGUgc2FtZSBmdW5jdGlvbiB0cnVlCm9rIExvYWRJY29uTWV0cmljCkxvYWRJY29uV2l0aFNjYWxlRG93bjogZXhwb3J0ZWQgdHJ1ZSBvcmRpbmFsIDM4MSByZXNvbHZlcyB0byB0aGUgc2FtZSBmdW5jdGlvbiB0cnVlCm9rIExvYWRJY29uV2l0aFNjYWxlRG93bgpzdW1tYXJ5IDEyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "comctl32 loaded: true\nok comctl32 is loaded (the program imports it)\nside-by-side path true System32 path false\nok the side-by-side version 6\nok not System32's\nDllGetVersion: exported true ordinal 27 resolves to the same function true\nok DllGetVersion\nInitCommonControlsEx: exported true ordinal 94 resolves to the same function true\nok InitCommonControlsEx\nInitCommonControls: exported true ordinal 17 resolves to the same function true\nok InitCommonControls\nSetWindowSubclass: exported true ordinal 410 resolves to the same function true\nok SetWindowSubclass\nGetWindowSubclass: exported true ordinal 411 resolves to the same function true\nok GetWindowSubclass\nRemoveWindowSubclass: exported true ordinal 412 resolves to the same function true\nok RemoveWindowSubclass\nDefSubclassProc: exported true ordinal 413 resolves to the same function true\nok DefSubclassProc\nLoadIconMetric: exported true ordinal 380 resolves to the same function true\nok LoadIconMetric\nLoadIconWithScaleDown: exported true ordinal 381 resolves to the same function true\nok LoadIconWithScaleDown\nsummary 12 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

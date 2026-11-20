@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgpell_elements",
+      "source_sha256": "95552838768c4f3ccbde8967711b86cb8d63aa70ff7a539431ac3662a2511de9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a89a0acec5bbb69943d42ab57e7f2dcb21d0a15ba5c9f93c26f0a40f427a8791",
+          "exit_code": 0,
+          "stdout": "value circle (0,0,10,10) \nvalue element 0 move \nvalue    x 4024000000000000\nvalue    y 4014000000000000\nvalue element 1 curve \nvalue    x 4024000000000000\nvalue    y 401f0bb2aad1692e\nvalue    x 401f0bb2aad1692e\nvalue    y 4024000000000000\nvalue    x 4014000000000000\nvalue    y 4024000000000000\nvalue element 2 curve \nvalue    x 4001e89aaa5d2da5\nvalue    y 4024000000000000\nvalue    x 0000000000000000\nvalue    y 401f0bb2aad1692e\nvalue    x 0000000000000000\nvalue    y 4014000000000000\nvalue element 3 curve \nvalue    x 0000000000000000\nvalue    y 4001e89aaa5d2da5\nvalue    x 4001e89aaa5d2da5\nvalue    y 0000000000000000\nvalue    x 4014000000000000\nvalue    y 0000000000000000\nvalue element 4 curve \nvalue    x 401f0bb2aad1692e\nvalue    y 0000000000000000\nvalue    x 4024000000000000\nvalue    y 4001e89aaa5d2da5\nvalue    x 4024000000000000\nvalue    y 4014000000000000\nvalue element 5 close \nvalue ellipse (1,2,8,4) \nvalue element 0 move \nvalue    x 4022000000000000\nvalue    y 4010000000000000\nvalue element 1 curve \nvalue    x 4022000000000000\nvalue    y 40146b144453c3ac\nvalue    x 401cd62888a78758\nvalue    y 4018000000000000\nvalue    x 4014000000000000\nvalue    y 4018000000000000\nvalue element 2 curve \nvalue    x 400653aeeeb0f151\nvalue    y 4018000000000000\nvalue    x 3ff0000000000000\nvalue    y 40146b144453c3ac\nvalue    x 3ff0000000000000\nvalue    y 4010000000000000\nvalue element 3 curve \nvalue    x 3ff0000000000000\nvalue    y 400729d7775878a8\nvalue    x 400653aeeeb0f151\nvalue    y 4000000000000000\nvalue    x 4014000000000000\nvalue    y 4000000000000000\nvalue element 4 curve \nvalue    x 401cd62888a78758\nvalue    y 4000000000000000\nvalue    x 4022000000000000\nvalue    y 400729d7775878a8\nvalue    x 4022000000000000\nvalue    y 4010000000000000\nvalue element 5 close \nvalue bounding box x 3ff0000000000000\nvalue bounding box y 4000000000000000\nvalue bounding box w 4020000000000000\nvalue bounding box h 4010000000000000\nvalue path bounding box x 3ff0000000000000\nvalue path bounding box w 4020000000000000\nok the path contains the centre\nok not the corner of the rect\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4af252ee18b8c15ce380febc94fd88682f3a39613199dd93d01b99296872fe4b",
+          "exit_code": 0,
+          "stdout": "value circle (0,0,10,10) \nvalue element 0 move \nvalue    x 4024000000000000\nvalue    y 4014000000000000\nvalue element 1 curve \nvalue    x 4024000000000000\nvalue    y 401f0bb2aad1692e\nvalue    x 401f0bb2aad1692e\nvalue    y 4024000000000000\nvalue    x 4014000000000000\nvalue    y 4024000000000000\nvalue element 2 curve \nvalue    x 4001e89aaa5d2da5\nvalue    y 4024000000000000\nvalue    x 0000000000000000\nvalue    y 401f0bb2aad1692e\nvalue    x 0000000000000000\nvalue    y 4014000000000000\nvalue element 3 curve \nvalue    x 0000000000000000\nvalue    y 4001e89aaa5d2da5\nvalue    x 4001e89aaa5d2da5\nvalue    y 0000000000000000\nvalue    x 4014000000000000\nvalue    y 0000000000000000\nvalue element 4 curve \nvalue    x 401f0bb2aad1692e\nvalue    y 0000000000000000\nvalue    x 4024000000000000\nvalue    y 4001e89aaa5d2da5\nvalue    x 4024000000000000\nvalue    y 4014000000000000\nvalue element 5 close \nvalue ellipse (1,2,8,4) \nvalue element 0 move \nvalue    x 4022000000000000\nvalue    y 4010000000000000\nvalue element 1 curve \nvalue    x 4022000000000000\nvalue    y 40146b144453c3ac\nvalue    x 401cd62888a78758\nvalue    y 4018000000000000\nvalue    x 4014000000000000\nvalue    y 4018000000000000\nvalue element 2 curve \nvalue    x 400653aeeeb0f151\nvalue    y 4018000000000000\nvalue    x 3ff0000000000000\nvalue    y 40146b144453c3ac\nvalue    x 3ff0000000000000\nvalue    y 4010000000000000\nvalue element 3 curve \nvalue    x 3ff0000000000000\nvalue    y 400729d7775878a8\nvalue    x 400653aeeeb0f151\nvalue    y 4000000000000000\nvalue    x 4014000000000000\nvalue    y 4000000000000000\nvalue element 4 curve \nvalue    x 401cd62888a78758\nvalue    y 4000000000000000\nvalue    x 4022000000000000\nvalue    y 400729d7775878a8\nvalue    x 4022000000000000\nvalue    y 4010000000000000\nvalue element 5 close \nvalue bounding box x 3ff0000000000000\nvalue bounding box y 4000000000000000\nvalue bounding box w 4020000000000000\nvalue bounding box h 4010000000000000\nvalue path bounding box x 3ff0000000000000\nvalue path bounding box w 4020000000000000\nok the path contains the centre\nok not the corner of the rect\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

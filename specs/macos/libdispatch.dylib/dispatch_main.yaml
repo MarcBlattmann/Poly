@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_main.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_main.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_main
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_main() never returns: the main thread drains the main queue. The blocks that were queued before the call run first,
+  in order, on the original main thread (pthread_main_np() is 1 in them). Blocks that arrive later (after a timer, from a
+  worker thread) run on the main queue (label "com.apple.main-thread") but on another thread: pthread_main_np() is 0 there and its thread id differs from
+  the original main thread's. Blocks on other queues keep running on their own threads. dispatch_after to the main queue fires while the main thread is in dispatch_main, in time order (50 ms
+  before 200 ms, neither early). The usual end is exit() from a block: the atexit handlers run (their output came after the last block's). Nothing runs before dispatch_main
+  is called.
+returns:
+  "result": "never returns"
+errors:
+  "none": "no error result"
+side_effects: "none"
+threading: "see the summary"
+ordering: ["blocks queued before the call run first, in order, on the original main thread"]
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

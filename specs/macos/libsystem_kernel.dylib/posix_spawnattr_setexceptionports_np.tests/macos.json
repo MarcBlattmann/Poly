@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "posix_spawnattr_setexceptionports_np_repeat",
+      "source_sha256": "e2060d225ab861b4d89f14df1bee72ddf42998969d9497b83e45dcdd1b0afb04",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7ab7c79324a52a74cb346078e1288e0f1a2ae74f30d86b1b351127e2c75381c0",
+          "exit_code": 0,
+          "stdout": "ok three calls all return 0\nok posix_spawn succeeds\nok child: runs\nsummary 1 passed, 0 failed\nok the child ends with status 0\nok a new attribute set after destroy: set returns 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2df87c533ab85a20e76797239201ac31472885d78a77191f6ed87e533a56af7b",
+          "exit_code": 0,
+          "stdout": "ok three calls all return 0\nok posix_spawn succeeds\nok child: runs\nsummary 1 passed, 0 failed\nok the child ends with status 0\nok a new attribute set after destroy: set returns 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "posix_spawnattr_setexceptionports_np_returns",
+      "source_sha256": "918be604e13d193af2c0741014d8cbfd97b791ccfb7d95b215d0067dc2cc23ec",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7fe213dd3e3e9121ba850ed5194a877842c315bf07abb9311b0a9f88d31df43e",
+          "exit_code": 0,
+          "stdout": "ok a normal call: 0\nok EXC_MASK_ALL, EXCEPTION_STATE_IDENTITY: 0\nok mask 0: 0\nok behavior 99: 0\nok MACH_PORT_NULL: 0\nok a name that does not exist: 0\nok the port is untouched\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d021307a5e90c591eeefa1040d20ab12339bd2829acd13f7256754368732a23c",
+          "exit_code": 0,
+          "stdout": "ok a normal call: 0\nok EXC_MASK_ALL, EXCEPTION_STATE_IDENTITY: 0\nok mask 0: 0\nok behavior 99: 0\nok MACH_PORT_NULL: 0\nok a name that does not exist: 0\nok the port is untouched\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

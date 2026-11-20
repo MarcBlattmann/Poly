@@ -268,6 +268,21 @@ impl Process {
         p
     }
 
+    /// An XNU process made by `fork` (`crate::xnu`): its files come from
+    /// the parent; its personality state starts empty (the caller copies
+    /// the signals).
+    pub fn new_xnu_child(
+        pid: u32,
+        ppid: u32,
+        format: binfmt::Format,
+        traced: bool,
+        files: crate::fs::Files,
+    ) -> Process {
+        let mut p = Process::with_state(pid, ppid, Personality::Xnu, format, None, traced, files);
+        p.xnu = Some(crate::xnu::XnuState::default());
+        p
+    }
+
     /// A Linux process made by `fork` / `clone` (`linux::task`): its files
     /// and personality state come from the parent.
     pub fn new_linux_child(
@@ -702,6 +717,11 @@ pub fn park(process: &Process, flags: &ThreadFlags, deadline_ns: Option<u64>) ->
 /// them like [`park`].
 pub fn wait_event(ready: impl FnMut() -> bool) {
     EVENTS.wait_until(ready);
+}
+
+/// [`wait_event`] until `deadline_ns` at the latest; whether `ready()` held.
+pub fn wait_event_until(ready: impl FnMut() -> bool, deadline_ns: u64) -> bool {
+    EVENTS.wait_until_deadline(ready, deadline_ns)
 }
 
 /// Make every thread in [`wait_event`] (and [`park`]) check its condition

@@ -91,7 +91,13 @@ const ENTRIES: &[Entry] = &[
     Entry { mib: &[], name: "hw.logicalcpu_max", value: |s| int(s.ncpu) },
     Entry { mib: &[], name: "hw.physicalcpu_max", value: |s| int(s.ncpu) },
     Entry { mib: &[], name: "hw.cachelinesize", value: |_| quad(64) },
-    Entry { mib: &[], name: "hw.tbfrequency", value: |_| quad(1_000_000_000) },
+    // The mach_absolute_time unit: nanoseconds on x86-64, the 24 MHz
+    // counter on arm64 (ADR 0238's timebase).
+    Entry {
+        mib: &[],
+        name: "hw.tbfrequency",
+        value: |s| quad(if s.machine == "arm64" { 24_000_000 } else { 1_000_000_000 }),
+    },
     Entry { mib: &[], name: "vm.loadavg", value: |_| alloc::vec![0; 24] },
     Entry { mib: &[], name: "sysctl.proc_translated", value: |s| int(u32::from(s.translated)) },
 ];

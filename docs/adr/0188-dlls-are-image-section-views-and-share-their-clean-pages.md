@@ -99,3 +99,18 @@ frame for every process that maps the file.
   would let relocated pages be shared too; not needed for now.
 - The kernel's exec path (the executable and `ntdll`, mapped from bytes) still
   makes private copies; they are small.
+
+## Addendum (2026-11-20, track `chrome-first-start`): relocated views share too
+
+An image section's views go to the base its first view got, so in practice a relocated DLL lands at
+the same address in every process that loads it in the same order (Chrome's `chrome_elf.dll` takes
+`0x180000000`, and the 313 MB `chrome.dll` then goes to the same relocated base in every Chrome
+process). The same file relocated to the same base is the same bytes, so the share key is now the
+file's identity **and** the base the bytes are relocated for (`FileIdentity::base`, 0 for the image
+at its preferred base). A relocated view, read lazily or held, shares its pages with every view of
+that file at that base.
+
+Measured with the QA driver (fresh Chrome disk, the first start and six warm restarts, the same
+session on `main` and with the change): the NT processes' own pages fell from 104,587 to 54,078
+(about 200 MB less), and shared pages rose from 13,951 to 66,911. Start time did not change
+measurably (warm median 2.13 s before, 2.25 s after, within the host's noise).

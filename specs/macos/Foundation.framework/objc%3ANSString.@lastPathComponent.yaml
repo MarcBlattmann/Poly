@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSString.@lastPathComponent.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSString.@lastPathComponent.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSString.@lastPathComponent"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSString lastPathComponent] (property) is the part after the last slash, ignoring trailing
+  slashes: '/a/b/c.txt' gives 'c.txt', '/a/b/' gives 'b', '//a//' gives 'a', 'a/b' gives 'b', '/a'
+  gives 'a', 'file' gives 'file'; '/' gives '/'; the empty string gives the empty string; non-ASCII
+  components are kept. The same observation covers the neighbouring path helpers, tested with this
+  entry: pathExtension (after the last dot of the last component: 'txt' for 'a.txt', 'gz' for
+  'a.tar.gz'; empty for '.hidden', 'a', 'a.' and '/d.x/f'); stringByDeletingLastPathComponent
+  ('/a/b/c' gives '/a/b', '/a' gives '/', 'a' gives '', '/' gives '/'); stringByDeletingPathExtension
+  ('a.txt' gives 'a'); stringByAppendingPathExtension: ('a' + 'txt' gives 'a.txt'); pathComponents
+  ('/a/b/c' gives '/', 'a', 'b', 'c'; 'a/b//c/' gives 'a', 'b', 'c', '/' - the trailing slash is a
+  last component '/'); +pathWithComponents: ('/', 'a', 'b' gives '/a/b'); stringByStandardizingPath
+  ('/a/./b/../c//d' gives '/a/c/d'); isAbsolutePath.
+returns:
+  success: "a string"
+errors: {}
+side_effects: "none"
+threading: "objects are immutable or the class says otherwise; immutable values may be read from any thread"
+ordering: []
+timing:
+  typical: "microseconds, no system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

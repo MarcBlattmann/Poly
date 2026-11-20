@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontdrawglyphs_boxes",
+      "source_sha256": "f461f35f68192e147c16b6fe33e92bc90fa48eeb4593fadf9c2e924305281ff9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e4310d5d51f5dcf2f931dc5266e277faacfe440e69ba826f73a87872915594f3",
+          "exit_code": 0,
+          "stdout": "ok ok\nvalue two.00 ffffffffffffffffffffffffffff\nvalue two.01 ffffffffffffffffffffffffffff\nvalue two.02 ffffffffffffffffffffffffffff\nvalue two.03 ffff00000000ffffffffffffffff\nvalue two.04 ffff00000000ffffffffffffffff\nvalue two.05 ffff00000000ffff000000ffffff\nvalue two.06 ffff00000000ffff000000ffffff\nvalue two.07 ffff00000000ffff000000ffffff\nvalue two.08 ffff00000000ffff000000ffffff\nvalue two.09 ffff00000000ffff000000ffffff\nvalue two.10 ffffffffffffffffffffffffffff\nvalue two.11 ffffffffffffffffffffffffffff\nok blank\nok q[5 * 14 + 2] == 0 && q[5 * 14 + 4] == 0 && q[5 * 14 + 6] == 0xff && q[2 * 14 + 2] == 0xff\nok q[5 * 14 + 1] > 0x70 && q[5 * 14 + 1] < 0x90 && q[5 * 14 + 5] > 0x70 && q[5 * 14 + 5] < 0x90\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "66418256d106148ffc34a3c1ed207f97c4f13dcb2cfd965491e7e4d49154f1d7",
+          "exit_code": 0,
+          "stdout": "ok ok\nvalue two.00 ffffffffffffffffffffffffffff\nvalue two.01 ffffffffffffffffffffffffffff\nvalue two.02 ffffffffffffffffffffffffffff\nvalue two.03 ffff00000000ffffffffffffffff\nvalue two.04 ffff00000000ffffffffffffffff\nvalue two.05 ffff00000000ffff000000ffffff\nvalue two.06 ffff00000000ffff000000ffffff\nvalue two.07 ffff00000000ffff000000ffffff\nvalue two.08 ffff00000000ffff000000ffffff\nvalue two.09 ffff00000000ffff000000ffffff\nvalue two.10 ffffffffffffffffffffffffffff\nvalue two.11 ffffffffffffffffffffffffffff\nok blank\nok q[5 * 14 + 2] == 0 && q[5 * 14 + 4] == 0 && q[5 * 14 + 6] == 0xff && q[2 * 14 + 2] == 0xff\nok q[5 * 14 + 1] > 0x70 && q[5 * 14 + 1] < 0x90 && q[5 * 14 + 5] > 0x70 && q[5 * 14 + 5] < 0x90\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontdrawglyphs_dejavu",
+      "source_sha256": "ae7ce37d1a71495856ab290c11a2fd74c704ae62b2f89a9f8d2f07c485470b50",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "47f5e92d4a7fc6bebde1e43728bc65854e2b1a23e7a4bbdf8863f0727b7df0bf",
+          "exit_code": 0,
+          "stdout": "ok same\nok ink > 40\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "151f78f642b0f80fb911830c33f46dfcdfa059a9c5dd81433411d175bba9646f",
+          "exit_code": 0,
+          "stdout": "ok same\nok ink > 40\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

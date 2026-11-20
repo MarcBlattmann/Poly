@@ -106,9 +106,6 @@ framework were present, which Poly may not ship. Chrome imports 219 CoreFoundati
 
 ## Waiting for other work
 
-- **libSystem (PR #434, ADR 0258):** this branch builds on it; its `posix_spawn` passes the six C
-  arguments to BSD call 244, which takes five (pid, path, one descriptor, argv, envp), so a child gets
-  an empty argv; the boot test's runner calls `__posix_spawn` directly until that is fixed.
 - **The Objective-C runtime (ADR 0259):** Apple's CoreFoundation re-exports `libobjc.A.dylib`; ours does
   not yet. Bridged classes in the class word, `CFAutorelease` with real pools, and Objective-C exceptions
   for the cases the sheets mark come with it.

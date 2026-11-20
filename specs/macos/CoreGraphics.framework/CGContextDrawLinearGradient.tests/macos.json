@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cglin_basic",
+      "source_sha256": "f07a3aa275847b63b78b2b2b2e0f64200cd2e66b6ed6f5110ad31879dabe66de",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c2d3c9e9472d4797234d4a7baeb3512d017532994b1cd0a837ad65ce657dedae",
+          "exit_code": 0,
+          "stdout": "value horizontal over the full width (rows 0 and 1) 00 f6000aff d2002eff ad0052ff 890076ff 760089ff 5200adff 2e00d2ff 0a00f6ff\nvalue horizontal over the full width (rows 0 and 1) 01 f60009ff d1002dff ad0052ff 890077ff 770089ff 5200adff 2d00d1ff 0900f6ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 00 0a00f6ff 0900f6ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 01 2e00d2ff 2d00d1ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 02 5200adff 5200adff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 03 760089ff 770089ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 04 890076ff 880076ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 05 ad0052ff ae0052ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 06 d2002eff d2002eff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 07 f50009ff f60009ff\nvalue diagonal from the lower left to the upper right 00 890077ff 64009bff 5200adff 4000bfff 2d00d1ff 1c00e4ff\nvalue diagonal from the lower left to the upper right 01 9b0064ff 880076ff 64009bff 5200aeff 4000c0ff 2d00d1ff\nvalue diagonal from the lower left to the upper right 02 ad0052ff 9b0064ff 880076ff 64009bff 5100adff 4000bfff\nvalue diagonal from the lower left to the upper right 03 bf0040ff ad0052ff 9b0065ff 890076ff 64009bff 5200adff\nvalue diagonal from the lower left to the upper right 04 d2002eff bf003fff ad0052ff 9b0064ff 880076ff 64009bff\nvalue diagonal from the lower left to the upper right 05 e3001bff d2002eff bf003fff ad0052ff 9b0065ff 880076ff\nvalue end points 2..6 without extending: nothing outside 00 00000000 00000000 e4001cff 9b0064ff 64009aff 1b00e4ff 00000000 00000000\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2b701a207c5283915d140a68d408739527694b4d3bf31e6afbee0e58b0248a11",
+          "exit_code": 0,
+          "stdout": "value horizontal over the full width (rows 0 and 1) 00 f6000aff d2002eff ad0052ff 890076ff 760089ff 5200adff 2e00d2ff 0a00f6ff\nvalue horizontal over the full width (rows 0 and 1) 01 f60009ff d1002dff ad0052ff 890077ff 770089ff 5200adff 2d00d1ff 0900f6ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 00 0a00f6ff 0900f6ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 01 2e00d2ff 2d00d1ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 02 5200adff 5200adff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 03 760089ff 770089ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 04 890076ff 880076ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 05 ad0052ff ae0052ff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 06 d2002eff d2002eff\nvalue vertical from y = 0 (the bottom) to 8: red at the bottom 07 f50009ff f60009ff\nvalue diagonal from the lower left to the upper right 00 890077ff 64009bff 5200adff 4000bfff 2d00d1ff 1c00e4ff\nvalue diagonal from the lower left to the upper right 01 9b0064ff 880076ff 64009bff 5200aeff 4000c0ff 2d00d1ff\nvalue diagonal from the lower left to the upper right 02 ad0052ff 9b0064ff 880076ff 64009bff 5100adff 4000bfff\nvalue diagonal from the lower left to the upper right 03 bf0040ff ad0052ff 9b0065ff 890076ff 64009bff 5200adff\nvalue diagonal from the lower left to the upper right 04 d2002eff bf003fff ad0052ff 9b0064ff 880076ff 64009bff\nvalue diagonal from the lower left to the upper right 05 e3001bff d2002eff bf003fff ad0052ff 9b0065ff 880076ff\nvalue end points 2..6 without extending: nothing outside 00 00000000 00000000 e4001cff 9b0064ff 64009aff 1b00e4ff 00000000 00000000\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cglin_extend",
+      "source_sha256": "3211ab86a8b6cadecd14b35729e0d71886b6d96335a3a7995869ab2281b1f305",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "02756fb82f5fdf52828291a348669299bf76e6adcba5ea00773c57cc6bf3e0bf",
+          "exit_code": 0,
+          "stdout": "value kCGGradientDrawsBeforeStartLocation 1\nvalue kCGGradientDrawsAfterEndLocation 2\nvalue no extension 00 00000000 00000000 00000000 e4001cff 9b0064ff 64009aff 1b00e4ff 00000000 00000000 00000000\nvalue before start 00 ff0000ff ff0000ff ff0000ff e4001bff 9b0064ff 64009bff 1b00e4ff 00000000 00000000 00000000\nvalue after end 00 00000000 00000000 00000000 e4001bff 9b0064ff 64009bff 1b00e4ff 0000ffff 0000ffff 0000ffff\nvalue both 00 ff0000ff ff0000ff ff0000ff e4001bff 9b0064ff 64009bff 1b00e4ff 0000ffff 0000ffff 0000ffff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "217f8d55186720016abca7610d49a1aebe0f1b6b47d7fd8bdbed3a23c1b187dc",
+          "exit_code": 0,
+          "stdout": "value kCGGradientDrawsBeforeStartLocation 1\nvalue kCGGradientDrawsAfterEndLocation 2\nvalue no extension 00 00000000 00000000 00000000 e4001cff 9b0064ff 64009aff 1b00e4ff 00000000 00000000 00000000\nvalue before start 00 ff0000ff ff0000ff ff0000ff e4001bff 9b0064ff 64009bff 1b00e4ff 00000000 00000000 00000000\nvalue after end 00 00000000 00000000 00000000 e4001bff 9b0064ff 64009bff 1b00e4ff 0000ffff 0000ffff 0000ffff\nvalue both 00 ff0000ff ff0000ff ff0000ff e4001bff 9b0064ff 64009bff 1b00e4ff 0000ffff 0000ffff 0000ffff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

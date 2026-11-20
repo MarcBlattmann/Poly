@@ -230,6 +230,9 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0254](0254-unmapping-does-not-wait-for-other-cpus.md) | Unmapping does not wait for other CPUs | Accepted |
 | [0255](0255-boots-that-run-programs-see-a-real-cpu.md) | Boots that run programs see a real CPU | Accepted |
 | [0257](0257-arm64-mach-o-programs-run-in-a-translated-xnu-process.md) | arm64 Mach-O programs run in a translated XNU process | Accepted |
+| [0258](0258-polys-own-libsystem.md) | Poly's own libSystem.B.dylib, v0 | Accepted |
+| [0259](0259-32-bit-windows-test-programs-in-the-pipeline.md) | 32-bit Windows test programs in the pipeline | Accepted |
+| [0259](0259-wasapi-an-engine-per-client-on-10-ms-device-periods.md) | WASAPI: an engine per client, on 10 ms device periods | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

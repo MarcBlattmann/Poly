@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "c6_std_button",
+      "exe_sha256": "ab2b41ac2197fc938d1d1c7a83ae76f1d91fb2b740fb5a25d098caf2463c35c4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYSBwdXNoIGJ1dHRvbgpjbGFzcyBCdXR0b24gc3R5bGUgMHg0MDAwMDAwMApvayBjbGFzcyBuYW1lIEJ1dHRvbgpvayBzdHlsZSBhcyBhc2tlZApCQ01fR0VUSURFQUxTSVpFIC0+IDEgc2l6ZSBwb3NpdGl2ZSB0cnVlCm9rIEJDTV9HRVRJREVBTFNJWkUgaXMgVFJVRQpvayBhIHBvc2l0aXZlIHNpemUKb2sgQkNNX0dFVFRFWFRNQVJHSU4gaXMgVFJVRQpvayBCTV9HRVRTVEFURSBvZiBhIG5ldyBidXR0b24Kb2sgYSBjb21tYW5kIGxpbmsKb2sgaXRzIHN0eWxlCm9rIEJDTV9TRVROT1RFIGlzIFRSVUUKb2sgQkNNX0dFVE5PVEVMRU5HVEgKQkNNX0dFVE5PVEUgLT4gMSB0ZXh0IG5vdGUKb2sgQkNNX0dFVE5PVEUgaXMgVFJVRQpvayB0aGUgbm90ZQpvayBhIHNwbGl0IGJ1dHRvbgpvayBpdHMgc3R5bGUKb2sgQkNNX1NFVE5PVEUgb24gYSBwdXNoIGJ1dHRvbgpzdW1tYXJ5IDE2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok a push button\nclass Button style 0x40000000\nok class name Button\nok style as asked\nBCM_GETIDEALSIZE -> 1 size positive true\nok BCM_GETIDEALSIZE is TRUE\nok a positive size\nok BCM_GETTEXTMARGIN is TRUE\nok BM_GETSTATE of a new button\nok a command link\nok its style\nok BCM_SETNOTE is TRUE\nok BCM_GETNOTELENGTH\nBCM_GETNOTE -> 1 text note\nok BCM_GETNOTE is TRUE\nok the note\nok a split button\nok its style\nok BCM_SETNOTE on a push button\nsummary 16 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 70
+    },
+    {
+      "name": "c6_std_edit_combo",
+      "exe_sha256": "198b96ea7c27e4ffad40f11c5b32e4e9172adfd73feb3a9e9a227615fb9ee148",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYW4gZWRpdApvayBFTV9TRVRDVUVCQU5ORVIgaXMgVFJVRQpFTV9HRVRDVUVCQU5ORVIgLT4gMSBmaXJzdCBjaGFyIDk5Cm9rIEVNX0dFVENVRUJBTk5FUiBpcyBUUlVFCm9rIHRoZSBiYW5uZXIgdGV4dApvayBFTV9HRVRMSU1JVFRFWFQKb2sgYSBjb21ibyBib3gKb2sgQ0JfU0VUQ1VFQkFOTkVSIGlzIFRSVUUKb2sgQ0JfQUREU1RSSU5HIHJldHVybnMgMApvayBDQl9HRVRDT1VOVApvayBDQl9HRVRDVVJTRUwgb2YgYSBuZXcgY29tYm8gYm94Cm9rIGEgbGlzdCBib3gKb2sgTEJfQUREU1RSSU5HIHJldHVybnMgMApvayBhbmQgMSBmb3IgdGhlIG5leHQKb2sgTEJfR0VUQ09VTlQKb2sgYSBzY3JvbGwgYmFyCm9rIFNCTV9HRVRQT1MKb2sgYSBzdGF0aWMKc3RhdGljIHRleHQgaGVsbG8Kb2sgaXRzIHRleHQKc3VtbWFyeSAxOCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok an edit\nok EM_SETCUEBANNER is TRUE\nEM_GETCUEBANNER -> 1 first char 99\nok EM_GETCUEBANNER is TRUE\nok the banner text\nok EM_GETLIMITTEXT\nok a combo box\nok CB_SETCUEBANNER is TRUE\nok CB_ADDSTRING returns 0\nok CB_GETCOUNT\nok CB_GETCURSEL of a new combo box\nok a list box\nok LB_ADDSTRING returns 0\nok and 1 for the next\nok LB_GETCOUNT\nok a scroll bar\nok SBM_GETPOS\nok a static\nstatic text hello\nok its text\nsummary 18 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 86
+    },
+    {
+      "name": "c6_std_wndproc_module",
+      "exe_sha256": "d093b41f6f899c5646e75e3a29d833997ce3bfa891cbcc00081e834a40526e37",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QnV0dG9uOiBmb3VuZCB0cnVlIHByb2NlZHVyZSBpbiBjb21jdGwzMi5kbGwKb2sgQnV0dG9uCkVkaXQ6IGZvdW5kIHRydWUgcHJvY2VkdXJlIGluIGNvbWN0bDMyLmRsbApvayBFZGl0ClN0YXRpYzogZm91bmQgdHJ1ZSBwcm9jZWR1cmUgaW4gY29tY3RsMzIuZGxsCm9rIFN0YXRpYwpMaXN0Qm94OiBmb3VuZCB0cnVlIHByb2NlZHVyZSBpbiBjb21jdGwzMi5kbGwKb2sgTGlzdEJveApDb21ib0JveDogZm91bmQgdHJ1ZSBwcm9jZWR1cmUgaW4gY29tY3RsMzIuZGxsCm9rIENvbWJvQm94ClNjcm9sbEJhcjogZm91bmQgdHJ1ZSBwcm9jZWR1cmUgaW4gY29tY3RsMzIuZGxsCm9rIFNjcm9sbEJhcgpDb21ib0xCb3g6IGZvdW5kIHRydWUgcHJvY2VkdXJlIGluIGNvbWN0bDMyLmRsbApvayBDb21ib0xCb3gKIzMyNzcwOiBmb3VuZCB0cnVlIHByb2NlZHVyZSBpbiBjb21jdGwzMjogZmFsc2UKb2sgIzMyNzcwIGlzIGZvdW5kCm9rICMzMjc3MCBpcyBub3QgY29tY3RsMzIncwpzdW1tYXJ5IDkgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Button: found true procedure in comctl32.dll\nok Button\nEdit: found true procedure in comctl32.dll\nok Edit\nStatic: found true procedure in comctl32.dll\nok Static\nListBox: found true procedure in comctl32.dll\nok ListBox\nComboBox: found true procedure in comctl32.dll\nok ComboBox\nScrollBar: found true procedure in comctl32.dll\nok ScrollBar\nComboLBox: found true procedure in comctl32.dll\nok ComboLBox\n#32770: found true procedure in comctl32: false\nok #32770 is found\nok #32770 is not comctl32's\nsummary 9 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

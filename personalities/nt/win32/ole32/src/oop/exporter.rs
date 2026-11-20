@@ -128,6 +128,12 @@ unsafe extern "system" fn listener(first: *mut c_void) -> u32 {
 unsafe extern "system" fn connection(arg: *mut c_void) -> u32 {
     let h = arg as Handle;
     if let Some(payload) = pipe::read_frame(h) {
+        // The call is delivered: from here on a connection that breaks is a call cut off by this
+        // process's end (`pipe::transact`).
+        if !pipe::write_all(h, &[poly_com::wire::RECEIVED]) {
+            close(h);
+            return 0;
+        }
         let reply = match Request::decode(&payload) {
             Ok(Request::Call { oid, op, caller }) => dispatch(oid, op, super::security::pipe_client(h), caller),
             _ => Reply::hr(E_UNEXPECTED),
@@ -255,7 +261,12 @@ fn dispatch(oid: u64, op: Op, client: u32, caller: Caller) -> Reply {
         Op::Invoke { iid, method, data } => {
             COUNT.with(|c| c.enter_call());
             let r = apt::run_in(e.owner, || {
-                super::security::serve(client, caller, || super::channel::invoke_stub(e.object, &iid, method, &data))
+                super::security::serve(client, caller, || {
+                    let mut out = Err(guard::RPC_E_SERVERFAULT);
+                    // An exception the process lets COM catch ends the call with a server fault.
+                    let _ = guard::guarded(|| out = super::channel::invoke_stub(e.object, &iid, method, &data));
+                    out
+                })
             });
             COUNT.with(|c| c.leave_call());
             match r {
@@ -296,7 +307,8 @@ fn dispatch(oid: u64, op: Op, client: u32, caller: Caller) -> Reply {
                         if f.is_null() {
                             return hr;
                         }
-                        let r = factory_lock(f, lock);
+                        let mut r = guard::RPC_E_SERVERFAULT;
+                        let _ = guard::guarded(|| r = factory_lock(f, lock));
                         release_unknown(f);
                         r
                     }
@@ -315,7 +327,9 @@ fn dispatch(oid: u64, op: Op, client: u32, caller: Caller) -> Reply {
                         if f.is_null() {
                             return (hr, core::ptr::null_mut());
                         }
-                        let (hr, o) = factory_create(f, core::ptr::null_mut(), &iid);
+                        let mut made = (guard::RPC_E_SERVERFAULT, core::ptr::null_mut());
+                        let _ = guard::guarded(|| made = factory_create(f, core::ptr::null_mut(), &iid));
+                        let (hr, o) = made;
                         release_unknown(f);
                         if o.is_null() {
                             return (hr, core::ptr::null_mut());

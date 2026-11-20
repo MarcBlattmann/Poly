@@ -4,9 +4,8 @@
  * from anywhere.
  *
  * It reads /etc/cftests.txt (one test per line: its name, and `app` for a
- * test that runs inside an application bundle) and starts each with the
- * posix_spawn system call (`__posix_spawn`: pid, path, argument
- * descriptor, argv, envp; no descriptor here) and an empty environment, as the macOS oracle does: a plain
+ * test that runs inside an application bundle) and starts each with
+ * posix_spawn and an empty environment, as the macOS oracle does: a plain
  * test as /bin/<name> from /, an application test as
  * /apps/<name>/T.app/Contents/MacOS/t with the argument --in-app from
  * /apps/<name> (the boot test laid T.app out beforehand, which the test's
@@ -18,14 +17,11 @@
  * and at the end `cf-runner: done`.
  */
 #include <fcntl.h>
+#include <spawn.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
-
-/* The BSD call itself (libsystem_kernel), which takes one descriptor of
- * file actions and attributes where posix_spawn(3) takes two pointers. */
-int __posix_spawn(pid_t *pid, const char *path, void *desc, char *const argv[], char *const envp[]);
 
 static char list[16384];
 
@@ -72,7 +68,7 @@ int main(void) {
             continue;
         }
         pid_t pid;
-        int r = __posix_spawn(&pid, path, NULL, argv, envp);
+        int r = posix_spawn(&pid, path, NULL, NULL, argv, envp);
         if (r != 0) {
             printf("cf-exit: %s spawn-error-%d\n", name, r);
             continue;

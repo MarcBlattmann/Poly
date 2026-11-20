@@ -14,7 +14,9 @@
 //! yet); the `$INODE64` forms are the 64-bit `stat` calls. The functions
 //! the SDK declares over a trap with the same arguments
 //! (`mach_port_allocate` …) are the trap itself; `semaphore_timedwait*`
-//! split their `mach_timespec_t`.
+//! split their `mach_timespec_t`; `posix_spawn` maps its six C arguments
+//! to the call's five and returns the errno (`__posix_spawn` is the raw
+//! call).
 
 /// A BSD wrapper per (name, number), then the error tail.
 macro_rules! bsd {
@@ -93,7 +95,7 @@ bsd! {
     "fremovexattr" = 239,
     "listxattr" = 240,
     "flistxattr" = 241,
-    "posix_spawn" = 244, "__posix_spawn" = 244,
+    "__posix_spawn" = 244,
     "minherit" = 250,
     "__sysctlbyname" = 274,
     "__shared_region_check_np" = 294,
@@ -151,6 +153,36 @@ mach! {
 }
 
 core::arch::global_asm!(
+    // posix_spawn(pid, path, file_actions, attrp, argv, envp): the C call
+    // has six arguments, BSD call 244 five (pid, path, descriptor, argv,
+    // envp; specs/macos/bsd/posix_spawn.yaml). The descriptor of file
+    // actions and attributes is 0: v0 has neither (a non-empty one is
+    // EINVAL). The result is the errno itself, as POSIX has it, not -1.
+    ".globl _posix_spawn",
+    ".p2align 4",
+    "_posix_spawn:",
+    "    test rdx, rdx",
+    "    je 4f",
+    "    cmp qword ptr [rdx], 0",
+    "    jne 6f",
+    "4:",
+    "    test rcx, rcx",
+    "    je 5f",
+    "    cmp qword ptr [rcx], 0",
+    "    jne 6f",
+    "5:",
+    "    xor edx, edx",
+    "    mov r10, r8",
+    "    mov r8, r9",
+    "    mov eax, 0x2000000 + 244",
+    "    syscall",
+    "    jb 7f",
+    "    xor eax, eax",
+    "7:",
+    "    ret",
+    "6:",
+    "    mov eax, 22",
+    "    ret",
     // pipe(fds): the two descriptors come back in rax and rdx.
     ".globl _pipe",
     ".p2align 4",

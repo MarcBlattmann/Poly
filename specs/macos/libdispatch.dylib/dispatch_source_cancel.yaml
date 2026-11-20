@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_source_cancel.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_source_cancel.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_source_cancel
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_source_cancel(source) stops further event handler calls; an event handler that is running finishes, and the cancel handler (dispatch_source_set_cancel_handler) then runs exactly once on the source's queue after it (order: event handler start, end, cancel handler). dispatch_source_testcancel is 0 for a new source and nonzero at
+  once after the cancel. Merging into the cancelled source runs nothing; a second cancel does nothing more (the cancel handler stays at one call). The cancel handler is where a read source's descriptor can be closed (it ran and the close worked). A source cancelled before it was ever resumed does not run its cancel handler until it is resumed.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "cancels the source; runs the cancel handler later"
+threading: "see the summary"
+ordering: ["the cancel handler runs after the last event handler call"]
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
