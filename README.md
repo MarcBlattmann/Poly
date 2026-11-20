@@ -48,9 +48,9 @@
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,598 | 1,086 | 3,462 | 3,773 | 52,981 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,598 | 1,088 | 3,462 | 3,771 | 52,981 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 96 | 421 | 0 | 0 |
-| macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
+| macOS | framework API | 880,557 | 0 | 0 | 46 | 880,511 | 0 | 0 |
 
 *API coverage* is green entries out of the entries that are ours to build: *app-provided* entries (libraries the application or its installer supplies, ADR 0055) are listed under *Entries* but left out of the percentages, and so are entries *not applicable by design* (calls the reference OS itself does not offer on x86-64, or that would replace the running kernel; Poly answers them as the reference does). *App-weighted* counts each API by how often the target apps call it; it is the number that tracks real progress and appears once the call tracer exists.
 

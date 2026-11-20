@@ -62,6 +62,32 @@ pub unsafe extern "system" fn AdjustTokenPrivileges(
 #[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> NtStatus;
+    fn NtSetSecurityObject(handle: Handle, info: u32, sd: *const u8) -> NtStatus;
+}
+
+/// `ERROR_INVALID_NAME`, `ERROR_NOACCESS`, `ERROR_UNKNOWN_REVISION` (`winerror.h`).
+const ERROR_INVALID_NAME: u32 = 123;
+const ERROR_NOACCESS: u32 = 998;
+const ERROR_UNKNOWN_REVISION: u32 = 1305;
+/// The `SECURITY_INFORMATION` parts a file's descriptor has: owner, group, DACL, SACL, label
+/// (`winnt.h`). Any other bit alone asks for nothing (specs/windows/advapi32.dll/
+/// SetFileSecurityW.yaml and GetFileSecurityW.yaml, `bad_information`: `ERROR_ACCESS_DENIED`).
+const FILE_SECURITY_PARTS: u32 = 0x1F;
+/// `SACL_SECURITY_INFORMATION`, `ACCESS_SYSTEM_SECURITY`, `READ_CONTROL`, `WRITE_DAC`,
+/// `WRITE_OWNER`, `FILE_OPEN_FOR_BACKUP_INTENT` (`winnt.h`, `winternl.h`).
+const SACL_SECURITY_INFORMATION: u32 = 8;
+const ACCESS_SYSTEM_SECURITY: u32 = 0x0100_0000;
+const READ_CONTROL: u32 = 0x0002_0000;
+const WRITE_DAC: u32 = 0x0004_0000;
+const WRITE_OWNER: u32 = 0x0008_0000;
+const FILE_OPEN_FOR_BACKUP_INTENT: u32 = 0x4000;
+
+/// A file name argument: NULL or empty is `ERROR_INVALID_NAME` (the sheets).
+fn file_name(name: Option<&[u16]>) -> Result<&[u16], u32> {
+    match name {
+        Some(n) if !n.is_empty() => Ok(n),
+        _ => Err(ERROR_INVALID_NAME),
+    }
 }
 
 /// `GetFileSecurityW(lpFileName, RequestedInformation, pSecurityDescriptor, nLength,
@@ -78,19 +104,21 @@ pub unsafe extern "system" fn GetFileSecurityW(
     length: u32,
     needed: *mut u32,
 ) -> i32 {
-    /// `SACL_SECURITY_INFORMATION`, `ACCESS_SYSTEM_SECURITY`, `READ_CONTROL`,
-    /// `FILE_OPEN_FOR_BACKUP_INTENT` (`winnt.h`, `winternl.h`).
-    const SACL_SECURITY_INFORMATION: u32 = 8;
-    const ACCESS_SYSTEM_SECURITY: u32 = 0x0100_0000;
-    const READ_CONTROL: u32 = 0x0002_0000;
-    const FILE_OPEN_FOR_BACKUP_INTENT: u32 = 0x4000;
     // SAFETY: the caller's string.
-    let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_INVALID_PARAMETER, FALSE) };
-    if needed.is_null() {
-        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    let name = match file_name(unsafe { wide_arg(name) }) {
+        Ok(n) => n,
+        Err(e) => return fail(e, FALSE),
+    };
+    // The sheet, `null_pointers`: no place for the length, or no buffer with a length, is
+    // ERROR_NOACCESS; nothing asked for is ERROR_ACCESS_DENIED.
+    if needed.is_null() || (descriptor.is_null() && length != 0) {
+        return fail(ERROR_NOACCESS, FALSE);
+    }
+    if requested & FILE_SECURITY_PARTS == 0 {
+        return fail(ERROR_ACCESS_DENIED, FALSE);
     }
     let access = READ_CONTROL | if requested & SACL_SECURITY_INFORMATION != 0 { ACCESS_SYSTEM_SECURITY } else { 0 };
-    let h = match crate::file::open_for(name, access, FILE_OPEN_FOR_BACKUP_INTENT) {
+    let h = match crate::file::open_for_security(name, access, FILE_OPEN_FOR_BACKUP_INTENT) {
         Ok(h) => h,
         Err(e) => return fail(e, FALSE),
     };
@@ -110,14 +138,74 @@ pub unsafe extern "system" fn GetFileSecurityW(
     }
 }
 
-/// `SetFileSecurityW`: not kept yet (`ERROR_NOT_SUPPORTED` once the file is known to exist;
-/// `SetNamedSecurityInfoW` sets a file's security).
+/// `SetFileSecurityW(lpFileName, SecurityInformation, pSecurityDescriptor)`
+/// (specs/windows/advapi32.dll/SetFileSecurityW.yaml): the parts the information names are taken
+/// from the descriptor and set on the file or directory, opened for what they need (`WRITE_OWNER`
+/// for the owner, group and label, `WRITE_DAC` for the DACL, `ACCESS_SYSTEM_SECURITY` for the
+/// SACL; backup intent, so that a directory opens too; every sharing mode, so that a file open
+/// elsewhere without sharing still takes it). `NtSetSecurityObject` decides the rest: the owner
+/// a token may set, the label it may give, a descriptor without the part asked for.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn SetFileSecurityW(name: *const u16, _information: u32, _descriptor: *const u8) -> i32 {
+pub unsafe extern "system" fn SetFileSecurityW(name: *const u16, information: u32, descriptor: *const u8) -> i32 {
     // SAFETY: the caller's string.
-    let Some(name) = (unsafe { wide_arg(name) }) else { return fail(ERROR_INVALID_PARAMETER, FALSE) };
-    match crate::file::attributes_of(name) {
-        Ok(_) => fail(ERROR_NOT_SUPPORTED, FALSE),
-        Err(e) => fail(e, FALSE),
+    let name = match file_name(unsafe { wide_arg(name) }) {
+        Ok(n) => n,
+        Err(e) => return fail(e, FALSE),
+    };
+    if descriptor.is_null() {
+        return fail(ERROR_NOACCESS, FALSE);
     }
+    // SAFETY: the caller's descriptor: at least its revision byte.
+    if unsafe { descriptor.read() } != 1 {
+        return fail(ERROR_UNKNOWN_REVISION, FALSE);
+    }
+    if information & FILE_SECURITY_PARTS == 0 {
+        return fail(ERROR_ACCESS_DENIED, FALSE);
+    }
+    let mut access = 0;
+    if information & (1 | 2 | 0x10) != 0 {
+        access |= WRITE_OWNER;
+    }
+    if information & 4 != 0 {
+        access |= WRITE_DAC;
+    }
+    if information & SACL_SECURITY_INFORMATION != 0 {
+        access |= ACCESS_SYSTEM_SECURITY;
+    }
+    let h = match crate::file::open_for_security(name, access, FILE_OPEN_FOR_BACKUP_INTENT) {
+        Ok(h) => h,
+        Err(e) => return fail(e, FALSE),
+    };
+    // SAFETY: the caller's descriptor; the kernel checks it.
+    let st = unsafe { NtSetSecurityObject(h, information, descriptor) };
+    close(h);
+    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+}
+
+/// `SetFileSecurityA`: `SetFileSecurityW` with an ANSI path.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn SetFileSecurityA(name: *const u8, information: u32, descriptor: *const u8) -> i32 {
+    // SAFETY: the caller's string.
+    let Some(wide) = (unsafe { ansi_arg(name) }) else { return fail(ERROR_INVALID_NAME, FALSE) };
+    let mut z = wide;
+    z.push(0);
+    // SAFETY: a NUL-terminated copy; the descriptor passed on.
+    unsafe { SetFileSecurityW(z.as_ptr(), information, descriptor) }
+}
+
+/// `GetFileSecurityA`: `GetFileSecurityW` with an ANSI path.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetFileSecurityA(
+    name: *const u8,
+    requested: u32,
+    descriptor: *mut u8,
+    length: u32,
+    needed: *mut u32,
+) -> i32 {
+    // SAFETY: the caller's string.
+    let Some(wide) = (unsafe { ansi_arg(name) }) else { return fail(ERROR_INVALID_NAME, FALSE) };
+    let mut z = wide;
+    z.push(0);
+    // SAFETY: a NUL-terminated copy; the caller's buffers passed on.
+    unsafe { GetFileSecurityW(z.as_ptr(), requested, descriptor, length, needed) }
 }

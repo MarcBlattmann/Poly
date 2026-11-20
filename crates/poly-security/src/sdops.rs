@@ -130,8 +130,27 @@ pub fn merge(stored: &Parts, new: &Parts, info: u32) -> SecResult<Parts> {
             out.control |= SE_DACL_PROTECTED;
         }
     }
-    if info & SACL_SECURITY_INFORMATION != 0 {
+    if info & SACL_SECURITY_INFORMATION != 0 && info & LABEL_SECURITY_INFORMATION != 0 {
         out.sacl = if new.control & SE_SACL_PRESENT != 0 { new.sacl.clone() } else { None };
+        out.control |= SE_SACL_PRESENT;
+        out.control &= !SE_SACL_AUTO_INHERITED;
+    } else if info & SACL_SECURITY_INFORMATION != 0 {
+        // The audit ACEs are replaced and the label stays: the label is set only with
+        // LABEL_SECURITY_INFORMATION (specs/windows/advapi32.dll/SetFileSecurityW.yaml,
+        // `sacl_information`; GetFileSecurityW.yaml, `parts`).
+        let old_labels = stored.sacl.as_deref().map(split_sacl).map(|(l, _)| l).unwrap_or_default();
+        let new_audits = if new.control & SE_SACL_PRESENT != 0 {
+            new.sacl.as_deref().map(split_sacl).map(|(_, a)| a).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let mut all = new_audits;
+        all.extend(old_labels);
+        out.sacl = if all.is_empty() && new.control & SE_SACL_PRESENT == 0 {
+            None
+        } else {
+            Some(acl_of(acl::ACL_REVISION, &all))
+        };
         out.control |= SE_SACL_PRESENT;
         out.control &= !SE_SACL_AUTO_INHERITED;
     } else if info & LABEL_SECURITY_INFORMATION != 0 {
@@ -208,6 +227,25 @@ mod tests {
 
     fn text(p: &Parts, info: u32) -> alloc::string::String {
         sdstr::format(p, info).unwrap().0
+    }
+
+    /// specs/windows/advapi32.dll/SetFileSecurityW.yaml, `sacl_information`: setting the SACL
+    /// replaces the audit ACEs and leaves the label; both together replace both.
+    #[test]
+    fn a_sacl_set_keeps_the_label() {
+        let stored = parts("O:BAG:SYD:(A;;FA;;;WD)S:(ML;;NW;;;ME)");
+        let new = parts("S:(AU;SA;FA;;;WD)");
+        let m = merge(&stored, &new, SACL_SECURITY_INFORMATION).unwrap();
+        assert_eq!(
+            text(&select(&m, SACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION), 0x18),
+            "S:(AU;SA;FA;;;WD)(ML;;NW;;;ME)"
+        );
+        let both = parts("S:(AU;SA;FR;;;WD)(ML;;NW;;;LW)");
+        let m = merge(&stored, &both, SACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION).unwrap();
+        assert_eq!(
+            text(&select(&m, SACL_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION), 0x18),
+            "S:(AU;SA;FR;;;WD)(ML;;NW;;;LW)"
+        );
     }
 
     #[test]

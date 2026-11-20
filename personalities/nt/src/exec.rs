@@ -432,7 +432,10 @@ pub fn start_process_listed(
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
     sys.objects.set_thread_object(thread, Some(thread_object))?;
-    sys.thread_records.insert(thread, crate::system::ThreadRecord { process: proc.pid, exit: None, hidden: false });
+    sys.thread_records.insert(
+        thread,
+        crate::system::ThreadRecord { process: proc.pid, exit: None, hidden: false, affinity: None, ideal: None },
+    );
     proc.threads.push(NtThread {
         thread,
         object: thread_object,
@@ -574,8 +577,16 @@ pub fn create_thread(
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
     sys.objects.set_thread_object(thread, Some(thread_object))?;
-    sys.thread_records
-        .insert(thread, crate::system::ThreadRecord { process: proc.pid, exit: None, hidden: req.hide_from_debugger });
+    sys.thread_records.insert(
+        thread,
+        crate::system::ThreadRecord {
+            process: proc.pid,
+            exit: None,
+            hidden: req.hide_from_debugger,
+            affinity: None,
+            ideal: None,
+        },
+    );
     proc.threads.push(NtThread {
         thread,
         object: thread_object,

@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfstringgetcharacteratindex_representations",
+      "source_sha256": "85a06c65b3b4d8b4198f38e9afaac39913dab336afa5805204ef7b6b6c45273b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a68b96996bd79a7db8f70ea11e062db8d9e6bbb5cc1e9bedae73e79a0ab7f59e",
+          "exit_code": 0,
+          "stdout": "ok CFStringGetCharacterAtIndex(c, 3) == 0xe9\nok CFStringGetCharacterAtIndex(m, 3) == 0xe9\nok CFStringGetCharacterAtIndex(sub, 0) == 'z'\nok CFStringGetCharacterAtIndex(sub, 1) == 0xe9\nok CFStringGetCharacterAtIndex(l1, 3) == 0xe9\nok CFStringGetCharacterAtIndex(m, 4) == '!'\nok CFStringGetCharacterAtIndex(m, 0) == 'y'\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c7ab09d164e667f386d3f207692ec7672324e8b36c230e57bac90bdb99400576",
+          "exit_code": 0,
+          "stdout": "ok CFStringGetCharacterAtIndex(c, 3) == 0xe9\nok CFStringGetCharacterAtIndex(m, 3) == 0xe9\nok CFStringGetCharacterAtIndex(sub, 0) == 'z'\nok CFStringGetCharacterAtIndex(sub, 1) == 0xe9\nok CFStringGetCharacterAtIndex(l1, 3) == 0xe9\nok CFStringGetCharacterAtIndex(m, 4) == '!'\nok CFStringGetCharacterAtIndex(m, 0) == 'y'\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfpreferencescopyappvalue_global_and_current_application",
+      "source_sha256": "41453a5a9bd04d730b3e3d1a6d033c04bf8d641aeabfd7d120269cdaab66f920",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e6b0528c480bfc2591337d0e4984fa881ad2bab559691209dafa06fec6620aeb",
+          "exit_code": 0,
+          "stdout": "ok langs != NULL && CFGetTypeID(langs) == CFArrayGetTypeID() && CFArrayGetCount(langs) >= 1\nok g != NULL && CFEqual(g, langs)\nok CFEqual(CFPreferencesCopyAppValue(CFSTR(\"AppleLanguages\"), app), langs)\nok CFPreferencesCopyAppValue(CFSTR(\"unrelated\"), kCFPreferencesAnyApplication) == NULL\nok CFPreferencesCopyValue(CFSTR(\"only-here\"), app, kCFPreferencesCurrentUser, kCFPreferencesAnyHost) == NULL\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7cda019e1d084e8caf5115b65f3fefd4e9042cdbf5a6afca85aa417ef5896786",
+          "exit_code": 0,
+          "stdout": "ok langs != NULL && CFGetTypeID(langs) == CFArrayGetTypeID() && CFArrayGetCount(langs) >= 1\nok g != NULL && CFEqual(g, langs)\nok CFEqual(CFPreferencesCopyAppValue(CFSTR(\"AppleLanguages\"), app), langs)\nok CFPreferencesCopyAppValue(CFSTR(\"unrelated\"), kCFPreferencesAnyApplication) == NULL\nok CFPreferencesCopyValue(CFSTR(\"only-here\"), app, kCFPreferencesCurrentUser, kCFPreferencesAnyHost) == NULL\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfpreferencescopyappvalue_types_and_missing",
+      "source_sha256": "1a8f37d0cedb4b83a6b3237893efe19f32728af46bacc4161cf5d6cdea6ceb72",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "61cfc70cf27d0128ea43e4b5f91980271f4aaaccbcb5a0f5f02ced67d6458635",
+          "exit_code": 0,
+          "stdout": "ok CFPreferencesCopyAppValue(CFSTR(\"never-set\"), app) == NULL\nok cf_is(CFPreferencesCopyAppValue(CFSTR(\"string\"), app), \"text\")\nok vi && CFGetTypeID(vi) == CFNumberGetTypeID() && CFNumberGetValue(vi, kCFNumberLongLongType, &ll) && ll == 5\nok vd && CFNumberGetValue(vd, kCFNumberDoubleType, &dv) && dv == 1.5\nok CFPreferencesCopyAppValue(CFSTR(\"bool\"), app) == kCFBooleanTrue\nok data && CFGetTypeID(data) == CFDataGetTypeID() && CFDataGetLength(data) == 2 && CFDataGetBytePtr(data)[1] == 'b'\nok arr && CFGetTypeID(arr) == CFArrayGetTypeID() && CFArrayGetCount(arr) == 2 && cf_is(CFArrayGetValueAtIndex(arr, 1), \"y\")\nok dict && CFGetTypeID(dict) == CFDictionaryGetTypeID() && cf_is(CFDictionaryGetValue(dict, CFSTR(\"k\")), \"v\")\nok date && CFGetTypeID(date) == CFDateGetTypeID() && CFDateGetAbsoluteTime(date) == 1000.0\nok CFPreferencesCopyAppValue(CFSTR(\"STRING\"), app) == NULL\nok cf_is(CFPreferencesCopyAppValue(CFSTR(\"mut\"), app), \"before\")\nok CFPreferencesCopyAppValue(CFSTR(\"string\"), app) == NULL\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "59f6cdbf8d756cfdf894895379a735e210c95bcea53107f12de44c4ca226df41",
+          "exit_code": 0,
+          "stdout": "ok CFPreferencesCopyAppValue(CFSTR(\"never-set\"), app) == NULL\nok cf_is(CFPreferencesCopyAppValue(CFSTR(\"string\"), app), \"text\")\nok vi && CFGetTypeID(vi) == CFNumberGetTypeID() && CFNumberGetValue(vi, kCFNumberLongLongType, &ll) && ll == 5\nok vd && CFNumberGetValue(vd, kCFNumberDoubleType, &dv) && dv == 1.5\nok CFPreferencesCopyAppValue(CFSTR(\"bool\"), app) == kCFBooleanTrue\nok data && CFGetTypeID(data) == CFDataGetTypeID() && CFDataGetLength(data) == 2 && CFDataGetBytePtr(data)[1] == 'b'\nok arr && CFGetTypeID(arr) == CFArrayGetTypeID() && CFArrayGetCount(arr) == 2 && cf_is(CFArrayGetValueAtIndex(arr, 1), \"y\")\nok dict && CFGetTypeID(dict) == CFDictionaryGetTypeID() && cf_is(CFDictionaryGetValue(dict, CFSTR(\"k\")), \"v\")\nok date && CFGetTypeID(date) == CFDateGetTypeID() && CFDateGetAbsoluteTime(date) == 1000.0\nok CFPreferencesCopyAppValue(CFSTR(\"STRING\"), app) == NULL\nok cf_is(CFPreferencesCopyAppValue(CFSTR(\"mut\"), app), \"before\")\nok CFPreferencesCopyAppValue(CFSTR(\"string\"), app) == NULL\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
