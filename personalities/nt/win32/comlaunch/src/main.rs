@@ -600,8 +600,9 @@ fn factory_alive(p: &Published) -> bool {
     }
     let req = Request::Call { oid: p.factory.oid, op: Op::Release(0), caller: Caller::DIRECT };
     let reply = if write_all(h, &frame(&req.encode())) {
-        let mut head = [0u8; 4];
-        if read_exact(h, &mut head) {
+        // The exporter confirms the call it read (`poly_com::wire::RECEIVED`), then replies.
+        let (mut mark, mut head) = ([0u8; 1], [0u8; 4]);
+        if read_exact(h, &mut mark) && mark[0] == poly_com::wire::RECEIVED && read_exact(h, &mut head) {
             frame_len(head).and_then(|n| {
                 let mut b = alloc::vec![0u8; n];
                 read_exact(h, &mut b).then_some(b)
