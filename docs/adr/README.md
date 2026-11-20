@@ -227,6 +227,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0250](0250-out-of-memory-never-panics-the-kernel.md) | Out of memory never panics the kernel | Accepted |
 | [0252](0252-the-bibata-cursor-theme.md) | The Bibata cursor theme | Accepted |
 | [0253](0253-file-descriptors-set-as-given-and-new-files-get-their-creators-default.md) | File descriptors set as given, and new files get their creator's default | Accepted |
+| [0254](0254-unmapping-does-not-wait-for-other-cpus.md) | Unmapping does not wait for other CPUs | Accepted |
 | [0255](0255-boots-that-run-programs-see-a-real-cpu.md) | Boots that run programs see a real CPU | Accepted |
 <!-- adr-index:end -->
 

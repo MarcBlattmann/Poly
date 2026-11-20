@@ -17,9 +17,11 @@
 //! `Memory`, sysctl values, signals and `posix_spawn` children in
 //! [`XnuState`].
 //!
-//! Only x86-64 programs run: arm64 ones wait for the translator (ADR 0151).
+//! arm64 programs run in the translator's runtime ([`arm64`], ADR 0257).
 //! The files are read whole into the kernel heap and their segments copied
 //! into anonymous memory (file-backed mappings come with larger programs).
+
+pub mod arm64;
 
 use crate::fs::cache::FileSource;
 use crate::fs::poll::ThreadBlocker;
@@ -52,7 +54,7 @@ pub struct Loaded {
 }
 
 /// Files for the loader, read whole through the VFS as the kernel.
-struct VfsFiles;
+pub(crate) struct VfsFiles;
 
 impl poly_dyld::FileSystem for VfsFiles {
     fn read(&mut self, path: &str) -> Option<Vec<u8>> {
