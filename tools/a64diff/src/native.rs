@@ -20,6 +20,9 @@
 //! arm64e) processes the `PAC*`/`AUT*` instructions leave registers alone,
 //! which is what poly-a64 does.
 
+// The comparison helpers are used only by the macOS/arm64 runner below.
+#![cfg_attr(not(all(target_os = "macos", target_arch = "aarch64")), allow(dead_code, unused_imports))]
+
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
