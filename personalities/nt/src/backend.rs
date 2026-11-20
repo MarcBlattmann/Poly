@@ -67,6 +67,12 @@ pub trait Backend {
     /// Image (executable or DLL) `path` was mapped in process `pid` at `base`, `size` bytes.
     fn image_mapped(&mut self, _pid: u32, _base: u64, _size: u64, _path: &[u16]) {}
 
+    /// Put the window-state page (ADR 0249) at `addr`, one page the caller committed read-only
+    /// there: the kernel's shared page replaces it. An error when the kernel has none.
+    fn map_window_state_page(&mut self, _addr: u64) -> Result<(), NtStatus> {
+        Err(poly_ntobj::status::STATUS_NOT_SUPPORTED)
+    }
+
     /// Map fresh zero-filled private pages at `[addr, addr + len)`.
     fn commit(&mut self, addr: u64, len: u64, prot: HwProt) -> Result<(), NtStatus>;
 
