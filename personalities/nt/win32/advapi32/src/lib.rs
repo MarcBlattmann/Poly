@@ -278,8 +278,12 @@ pub unsafe extern "system" fn ConvertSidToStringSidW(s: *const u8, out: *mut *mu
     let bytes: Vec<u8> = text.iter().chain(&[0]).flat_map(|c| c.to_le_bytes()).collect();
     match local_copy(&bytes) {
         Some(p) => {
-            // SAFETY: checked non-null.
-            unsafe { out.write(p.cast()) };
+            // SAFETY: checked non-null; the last error becomes 0
+            // (ImpersonateNamedPipeClient.yaml `last_error_in_the_tests`).
+            unsafe {
+                out.write(p.cast());
+                SetLastError(0);
+            }
             TRUE
         }
         None => fail(ERROR_NOT_ENOUGH_MEMORY),

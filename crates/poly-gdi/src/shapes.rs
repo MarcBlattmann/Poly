@@ -3,6 +3,7 @@
 //! `OffsetWindowOrgEx.yaml`; Learn's "Mapping Modes and Translations" and "Hatch styles").
 
 use crate::region::{Rect, Region};
+use alloc::vec::Vec;
 
 /// The pixels `p` of `rgn` for which every pixel `q` with `|q.x - p.x| <= w` and
 /// `|q.y - p.y| <= h` is in `rgn` too (an erosion by a `(2w+1) x (2h+1)` box), with `w, h >= 0`.
@@ -86,11 +87,45 @@ pub fn round_rect(l: i32, t: i32, r: i32, b: i32, cw: i32, ch: i32, pen: Option<
     };
     let n = width.max(1);
     let (x1, y1) = (r - 1, b - 1);
-    if n == 1 {
-        // `fill_with_pen`: the region one pixel wider and taller; the pen on its border.
-        let all = round_box(l, t, x1, y1, cw, ch);
-        let pen = border4(&all);
-        return (all.subtract(&pen), pen);
+    let (w, h) = (i64::from(r) - i64::from(l), i64::from(b) - i64::from(t));
+    // `corner_size`: 0 on either axis, or 1 on both, is a plain rectangle.
+    let plain = cw == 0 || ch == 0 || (cw == 1 && ch == 1);
+    if n == 1 || (!inside && !plain) {
+        if n == 1 && w == 2 && h == 2 {
+            // `box`: a 2x2 box draws (l, t) and (l, t+1), no brush.
+            return (Region::new(), rect_region(l, t, l + 1, t + 2));
+        }
+        let (cw, ch) = if plain { (0, 0) } else { (i64::from(cw), i64::from(ch)) };
+        let path = crate::rgnshape::outline_path(w, h, cw, ch);
+        let lit = if n == 1 {
+            // `outline_1px`: the stroke of the path.
+            crate::rgnshape::outline_1px_pixels(&path)
+        } else {
+            // `outline_wide` (an approximation the sheet gives for rounded boxes).
+            crate::rgnshape::outline_wide_pixels(&path, i64::from(n))
+        };
+        let pen = pixels_region(l, t, &lit);
+        // `fill_with_pen`: the brush fills the inside of the path where the pen is not.
+        let runs: Vec<Rect> = crate::rgnshape::path_interior(&path, h)
+            .into_iter()
+            .map(|(y, a, z)| Rect::new(l + a as i32, t + y as i32, l + z as i32, t + y as i32 + 1))
+            .collect();
+        let brush = Region::from_rects(&runs).subtract(&pen);
+        return (brush, pen);
+    }
+    if inside && !plain && w > i64::from(n) && h > i64::from(n) {
+        // PS_INSIDEFRAME on a rounded box (no rule in the sheet): the wide stroke of the path of
+        // the box made smaller so that the pen stays inside it.
+        let (a, z) = (n / 2, (n - 1) / 2);
+        let (sw, sh) = (w - i64::from(a + z), h - i64::from(a + z));
+        let shrink = |c: i32| i64::from(c).saturating_sub(i64::from(n - 1)).max(1);
+        let path = crate::rgnshape::outline_path(sw, sh, shrink(cw), shrink(ch));
+        let pen = pixels_region(l + a, t + a, &crate::rgnshape::outline_wide_pixels(&path, i64::from(n)));
+        let runs: Vec<Rect> = crate::rgnshape::path_interior(&path, sh)
+            .into_iter()
+            .map(|(y, x0, x1)| Rect::new(l + a + x0 as i32, t + a + y as i32, l + a + x1 as i32, t + a + y as i32 + 1))
+            .collect();
+        return (Region::from_rects(&runs).subtract(&pen), pen);
     }
     let grow = |c: i32, by: i32| if c == 0 { 0 } else { c.saturating_add(by).max(0) };
     let (outer, inner) = if inside {
@@ -105,6 +140,26 @@ pub fn round_rect(l: i32, t: i32, r: i32, b: i32, cw: i32, ch: i32, pen: Option<
         )
     };
     (inner.clone(), outer.subtract(&inner))
+}
+
+/// The region of `pixels` (offsets from `l`, `t`): their runs on each row.
+fn pixels_region(l: i32, t: i32, pixels: &[(i64, i64)]) -> Region {
+    let mut v: Vec<(i64, i64)> = pixels.iter().map(|&(x, y)| (y, x)).collect();
+    v.sort_unstable();
+    let mut runs: Vec<Rect> = Vec::new();
+    let mut i = 0;
+    while i < v.len() {
+        let (y, x0) = v[i];
+        let mut x1 = x0 + 1;
+        i += 1;
+        while i < v.len() && v[i] == (y, x1) {
+            x1 += 1;
+            i += 1;
+        }
+        let (y, x0, x1) = (t + y as i32, l + x0 as i32, l + x1 as i32);
+        runs.push(Rect::new(x0, y, x1, y + 1));
+    }
+    Region::from_rects(&runs)
 }
 
 /// Whether hatch `style` (`HS_HORIZONTAL` 0 .. `HS_DIAGCROSS` 5, `wingdi.h`) has a pixel at
@@ -289,6 +344,24 @@ mod tests {
         let (brush, pen) = round_rect(0, 0, 10, 8, 0, 0, None);
         assert_eq!((pixels(&brush).len(), pixels(&pen).len()), (9 * 7, 0));
         assert!(round_rect(5, 5, 6, 6, 0, 0, Some((1, false))).1.is_empty());
+    }
+
+    #[test]
+    fn one_pixel_outline_of_a_circle_and_small_boxes() {
+        // RoundRect.yaml `outline_1px`, the 21x21 circle of rr_pen1 at (2,2): its top run is
+        // x 10..=14 on row 2, its widest rows x 2 and 22 on rows 10..=14.
+        let (brush, pen) = round_rect(2, 2, 23, 23, 21, 21, Some((1, false)));
+        let row = |y: i32| (0..30).filter(|&x| pen.contains_point(x, y)).collect::<Vec<_>>();
+        assert_eq!(row(2), [10, 11, 12, 13, 14]);
+        for y in 10..=14 {
+            assert_eq!(row(y), [2, 22], "row {y}");
+        }
+        // The brush never overlaps the pen.
+        assert!(brush.intersect(&pen).is_empty());
+        // `box`: 2x2 draws (l, t) and (l, t+1); 3x3 with corners four pen pixels and one brush pixel.
+        assert_eq!(pixels(&round_rect(5, 5, 7, 7, 4, 4, Some((1, false))).1), [(5, 5), (5, 6)]);
+        let (b3, p3) = round_rect(5, 5, 8, 8, 3, 3, Some((1, false)));
+        assert_eq!((pixels(&p3).len(), pixels(&b3)), (4, std::vec![(6, 6)]));
     }
 
     #[test]
