@@ -194,7 +194,8 @@ pub fn gains_of(b: &[u8]) -> Option<[u32; MAX_CHANNELS]> {
 pub struct StreamInfo {
     /// Frames the program wrote since the stream was opened or reset.
     pub written: u64,
-    /// Frames of them the mixer took.
+    /// Frames of them the device has played: the mixer took them and the device finished the
+    /// period they went out in.
     pub played: u64,
     /// Frames of silence the stream played while running without frames.
     pub silence: u64,
@@ -202,7 +203,7 @@ pub struct StreamInfo {
     pub underruns: u32,
     pub running: bool,
     pub buffer_frames: u32,
-    /// Frames written and not yet taken.
+    /// Frames written and not yet taken by the mixer (the buffer's room is the rest).
     pub queued: u32,
     /// The device's output stream ([`DeviceInfo`]): its rate, period and
     /// periods, so the program can tell how far behind the speaker the
@@ -262,12 +263,13 @@ impl Spans {
 }
 
 /// The accounting of one stream's ring buffer (the bytes are the
-/// caller's): frames written and played, whether it runs, and the silence
-/// it played when it ran dry.
+/// caller's): frames written, taken by the mixer and played by the device,
+/// whether it runs, and the silence it played when it ran dry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Ring {
     capacity: u32,
     written: u64,
+    taken: u64,
     played: u64,
     silence: u64,
     underruns: u32,
@@ -277,7 +279,7 @@ pub struct Ring {
 
 impl Ring {
     pub const fn new(capacity: u32) -> Ring {
-        Ring { capacity, written: 0, played: 0, silence: 0, underruns: 0, running: false, dry: false }
+        Ring { capacity, written: 0, taken: 0, played: 0, silence: 0, underruns: 0, running: false, dry: false }
     }
 
     pub fn capacity(&self) -> u32 {
@@ -285,7 +287,7 @@ impl Ring {
     }
 
     pub fn queued(&self) -> u32 {
-        (self.written - self.played) as u32
+        (self.written - self.taken) as u32
     }
 
     pub fn room(&self) -> u32 {
@@ -296,6 +298,12 @@ impl Ring {
         self.running
     }
 
+    /// Frames the mixer took.
+    pub fn taken(&self) -> u64 {
+        self.taken
+    }
+
+    /// Frames the device played.
     pub fn played(&self) -> u64 {
         self.played
     }
@@ -318,16 +326,21 @@ impl Ring {
     /// The next `frames` frames to play (at most those queued), not yet
     /// used up.
     pub fn peek(&self, frames: u32) -> Spans {
-        self.spans(self.played, frames.min(self.queued()))
+        self.spans(self.taken, frames.min(self.queued()))
     }
 
     /// The mixer used `frames` of them.
     pub fn consume(&mut self, frames: u32) {
         let n = frames.min(self.queued());
-        self.played += n as u64;
+        self.taken += n as u64;
         if n > 0 {
             self.dry = false;
         }
+    }
+
+    /// The device finished playing `frames` more of what the mixer took.
+    pub fn heard(&mut self, frames: u64) {
+        self.played = (self.played + frames).min(self.taken);
     }
 
     /// The mixer's period ended `short` frames (in the stream's rate)

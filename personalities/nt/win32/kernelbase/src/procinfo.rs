@@ -183,15 +183,48 @@ pub unsafe extern "system" fn GetProcessShutdownParameters(level: *mut u32, flag
 }
 
 /// `ProcessIdToSessionId(dwProcessId, pSessionId)`: "Retrieves the Remote Desktop Services
-/// session associated with a specified process" (Learn). Poly has one session: every process
-/// is in the caller's (`PEB.SessionId`, PEB + 0x2C0, `winternl.h`). Doc-derived.
+/// session associated with a specified process" (Learn; the process is opened with
+/// `PROCESS_QUERY_LIMITED_INFORMATION`). The caller's own from its PEB (`PEB.SessionId`, PEB +
+/// 0x2C0, `winternl.h`); another process's from `ProcessSessionInformation`, which answers the same
+/// value (NtQueryInformationProcess.yaml `session`). WTSGetActiveConsoleSessionId.yaml: a child's
+/// is its parent's session (`child`); an unused id fails with `ERROR_INVALID_PARAMETER` (`bad_pid`),
+/// which is what opening it gives.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn ProcessIdToSessionId(_process_id: u32, session: *mut u32) -> i32 {
+pub unsafe extern "system" fn ProcessIdToSessionId(process_id: u32, session: *mut u32) -> i32 {
     if session.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    // SAFETY: the PEB is mapped; the caller's out-pointer.
-    unsafe { session.write_unaligned(((peb() + 0x2C0) as *const u32).read()) };
+    if process_id == crate::process::GetCurrentProcessId() {
+        // SAFETY: the PEB is mapped; the caller's out-pointer.
+        unsafe { session.write_unaligned(((peb() + 0x2C0) as *const u32).read()) };
+        return TRUE;
+    }
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    /// `ProcessSessionInformation` (`PROCESSINFOCLASS`, `ntddk.h`).
+    const PROCESS_SESSION_INFORMATION: u32 = 24;
+    let h = crate::iocp::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, process_id);
+    if h == 0 {
+        // OpenProcess's error stands.
+        return FALSE;
+    }
+    let mut value = [0u8; 4];
+    // SAFETY: a 4-byte buffer for the 4-byte answer; the handle opened above, closed below.
+    let st = unsafe {
+        crate::nt::NtQueryInformationProcess(
+            h,
+            PROCESS_SESSION_INFORMATION,
+            value.as_mut_ptr(),
+            4,
+            core::ptr::null_mut(),
+        )
+    };
+    // SAFETY: the handle opened above.
+    unsafe { crate::file::CloseHandle(h) };
+    if st.0 != 0 {
+        return fail(ERROR_INVALID_PARAMETER, FALSE);
+    }
+    // SAFETY: the caller's out-pointer.
+    unsafe { session.write_unaligned(u32::from_le_bytes(value)) };
     TRUE
 }
 

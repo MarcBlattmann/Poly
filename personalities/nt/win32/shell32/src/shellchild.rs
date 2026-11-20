@@ -27,9 +27,10 @@ unsafe extern "system" {
     fn OpenProcess(access: u32, inherit: i32, pid: u32) -> usize;
     fn CloseHandle(h: usize) -> i32;
     fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> usize;
+    fn ProcessIdToSessionId(pid: u32, session: *mut u32) -> i32;
     fn Process32FirstW(snapshot: usize, entry: *mut u8) -> i32;
     fn Process32NextW(snapshot: usize, entry: *mut u8) -> i32;
-    fn ProcessIdToSessionId(pid: u32, session: *mut u32) -> i32;
+
     fn InitializeProcThreadAttributeList(list: *mut u8, count: u32, flags: u32, size: *mut usize) -> i32;
     fn UpdateProcThreadAttribute(
         list: *mut u8,
@@ -51,7 +52,7 @@ unsafe extern "system" {
         env: *mut c_void,
         dir: *const u16,
         si: *mut c_void,
-        pi: *mut [usize; 3],
+        pi: *mut crate::exec::ProcessInformation,
     ) -> i32;
     fn GetLastError() -> u32;
 }
@@ -164,7 +165,7 @@ pub fn start(command: &[u16], dir: Option<&[u16]>, show: i32) -> Option<Result<(
         si[SI_SIZE..].copy_from_slice(&(list.as_mut_ptr() as usize).to_le_bytes());
         let mut cmd = nul(command);
         let dir = dir.map(nul);
-        let mut pi = [0usize; 3];
+        let mut pi = crate::exec::ProcessInformation { process: 0, thread: 0, pid: 0, tid: 0 };
         // SAFETY: NUL-terminated strings (the command line writable), the structures above.
         let ok = unsafe {
             CreateProcessW(
@@ -187,8 +188,8 @@ pub fn start(command: &[u16], dir: Option<&[u16]>, show: i32) -> Option<Result<(
             if ok == 0 {
                 return Err(e);
             }
-            CloseHandle(pi[0]);
-            CloseHandle(pi[1]);
+            CloseHandle(pi.process);
+            CloseHandle(pi.thread);
         }
         Ok(())
     })();

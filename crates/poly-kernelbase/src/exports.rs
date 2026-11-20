@@ -170,6 +170,8 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("VirtualAlloc", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualFree", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualProtect", "api-ms-win-core-memory-l1-1-0"),
+    ("VirtualLock", "api-ms-win-core-memory-l1-1-0"),
+    ("VirtualUnlock", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualQuery", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualAllocEx", "api-ms-win-core-memory-l1-1-0"),
     ("VirtualFreeEx", "api-ms-win-core-memory-l1-1-0"),

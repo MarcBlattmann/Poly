@@ -203,6 +203,30 @@ pub fn desktop_request(path: &[u16], show: bool) -> Result<(), u32> {
 /// A string value of `HKEY_CLASSES_ROOT\<key>` (`None` for the default value), without its NUL,
 /// with `%variables%` of a `REG_EXPAND_SZ` value expanded.
 fn class_value(key: &[u16], value: Option<&str>) -> Option<Vec<u16>> {
+    reg_value(HKEY_CLASSES_ROOT, key, value)
+}
+
+/// `HKEY_LOCAL_MACHINE` (`winreg.h`).
+const HKEY_LOCAL_MACHINE: isize = 0x8000_0002_u32 as i32 as isize;
+
+/// The program the machine's `App Paths` entry of the bare file name `file` names: the default
+/// value of `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\<file>`, without quotes
+/// (`specs/windows/shlwapi.dll/AssocQueryStringW.yaml`, rule `shellexecute_app_paths`: the entry of
+/// the machine is used, the user's is not). `None` for a name with a directory part or no entry.
+fn app_path(file: &[u16]) -> Option<Vec<u16>> {
+    if file.is_empty() || file.iter().any(|&c| c == u16::from(b'\\') || c == u16::from(b'/') || c == u16::from(b':')) {
+        return None;
+    }
+    let key = key_path(&[&w("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths"), file]);
+    let v = reg_value(HKEY_LOCAL_MACHINE, &key, None)?;
+    let q = u16::from(b'"');
+    let v: Vec<u16> = v.into_iter().filter(|&c| c != q).collect();
+    (!v.is_empty()).then_some(v)
+}
+
+/// A string value of `<root>\<key>` (`None` for the default value), without its NUL, with
+/// `%variables%` of a `REG_EXPAND_SZ` value expanded.
+fn reg_value(root: isize, key: &[u16], value: Option<&str>) -> Option<Vec<u16>> {
     let key = nul(key);
     let value = value.map(|v| nul(&w(v)));
     let value_ptr = value.as_ref().map_or(core::ptr::null(), |v| v.as_ptr());
@@ -210,9 +234,7 @@ fn class_value(key: &[u16], value: Option<&str>) -> Option<Vec<u16>> {
     let mut size = buf.len() as u32;
     let mut kind = 0u32;
     // SAFETY: NUL-terminated names; the buffer and its size.
-    let r = unsafe {
-        RegGetValueW(HKEY_CLASSES_ROOT, key.as_ptr(), value_ptr, RRF_STRINGS, &mut kind, buf.as_mut_ptr(), &mut size)
-    };
+    let r = unsafe { RegGetValueW(root, key.as_ptr(), value_ptr, RRF_STRINGS, &mut kind, buf.as_mut_ptr(), &mut size) };
     if r != 0 {
         return None;
     }
@@ -396,10 +418,16 @@ fn execute(info: &ShellExecuteInfo) -> Executed {
         )
     };
     let no_ui = info.mask & SEE_MASK_FLAG_NO_UI != 0;
+    let from_pidl = pidl.is_some();
     let path = match pidl {
         Some(p) => p,
         None if file.is_empty() => return Err((ERROR_FILE_NOT_FOUND, SE_ERR_FNF)),
         None => full_path(file, dir),
+    };
+    // A bare program name that is not there: the machine's `App Paths` entry for it.
+    let path = match crate::item::exists(&path) {
+        None if !from_pidl => app_path(file).unwrap_or(path),
+        _ => path,
     };
     let Some(folder) = crate::item::exists(&path) else { return Err((ERROR_FILE_NOT_FOUND, SE_ERR_FNF)) };
     // A working directory that is not there is ignored (the sheet's `directory`).

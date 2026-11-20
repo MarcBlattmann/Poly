@@ -477,6 +477,7 @@ impl KernelHw {
         let bytes: u64 = rects.iter().map(|r| u64::from(r.width) * u64::from(r.height) * 4).sum();
         let n = rects.len() as u64;
         m.sent = rects;
+        crate::timeline::frame(bytes, n);
         stat(|s| {
             s.sends += 1;
             s.rects += n;

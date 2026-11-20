@@ -326,8 +326,6 @@ poly_win32_rt::fail_exports!(
         UpdateResourceW,
         VerifyVersionInfoA,
         VirtualAllocExNuma,
-        VirtualLock,
-        VirtualUnlock,
         WaitCommEvent,
         WaitForDebugEvent,
         WaitNamedPipeA,

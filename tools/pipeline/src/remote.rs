@@ -553,6 +553,7 @@ mod tests {
             imports: Default::default(),
             session: None,
             token: None,
+            sound: None,
         }
     }
 
