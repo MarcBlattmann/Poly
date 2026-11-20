@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:07",
+  "tests": [
+    {
+      "name": "syncenter_basic",
+      "source_sha256": "09066285118734be8d3df14b3be18ae392621c8584024d2d2604603b99526c35",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "db51e5e81c7cdaea5b0ea78db170a8be188127e0b08ce74958fb944756ced6f9",
+          "exit_code": 0,
+          "stdout": "value OBJC_SYNC_SUCCESS 0\nvalue OBJC_SYNC_NOT_OWNING_THREAD_ERROR -1\nvalue retainCount before 1\nvalue enter a 0\nvalue retainCount while locked (the lock does not retain) 1\nvalue enter a again (recursive) 0\nvalue enter b (another object is independent) 0\nvalue enter nil 0\nvalue exit nil 0\nvalue exit b 0\nvalue exit a 0\nvalue exit a again 0\nvalue exit a a third time (no lock is held) -1\nvalue enter a class object 0\nvalue exit a class object 0\nvalue enter the metaclass 0\nvalue exit the metaclass 0\nvalue retainCount after 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "62faaa6c97b95a1da7800ae126a01637c141f0432c959af57b6a5b10eae420f0",
+          "exit_code": 0,
+          "stdout": "value OBJC_SYNC_SUCCESS 0\nvalue OBJC_SYNC_NOT_OWNING_THREAD_ERROR -1\nvalue retainCount before 1\nvalue enter a 0\nvalue retainCount while locked (the lock does not retain) 1\nvalue enter a again (recursive) 0\nvalue enter b (another object is independent) 0\nvalue enter nil 0\nvalue exit nil 0\nvalue exit b 0\nvalue exit a 0\nvalue exit a again 0\nvalue exit a a third time (no lock is held) -1\nvalue enter a class object 0\nvalue exit a class object 0\nvalue enter the metaclass 0\nvalue exit the metaclass 0\nvalue retainCount after 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "syncenter_threads",
+      "source_sha256": "1687c6defba856f61da71ecfd1044f49d687d43d90ae94d79e9bc91078c62b71",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "55f4f304a75a1f5677050ae6ef3f8a120fd29e1fb63fbf249802b4fb81c2f276",
+          "exit_code": 0,
+          "stdout": "value counter after 4 x 20000 locked increments 80000\nvalue times two threads were inside at once 0\nvalue waiter got the lock while main holds it 0\nvalue waiter after main's inner exit (still held once) 0\nvalue waiter got the lock after main's last exit 1\nvalue waiter's enter result 0\nok other object: enter works while lock_obj is held by this thread\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b91bb00356b622efeed7afd13618e220a12f79310b95f121fc666351346029ba",
+          "exit_code": 0,
+          "stdout": "value counter after 4 x 20000 locked increments 80000\nvalue times two threads were inside at once 0\nvalue waiter got the lock while main holds it 0\nvalue waiter after main's inner exit (still held once) 0\nvalue waiter got the lock after main's last exit 1\nvalue waiter's enter result 0\nok other object: enter works while lock_obj is held by this thread\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

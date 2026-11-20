@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_autoreleasePoolPop.yaml. Observed with Objective-C test programs built with
+# clang for x86_64 and arm64 (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in
+# objc_autoreleasePoolPop.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_autoreleasePoolPop
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively and x86_64 under Rosetta 2; every test printed the same bytes on both architectures and on every run. Test programs are built with `poly-mac: libobjc` (linked against libobjc and the root class NSObject only, no Foundation)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  A "count" below is what the root class's retainCount method reports: 1 for a new object, one per
+  owning reference. objc_autoreleasePoolPop(token) ends the pool the token names and every pool
+  pushed after it that is still open: all objects autoreleased into them receive their -release
+  now, newest first (10, 11, 12 are released as 12, 11, 10), inner pools before outer ones (a pop
+  of an inner pool releases only that pool's objects: observed 4 then 3 at the inner pop, and 5,
+  2, 1 at the outer one). A pop of an outer token while inner pools are open ends them all,
+  innermost first, and a new pool afterwards works. An object whose -dealloc autoreleases another
+  object into the pool being popped has that object released by the same pop, and a -dealloc may
+  open and pop a pool of its own. Objects retained elsewhere survive. A null token is not
+  accepted: the process dies with SIGSEGV (signal 11, observed in a child process) on both
+  architectures. There is no return value. Identical on x86_64 and arm64.
+returns:
+  value: "none (void)"
+errors:
+  null_token: "the process dies by SIGSEGV (11)"
+  stale_token: "not observed"
+side_effects: >
+  Pending releases of the ended pools are sent; -dealloc of objects that reach zero runs during
+  the pop.
+threading: >
+  The pool stack belongs to the calling thread; behaviour with more than one thread was not
+  observed.
+ordering:
+  - "inner pools end before outer ones"
+  - "within a pool, newest autorelease first"
+  - "-dealloc of a released object runs before objc_autoreleasePoolPop returns"
+timing:
+  typical: "microseconds: a few memory operations, no system call in the common case"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:50:53",
+  "tests": [
+    {
+      "name": "arc_poolpush_arcpool",
+      "source_sha256": "4a84ddab917477e2e1d387b01b52e2a7a70984cdb926c88997e58a01150905f1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e913b842e64a2a3d0d4107b83f31f9657145d8855cf4a76a91e86abe1d635436",
+          "exit_code": 0,
+          "stdout": "value deallocs inside the block 0\nvalue deallocs inside the inner block 0\nvalue deallocs after the inner block 5\nvalue deallocs after the outer block 15\nvalue deallocs after a loop iteration 4\nvalue deallocs after the break 8\nvalue deallocs after a manual pool 10\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1aeb7df9ed4fb982597d0c322f604b5eb111b20a1ceec6d64e03e29eea72a0c5",
+          "exit_code": 0,
+          "stdout": "value deallocs inside the block 0\nvalue deallocs inside the inner block 0\nvalue deallocs after the inner block 5\nvalue deallocs after the outer block 15\nvalue deallocs after a loop iteration 4\nvalue deallocs after the break 8\nvalue deallocs after a manual pool 10\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_poolpush_scope",
+      "source_sha256": "a831395827de480303a5b40cf4bb7a77783ded179e8ffaf194eccf2c0ca91aa8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "397c988362e2bfa2d019718c7e7fcdc4893bbd75df152e16fa221d7287f47d03",
+          "exit_code": 0,
+          "stdout": "value deallocs before any pop 0\nvalue deallocs after the inner pop 2\nvalue deallocs after the outer pop 3\nvalue an empty pool popped without effect 3\nvalue deallocs after popping the inner and autoreleasing 0\nvalue deallocs after the outer pop (second) 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "19c3e2d98d9c6a4a59a4c9258def02390aaaa6b5dd0207839fc219280bf28b4e",
+          "exit_code": 0,
+          "stdout": "value deallocs before any pop 0\nvalue deallocs after the inner pop 2\nvalue deallocs after the outer pop 3\nvalue an empty pool popped without effect 3\nvalue deallocs after popping the inner and autoreleasing 0\nvalue deallocs after the outer pop (second) 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_poolpush_token",
+      "source_sha256": "d5b6ebafa5f7dd69c44d7939a7c5d231a2f74045b0c21c00340ab4b9cc14d73f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "af7ee97ddb2e168b6ab95e2542130c4fcf9b3952361f8255255435f10682a54b",
+          "exit_code": 0,
+          "stdout": "ok the token is not null\nok the token is not null (inner)\nok nested pools have different tokens\nok a third one differs from both\nok pushing after a pop gives the popped token again\nok again one level up\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4ab301ce6aa952bdf721480a77f435f94de11c2b54d21e54d68ecd8a93f9ae1a",
+          "exit_code": 0,
+          "stdout": "ok the token is not null\nok the token is not null (inner)\nok nested pools have different tokens\nok a third one differs from both\nok pushing after a pop gives the popped token again\nok again one level up\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

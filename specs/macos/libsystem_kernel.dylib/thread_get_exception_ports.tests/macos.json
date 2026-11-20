@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_thread_get_errors",
+      "source_sha256": "8a9fe50659b969e308394ef900cb71431d730ab53eb82c303849dcd0a91adc09",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fbf4429a68c863b8f764f88259ea7ffbf8dcb95de1812b6739935b295f8629c1",
+          "exit_code": 0,
+          "stdout": "ok mask 0: success with no entries\nok mask 0x80000000: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the thread: MACH_SEND_INVALID_DEST\nok a name that is nothing as the thread: MACH_SEND_INVALID_DEST\nok the task port as the thread: KERN_INVALID_ARGUMENT\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d926c44ffde231a6f8ab9bcd69ae85b0748517e22ca5f77f977c3b8d35d57953",
+          "exit_code": 0,
+          "stdout": "ok mask 0: success with no entries\nok mask 0x80000000: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the thread: MACH_SEND_INVALID_DEST\nok a name that is nothing as the thread: MACH_SEND_INVALID_DEST\nok the task port as the thread: KERN_INVALID_ARGUMENT\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_thread_get_other_threads",
+      "source_sha256": "4e81fd1e8a9dbd85766c2e06d5dceb7b8ad69a2968a205670f91d4b84ae6ea10",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7bedbd1e8ffa8a65dcb6bf6e1068fccbfb6fe1c81564f5a1e3bf3d71c78bbc39",
+          "exit_code": 0,
+          "stdout": "ok a thread made after the task's port was set has no entry of its own\nok this thread's entry is its own port\nok the other thread still has none\nok the task's entry is still its own port\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e88b4be0c22f5ba3e1da6c26949c3dfde23496e49d35458a8a89915d4825347b",
+          "exit_code": 0,
+          "stdout": "ok a thread made after the task's port was set has no entry of its own\nok this thread's entry is its own port\nok the other thread still has none\nok the task's entry is still its own port\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "methxchg_basic",
+      "source_sha256": "9f379ab7b3b475a04abf1df1d0c0998227ce74ce36082c608965bc3e0bd75e00",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b69439c529d64121b2921acd3ef4a619d6605736de368bd50970f9a2b2f8d478",
+          "exit_code": 0,
+          "stdout": "ok before: one\nok before: two\nok the Methods keep their selectors\nok the IMPs are swapped\nok messages follow: one now answers 2\nok messages follow: two now answers 1\nok class_getMethodImplementation follows\nok exchanging again restores one\nok exchanging again restores two\nok exchanging a Method with itself changes nothing\nok the same Method objects are still found\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "be4922061253ec0a13b746ea9821106f3938e52d3a31548a193c79695bfc7aa2",
+          "exit_code": 0,
+          "stdout": "ok before: one\nok before: two\nok the Methods keep their selectors\nok the IMPs are swapped\nok messages follow: one now answers 2\nok messages follow: two now answers 1\nok class_getMethodImplementation follows\nok exchanging again restores one\nok exchanging again restores two\nok exchanging a Method with itself changes nothing\nok the same Method objects are still found\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "methxchg_swizzle",
+      "source_sha256": "1a47c5fb224755a8aebf6a6ae5951c52e635dc6f985d4d1ef22dd877be7d2c80",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0cbec87ae69d94f210b6b44285af741131c4a4e63b55cb7c0b6a6148a60fdf59",
+          "exit_code": 0,
+          "stdout": "ok before: target is the original\nok after: target runs the replacement, which reaches the original through swz\nvalue original calls 2\nvalue replacement calls 1\nok swz now holds the original IMP\nvalue a's encoding after the exchange q@:\nvalue b's encoding after the exchange d@:\nok encodings were not swapped\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cf3f1d9940531a6a3fff1f944fb38575455bb0f15b61ca65e9c626ba3d0fea0c",
+          "exit_code": 0,
+          "stdout": "ok before: target is the original\nok after: target runs the replacement, which reaches the original through swz\nvalue original calls 2\nvalue replacement calls 1\nok swz now holds the original IMP\nvalue a's encoding after the exchange q@:\nvalue b's encoding after the exchange d@:\nok encodings were not swapped\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

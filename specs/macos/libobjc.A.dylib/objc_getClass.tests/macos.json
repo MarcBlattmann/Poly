@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "getclass_basic",
+      "source_sha256": "fab53441d41892adce2ec82ee0af31b22f783110aa9c1a5602f556196041ecd7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ae7ac3a09987ed3099fba2cb3678b1f020c4700bada298ac11621590614755b9",
+          "exit_code": 0,
+          "stdout": "ok NSObject is found\nvalue NSObject name NSObject\nok same answer twice\nok [NSObject class] equals it\nok compiled class GcAlpha found\nok compiled class GcBeta found\nok GcAlpha and GcBeta differ\nok GcBeta superclass is GcAlpha\nok GcAlpha superclass is NSObject\nok @class reference equals lookup\nok unknown name gives nil\nok empty name gives nil\nok lookup is case sensitive\nok lookup is case sensitive (2)\nok prefix of a name is not enough\nok name with trailing space is unknown\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ab3e7ea7f79849996ba4e04c892134b75deba3a1fcdeb603541667f221820852",
+          "exit_code": 0,
+          "stdout": "ok NSObject is found\nvalue NSObject name NSObject\nok same answer twice\nok [NSObject class] equals it\nok compiled class GcAlpha found\nok compiled class GcBeta found\nok GcAlpha and GcBeta differ\nok GcBeta superclass is GcAlpha\nok GcAlpha superclass is NSObject\nok @class reference equals lookup\nok unknown name gives nil\nok empty name gives nil\nok lookup is case sensitive\nok lookup is case sensitive (2)\nok prefix of a name is not enough\nok name with trailing space is unknown\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "getclass_names",
+      "source_sha256": "08c46df16063c2270790ab291bef6eeaeaaf31c2d675f220c0783587e7f98ea3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a9c67c6bf6a15ec439c685ef67d191957ebb6b471dce368c0b0b70ce0d691845",
+          "exit_code": 0,
+          "stdout": "ok made Gn.Dot\nok made Gn-Dash\nok made Gn Space\nok made Gn$Dollar\nok made Gn_Under_\nok made Gn0123\nok made Gn??\nok made Gn:colon\nok made G\nok made Gn<Proto>\nok found Gn.Dot\nok found Gn-Dash\nok found Gn Space\nok found Gn$Dollar\nok found Gn_Under_\nok found Gn0123\nok found Gn??\nok found Gn:colon\nok found G\nok found Gn<Proto>\nok 1024-character name registered\nok 1024-character name found\nvalue its name length 1024\nok a name differing in the last character is unknown\nok GnPre\nok GnPrefi is unknown\nok metaclass has the same name\nok getClass does not return the metaclass\nsummary 27 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ab2db6e15b019f6bf3804bbe13c0baa74965bfc817fd72c4359ec6b117dae75a",
+          "exit_code": 0,
+          "stdout": "ok made Gn.Dot\nok made Gn-Dash\nok made Gn Space\nok made Gn$Dollar\nok made Gn_Under_\nok made Gn0123\nok made Gn??\nok made Gn:colon\nok made G\nok made Gn<Proto>\nok found Gn.Dot\nok found Gn-Dash\nok found Gn Space\nok found Gn$Dollar\nok found Gn_Under_\nok found Gn0123\nok found Gn??\nok found Gn:colon\nok found G\nok found Gn<Proto>\nok 1024-character name registered\nok 1024-character name found\nvalue its name length 1024\nok a name differing in the last character is unknown\nok GnPre\nok GnPrefi is unknown\nok metaclass has the same name\nok getClass does not return the metaclass\nsummary 27 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:08",
+  "tests": [
+    {
+      "name": "msgsendsuper2_args",
+      "source_sha256": "488f6c60650475f2c74873b31f912322ad3e165ba06b9a2aad393834d2cf18a0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d9fdba3b405ef0b92e2994328ee6577afd9568df70120f0e53a3304b2a440154",
+          "exit_code": 0,
+          "stdout": "ok ten integer arguments\nok eleven mixed floating arguments\nok two-word struct in registers\nok two-double struct\nok arm64: large struct through the result pointer\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ae1cbb35ecbae5e9ba7f866f60e68c2edd8c7a8d02f96c274280f9083d74a984",
+          "exit_code": 0,
+          "stdout": "ok ten integer arguments\nok eleven mixed floating arguments\nok two-word struct in registers\nok two-double struct\nok x86_64: large structs use objc_msgSendSuper2_stret\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "msgsendsuper2_basic",
+      "source_sha256": "4403898e76d3fceb4fd500f471e3a1884ee443ea52367f95fdeb24ce3aaad28d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3aec98226a500d07e87067c83e322916eb743c3c0fd0489cce2532bf1d0aa298",
+          "exit_code": 0,
+          "stdout": "ok super_class = Mid starts at Base\nok self is the receiver\nok _cmd is the selector\nok super_class = Leaf starts at Mid (which calls Base)\nok super_class = Base reaches NSObject's -self\nok integer arguments (Mid's override adds 1000 to Base's)\nok integer arguments, starting at Base\nok floating arguments and return\nok [l who] runs Leaf, Mid, Base\nok Mid's [super add:to:]\nok Mid's [super scale:by:]\nok class method super send starts at Base's metaclass\nok self is the class\nok +cwho through Mid's [super cwho]\nvalue result with a nil receiver 1\nok the method ran (it returned 1)\nok with self == nil\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4e0c95ada8d490b00ea3a279fc98193349ca9d8a209107e81e29a5cffdc25ede",
+          "exit_code": 0,
+          "stdout": "ok super_class = Mid starts at Base\nok self is the receiver\nok _cmd is the selector\nok super_class = Leaf starts at Mid (which calls Base)\nok super_class = Base reaches NSObject's -self\nok integer arguments (Mid's override adds 1000 to Base's)\nok integer arguments, starting at Base\nok floating arguments and return\nok [l who] runs Leaf, Mid, Base\nok Mid's [super add:to:]\nok Mid's [super scale:by:]\nok class method super send starts at Base's metaclass\nok self is the class\nok +cwho through Mid's [super cwho]\nvalue result with a nil receiver 1\nok the method ran (it returned 1)\nok with self == nil\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

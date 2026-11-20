@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_msgSend.yaml. Observed with Objective-C test programs (tests/macos/include/poly_mobjc.h,
+# ADR 0182); results per architecture in objc_msgSend.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_msgSend
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, 3 runs per architecture with identical output; arm64 observed natively, x86_64 under Rosetta 2 (no native Intel Mac was available, so a difference between Rosetta and real Intel hardware would not show); the programs are Objective-C compiled with Apple clang, loading /usr/lib/libobjc.A.dylib, with no Foundation except where a sheet says so (poly-mac: libobjc, poly_mobjc.h)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  Sends a message: the caller passes the receiver and the selector in the first
+  two argument registers and the method's own arguments after them, exactly as for
+  a call of the method's code; the function finds the method and jumps to it, so
+  the method's result is the result of the call and the stack and registers are
+  as if the caller had called it directly. The call must be made through a
+  pointer of the method's exact type (arm64 passes the arguments of a variadic
+  call differently). Method search: the receiver's class (for an instance), or
+  its metaclass (for a class object, which is how class methods are found), then
+  each superclass in turn; a method added by a category counts as the class's
+  own. The receiver may also be a tagged pointer, whose class is read from the
+  tag bits. A nil receiver ends the call at once: nothing is called, no
+  resolver runs, and the result registers read as zero
+  (see returns). If no method is found the runtime sends +resolveInstanceMethod:
+  to the receiver's class (+resolveClassMethod: when the receiver is a class
+  object, to that class), once, and searches again when it returned YES; the
+  method it added then runs, and later sends are ordinary. When there is still
+  no method and no message-forwarding handler is installed (no Foundation), the
+  runtime writes a line to standard error (for an instance receiver:
+  "objc[pid]: -[Class sel]: unrecognized selector sent to instance 0xADDR (no
+  message forward handler is installed)") and the process ends by SIGABRT (signal 6); -forwardingTargetForSelector:,
+  -methodSignatureForSelector: and -forwardInvocation: are not called. The
+  dispatch is never stale: a method added with class_addMethod, replaced with
+  class_replaceMethod or method_setImplementation, or swapped with
+  method_exchangeImplementations takes effect on the very next send, also for
+  selectors already sent to that class and for its subclasses that do not
+  override it. self in the method is the receiver, _cmd the selector sent.
+returns:
+  success: "whatever the method returns, in the registers of the method's own return type"
+  nil_receiver_integer_pointer: "0 for char/short/int/long/BOOL/pointer/id returns, on both architectures"
+  nil_receiver_float_double: "0.0 (arm64: d0 and s0 zero; x86_64: xmm0 zero)"
+  nil_receiver_small_struct: "a struct of up to two 8-byte integers or two doubles reads zero in both registers (both architectures); arm64 also zeroes the four registers of a struct of four floats or four doubles"
+  nil_receiver_memory_struct: "arm64: a struct returned through the hidden result pointer (x8) is NOT written by a nil send; x86_64: objc_msgSend_stret leaves the buffer untouched (see that entry)"
+  nil_receiver_long_double: "x86_64: a long double returned with plain objc_msgSend is not zeroed by a nil receiver (st0 was observed holding a NaN in a probe, not in a test); the objc_msgSend_fpret entry point returns 0"
+  null_selector_nil_receiver: "0; no crash"
+  tagged_receiver: "dispatches on the class of the tag (observed with NSNumber and NSString values of Foundation: -intValue, -doubleValue, -length, -class, -self, isKindOfClass: all work); the class returned by -class equals object_getClass(receiver)"
+errors:
+  unrecognized_selector: "stderr line as in the summary, then SIGABRT (wait status: killed by signal 6); observed for an instance receiver, a class receiver, and when +resolveInstanceMethod: returned YES without adding a method"
+side_effects: "A first send of a selector the class does not implement runs +resolveInstanceMethod: or +resolveClassMethod: once and may add a method to the class; after that the method is in the class's method list. The runtime writes the unrecognized-selector message to standard error before aborting. Nothing else is observable: caches are not visible through the public API except as 'never stale'."
+threading: "reentrant and thread-safe like any call; sends from several threads to the same class while methods are added are not covered by the tests (not observed)"
+ordering:
+  - "+initialize of the receiver's class runs before the first message to the class is delivered, once (observed in the imageload tests of _objc_load_image: the first message to a class triggers it, being loaded does not)"
+  - "the resolver is asked once per (class, selector) that has no method; a second send of a selector the resolver added does not ask again; for a selector the resolver declined, the process aborts at that send, so how often it would ask is not observable"
+  - "when a subclass instance receives a selector that only a superclass's resolver handles, the resolver is inherited and runs with self = the receiver's class (the subclass), and the method is added to that subclass"
+timing:
+  typical: "nanoseconds to microseconds: one dispatch"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

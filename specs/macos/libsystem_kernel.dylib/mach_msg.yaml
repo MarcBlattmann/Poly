@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/mach_msg.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mexc.h; ADR 0182);
+# results per architecture in mach_msg.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/mach_msg
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mexc.h, poly_mlibc.h) so that they call libSystem; each makes its own faults in its own threads or child processes and catches them with exception ports of its own, in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); results are equal on both except where the sheet names a difference"
+  observed_by: spec-macos-mach-exc
+  date: 2026-11-20
+summary: >
+  mach_msg(msg, option, send_size, rcv_size, rcv_name, timeout_ms, notify) as libSystem calls it (the raw trap is specified separately; sending through
+  it ends the process). Sending (MACH_SEND_MSG): a message of a header and 16 bytes (size 40) arrives with its id, size and bytes; remote port MACH_PORT_NULL, local port
+  the name of the receive right it was sent to, the bits holding the dispositions as the receiver sees them (a send disposition 0x11 in the local slot); messages come in
+  the order sent; a port set receives for its members and names the member in the local port. A reply port sent as MAKE_SEND_ONCE arrives as a new send-once name in the
+  remote port with MOVE_SEND_ONCE (18) in the remote slot; a send and a receive in one call (MACH_SEND_MSG | MACH_RCV_MSG) returns the reply in the same buffer. Trailers: by default 8 bytes,
+  format 0; with MACH_RCV_TRAILER_ELEMENTS 1 (sequence number) 12, 2 (sender) 20, 3 (audit) 52, 4 (context) 60, 7 (attributes) 68 bytes.
+  Receiving: a buffer too small is MACH_RCV_TOO_LARGE (0x10004004): without MACH_RCV_LARGE the message is destroyed and only the header's id is filled in (the size
+  field is that of a header); with MACH_RCV_LARGE the message stays queued and the header's size says how big a buffer is needed; an empty queue with MACH_RCV_TIMEOUT is
+  MACH_RCV_TIMED_OUT (0x10004003), also with timeout 0; a name that is not a receive right (nothing, MACH_PORT_NULL, a send right only) is
+  MACH_RCV_INVALID_NAME (0x10004002); a receive right destroyed during a wait ends it with MACH_RCV_PORT_CHANGED (0x10004006) (not MACH_RCV_PORT_DIED), also when
+  destroyed with mod_refs or mach_port_destruct; a port set whose member is destroyed during the wait keeps waiting. Sending errors: a destination that is not a send right
+  (nothing, MACH_PORT_NULL, a receive right only) MACH_SEND_INVALID_DEST (0x10000003); a remote disposition that is none (99) MACH_SEND_INVALID_HEADER (0x10000010); a
+  size smaller than a header MACH_SEND_MSG_TOO_SMALL (0x10000008); a full queue with MACH_SEND_TIMEOUT MACH_SEND_TIMED_OUT (0x10000004); neither send nor receive in the option:
+  success.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  rcv_too_large: "MACH_RCV_TOO_LARGE (0x10004004)"
+  rcv_timed_out: "MACH_RCV_TIMED_OUT (0x10004003)"
+  rcv_invalid_name: "MACH_RCV_INVALID_NAME (0x10004002)"
+  rcv_port_changed: "MACH_RCV_PORT_CHANGED (0x10004006): the receive right was destroyed while waiting"
+  send_invalid_dest: "MACH_SEND_INVALID_DEST (0x10000003)"
+  send_invalid_header: "MACH_SEND_INVALID_HEADER (0x10000010)"
+  send_msg_too_small: "MACH_SEND_MSG_TOO_SMALL (0x10000008)"
+  send_timed_out: "MACH_SEND_TIMED_OUT (0x10000004)"
+side_effects: "a message is queued or removed"
+threading: "blocks the calling thread until the message is sent or received or the timeout passes"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "timeouts are lower bounds in milliseconds"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

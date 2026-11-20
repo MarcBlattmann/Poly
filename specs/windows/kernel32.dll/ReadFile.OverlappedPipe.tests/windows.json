@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d45892328ab7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:26:42Z",
+  "tests": [
+    {
+      "name": "cnet_rf_b",
+      "exe_sha256": "0124d890d96992ca4dfc894a3f0fff458d9d7c589baaf6ff7961389dd25a5394",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cGVuZGluZyByZWFkOiBldmVudCBzaWduYWxsZWQgbm8sIEludGVybmFsIGlzIFNUQVRVU19QRU5ESU5HIHllcwpHZXRPdmVybGFwcGVkUmVzdWx0OiB5ZXMgY291bnQgNiwgYnl0ZXMgWzk3LCA5OCwgOTksIDEwMCwgMTAxLCAxMDJdCmEgbmV3IHJlYWQgd2l0aCBubyBkYXRhOiByZXR1cm5lZCBubyAoZXJyb3IgOTk3KQphIHJlYWQgcGVuZGluZyBhZ2FpbjogcmV0dXJuZWQgbm8gKGVycm9yIDk5NykKYSByZWFkIGFmdGVyIHRoYXQ6IHJldHVybmVkIG5vIChlcnJvciAxMDkpLCBjb3VudCAwLCBldmVudCBzaWduYWxsZWQgbm8Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "pending read: event signalled no, Internal is STATUS_PENDING yes\nGetOverlappedResult: yes count 6, bytes [97, 98, 99, 100, 101, 102]\na new read with no data: returned no (error 997)\na read pending again: returned no (error 997)\na read after that: returned no (error 109), count 0, event signalled no\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "cnet_rf_c",
+      "exe_sha256": "e706f7c48a5029655c2dda0caa68ab2bad8fbb84670d855aff698dd863a0789c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0T3ZlcmxhcHBlZFJlc3VsdCB3aXRob3V0IHdhaXRpbmc6IG5vIGVycm9yIDk5NiBjb3VudCAwCnJlYWQgNCBvZiAxMCB3YWl0aW5nIGJ5dGVzOiByZXR1cm5lZCB5ZXMgKGVycm9yIDApLCBjb3VudCA0LCBldmVudCBzaWduYWxsZWQgeWVzCkNhbmNlbElvRXggb2YgaXQ6IHllcwp0aGUgcGVlciBjbG9zZWQ6IGV2ZW50IHNpZ25hbGxlZCB5ZXMKcmVhZCBvbiBhIGNsaWVudCB3aG9zZSBzZXJ2ZXIgZW5kIGlzIGNsb3NlZDogcmV0dXJuZWQgbm8gKGVycm9yIDEwOSksIGNvdW50IDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetOverlappedResult without waiting: no error 996 count 0\nread 4 of 10 waiting bytes: returned yes (error 0), count 4, event signalled yes\nCancelIoEx of it: yes\nthe peer closed: event signalled yes\nread on a client whose server end is closed: returned no (error 109), count 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

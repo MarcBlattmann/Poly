@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_autorelease.yaml. Observed with Objective-C test programs built with
+# clang for x86_64 and arm64 (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in
+# objc_autorelease.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_autorelease
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively and x86_64 under Rosetta 2; every test printed the same bytes on both architectures and on every run. Test programs are built with `poly-mac: libobjc` (linked against libobjc and the root class NSObject only, no Foundation)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  A "count" below is what the root class's retainCount method reports: 1 for a new object, one per
+  owning reference. objc_autorelease(obj) returns obj and arranges for one -release to be sent to
+  it when the innermost open autorelease pool of the calling thread is popped. The count does not
+  change at the call. It is a message send of -autorelease (an override sees one call per
+  objc_autorelease, also when no pool is open). A pop releases the pool's objects newest first:
+  objects autoreleased 10, 11, 12 died in the order 12, 11, 10. An object retained elsewhere
+  survives the pop with its count reduced by one. The same object autoreleased twice receives two
+  releases at the pop. Pools hold any number of entries (5000 tested). With no pool open the call
+  still returns the object and the count is unchanged, but the release never happens: the object
+  leaks, and a pool pushed afterwards does not release it. nil is accepted and returned. Identical
+  on x86_64 and arm64.
+returns:
+  object: "the argument"
+  nil: "nil"
+errors:
+  no_pool: "no error and no message on stderr; the object is leaked (never released)"
+side_effects: >
+  One pending release is queued in the innermost pool of the calling thread.
+threading: >
+  No thread-specific behaviour was observed; every test ran on the main thread of one process.
+  Behaviour with several threads is not observed.
+ordering:
+  - "the queued release is sent at the pop of the pool that was innermost at the call, newest entry first"
+  - "-autorelease is sent once per call, before objc_autorelease returns"
+timing:
+  typical: "microseconds: a few memory operations, no system call in the common case"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

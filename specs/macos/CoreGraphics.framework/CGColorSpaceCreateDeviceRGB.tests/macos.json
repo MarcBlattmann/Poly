@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgcs_device_more",
+      "source_sha256": "6937cf0c8c8149eedd01a63e8fc8a1e08d507217f2cd727e1a8a91580bfc63f2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5548fff8926691fd854ac6c0b646ea12f55261a174c5c010a92b23b1861aa573",
+          "exit_code": 0,
+          "stdout": "ok device gray: 1 component, model monochrome (0)\nok device CMYK: 4 components, model CMYK (2)\nok the three device spaces are different objects\nvalue model values: monochrome 0\nvalue RGB 1\nvalue CMYK 2\nvalue lab 3\nvalue indexed 5\nvalue pattern 6\nok retain/release keep the object alive\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4434c775a1190cf681967754239cbb9b16d481bbe41502940dfc435fd93a66d9",
+          "exit_code": 0,
+          "stdout": "ok device gray: 1 component, model monochrome (0)\nok device CMYK: 4 components, model CMYK (2)\nok the three device spaces are different objects\nvalue model values: monochrome 0\nvalue RGB 1\nvalue CMYK 2\nvalue lab 3\nvalue indexed 5\nvalue pattern 6\nok retain/release keep the object alive\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgcs_device_vs_srgb",
+      "source_sha256": "a53ba628343ad15fb170dc72f793b102027e90ebb547a77145733b580f48129b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a0d398f46303051613326f6df5b584cfb673d05915b5709f195c1dc94f29a94e",
+          "exit_code": 0,
+          "stdout": "value level in 1/100 0\nvalue device RGB bitmap 000000ff\nvalue sRGB bitmap 000000ff\nvalue level in 1/100 10\nvalue device RGB bitmap 1a1a1aff\nvalue sRGB bitmap 1a1a1aff\nvalue level in 1/100 25\nvalue device RGB bitmap 404040ff\nvalue sRGB bitmap 404040ff\nvalue level in 1/100 50\nvalue device RGB bitmap 808080ff\nvalue sRGB bitmap 808080ff\nvalue level in 1/100 75\nvalue device RGB bitmap bfbfbfff\nvalue sRGB bitmap bfbfbfff\nvalue level in 1/100 90\nvalue device RGB bitmap e6e6e6ff\nvalue sRGB bitmap e6e6e6ff\nvalue level in 1/100 100\nvalue device RGB bitmap ffffffff\nvalue sRGB bitmap ffffffff\nvalue levels where the two bitmaps differ 0\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c84b215a01ab6eebcfd0818c10ad25002d5f8b0524b7a8a7fa46e93e67025a64",
+          "exit_code": 0,
+          "stdout": "value level in 1/100 0\nvalue device RGB bitmap 000000ff\nvalue sRGB bitmap 000000ff\nvalue level in 1/100 10\nvalue device RGB bitmap 1a1a1aff\nvalue sRGB bitmap 1a1a1aff\nvalue level in 1/100 25\nvalue device RGB bitmap 404040ff\nvalue sRGB bitmap 404040ff\nvalue level in 1/100 50\nvalue device RGB bitmap 808080ff\nvalue sRGB bitmap 808080ff\nvalue level in 1/100 75\nvalue device RGB bitmap bfbfbfff\nvalue sRGB bitmap bfbfbfff\nvalue level in 1/100 90\nvalue device RGB bitmap e6e6e6ff\nvalue sRGB bitmap e6e6e6ff\nvalue level in 1/100 100\nvalue device RGB bitmap ffffffff\nvalue sRGB bitmap ffffffff\nvalue levels where the two bitmaps differ 0\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

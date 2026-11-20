@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/_objc_map_images.yaml. Observed with Objective-C test programs (tests/macos/include/poly_mobjc.h,
+# ADR 0182); results per architecture in _objc_map_images.tests/macos.json.
+id: macos/api/libobjc.A.dylib/_objc_map_images
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, 3 runs per architecture with identical output; arm64 observed natively, x86_64 under Rosetta 2 (no native Intel Mac was available, so a difference between Rosetta and real Intel hardware would not show); the programs are Objective-C compiled with Apple clang, loading /usr/lib/libobjc.A.dylib, with no Foundation except where a sheet says so (poly-mac: libobjc, poly_mobjc.h)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  The runtime's work when an image (an executable or a library) with Objective-C
+  sections is mapped, seen only through public API (the entry point itself is
+  internal). Before main runs, or before dlopen returns for a later image: every class
+  the image defines is registered (objc_getClass finds it, objc_getClassList
+  and objc_copyClassNamesForImage list it, in the order of the image's class list), with its metaclass
+  and superclass links (a class and its metaclass differ, the metaclass of a
+  subclass has the metaclass of the superclass as its superclass, and a class
+  that derives from NSObject has it as its superclass); class_getImageName names the executable's
+  path for its classes, "/usr/lib/libobjc.A.dylib" for NSObject, nil for a class
+  made at run time with objc_allocateClassPair; the image's protocols are
+  registered (objc_getProtocol, conformance through adopted protocols and protocols that
+  extend others); the image's categories are attached to their classes, also to classes of other
+  images (a category in the executable on NSObject, a category of
+  Foundation on NSObject after dlopen): their methods are in the class's
+  method list, found by class_getInstanceMethod and answered by instances,
+  class objects (through NSObject's instance methods) and subclasses; a
+  category method replaces a class's own method of the same selector in
+  dispatch, but both stay in the class's method list (class_copyMethodList
+  shows -shadowed twice, the category's first); of several categories that
+  define one selector the one later in the image wins; class methods in
+  categories replace class methods the same way. After dlopen of Foundation
+  NSArray is found at once, the class list has grown by hundreds of classes,
+  NSArray's image is CoreFoundation's, and NSObject, which did not answer
+  -valueForKey:, now does (Foundation's category).
+returns:
+  classes: "registered and listed; Animal, Dog, Cat of the test come out of objc_copyClassNamesForImage as Animal Dog Cat (source order)"
+  method_list_order: "class_copyMethodList of a class with categories (-twice in two categories, -shadowed in one, -own, -fromOne): twice fromOne shadowed twice own shadowed twice, i.e. the categories' methods first (the last category first), then the class's own, in 7 entries"
+  category_wins: "a category's method replaces the class's own in dispatch; between two categories the later one in the image"
+errors:
+  unknown_class: "objc_getClass of a name no loaded image defines is nil, also before the dlopen that brings it"
+side_effects: "adds the image's classes, protocols and categories to the process-wide tables; attaching a category to a class changes dispatch for existing instances at once"
+threading: "images are mapped on the thread calling dlopen (or before main); not observed with several threads"
+ordering:
+  - "classes and protocols are registered before any +load of the image runs (a +load can message other classes of the same image, observed in _objc_load_image's tests)"
+  - "a category's methods are attached before the +load of its class runs (a +load saw a method added by a category)"
+timing:
+  typical: "microseconds per class; dlopen of Foundation, hundreds of classes, well under a second"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

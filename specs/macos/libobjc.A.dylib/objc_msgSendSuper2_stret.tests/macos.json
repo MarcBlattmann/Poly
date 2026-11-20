@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:11",
+  "tests": [
+    {
+      "name": "msgsendsuper2_stret_basic",
+      "source_sha256": "39f9a21645b23723ab1d9984dee7bd706428e2e137c8e94944cac5269fe2f373",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e0f029eeef70eba7589bab9b8ecd6513e164eab9bbb4e47b67ab011924b1c617",
+          "exit_code": 0,
+          "stdout": "ok objc_msgSendSuper2_stret does not exist on arm64\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "de0608e680e52091f4d9da99aa1309ecbd43b4b145e4887a39171e1d8247f750",
+          "exit_code": 0,
+          "stdout": "ok super_class = Mid starts at Base\nok self is the receiver\nok super_class = Leaf starts at Mid, which calls Base\nok a plain stret send runs Mid's override\nok nil receiver: the method ran\nok with self == nil\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

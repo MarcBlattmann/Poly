@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_sync_exit.yaml. Observed with Objective-C test programs built for x86_64 and arm64
+# (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in objc_sync_exit.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_sync_exit
+oracle:
+  os: "macOS 27.0 (26A428)"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 (26A428), Darwin 27.0.0; tests are single C files compiled as Objective-C by `pipeline mac build` (clang, without ARC) and linked with /usr/lib/libobjc.A.dylib and libSystem; each runs 3 times per architecture in a fresh empty scratch directory with an empty environment. arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); no output differed between the two architectures in any test of this entry. No Foundation: the root class NSObject exported by libobjc itself is the only class used."
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  objc_sync_exit(obj) releases one level of the lock taken by objc_sync_enter on the same object by
+  the same thread, and returns OBJC_SYNC_SUCCESS (0). When the number of exits equals the number of
+  enters the object's lock is free and a blocked thread proceeds (after exits 1..4 of 5 a waiting
+  thread was still blocked, after the 5th it entered). nil returns 0 and does nothing. An exit that
+  has no matching enter returns OBJC_SYNC_NOT_OWNING_THREAD_ERROR (-1): an object never locked, a
+  lock already fully released (one exit too many after 2 enters gave 0, 0, -1; after 200 nested
+  enters the 201st exit gave -1), or a thread that does not hold the lock: calling exit from another
+  thread while the owner holds it returned -1 and the owner's lock stayed intact (the owner's own
+  exit afterwards returned 0). The lock is usable normally after any such error. The compiler's
+  @synchronized block releases the lock when it is left by falling off the end, break or an
+  exception passing through: after each of these a further objc_sync_exit returned -1 (nothing
+  held), and inside the block another thread's exit returned -1. @synchronized (nil) runs its body.
+  The object evaluated at block entry is the one unlocked, even if the variable changed inside the
+  block (the other object was never locked: -1). Same on x86_64 and arm64. Not observed: exiting an
+  object that was deallocated while locked.
+returns:
+  success: "0 (OBJC_SYNC_SUCCESS)"
+  nil_object: "0"
+  not_owned: "-1 (OBJC_SYNC_NOT_OWNING_THREAD_ERROR)"
+errors:
+  not_owning_thread: "-1: never entered, entered fewer times than exited, or the lock is held by another thread (that lock is not touched)"
+side_effects: >
+  One level of the object's recursive lock is released; at zero a waiting thread is woken.
+threading: >
+  Only the owning thread may exit; another thread gets -1.
+ordering:
+  - "a waiter is released only by the exit that brings the nesting level to zero"
+timing:
+  typical: "microseconds per uncontended call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

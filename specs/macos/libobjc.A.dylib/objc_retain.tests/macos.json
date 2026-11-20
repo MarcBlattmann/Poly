@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_retain_basic",
+      "source_sha256": "e9131ebbc92cd61497bf87723e63abdce40847bcfbf38589098a34d289299b91",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "93ec61519f7fdb055eec12fa11e210840f1c61db17619225cce608ab2af52472",
+          "exit_code": 0,
+          "stdout": "ok new object\nvalue retainCount of a new object 1\nok returns its argument\nvalue retainCount after one retain 2\nvalue retainCount after three retains 4\nvalue retainCount after one release 3\nvalue deallocs so far 0\nvalue deallocs before the last release 0\nvalue deallocs after the last release 1\nok nil in, nil out\nok nil again\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7d08d1a4b3489446171e6d70a3c93c72f5fab31fbc2cccd79b9a32632b87c1dc",
+          "exit_code": 0,
+          "stdout": "ok new object\nvalue retainCount of a new object 1\nok returns its argument\nvalue retainCount after one retain 2\nvalue retainCount after three retains 4\nvalue retainCount after one release 3\nvalue deallocs so far 0\nvalue deallocs before the last release 0\nvalue deallocs after the last release 1\nok nil in, nil out\nok nil again\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_retain_many",
+      "source_sha256": "d3df119ec41037cf2dc5b06e41ccc68f076dc3a6d2b6d346f2c2d848bf9ffcbf",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "06077f3e2b7a0deb91ae603135e530fa987a2b8371e2aa71c27f6f153fc2b256",
+          "exit_code": 0,
+          "stdout": "value retainCount after 1000 retains 1001\nvalue retainCount back 1\nvalue deallocs while 1 reference 0\nvalue deallocs at the end 1\nvalue both still alive 1\nvalue both gone 3\nvalue retain in dealloc returns self 1\nvalue retainCount seen inside dealloc 0\nvalue retainCount after a retain inside dealloc 0\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2aac4795da5534f246224efb52f9b6bbe91bb70d39d7aebfb5cc098948a12e57",
+          "exit_code": 0,
+          "stdout": "value retainCount after 1000 retains 1001\nvalue retainCount back 1\nvalue deallocs while 1 reference 0\nvalue deallocs at the end 1\nvalue both still alive 1\nvalue both gone 3\nvalue retain in dealloc returns self 1\nvalue retainCount seen inside dealloc 0\nvalue retainCount after a retain inside dealloc 0\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

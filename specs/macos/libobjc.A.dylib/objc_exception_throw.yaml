@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_exception_throw.yaml. Observed with Objective-C test programs built for x86_64 and arm64
+# (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in objc_exception_throw.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_exception_throw
+oracle:
+  os: "macOS 27.0 (26A428)"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 (26A428), Darwin 27.0.0; tests are single C files compiled as Objective-C by `pipeline mac build` (clang, without ARC) and linked with /usr/lib/libobjc.A.dylib and libSystem; each runs 3 times per architecture in a fresh empty scratch directory with an empty environment. arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); no output differed between the two architectures in any test of this entry. No Foundation: the root class NSObject exported by libobjc itself is the only class used."
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  objc_exception_throw(object) starts unwinding the stack and does not return. Handlers are found
+  the way the compiler's @try / @catch / @finally tables describe them (the unwinder is the one C++
+  uses; frames between the throw and the handler may be plain C functions, observed through six of
+  them). The matching rules of @catch clauses, in order of appearance within a @try: a clause for a
+  class matches an object whose class is that class or a subclass of it; a clause for another class
+  does not match and the search goes on to the next clause and then outward; @catch (id) and @catch
+  (...) match everything, including nil. A class object, thrown as the object, is matched by an
+  NSObject * clause too (a class object is an instance of the root class) and by id. The object
+  caught is the very object thrown (pointer-identical). nil can be thrown: it is caught by @catch
+  (id) as nil and by @catch (...). @finally clauses of the frames passed run innermost first, each
+  before the handler of an outer frame, then the handler runs, then the @finally of its own @try
+  statement (observed order t 3 2 1 c F for a throw through three frames with finally clauses).
+  Nothing after the throw call in the throwing function runs. The exception object is kept alive by
+  the runtime from the throw until the handler that caught it ends (see objc_begin_catch,
+  objc_end_catch). A thrown exception that nobody catches terminates the process by abort: the child
+  ended with SIGABRT (6) after its own earlier output was written, and wrote to stderr one line:
+  libc++abi: terminating due to uncaught exception of type NAME, where NAME is the class name of the
+  thrown object (for a thrown class object it was the class's own name, Boom for class Boom) and the
+  word nil for nil. 1000 throws in a loop, each caught, leave the retain count of the exception
+  unchanged and nothing accumulates. Same on x86_64 and arm64.
+returns:
+  never_returns: "control continues in the matching handler or the process aborts"
+  caught_object: "the object thrown, the same pointer, also for a class object and nil"
+errors:
+  uncaught: "abort: SIGABRT (6) after the message libc++abi: terminating due to uncaught exception of type NAME on stderr"
+side_effects: >
+  The exception object gets one reference held by the runtime from the throw (retain count 1 → 2
+  while it propagates and inside the handler) which is dropped when the handler ends. Handler
+  frames' @finally clauses run during unwinding.
+threading: >
+  Per thread: four threads throwing at once (16000 throws in all) always reached handlers of their
+  own thread with their own object.
+ordering:
+  - "@finally clauses of inner frames run before the handler of an outer frame"
+  - "the handler runs before the @finally of the @try statement that contains it"
+  - "code after the throw does not run"
+timing:
+  typical: "microseconds per throw and catch (a C++-style two-phase unwind)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "getinstmethod_basic",
+      "source_sha256": "291ff3469c0c8980c8440f772dcb1dad3d24c0ba50279852baceed3a06a4dd72",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6228f4223f98adbe416629ccb4f9a39a8d78b4059953e000b8417c82b6ad0618",
+          "exit_code": 0,
+          "stdout": "ok own method of the base\nok own method of the leaf\nok a method defined by both: leaf\nok an inherited method is found\nok a leaf method is not in the base\nok an absent selector gives NULL\nok a class method is not an instance method\nok an inherited NSObject method: -hash\nok NSObject has no -alloc instance method\nok nil class gives NULL\nok base and leaf have different Method objects for 'both'\nok the base's one has its implementation\nok the leaf's one has its implementation\nok the same call twice gives the same Method\nok an inherited method is the superclass's Method\nok an NSObject method is the same through every subclass\nok method_getName gives the selector back\nvalue name both\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c85fd51477da4e1edac74a9381ec6f93ec4a800b690461e5d81354999e85650d",
+          "exit_code": 0,
+          "stdout": "ok own method of the base\nok own method of the leaf\nok a method defined by both: leaf\nok an inherited method is found\nok a leaf method is not in the base\nok an absent selector gives NULL\nok a class method is not an instance method\nok an inherited NSObject method: -hash\nok NSObject has no -alloc instance method\nok nil class gives NULL\nok base and leaf have different Method objects for 'both'\nok the base's one has its implementation\nok the leaf's one has its implementation\nok the same call twice gives the same Method\nok an inherited method is the superclass's Method\nok an NSObject method is the same through every subclass\nok method_getName gives the selector back\nvalue name both\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "getinstmethod_meta",
+      "source_sha256": "0afa08254161c7784b251b87c008d61e75b32841828c720d1c3adecb22d49350",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e0cfe21a7c8b26d051e478c0b47e5dddf2fce59874923aead4dccc811f81af71",
+          "exit_code": 0,
+          "stdout": "ok class method found on the metaclass\nok inherited class method found on the subclass's metaclass\nok same Method as the superclass's metaclass has\nok a leaf class method\nok not on the base metaclass\nok instance method of the class is absent on its metaclass\nok class method is absent on the class\nok NSObject +alloc is on NSObject's metaclass\nok +alloc is inherited by every metaclass\nok NSObject's metaclass sees NSObject's instance methods (root class fallback): -finalize\nok ... and so does a subclass's metaclass\nvalue root metaclass superclass is NSObject 1\nvalue an instance method of a subclass is not on any metaclass 1\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e5a011e50680fbb995419e8aa2184c16cd19c6d43bf0839466f244caaa45762f",
+          "exit_code": 0,
+          "stdout": "ok class method found on the metaclass\nok inherited class method found on the subclass's metaclass\nok same Method as the superclass's metaclass has\nok a leaf class method\nok not on the base metaclass\nok instance method of the class is absent on its metaclass\nok class method is absent on the class\nok NSObject +alloc is on NSObject's metaclass\nok +alloc is inherited by every metaclass\nok NSObject's metaclass sees NSObject's instance methods (root class fallback): -finalize\nok ... and so does a subclass's metaclass\nvalue root metaclass superclass is NSObject 1\nvalue an instance method of a subclass is not on any metaclass 1\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

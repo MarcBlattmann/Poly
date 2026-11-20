@@ -139,6 +139,13 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-cf"
+version = "0.0.1"
+dependencies = [
+ "poly-libsystem",
+]
+
+[[package]]
 name = "poly-cmd"
 version = "0.0.1"
 
@@ -373,6 +380,10 @@ dependencies = [
 
 [[package]]
 name = "poly-libm"
+version = "0.0.1"
+
+[[package]]
+name = "poly-libsystem"
 version = "0.0.1"
 
 [[package]]

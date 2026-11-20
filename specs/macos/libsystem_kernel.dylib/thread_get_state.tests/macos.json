@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_thread_get_state_flavors",
+      "source_sha256": "50379782e6a1b56448ccb36f8d2d7e892500b15412ceeea394ee35bc783ebc2d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d527167c6f06e7b180427b7ca4c47a1256f86c702d23f31daa461bae914df518",
+          "exit_code": 0,
+          "stdout": "ok ARM_THREAD_STATE64: succeeds with count 68\nok ARM_EXCEPTION_STATE64: succeeds with count 4\nok ARM_NEON_STATE64: succeeds with count 132\nok ARM_DEBUG_STATE64: succeeds with count 130\nok ARM_THREAD_STATE: succeeds with count 70\nok ARM_VFP_STATE: succeeds with count 65\nok the count is the number of 32-bit words of the structure\nok the state of the calling thread: a pc that is not 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "eecac2dc3f7bb72054d456c1aa9dedb71e333a0eed6c6d018ab5c469a26cf606",
+          "exit_code": 0,
+          "stdout": "ok x86_THREAD_STATE64: succeeds with count 42\nok x86_EXCEPTION_STATE64: succeeds with count 4\nok x86_FLOAT_STATE64: succeeds with count 131\nok x86_AVX_STATE64: succeeds with count 211\nok x86_DEBUG_STATE64: succeeds with count 16\nok x86_THREAD_STATE: succeeds with count 44\nok x86_FLOAT_STATE: succeeds with count 133\nok the count is the number of 32-bit words of the structure\nok the state of the calling thread: a pc that is not 0\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_thread_get_state_other_thread",
+      "source_sha256": "7493c7c266f898a027828a6138407d8186889c6d2ead2cfb904be2695ebc373c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1c938b9a12f9a6b50ea9ad93e8c1e516176694a964e7aebc61d7898ca3ce45aa",
+          "exit_code": 0,
+          "stdout": "ok thread_suspend succeeds\nok two reads succeed\nok the pc is not 0\nok a suspended thread gives the same state twice\nok thread_resume succeeds\nok the handler saw the register the thread had set before the breakpoint\nok and a pc that is not 0\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "001bf7db4f5e97e4efb03efa1b4835dcc5de75888cf6013e3d3d89799f7bd46c",
+          "exit_code": 0,
+          "stdout": "ok thread_suspend succeeds\nok two reads succeed\nok the pc is not 0\nok a suspended thread gives the same state twice\nok thread_resume succeeds\nok the handler saw the register the thread had set before the breakpoint\nok and a pc that is not 0\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/sel_registerName.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in sel_registerName.tests/macos.json.
+id: macos/api/libobjc.A.dylib/sel_registerName
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  SEL sel_registerName(const char *str). Returns the unique selector for a name, creating it the first
+  time. The same name gives the same SEL value (pointer equality) every time, also from another buffer
+  and equal to the compiler's @selector and to sel_getUid and to the selector of built-in names such
+  as init and dealloc; different names give different selectors: case matters, a prefix or a longer
+  name differ, "foo" and "foo:" differ, and the same letters in another colon order differ; 200
+  distinct names gave 200 distinct selectors, looked up again later unchanged. The name is copied (the
+  caller's buffer may change). The empty string is a valid selector and always the same one. Names are
+  arbitrary byte strings up to the sizes tried (2048 characters, spaces, '.', '-', '$', ':', '<', '>',
+  a tab, non-ASCII bytes) and read back with sel_getName unchanged. The result is never NULL. The
+  numeric value of a SEL is not stable and differs between runs and architectures; only equality is.
+returns:
+  selector: "the unique SEL of that exact name"
+errors:
+  none: "no error codes"
+  null_name: "not observed"
+side_effects: "registers the name in the selector table the first time it is seen"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering: []
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

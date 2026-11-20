@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_raise_default_client",
+      "source_sha256": "adc8165237990705e4fb5595c6624bf95002d54b9e0ca4fd8b75907003294dfc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "33463da0e366d6cd77fa343a047f7ec2e492345ac167a00b50b87e81482909bc",
+          "exit_code": 0,
+          "stdout": "ok with MACH_PORT_NULL as the port: the call returns MACH_SEND_INVALID_DEST\nok with a port of the program's own: the process is killed by SIGKILL\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "16cceabc5ac3ad03bade0ef38157b60de4ccdac716524bc244bc7bdf895f9124",
+          "exit_code": 0,
+          "stdout": "ok with MACH_PORT_NULL as the port: the call returns MACH_SEND_INVALID_DEST\nok with a port of the program's own: the process is killed by SIGKILL\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_raise_default_codes64",
+      "source_sha256": "38f97d0bb0ec7e1f67dab25b3d2b67c1de6bf18d661b3db1ed705ef2eb10b49a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "46cc8fdb603c794ec11bb37652fd7e2120e7f478fef87241fa060d2ad7aaaf42",
+          "exit_code": 0,
+          "stdout": "ok task_set_exception_ports succeeds\nok three exceptions were delivered\nok access: message id\nok access: message size\nok access: complex, with two port descriptors\nok access: the reply right is a send-once right\nok access: the local port is set\nok access: exception type\nok access: two codes\nok access: the thread descriptor is the faulting thread, moved as a send right\nok access: the task descriptor is this task, moved as a send right\nok access: the default trailer, 8 bytes\nok undefined instruction: message id\nok undefined instruction: message size\nok undefined instruction: complex, with two port descriptors\nok undefined instruction: the reply right is a send-once right\nok undefined instruction: the local port is set\nok undefined instruction: exception type\nok undefined instruction: two codes\nok undefined instruction: the thread descriptor is the faulting thread, moved as a send right\nok undefined instruction: the task descriptor is this task, moved as a send right\nok undefined instruction: the default trailer, 8 bytes\nok breakpoint: message id\nok breakpoint: message size\nok breakpoint: complex, with two port descriptors\nok breakpoint: the reply right is a send-once right\nok breakpoint: the local port is set\nok breakpoint: exception type\nok breakpoint: two codes\nok breakpoint: the thread descriptor is the faulting thread, moved as a send right\nok breakpoint: the task descriptor is this task, moved as a send right\nok breakpoint: the default trailer, 8 bytes\nok access: code 0 is KERN_PROTECTION_FAILURE\nok access: code 1 is the whole 64-bit address\nok undefined instruction: code 0 is 1\nvalue breakpoint: code 0 1\nvalue message size, access 84\nok each fault was resumed: the thread went on\nok the register the handler set is what the thread stored\nsummary 37 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bc8e5b1a1a7f588d4b5073d82e9004a04a2ad64d8f605d8dc8116da440a0fdce",
+          "exit_code": 0,
+          "stdout": "ok task_set_exception_ports succeeds\nok three exceptions were delivered\nok access: message id\nok access: message size\nok access: complex, with two port descriptors\nok access: the reply right is a send-once right\nok access: the local port is set\nok access: exception type\nok access: two codes\nok access: the thread descriptor is the faulting thread, moved as a send right\nok access: the task descriptor is this task, moved as a send right\nok access: the default trailer, 8 bytes\nok undefined instruction: message id\nok undefined instruction: message size\nok undefined instruction: complex, with two port descriptors\nok undefined instruction: the reply right is a send-once right\nok undefined instruction: the local port is set\nok undefined instruction: exception type\nok undefined instruction: two codes\nok undefined instruction: the thread descriptor is the faulting thread, moved as a send right\nok undefined instruction: the task descriptor is this task, moved as a send right\nok undefined instruction: the default trailer, 8 bytes\nok breakpoint: message id\nok breakpoint: message size\nok breakpoint: complex, with two port descriptors\nok breakpoint: the reply right is a send-once right\nok breakpoint: the local port is set\nok breakpoint: exception type\nok breakpoint: two codes\nok breakpoint: the thread descriptor is the faulting thread, moved as a send right\nok breakpoint: the task descriptor is this task, moved as a send right\nok breakpoint: the default trailer, 8 bytes\nok access: code 0 is KERN_PROTECTION_FAILURE\nok access: code 1 is the whole 64-bit address\nok undefined instruction: code 0 is 1\nvalue breakpoint: code 0 2\nvalue message size, access 84\nok each fault was resumed: the thread went on\nok the register the handler set is what the thread stored\nsummary 37 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgcurve_path",
+      "source_sha256": "accc8af8ef75811fa3cc16a8efb13ee8c96d6111d1a9bbebb4bfb66c39f99af9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a7f7f9b9740fb4dcbfd67d129439c92b3c125cc141c859e5ae1d31ea66d57cd5",
+          "exit_code": 0,
+          "stdout": "ok a new path is empty\nok a path with elements is not empty\nvalue element 0 move 01,02 \nvalue element 1 line 03,04 \nvalue element 2 quad 05,06 07,08 \nvalue element 3 curve 09,10 11,12 13,14 \nvalue element 4 close \nok five elements\nvalue current point x after closing: back at the subpath start 3ff0000000000000\nvalue current point y 4000000000000000\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "333293c41d1ab61605bc7b4b85c6028cf50c85d350db98485844e25ebc108625",
+          "exit_code": 0,
+          "stdout": "ok a new path is empty\nok a path with elements is not empty\nvalue element 0 move 01,02 \nvalue element 1 line 03,04 \nvalue element 2 quad 05,06 07,08 \nvalue element 3 curve 09,10 11,12 13,14 \nvalue element 4 close \nok five elements\nvalue current point x after closing: back at the subpath start 3ff0000000000000\nvalue current point y 4000000000000000\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

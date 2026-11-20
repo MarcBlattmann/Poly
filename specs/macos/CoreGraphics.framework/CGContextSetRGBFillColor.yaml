@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextSetRGBFillColor.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextSetRGBFillColor.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextSetRGBFillColor
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextSetRGBFillColor(context, r, g, b, a) sets the fill colour in the context's colour space (the colour given is taken as being in the context's own space for an sRGB bitmap). Stored byte = round half up of (component x alpha x 255) after clamping each component to 0..1: -0.5 -> 0, 1/510 -> 1 (0.5/255 rounds up), 0.49/255 -> 0, 0.2 -> 33, 0.3 -> 4d, 0.5 -> 80, 127.4/255 -> 7f, 0.7 -> b3, 0.999 -> ff, 1.5 -> ff. Premultiplication: component c at alpha a stores round(c x a): for c = 255 at alpha 0, 17, ..., 255 the red byte is 00 11 22 33 ... ff; for c = 200: 00 0d 1b 28 35 43 50 5d 6b 78 85 93 a0 ad bb c8; c = 128: 00 09 11 1a 22 2b 33 3c 44 4d 55 5e 66 6f 77 80; c = 3: 00 00 00 01 01 01 01 01 02 02 02 02 02 03 03 03. The colour stays until changed, is saved/restored with the graphics state, CGContextSetGrayFillColor(0.5, 1) stores 80 80 80 ff, a generic RGB colour object (CGColorCreateGenericRGB) set with CGContextSetFillColorWithColor stores the same bytes as the same numbers through SetRGBFillColor except for colour space conversion (a generic RGB (0.1, 0.6, 0.9, 0.5) fill: 0a 55 75 80; the same numbers by SetRGBFillColor: 0d 4d 73 80).
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "changes the fill colour of the graphics state"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

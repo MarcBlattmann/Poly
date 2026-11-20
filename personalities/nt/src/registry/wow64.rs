@@ -209,6 +209,46 @@ pub fn wow64_view(path: &[u16], wow64: bool, access: u64) -> Option<Vec<u16>> {
     if view_of(wow64, access) != View::X86 {
         return None;
     }
+    redirect(path)
+}
+
+/// Whether `path` has a `Wow6432Node` component: a key of the 32-bit view's physical place.
+pub fn has_node(path: &[u16]) -> bool {
+    path.split(|&c| c == u16::from(b'\\')).any(|c| eq(c, WOW6432_NODE))
+}
+
+/// `path` with the `Wow6432Node` components of the 32-bit view's physical places left out (the
+/// one right below `\REGISTRY\MACHINE\SOFTWARE` and those right below a `Classes` key): the
+/// key's name as both views spell it (`SOFTWARE\Wow6432Node\Vendor` is `SOFTWARE\Vendor`,
+/// `Classes\Wow6432Node\CLSID` is `Classes\CLSID`, `SOFTWARE\Wow6432Node\Classes` is
+/// `SOFTWARE\Classes`). A key of that name elsewhere is an ordinary key and stays.
+pub fn without_node(path: &[u16]) -> Vec<u16> {
+    let parts: Vec<&[u16]> = path.split(|&c| c == u16::from(b'\\')).filter(|c| !c.is_empty()).collect();
+    let mut kept: Vec<&[u16]> = Vec::with_capacity(parts.len());
+    for (i, c) in parts.iter().enumerate() {
+        let machine_software =
+            i == 3 && eq(parts[0], "REGISTRY") && eq(parts[1], "MACHINE") && eq(parts[2], "SOFTWARE");
+        let below_classes = i > 0 && (eq(parts[i - 1], "Classes") || ends_with_ignore_case(parts[i - 1], "_Classes"));
+        if eq(c, WOW6432_NODE) && (machine_software || below_classes) {
+            continue;
+        }
+        kept.push(c);
+    }
+    join(&kept)
+}
+
+/// The physical key a call in the 32-bit view reaches by `path` (an NT path that may already
+/// name a `Wow6432Node`: a path that names it is the physical key and is not redirected again,
+/// `RegCreateKeyExW.yaml` `named_node`; `Software\Wow6432Node\Classes` is the shared `Classes`
+/// for a 32-bit caller, whose redirected subkeys go below `Classes\Wow6432Node`).
+pub fn x86_target(path: &[u16]) -> Vec<u16> {
+    let logical = without_node(path);
+    redirect(&logical).unwrap_or(logical)
+}
+
+/// The physical key of the 32-bit view of `path` ([`wow64_view`] for a call in that view); `None`
+/// when it is `path` itself.
+pub fn redirect(path: &[u16]) -> Option<Vec<u16>> {
     let parts: Vec<&[u16]> = path.split(|&c| c == u16::from(b'\\')).filter(|c| !c.is_empty()).collect();
     if parts.len() < 2 || !eq(parts[0], "REGISTRY") {
         return None;
@@ -256,15 +296,15 @@ mod tests {
 
     #[test]
     fn a_32_bit_process_sees_software_under_wow6432node() {
-        assert_eq!(view(SW, true, 0).as_deref(), Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node"));
+        assert_eq!(view(SW, true, 0).as_deref(), Some("\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node"));
         assert_eq!(
             view("\\REGISTRY\\MACHINE\\SOFTWARE\\Vendor\\App", true, 0).as_deref(),
-            Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Vendor\\App")
+            Some("\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Vendor\\App")
         );
         // Case does not matter for the match; the caller's spelling is kept below it.
         assert_eq!(
             view("\\registry\\machine\\software\\Vendor", true, 0).as_deref(),
-            Some("\\registry\\machine\\software\\Wow6432Node\\Vendor")
+            Some("\\registry\\machine\\software\\WOW6432Node\\Vendor")
         );
     }
 
@@ -281,7 +321,7 @@ mod tests {
         assert_eq!(view("\\REGISTRY\\MACHINE\\SOFTWARE\\Vendor", true, KEY_WOW64_64KEY), None);
         assert_eq!(
             view("\\REGISTRY\\MACHINE\\SOFTWARE\\Vendor", false, KEY_WOW64_32KEY).as_deref(),
-            Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Vendor")
+            Some("\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Vendor")
         );
         // The same flag as the process's own changes nothing; the rights next to it are ignored.
         assert_eq!(view("\\REGISTRY\\MACHINE\\SOFTWARE\\Vendor", false, KEY_WOW64_64KEY | 0xF003F), None);
@@ -316,7 +356,7 @@ mod tests {
     fn five_classes_subkeys_are_redirected_below_classes() {
         for name in CLASSES_REDIRECTED {
             let path = std::format!("{SW}\\Classes\\{name}\\{{1234}}");
-            let want = std::format!("{SW}\\Classes\\Wow6432Node\\{name}\\{{1234}}");
+            let want = std::format!("{SW}\\Classes\\WOW6432Node\\{name}\\{{1234}}");
             assert_eq!(view(&path, true, 0).as_deref(), Some(want.as_str()), "{name}");
             assert_eq!(view(&path, false, 0), None, "{name}");
             assert_eq!(view(&path, false, KEY_WOW64_32KEY).as_deref(), Some(want.as_str()), "{name}");
@@ -326,21 +366,21 @@ mod tests {
         assert_eq!(view("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes", true, 0), None);
         assert_eq!(
             view("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\clsid", true, 0).as_deref(),
-            Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\Wow6432Node\\clsid")
+            Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\clsid")
         );
     }
 
     #[test]
     fn a_path_already_in_the_32_bit_view_is_not_moved_again() {
-        let physical = "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Vendor";
+        let physical = "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Vendor";
         assert_eq!(view(physical, true, 0), None);
         assert_eq!(view(physical, false, KEY_WOW64_32KEY), None);
-        assert_eq!(view("\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node", true, 0), None);
+        assert_eq!(view("\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node", true, 0), None);
         // Below a handle of the 32-bit view a shared key is the shared one (a relative open of
         // `Microsoft\Windows\CurrentVersion\Policies` from `HKLM\Software`).
         assert_eq!(
             view(
-                "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Policies\\X",
+                "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Policies\\X",
                 true,
                 0
             )
@@ -348,7 +388,7 @@ mod tests {
             Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\X")
         );
         // Redirected Classes subkeys stay where they are below the node.
-        assert_eq!(view("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\Wow6432Node\\CLSID", true, 0), None);
+        assert_eq!(view("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\CLSID", true, 0), None);
     }
 
     #[test]
@@ -373,11 +413,11 @@ mod tests {
         let user = "\\REGISTRY\\USER\\S-1-5-21-1";
         for name in CLASSES_REDIRECTED {
             let path = std::format!("{user}\\Software\\Classes\\{name}\\X");
-            let want = std::format!("{user}\\Software\\Classes\\Wow6432Node\\{name}\\X");
+            let want = std::format!("{user}\\Software\\Classes\\WOW6432Node\\{name}\\X");
             assert_eq!(view(&path, true, 0).as_deref(), Some(want.as_str()), "{name}");
             // The linked hive of the user's classes.
             let hive = std::format!("{user}_Classes\\{name}");
-            let want = std::format!("{user}_Classes\\Wow6432Node\\{name}");
+            let want = std::format!("{user}_Classes\\WOW6432Node\\{name}");
             assert_eq!(view(&hive, true, 0).as_deref(), Some(want.as_str()), "{name}");
         }
     }
@@ -386,7 +426,26 @@ mod tests {
     fn doubled_and_trailing_backslashes_are_ignored() {
         assert_eq!(
             view("\\REGISTRY\\MACHINE\\SOFTWARE\\\\Vendor\\", true, 0).as_deref(),
-            Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Vendor")
+            Some("\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Vendor")
         );
+    }
+
+    fn target(path: &str) -> String {
+        String::from_utf16(&x86_target(&w(path))).unwrap()
+    }
+
+    #[test]
+    fn a_path_that_names_the_node_is_the_physical_key() {
+        // Named in any spelling, the node is where the 32-bit view already is.
+        assert_eq!(target(&std::format!("{SW}\\Wow6432Node\\Vendor")), std::format!("{SW}\\WOW6432Node\\Vendor"));
+        let clsid = std::format!("{SW}\\Classes\\WOW6432Node\\CLSID\\{{G}}");
+        assert_eq!(target(&std::format!("{SW}\\Classes\\wow6432node\\CLSID\\{{G}}")), clsid);
+        // Software\WOW6432Node\Classes is the shared Classes for a 32-bit caller.
+        assert_eq!(target(&std::format!("{SW}\\WOW6432Node\\Classes")), std::format!("{SW}\\Classes"));
+        assert_eq!(target(&std::format!("{SW}\\WOW6432Node\\Classes\\CLSID\\{{G}}")), clsid);
+        // A key of that name elsewhere is an ordinary key.
+        let user = "\\REGISTRY\\USER\\S-1-5-21-1\\Software\\WOW6432Node\\Vendor";
+        assert_eq!(target(user), user);
+        assert!(has_node(&w(&clsid)) && !has_node(&w(SW)));
     }
 }
