@@ -10,6 +10,6 @@
 #   bash tests/macos/libobjc/generate.sh
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
-clang -arch x86_64 -march=x86-64 -mmacosx-version-min=13.0 -O1 -fobjc-arc -fno-builtin -fno-ident -fno-objc-exceptions \
+clang -arch x86_64 -march=x86-64 -mmacosx-version-min=13.0 -O1 -fobjc-arc -fno-builtin -fno-ident -fno-objc-exceptions -fno-autolink -Wl,-dead_strip_dylibs \
     -Wall -Wno-format -o "$here/hello_x64" "$here/hello.m"
 ls -l "$here/hello_x64"
