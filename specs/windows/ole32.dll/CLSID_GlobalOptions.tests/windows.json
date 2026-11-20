@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "go_create",
-      "exe_sha256": "ef030520bb177ddcb9477c236c89bfa6d3a33b94b55b998255c274ae9c609359",
+      "exe_sha256": "500b1b4da461bf1b57a2d99b72c94feecfa1288cc0eeb00d2ba8ce2c40764aaa",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
