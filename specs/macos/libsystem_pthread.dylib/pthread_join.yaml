@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_join.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_join.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_join
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_join(thread, &result) waits for a joinable thread to end, stores its return value (or
+  pthread_exit's value; result may be NULL; a failed call leaves *result alone) and returns 0; the thread's
+  resources are released, so joining the same id again is ESRCH (3). It also works when the thread had ended long
+  before. Errors: joining the calling thread is EDEADLK (11), also from a created thread; joining a detached
+  thread that is still running is EINVAL (22), and once a detached thread has ended its id no longer exists
+  (ESRCH, 3); a zero id is ESRCH. Five threads joined in the reverse of their creation order each gave
+  their own result; the join took at least as long as the thread slept (100 ms). A thread created by another
+  thread, whose creator has ended, can be joined by a third thread. Same on both architectures.
+returns:
+  "success": "0, *result set to the thread's return value"
+errors:
+  "ESRCH": "3: id already joined, detached thread that has ended, or never valid (zero)"
+  "EDEADLK": "11: joining oneself"
+  "EINVAL": "22: the thread is detached and still running"
+side_effects: "releases the thread's resources"
+threading: "blocks until the thread ends"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_c.dylib/strlcpy.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in strlcpy.tests/macos.json.
+id: macos/api/libsystem_c.dylib/strlcpy
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  strlcpy(dst, src, size) copies at most size-1 bytes of src and always ends the copy with a NUL
+  when size is not 0; it writes nothing past the NUL (the bytes after it keep their value: no padding)
+  and nothing at all when size is 0 (dst may then be NULL). The result is always strlen(src), however
+  much was copied, so a result >= size means the copy was cut short. Observed: size > strlen: whole
+  string and NUL; size == strlen+1: whole string, NUL in the last byte; size == strlen: one byte
+  short, NUL in the last byte; size 1: only a NUL; size 0: nothing written; empty src: result 0 and
+  a NUL; a 1000 byte source into 8 bytes: result 1000, 7 bytes and a NUL; a guard byte after the
+  destination was never changed for any length 0..20 into a 10 byte buffer. Same on arm64 and x86_64.
+returns:
+  "length_of_src": "always strlen(src), also when truncated or size is 0"
+errors:
+  "none": "the function has no error result"
+side_effects: "writes at most size bytes at dst"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

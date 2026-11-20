@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "dlopen_errors",
+      "source_sha256": "ddfcf40d4159b378c6aa0a8d56fafbc7a9d7a90d4e09fb9e2f1ceed087a8a559",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1665cfdb8c1f4396e1077dd6e318d24122e05c7b5b5857a0bfe71d33e2dd63bd",
+          "exit_code": 0,
+          "stdout": "ok dlerror before any failure is NULL\nok a missing file: NULL\nok the message starts with dlopen(path, mode):\nok it says what was tried\nok read once, it is gone: dlerror is NULL again\nok the mode is shown in hex: RTLD_LAZY|RTLD_LOCAL (1|4) is 0x0005\nok RTLD_NOW|RTLD_GLOBAL (2|8) is 0x000A\nok @rpath with no LC_RPATH in the program\nok @executable_path names the program's directory\nok a bare name is tried as given and under /usr/lib\nok a file that is not Mach-O\nok an empty file: the reason is empty parentheses\nok a directory: not a file\nok an empty path is a failure too\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "adc00b76fc4bdb9d66f9ef199ee87e81f1b0a2fd15644108aacf6017c90be946",
+          "exit_code": 0,
+          "stdout": "ok dlerror before any failure is NULL\nok a missing file: NULL\nok the message starts with dlopen(path, mode):\nok it says what was tried\nok read once, it is gone: dlerror is NULL again\nok the mode is shown in hex: RTLD_LAZY|RTLD_LOCAL (1|4) is 0x0005\nok RTLD_NOW|RTLD_GLOBAL (2|8) is 0x000A\nok @rpath with no LC_RPATH in the program\nok @executable_path names the program's directory\nok a bare name is tried as given and under /usr/lib\nok a file that is not Mach-O\nok an empty file: the reason is empty parentheses\nok a directory: not a file\nok an empty path is a failure too\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dlopen_more",
+      "source_sha256": "ff6bfd892d9cd058465b574a86f5999a48abbb6fba7584894896a6be5b479ec0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "de6b33e713037dfb8bf0fe7170307ef28a8398161474758abc82e1ad57a24646",
+          "exit_code": 0,
+          "stdout": "ok two failures in a row: the second one's message\nok the first message is lost\nok the library opened before still works\nok a successful dlopen clears an unread error\nok so does a successful dlsym\nok and a dlclose\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4fe7fff5b30f9b0e650bf680169f0efa58c880d24c0d09e992c71429e533a116",
+          "exit_code": 0,
+          "stdout": "ok two failures in a row: the second one's message\nok the first message is lost\nok the library opened before still works\nok a successful dlopen clears an unread error\nok so does a successful dlsym\nok and a dlclose\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

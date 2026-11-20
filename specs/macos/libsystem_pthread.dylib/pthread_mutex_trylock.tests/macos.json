@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "pthread_mutex_trylock_attr",
+      "source_sha256": "d8711109875d52028d8a3048a51691813bcbec1af0555f621c0088138e301f72",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "55afa97a34f596e67bdb0ca015c95bc31e6388e10f45c6037335f9db2aea648d",
+          "exit_code": 0,
+          "stdout": "ok attr init\nok the default type is NORMAL (0)\nvalue PTHREAD_MUTEX_ERRORCHECK 1\nvalue PTHREAD_MUTEX_RECURSIVE 2\nvalue PTHREAD_MUTEX_DEFAULT 0\nok settype 9: EINVAL (22)\nok a failed settype leaves the type\nok the default protocol is PTHREAD_PRIO_NONE (0)\nok setprotocol inherit: 0\nok setprotocol 99: EINVAL\nok the default policy is FIRSTFIT (3)\nok setpolicy fairshare: 0\nok ... reads back FAIRSHARE (1)\nok setpolicy 77: EINVAL\nok attr destroy\nok a static initialiser works without init\nok the recursive static initialiser recurses\nok destroy of a locked mutex: EBUSY (16)\nok destroy of an unlocked mutex: 0\nok lock after destroy: EINVAL\nok trylock after destroy: EINVAL\nvalue sizeof(pthread_mutex_t) 64\nvalue sizeof(pthread_mutexattr_t) 16\nvalue sizeof(pthread_cond_t) 48\nvalue sizeof(pthread_attr_t) 64\nvalue sizeof(pthread_rwlock_t) 200\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6deb43c58152212391d867a05e04f3dd064bdf2a89014ad7da52d401b8dcb187",
+          "exit_code": 0,
+          "stdout": "ok attr init\nok the default type is NORMAL (0)\nvalue PTHREAD_MUTEX_ERRORCHECK 1\nvalue PTHREAD_MUTEX_RECURSIVE 2\nvalue PTHREAD_MUTEX_DEFAULT 0\nok settype 9: EINVAL (22)\nok a failed settype leaves the type\nok the default protocol is PTHREAD_PRIO_NONE (0)\nok setprotocol inherit: 0\nok setprotocol 99: EINVAL\nok the default policy is FIRSTFIT (3)\nok setpolicy fairshare: 0\nok ... reads back FAIRSHARE (1)\nok setpolicy 77: EINVAL\nok attr destroy\nok a static initialiser works without init\nok the recursive static initialiser recurses\nok destroy of a locked mutex: EBUSY (16)\nok destroy of an unlocked mutex: 0\nok lock after destroy: EINVAL\nok trylock after destroy: EINVAL\nvalue sizeof(pthread_mutex_t) 64\nvalue sizeof(pthread_mutexattr_t) 16\nvalue sizeof(pthread_cond_t) 48\nvalue sizeof(pthread_attr_t) 64\nvalue sizeof(pthread_rwlock_t) 200\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pthread_mutex_trylock_types",
+      "source_sha256": "97a89fcf7d0871acfbaf9baf77e9f7b9fbb80dad36c8d5142818df378e5c5c88",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ff94fa54ec66d741e3d497c96bdd295548d0cd4a018efe09bffadc66b55c4e96",
+          "exit_code": 0,
+          "stdout": "ok free: trylock returns 0\nok default type, owner trylocks again: EBUSY (16)\nok another thread's trylock: EBUSY\nok unlock\nok unlock of an unlocked default mutex: 0 (no error)\nok default type: another thread may unlock it (0)\nok ... and it is free again\nok settype errorcheck\nok errorcheck: relock by the owner: EDEADLK (11)\nok errorcheck: trylock by the owner: EBUSY\nok errorcheck: unlock by another thread: EPERM (1)\nok errorcheck: unlock by the owner\nok errorcheck: unlock of an unlocked mutex: EPERM\nok recursive: lock\nok recursive: relock by the owner\nok recursive: trylock by the owner\nok recursive: another thread's trylock: EBUSY\nok recursive: still held after two of three unlocks\nok recursive: third unlock\nok recursive: free after as many unlocks as locks\nok recursive: one unlock too many: EPERM\nsummary 21 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a3d53e700657b41ede5ae9f700343d205244e55a47efc61379e83849d88541eb",
+          "exit_code": 0,
+          "stdout": "ok free: trylock returns 0\nok default type, owner trylocks again: EBUSY (16)\nok another thread's trylock: EBUSY\nok unlock\nok unlock of an unlocked default mutex: 0 (no error)\nok default type: another thread may unlock it (0)\nok ... and it is free again\nok settype errorcheck\nok errorcheck: relock by the owner: EDEADLK (11)\nok errorcheck: trylock by the owner: EBUSY\nok errorcheck: unlock by another thread: EPERM (1)\nok errorcheck: unlock by the owner\nok errorcheck: unlock of an unlocked mutex: EPERM\nok recursive: lock\nok recursive: relock by the owner\nok recursive: trylock by the owner\nok recursive: another thread's trylock: EBUSY\nok recursive: still held after two of three unlocks\nok recursive: third unlock\nok recursive: free after as many unlocks as locks\nok recursive: one unlock too many: EPERM\nsummary 21 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -670,6 +670,16 @@ between x86_64 and arm64 (the page size); each architecture is recorded on
 its own. A test starts in a fresh, empty scratch directory (use relative
 paths), with an empty environment.
 
+**Tests of libSystem's own functions** (entries `macos/api/libsystem_c.dylib/...`,
+`libsystem_pthread`, `libsystem_malloc`, `libdyld`) are the exception: such a
+test says `poly-mac: libsystem` in a comment among its first 30 lines, includes
+`poly_mlibc.h` (`tests/macos/include`) instead and calls the function under test
+through libSystem. It still reports with raw `write` calls only (`check`,
+`check_str`, `value`, `finish`, the same output format), so a broken function
+cannot hide behind its own output. `mac build` lets exactly these tests import
+libSystem symbols and still refuses every other library; all other tests import
+nothing.
+
 ```sh
 cargo xtask pipeline mac build [--tests-dir DIR]... [--tests a,b]   # target/pipeline/macos/bin/<arch>/, manifest.json
 cargo xtask pipeline mac run [--tests-dir DIR]... [--tests a,b] [--runs 3] [--record]

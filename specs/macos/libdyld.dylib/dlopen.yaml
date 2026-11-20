@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdyld.dylib/dlopen.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in dlopen.tests/macos.json.
+id: macos/api/libdyld.dylib/dlopen
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  dlopen(path, mode) loads (or finds already loaded) an image and returns a handle, or NULL with a message for
+  dlerror. Modes: RTLD_LAZY 1, RTLD_NOW 2, RTLD_LOCAL 4, RTLD_GLOBAL 8 (RTLD_FIRST 0x100); mode 0 and odd extra bits are
+  tolerated. dlopen(NULL, ...) returns a handle searching the program and everything loaded. The same library
+  gives the same handle again, also through a symbolic link (/usr/lib/libz.dylib and libz.1.dylib), and dlclose
+  returns 0 (also repeated); libraries from the dyld shared cache (libz, CoreFoundation, by its framework path and its
+  Versions/A path) load by their absolute path. A framework by a partial path ("CoreFoundation.framework/CoreFoundation")
+  is not searched for. dlerror() returns NULL before any failure, then the message of the last failure once, and NULL after
+  it was read; a second failure replaces an unread first one; a successful dlopen, dlsym or dlclose clears an unread
+  message. Message format: "dlopen(<path as given>, 0x<mode, 4 hex digits, upper case>): tried: '<path>' (no such file),
+  '<path>' ..." listing each place tried with the reason in parentheses. For an absolute path: the path, the same path under
+  "/System/Volumes/Preboot/Cryptexes/OS" (on x86_64 first also under ".../Cryptexes/Rosetta"), then the path again; for a
+  bare or relative name: the name, "/System/Volumes/Preboot/Cryptexes/OS" with the name appended directly (no slash),
+  "/usr/lib/<name>" with "(no such file, not in dyld cache)", then the name again, and for a path starting with "./" also
+  the absolute path in the current directory (and again under the Cryptexes prefix). Reasons: "no such file", "slice is not
+  valid mach-o file" (a text file), "" (an empty file: empty parentheses), "not a file" (a directory), "not a file, not in
+  dyld cache" (the empty path, tried as "/usr/lib/"). "@rpath/x" in a program without LC_RPATH: "dlopen(@rpath/libx.dylib,
+  0x0002): no LC_RPATH's found"; "@executable_path/x": tried: '<program directory>/x' (no such file). Mode shown examples:
+  RTLD_NOW 0x0002, LAZY|LOCAL 0x0005, NOW|GLOBAL 0x000A. The messages differ between architectures in the Rosetta entry.
+returns:
+  "success": "handle, dlerror stays NULL"
+  "failure": "NULL"
+errors:
+  "message": "see summary: tried-list, per place the reason"
+side_effects: "may load an image"
+threading: "not tested with several threads"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "x86_64 failure messages list one more place (Cryptexes/Rosetta)"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
