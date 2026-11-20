@@ -332,13 +332,12 @@ pub fn run_spec(kernel: &Path, syms: &Arc<Symbols>) -> Result<Vec<SpecResult>> {
             continue;
         };
         let status = lines[e].rsplit(' ').next().and_then(|v| v.parse().ok());
-        let got: Vec<&str> = lines[s + 1..e]
-            .iter()
-            .copied()
-            .filter(|l| ["ok ", "not ok ", "value ", "summary "].iter().any(|p| l.starts_with(p)))
-            .collect();
+        // The protocol lines on both sides (children's own lines and other
+        // text are not compared).
+        let protocol = |l: &&str| ["ok ", "not ok ", "value ", "summary "].iter().any(|p| l.starts_with(p));
+        let got: Vec<&str> = lines[s + 1..e].iter().copied().filter(protocol).collect();
         let want = recorded(n).unwrap_or_default();
-        let want: Vec<&str> = want.lines().collect();
+        let want: Vec<&str> = want.lines().filter(protocol).collect();
         let not_ok = got.iter().filter(|l| l.starts_with("not ok ")).map(|l| l.to_string()).collect();
         results.push(SpecResult { name: n.into(), status, matches: got == want, not_ok });
     }
@@ -347,8 +346,7 @@ pub fn run_spec(kernel: &Path, syms: &Arc<Symbols>) -> Result<Vec<SpecResult>> {
 
 /// Spec tests that cannot pass on Poly yet, and why (they are run and
 /// reported, not failed on). None of the reasons is in libobjc's own
-/// behaviour except the unwinder: the others are libSystem pieces or the
-/// BSD layer's `fork`.
+/// behaviour except the unwinder: the others are libSystem pieces.
 const SPEC_NOT_YET: &[(&str, &str)] = &[
     ("impblock_basic", "imp_implementationWithBlock and the Blocks runtime (libsystem_blocks)"),
     ("impblock_shared", "imp_implementationWithBlock and the Blocks runtime (libsystem_blocks)"),
@@ -361,9 +359,6 @@ const SPEC_NOT_YET: &[(&str, &str)] = &[
     ("syncexit_exceptions", "caught exceptions: an unwinder (_Unwind_Resume, libunwind)"),
     ("syncenter_threads", "threads: pthread_create in Poly's libSystem"),
     ("syncexit_recursive", "threads: pthread_create in Poly's libSystem"),
-    ("exc_throw_uncaught", "it forks a child (fork in the BSD layer)"),
-    ("msgsend_unrecognized", "it forks a child (fork in the BSD layer)"),
-    ("arc_poolpop_null", "it forks a child (fork in the BSD layer)"),
     ("msgsend_tagged", "tagged pointers come from Foundation (dlopen)"),
     ("msgsend_stret_basic", "dlsym in Poly's libSystem"),
 ];
@@ -402,7 +397,7 @@ pub fn spec_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
     eprintln!(
         "==> {passed} of {} libobjc spec tests pass ({} of them x86-64 parts); {} wait for the unwinder, threads, \
-         blocks, fork or dlopen",
+         blocks or dlopen",
         results.len(),
         X86_64_PARTS.len(),
         SPEC_NOT_YET.len(),

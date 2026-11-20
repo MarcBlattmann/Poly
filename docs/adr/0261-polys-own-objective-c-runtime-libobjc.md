@@ -88,12 +88,12 @@ never kept in the compiled records.
   return-value handshake, pools, run-time methods and classes, associations, the sync locks).
 - Boot test group `objc-spec` (shard `userland`): every visible test of the libobjc sheets (98),
   built for x86-64 as `pipeline mac build` builds them (`tests/macos/libobjc/spec`), run on Poly in
-  one boot by a small runner that `posix_spawn`s each (ADR 0246); each must print what macOS
-  printed (the arm64 recording). 82 pass: 77 equal the recording, 5 are x86-64 parts (the arm64
+  one boot by a small runner that `posix_spawn`s each (ADR 0246); each must print the protocol lines
+  macOS printed (the arm64 recording). 85 pass: 80 equal the recording, 5 are x86-64 parts (the arm64
   struct-return checks become the x86-64 `_stret` ones, BOOL is `c`) whose own checks all pass. The
-  other 16 are listed with their reason and wait for pieces outside libobjc: an unwinder (caught
+  other 13 are listed with their reason and wait for pieces outside libobjc: an unwinder (caught
   exceptions, `_Unwind_Resume` in cleanups), threads (`pthread_create`), the Blocks runtime,
-  `fork`, `dlopen`/`dlsym`.
+  `dlopen`/`dlsym`.
 
 ## Not in v0
 
