@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctlinecreatewithattributedstring_clusters",
+      "source_sha256": "be7b8969ef25f849f5827413dc0016ec38c5e6e68893f0925a11d508155193c1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2782d917f5f9644fc59e60f60e04de62d62b914d328e28173e82ff46de1e3965",
+          "exit_code": 0,
+          "stdout": "ok CTLineGetGlyphCount(plain) == 4\nok CTLineGetGlyphCount(e) == 1\nok g[0] == 8\nok CTLineGetGlyphCount(c) == 2\nok cr.location == 0 && cr.length == 2\nok g[0] == 6 && g[1] == 9\nok CTLineGetGlyphCount(em) == 1\nok er.location == 0 && er.length == 2\nok idx[0] == 0\nok g[0] == 10\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "73ffbe0b6265d82727157eaca88cd84ed7683f89f9b7598a88fc4291111853fb",
+          "exit_code": 0,
+          "stdout": "ok CTLineGetGlyphCount(plain) == 4\nok CTLineGetGlyphCount(e) == 1\nok g[0] == 8\nok CTLineGetGlyphCount(c) == 2\nok cr.location == 0 && cr.length == 2\nok g[0] == 6 && g[1] == 9\nok CTLineGetGlyphCount(em) == 1\nok er.location == 0 && er.length == 2\nok idx[0] == 0\nok g[0] == 10\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctlinecreatewithattributedstring_dejavu_ligatures",
+      "source_sha256": "17071b8896bb71e48a6865d78ed411f11bd6c339da53896eeeb591c64b9e68b7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "570e849aae3a8a645c950872fa57b7fb5734ae9d0c7372e3a5cc91ef502d4f53",
+          "exit_code": 0,
+          "stdout": "ok CTLineGetGlyphCount(fi) == 1\nok r.location == 0 && r.length == 2\nok idx[0] == 0\nok CTLineGetGlyphCount(pt_line(\"ff\", f)) == 1\nok CTLineGetGlyphCount(pt_line(\"fa\", f)) == 2\nok CTLineGetGlyphCount(pt_line(\"AV\", f)) == 2\nok av < 68.41 + 68.41 - 1\nok av is 130.42\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "56447c983b5874ec13f31c4f0676a00ab89953befd0d09d6a135ce9da72825e0",
+          "exit_code": 0,
+          "stdout": "ok CTLineGetGlyphCount(fi) == 1\nok r.location == 0 && r.length == 2\nok idx[0] == 0\nok CTLineGetGlyphCount(pt_line(\"ff\", f)) == 1\nok CTLineGetGlyphCount(pt_line(\"fa\", f)) == 2\nok CTLineGetGlyphCount(pt_line(\"AV\", f)) == 2\nok av < 68.41 + 68.41 - 1\nok av is 130.42\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctlinecreatewithattributedstring_font_runs",
+      "source_sha256": "21fc93f69b3c8a028d0865a071e36060a014d0fd794bb89125bacb406ac83caf",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "16f9a1f58c9dbac64db802aa48a2743dbba42702b1011659422eb7180d337ed7",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(runs) == 2\nok a.location == 0 && a.length == 1 && b.location == 1 && b.length == 1\nok pt_is((CTFontRef)CFDictionaryGetValue(CTRunGetAttributes(r0), kCTFontAttributeName), \"PolyTest-Regular\")\nok pt_is((CTFontRef)CFDictionaryGetValue(CTRunGetAttributes(r1), kCTFontAttributeName), \"PolyTest-Bold\")\nok CTLineGetTypographicBounds(l, NULL, NULL, NULL) is 116\nok CFArrayGetCount(CTLineGetGlyphRuns(pt_line(\"AB\", reg))) == 1\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b71ccdfa0098a3ff4f23e6288000dcc4ad2584a9d0e86b8f718c4e2b307edad5",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(runs) == 2\nok a.location == 0 && a.length == 1 && b.location == 1 && b.length == 1\nok pt_is((CTFontRef)CFDictionaryGetValue(CTRunGetAttributes(r0), kCTFontAttributeName), \"PolyTest-Regular\")\nok pt_is((CTFontRef)CFDictionaryGetValue(CTRunGetAttributes(r1), kCTFontAttributeName), \"PolyTest-Bold\")\nok CTLineGetTypographicBounds(l, NULL, NULL, NULL) is 116\nok CFArrayGetCount(CTLineGetGlyphRuns(pt_line(\"AB\", reg))) == 1\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

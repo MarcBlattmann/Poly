@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctlinedraw_antialiasing",
+      "source_sha256": "159b0fa79be5743e54a54411876e20f4f690a3eec8ea21e5434b4a486c06f7d1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0ef3b2c09a2d6c17c97892bc62e4c40df344972e9e940ee915be1e4e6a9e8371",
+          "exit_code": 0,
+          "stdout": "ok within(h[5 * 10 + 2], 0x7f) && h[5 * 10 + 3] == 0 && h[5 * 10 + 4] == 0 && h[5 * 10 + 5] == 0 && within(h[5 * 10 + 6], 0x7f)\nok h[5 * 10 + 1] == 0xff && h[5 * 10 + 7] == 0xff && h[2 * 10 + 3] == 0xff && h[10 * 10 + 3] == 0xff\nok same\nok s[4 * 10 + 0] == 0xff && within(s[4 * 10 + 1], 0xb3) && s[4 * 10 + 2] == 0 && s[4 * 10 + 3] == 0 && within(s[4 * 10 + 4], 0x7f) && s[4 * 10 + 5] == 0xff\nok bw\nok gray > 5\nok sym\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "669d208a5c0319c75e73193295d24cfd85f74cfccd28384ee6dfb97e3756e7d9",
+          "exit_code": 0,
+          "stdout": "ok within(h[5 * 10 + 2], 0x7f) && h[5 * 10 + 3] == 0 && h[5 * 10 + 4] == 0 && h[5 * 10 + 5] == 0 && within(h[5 * 10 + 6], 0x7f)\nok h[5 * 10 + 1] == 0xff && h[5 * 10 + 7] == 0xff && h[2 * 10 + 3] == 0xff && h[10 * 10 + 3] == 0xff\nok same\nok s[4 * 10 + 0] == 0xff && within(s[4 * 10 + 1], 0xb3) && s[4 * 10 + 2] == 0 && s[4 * 10 + 3] == 0 && within(s[4 * 10 + 4], 0x7f) && s[4 * 10 + 5] == 0xff\nok bw\nok gray > 5\nok sym\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctlinedraw_exact_boxes",
+      "source_sha256": "892ca5590fd694445e334d194d460994150c01757f33f66a7dbe3cbe6f7a2eb8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "35e0ce0c1b6df4e37cb74f42fecbbe6a0c1ae268d24cff7249c18acf3a03fbde",
+          "exit_code": 0,
+          "stdout": "value image A\nvalue p.00 ffffffffffffffffffff\nvalue p.01 ffffffffffffffffffff\nvalue p.02 ffffffffffffffffffff\nvalue p.03 ffff00000000ffffffff\nvalue p.04 ffff00000000ffffffff\nvalue p.05 ffff00000000ffffffff\nvalue p.06 ffff00000000ffffffff\nvalue p.07 ffff00000000ffffffff\nvalue p.08 ffff00000000ffffffff\nvalue p.09 ffff00000000ffffffff\nvalue p.10 ffffffffffffffffffff\nvalue p.11 ffffffffffffffffffff\nok box_is(a, 10, 12, 2, 3, 6, 10)\nvalue image B\nvalue p.00 ffffffffffffffffffff\nvalue p.01 ffffffffffffffffffff\nvalue p.02 ffffffffffffffffffff\nvalue p.03 ffff000000ffffffffff\nvalue p.04 ffff000000ffffffffff\nvalue p.05 ffff000000ffffffffff\nvalue p.06 ffff000000ffffffffff\nvalue p.07 ffff000000ffffffffff\nvalue p.08 ffffffffffffffffffff\nvalue p.09 ffffffffffffffffffff\nok box_is(b, 10, 10, 2, 3, 5, 8)\nvalue image AB\nvalue p.00 ffffffffffffffffffffffffffff\nvalue p.01 ffffffffffffffffffffffffffff\nvalue p.02 ffffffffffffffffffffffffffff\nvalue p.03 ffff00000000ffffffffffffffff\nvalue p.04 ffff00000000ffffffffffffffff\nvalue p.05 ffff00000000ffff000000ffffff\nvalue p.06 ffff00000000ffff000000ffffff\nvalue p.07 ffff00000000ffff000000ffffff\nvalue p.08 ffff00000000ffff000000ffffff\nvalue p.09 ffff00000000ffff000000ffffff\nvalue p.10 ffffffffffffffffffffffffffff\nvalue p.11 ffffffffffffffffffffffffffff\nok ok\nvalue image O\nvalue p.00 ffffffffffffffffffff\nvalue p.01 ffffffffffffffffffff\nvalue p.02 ffffffffffffffffffff\nvalue p.03 ff00000000000000ffff\nvalue p.04 ff00000000000000ffff\nvalue p.05 ff0000ffffff0000ffff\nvalue p.06 ff0000ffffff0000ffff\nvalue p.07 ff0000ffffff0000ffff\nvalue p.08 ff00000000000000ffff\nvalue p.09 ff00000000000000ffff\nvalue p.10 ffffffffffffffffffff\nvalue p.11 ffffffffffffffffffff\nok o[3 * 10 + 1] == 0 && o[5 * 10 + 1] == 0 && o[5 * 10 + 3] == 0xff && o[7 * 10 + 5] == 0xff && o[7 * 10 + 7] == 0 && o[10 * 10 + 4] == 0xff\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b3c2185e4094935dbcb062a8f8a162bed6d9d07e6f89fd2ffc9efd0024303b26",
+          "exit_code": 0,
+          "stdout": "value image A\nvalue p.00 ffffffffffffffffffff\nvalue p.01 ffffffffffffffffffff\nvalue p.02 ffffffffffffffffffff\nvalue p.03 ffff00000000ffffffff\nvalue p.04 ffff00000000ffffffff\nvalue p.05 ffff00000000ffffffff\nvalue p.06 ffff00000000ffffffff\nvalue p.07 ffff00000000ffffffff\nvalue p.08 ffff00000000ffffffff\nvalue p.09 ffff00000000ffffffff\nvalue p.10 ffffffffffffffffffff\nvalue p.11 ffffffffffffffffffff\nok box_is(a, 10, 12, 2, 3, 6, 10)\nvalue image B\nvalue p.00 ffffffffffffffffffff\nvalue p.01 ffffffffffffffffffff\nvalue p.02 ffffffffffffffffffff\nvalue p.03 ffff000000ffffffffff\nvalue p.04 ffff000000ffffffffff\nvalue p.05 ffff000000ffffffffff\nvalue p.06 ffff000000ffffffffff\nvalue p.07 ffff000000ffffffffff\nvalue p.08 ffffffffffffffffffff\nvalue p.09 ffffffffffffffffffff\nok box_is(b, 10, 10, 2, 3, 5, 8)\nvalue image AB\nvalue p.00 ffffffffffffffffffffffffffff\nvalue p.01 ffffffffffffffffffffffffffff\nvalue p.02 ffffffffffffffffffffffffffff\nvalue p.03 ffff00000000ffffffffffffffff\nvalue p.04 ffff00000000ffffffffffffffff\nvalue p.05 ffff00000000ffff000000ffffff\nvalue p.06 ffff00000000ffff000000ffffff\nvalue p.07 ffff00000000ffff000000ffffff\nvalue p.08 ffff00000000ffff000000ffffff\nvalue p.09 ffff00000000ffff000000ffffff\nvalue p.10 ffffffffffffffffffffffffffff\nvalue p.11 ffffffffffffffffffffffffffff\nok ok\nvalue image O\nvalue p.00 ffffffffffffffffffff\nvalue p.01 ffffffffffffffffffff\nvalue p.02 ffffffffffffffffffff\nvalue p.03 ff00000000000000ffff\nvalue p.04 ff00000000000000ffff\nvalue p.05 ff0000ffffff0000ffff\nvalue p.06 ff0000ffffff0000ffff\nvalue p.07 ff0000ffffff0000ffff\nvalue p.08 ff00000000000000ffff\nvalue p.09 ff00000000000000ffff\nvalue p.10 ffffffffffffffffffff\nvalue p.11 ffffffffffffffffffff\nok o[3 * 10 + 1] == 0 && o[5 * 10 + 1] == 0 && o[5 * 10 + 3] == 0xff && o[7 * 10 + 5] == 0xff && o[7 * 10 + 7] == 0 && o[10 * 10 + 4] == 0xff\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

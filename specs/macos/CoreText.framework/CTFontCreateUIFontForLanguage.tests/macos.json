@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontcreateuifontforlanguage_sys_name",
+      "source_sha256": "205c47b9739bf4669fddacf160a8f403ae469362be092dc9ba83cd743fbddf23",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "db5611d1d3cf13b5209f502c88c5fc38643b4e8ea2b7fb2f42d8433f022434b1",
+          "exit_code": 0,
+          "stdout": "ok pt_is(role, \".SFNS-Regular\") && pt_is(byname, \".SFNS-Regular\")\nok CTFontGetSize(byname) is 13\nok CTFontGetAscent(role) is CTFontGetAscent(byname)\nok cf_is(CTFontDescriptorCopyAttribute(CTFontCopyFontDescriptor(role), kCTFontNameAttribute), \".SFNS-Regular\")\nok pt_is(CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 13, CFSTR(\"en\")), \".SFNS-Regular\")\nok pt_is(CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 13, CFSTR(\"de\")), \".SFNS-Regular\")\nok CTFontGetGlyphsForCharacters(role, &a, &g, 1) && g != 0\nok CTFontGetAdvancesForGlyphs(role, kCTFontOrientationHorizontal, &g, &adv, 1) > 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "615ef52ccbe243485069e906b354ca4c8f42e344f7f58b3cbb19ea4b483ac9ff",
+          "exit_code": 0,
+          "stdout": "ok pt_is(role, \".SFNS-Regular\") && pt_is(byname, \".SFNS-Regular\")\nok CTFontGetSize(byname) is 13\nok CTFontGetAscent(role) is CTFontGetAscent(byname)\nok cf_is(CTFontDescriptorCopyAttribute(CTFontCopyFontDescriptor(role), kCTFontNameAttribute), \".SFNS-Regular\")\nok pt_is(CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 13, CFSTR(\"en\")), \".SFNS-Regular\")\nok pt_is(CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 13, CFSTR(\"de\")), \".SFNS-Regular\")\nok CTFontGetGlyphsForCharacters(role, &a, &g, 1) && g != 0\nok CTFontGetAdvancesForGlyphs(role, kCTFontOrientationHorizontal, &g, &adv, 1) > 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontcreateuifontforlanguage_sys_system",
+      "source_sha256": "1203ffb905e7d65ac190759b81a48f6507c34c3c7481fe3eaba0709d89f9d48d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "691cbd8ccc5d41a136c9ab012cf5dccec5faa0fe76fe9360ccd8e79e5bac61d1",
+          "exit_code": 0,
+          "stdout": "ok f != NULL && CFGetTypeID(f) == CTFontGetTypeID()\nok pt_is(f, \".SFNS-Regular\")\nok CTFontGetSize(f) is 13\nok CTFontGetSize(g) is 17\nok cf_is(CTFontCopyFamilyName(g), \".AppleSystemUIFont\") && cf_is(CTFontCopyFullName(g), \"System Font Regular\")\nok CTFontGetAscent(g) > 0 && CTFontGetDescent(g) > 0 && CTFontGetUnitsPerEm(g) > 0\nok CTFontGetSymbolicTraits(g) == 0\nok CFEqual(g, CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 17, NULL))\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "21106398cca3ba21541f22f1b094f344c739c0bd19e73fd8fbf39f875981eed8",
+          "exit_code": 0,
+          "stdout": "ok f != NULL && CFGetTypeID(f) == CTFontGetTypeID()\nok pt_is(f, \".SFNS-Regular\")\nok CTFontGetSize(f) is 13\nok CTFontGetSize(g) is 17\nok cf_is(CTFontCopyFamilyName(g), \".AppleSystemUIFont\") && cf_is(CTFontCopyFullName(g), \"System Font Regular\")\nok CTFontGetAscent(g) > 0 && CTFontGetDescent(g) > 0 && CTFontGetUnitsPerEm(g) > 0\nok CTFontGetSymbolicTraits(g) == 0\nok CFEqual(g, CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 17, NULL))\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

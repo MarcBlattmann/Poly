@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontgetsymbolictraits_dejavu",
+      "source_sha256": "1d567122ab96793999ced82e1702f23fd6b3c9f3066f2258f93b4bab01ebb6ec",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0a4e3ffdd022344d5609b93ed8876b97056009b2e7fc3bbe5d256ed78df0606a",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetSymbolicTraits(pt_file_font(\"DejaVuSans.ttf\", 12)) == 0\nok CTFontGetSymbolicTraits(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)) == kCTFontTraitBold\nok CTFontGetSymbolicTraits(o) == kCTFontTraitItalic\nok CTFontGetSlantAngle(o) is -11\nok CTFontGetSymbolicTraits(pt_file_font(\"DejaVuSans-BoldOblique.ttf\", 12)) == (kCTFontTraitBold | kCTFontTraitItalic)\nok CTFontGetSymbolicTraits(pt_file_font(\"DejaVuSansMono.ttf\", 12)) == kCTFontTraitMonoSpace\nok CTFontGetSlantAngle(pt_file_font(\"DejaVuSans.ttf\", 12)) is 0\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "dbcc6da55a7dd5006c2c20a06a53790365e23a415b8412dc45691e49c5d94acb",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetSymbolicTraits(pt_file_font(\"DejaVuSans.ttf\", 12)) == 0\nok CTFontGetSymbolicTraits(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)) == kCTFontTraitBold\nok CTFontGetSymbolicTraits(o) == kCTFontTraitItalic\nok CTFontGetSlantAngle(o) is -11\nok CTFontGetSymbolicTraits(pt_file_font(\"DejaVuSans-BoldOblique.ttf\", 12)) == (kCTFontTraitBold | kCTFontTraitItalic)\nok CTFontGetSymbolicTraits(pt_file_font(\"DejaVuSansMono.ttf\", 12)) == kCTFontTraitMonoSpace\nok CTFontGetSlantAngle(pt_file_font(\"DejaVuSans.ttf\", 12)) is 0\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontgetsymbolictraits_polytest",
+      "source_sha256": "2863aa9b247cb31f9348bcc7edecd95d112607d82de7ccced3e35f5866384cbe",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a2512ccba95bb7c3f2d86e4ed5b98b35acfa422a3f4decdf6888111dc61e7477",
+          "exit_code": 0,
+          "stdout": "ok kCTFontTraitItalic == 1 && kCTFontTraitBold == 2 && kCTFontTraitMonoSpace == (1 << 10)\nok CTFontGetSymbolicTraits(pt_font(0, 20)) == 0\nok CTFontGetSymbolicTraits(pt_font(1, 20)) == kCTFontTraitBold\nok CTFontGetSymbolicTraits(pt_font(1, 5)) == kCTFontTraitBold\nok CTFontGetSymbolicTraits(CTFontCreateWithFontDescriptor(pt_descriptor(1), 20, &t)) == kCTFontTraitBold\nok (CTFontGetSymbolicTraits(pt_font(1, 20)) & (kCTFontTraitItalic | kCTFontTraitMonoSpace | kCTFontTraitVertical)) == 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1e3a0f2430d8ea0bed65ae76054a14d7a634513602f83eb8d55f11fcd634eb4c",
+          "exit_code": 0,
+          "stdout": "ok kCTFontTraitItalic == 1 && kCTFontTraitBold == 2 && kCTFontTraitMonoSpace == (1 << 10)\nok CTFontGetSymbolicTraits(pt_font(0, 20)) == 0\nok CTFontGetSymbolicTraits(pt_font(1, 20)) == kCTFontTraitBold\nok CTFontGetSymbolicTraits(pt_font(1, 5)) == kCTFontTraitBold\nok CTFontGetSymbolicTraits(CTFontCreateWithFontDescriptor(pt_descriptor(1), 20, &t)) == kCTFontTraitBold\nok (CTFontGetSymbolicTraits(pt_font(1, 20)) & (kCTFontTraitItalic | kCTFontTraitMonoSpace | kCTFontTraitVertical)) == 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
