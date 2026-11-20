@@ -680,6 +680,27 @@ impl Memory {
         result
     }
 
+    /// Lower the maximum protection of a mapped range (Mach `vm_protect`
+    /// with `set_maximum`, ADR 0238): the pages whose current protection
+    /// goes down with it are re-protected first, then the regions' maximum
+    /// is lowered.
+    pub fn limit_max_prot(&self, addr: u64, len: u64, max: Prot) -> Result<(), MemoryError> {
+        let end = addr.checked_add(len).ok_or(MemoryError::Vm(poly_vm::Error::NoMemory))?;
+        let parts: Vec<(u64, u64, Prot)> = self
+            .regions()
+            .iter()
+            .filter(|v| v.start < end && v.end > addr)
+            .map(|v| (v.start.max(addr), v.end.min(end), v.prot))
+            .collect();
+        for (s, e, p) in parts {
+            if p.intersect(max) != p {
+                self.protect(s, e - s, p.intersect(max))?;
+            }
+        }
+        self.inner.lock().map.limit_max_prot(addr, len, max)?;
+        Ok(())
+    }
+
     /// Set the start of the program break (`exec`): the heap begins at the
     /// next page boundary.
     pub fn init_brk(&self, start: u64) -> Result<(), MemoryError> {

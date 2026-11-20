@@ -66,10 +66,18 @@ translator are other tracks), so nothing of this can run on Poly today.
 
 ## Consequences
 
-- The kernel keeps calling the stateless `Xnu::dispatch` until Mach-O
-  processes exist; implementing `XnuKernel` in the kernel (on `poly-vm`
-  regions, the scheduler's block and wake, one `MachState` behind a lock) is
-  the next step and needs a loaded Mach-O program to be useful.
+- The kernel implements `XnuKernel` (`kernel/src/xnu_mach.rs`) on the
+  process's `user::Memory` and the scheduler's park and unpark, with one
+  `MachState` behind a spin lock. A Mach task is a pid; its name space is
+  made on the process's first Mach call and dropped at exit. `xnu.rs` asks
+  the BSD layer (ADR 0237) first and falls back to the Mach core for calls
+  that layer does not have. Lowering a maximum protection is a `poly-vm`
+  operation (`VmMap::limit_max_prot`).
+- The boot test group `macho-mach` runs the x86-64 builds of the visible
+  tests that need no fork, mmap or sysctl (24 programs,
+  `personalities/xnu/tests/data`) on Poly and compares their output with
+  the macOS recordings. The others join it as the BSD layer gains those
+  calls.
 - Values the sheets mark as values (not checks) follow the recordings where
   the model can, for example `EOWNERDEAD` for an unfair lock whose word does
   not name a thread, `316` for a timed-out `psynch_cvwait`.

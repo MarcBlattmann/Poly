@@ -1672,6 +1672,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // x86-64 Mach-O programs through Poly's own dyld: static, chained and
     // classic fixups, dylibs, TLV, initializers (macho.rs, ADR 0237).
     ("macho", macho::boot_test),
+    // The Mach core's visible spec tests that run on Poly today, x86-64
+    // builds, output compared with macOS's (macho.rs, ADR 0238).
+    ("macho-mach", macho::mach_boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
@@ -1833,6 +1836,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "native",
             "dynamic",
             "macho",
+            "macho-mach",
             "busybox",
             "rootdisk",
             "toolkits",
