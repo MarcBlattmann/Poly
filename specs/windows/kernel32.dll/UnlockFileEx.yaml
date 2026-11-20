@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/UnlockFileEx.yaml
+id: windows/api/kernel32.dll/UnlockFileEx
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave the same output except where a sheet says what a 32-bit caller sees."
+  observed_by: spec-win-updater-services
+  date: 2026-11-20
+sources: >
+  Observations of our own 64-bit test programs on the machine above (each test ran at least twice with identical output). Microsoft Learn pages of the functions (kernel32 / fileapi.h, winbase.h, processthreadsapi.h, wow64apiset.h, memoryapi.h, synchapi.h, combaseapi.h, objbase.h, userenv.h) for names, parameters and the error values in winerror.h. What the documentation does not say (error codes, edge cases, the effect of access rights) is taken from the observations only. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Releases a byte range locked with LockFileEx (or LockFile) through the same file handle. The range must be exactly one that was locked: a part of it, a bigger range, a shifted range and the union of two adjacent locks are all refused with ERROR_NOT_LOCKED.
+interface:
+  signature: "BOOL UnlockFileEx(HANDLE hFile, DWORD dwReserved, DWORD nNumberOfBytesToUnlockLow, DWORD nNumberOfBytesToUnlockHigh, LPOVERLAPPED lpOverlapped)"
+installer: "Google's updater 157 and 159 (32-bit) import this function; their run on Poly reaches it while they install and start their two services and register their update service and scheduled task. What they pass is not known beyond the import. Chrome's setup.exe and notification helper import it as well."
+rules:
+  exact_match: "unlock of the exact range: TRUE; unlock 0..8 of a 0..16 lock, 4..8 inside 0..8, 0..12 over 0..8, 1..9 and 0..16 over the two adjacent locks 0..8 and 8..16: ERROR_NOT_LOCKED 158; the same range again after unlocking: 158; a range that was never locked: 158"
+  owner: "a lock taken through handle B cannot be released through handle A: 158"
+  order: "two locks can be released in any order"
+  large: "offsets and lengths above 4 GiB work (a lock at 4 GiB of 16 bytes: unlock 4 GiB of 8 bytes fails with 158, of 16 bytes succeeds; a lock of 8 GiB from 0 needs the unlock of 8 GiB from 0); the largest usable offset 0x7FFFFFFFFFFFFFFE with length 1, and offset 0xFFFFFFFFFFFFFFFF with length 1 can be locked and unlocked; a range that wraps past 2^64 (offset 0xFFFFFFFFFFFFFF00, length 0x200) fails in LockFileEx and in UnlockFileEx with ERROR_INVALID_LOCK_RANGE 307"
+  length_zero: "a lock of length 0 and its unlock succeed"
+  lockfile_mix: "a range locked with LockFile is released by UnlockFileEx and a range locked with LockFileEx (also a shared one) is released by UnlockFile; LockFile and LockFileEx conflict with each other (ERROR_LOCK_VIOLATION 33 for B over A's lock and over a shared lock)"
+  overlapped_record: "a garbage Internal field and a non-NULL event handle in the OVERLAPPED record are ignored (the event is not signalled); any thread may unlock a range locked through the handle; a handle opened with FILE_FLAG_OVERLAPPED locks and unlocks the same way"
+  reserved: "dwReserved of 1 or 0xFFFFFFFF: ERROR_INVALID_PARAMETER 87 (the lock stays and a correct unlock works afterwards)"
+  handles: "the NULL handle, INVALID_HANDLE_VALUE, a handle value that is not open and a closed handle: ERROR_INVALID_HANDLE 6; a handle with only FILE_READ_ATTRIBUTES: LockFileEx and UnlockFileEx both fail with ERROR_ACCESS_DENIED 5; a handle with GENERIC_READ only can lock and unlock"
+errors:
+  not_locked: "ERROR_NOT_LOCKED 158"
+  invalid_parameter: "ERROR_INVALID_PARAMETER 87"
+  invalid_handle: "ERROR_INVALID_HANDLE 6"
+  access_denied: "ERROR_ACCESS_DENIED 5"
+  invalid_lock_range: "ERROR_INVALID_LOCK_RANGE 307"
+side_effects: "the lock is released"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, run on the oracle with the elevated token in the interactive session. Scenarios that could end the process (a NULL pointer where the function reads or writes through it) run in a child process of the same image (`--child ...`) and the parent prints the exit code. Observations are results, error codes, booleans and counts; never addresses, process or thread ids, times or the name of the machine. Files the tests make live next to the test program and are deleted by the test.
+not_covered: >
+  the locks of LockFile and LockFileEx interleaved (they share the lock table); locks held by a handle that was inherited by a child; a NULL OVERLAPPED pointer (an access violation).
