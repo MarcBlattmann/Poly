@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getaddrinfo.Families.yaml
+id: windows/api/ws2_32.dll/getaddrinfo.Families
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain, connected by Wi-Fi to a home router that is its only DNS server; NetBIOS over TCP/IP enabled, node type hybrid, no primary DNS suffix, a VPN adapter that has its own name-resolution policy rules for its own namespaces), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran twice with identical output, each run in a fresh scratch directory, with names that are new in every run"
+  observed_by: spec-win-dns-timing
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: getaddrinfo, GetAddrInfoW, ADDRINFOA, ADDRINFOW, freeaddrinfo, gethostbyname, "Winsock Error Codes", "Name Resolution Policy Table" (the tests of the unreachable server), the hosts file; ws2def.h, ws2tcpip.h, winsock2.h and winerror.h for constants and layouts. Chrome's calls: docs/windows/chrome-net-gaps.md and the committed network-service traces. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Offline and without the network's answers: the family rules of a name that exists, and how fast a change of the hosts file is seen. Chrome asks with AF_UNSPEC and SOCK_STREAM. Names are polytest-*.invalid with documentation addresses (192.0.2.55 and 2001:db8::55).
+interface:
+  signature: "getaddrinfo and GetAddrInfoW of names of the hosts file that have an IPv4 address, an IPv6 address or both, with AF_UNSPEC, AF_INET, AF_INET6, AI_ADDRCONFIG, AI_V4MAPPED, AI_ALL and AI_DNS_ONLY; changes of the hosts file"
+rules:
+  ipv4_only: "A name with one IPv4 address: AF_UNSPEC and AF_INET give one entry (IPv4); AF_INET6 fails with 11001 (not 11004); AF_INET6 with AI_V4MAPPED gives one IPv6 entry (the mapped address); AI_V4MAPPED | AI_ALL gives the same one entry; AI_ADDRCONFIG and AI_DNS_ONLY change nothing; GetAddrInfoW the same."
+  ipv6_only: "A name with one IPv6 address: AF_UNSPEC and AF_INET6 give one entry (IPv6); AF_INET fails with 11001; AI_V4MAPPED with AF_INET6 one IPv6 entry; AI_ADDRCONFIG with AF_UNSPEC still gives the IPv6 entry (the oracle has IPv4 and IPv6 addresses, so there is nothing to filter: the effect on a machine without IPv6 is not observed)."
+  both: "A name with an IPv4 and an IPv6 address: AF_UNSPEC two entries (one IPv4, one IPv6; the order is not recorded), AF_INET one, AF_INET6 one; AF_INET6 with AI_V4MAPPED one IPv6 entry (the native one, the mapped IPv4 is not added), with AI_V4MAPPED | AI_ALL two IPv6 entries (the native and the mapped one); GetAddrInfoW the same counts."
+  error_places: "A missing family gives 11001 in the return value, WSAGetLastError and GetLastError."
+  live_changes: "The hosts file is read again after it changes: a name that failed with 11001 just before resolves (code 0, one IPv4 entry) within about 20 ms of the file being written (test bound: 1 s) and then in under 100 ms; after the line is removed the name fails again within about 50 ms (bound 1 s) and in under 500 ms after that. The match ignores the case (POLYTEST-LIVE.INVALID resolves) and a trailing dot (\"polytest-live.invalid.\" resolves); a comment after the names (\"# a comment\") is ignored; every further name on a line is an alias that resolves to the line's address."
+  time: "A name of the hosts file resolves in 0.15 to 1.2 ms (probe), 4 ms at the first lookup of a process."
+errors:
+  host_not_found: "WSAHOST_NOT_FOUND (11001)"
+side_effects: "the tests write lines containing polytest- into the hosts file (administrator rights are needed) and remove them at the end and at the start of every test"
+threading: "getaddrinfo may be called from any thread; lookups of several threads run at the same time"
+ordering: []
+timing:
+  typical: "bounds in the rules"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Every name that is meant not to exist is `polytest-<16 random hex digits>` (with .invalid, .test or .local added, or as a single label), different in every call and every run, so no earlier run and no cache can answer it; no name of another party is looked up except `wpad`, `localhost` and numeric addresses. Names of the hosts-file tests are `polytest-*.invalid`; the test adds its lines to the hosts file (192.0.2.0/24 and 2001:db8::/32, the documentation ranges), removes every line with `polytest-` at the end and at the start, and nothing connects to them. Times are taken with the performance counter around the call and printed only as facts about bounds ("under 500 ms: true"), never as values; the bounds leave a wide margin to what was measured. The tests need the network of the oracle only for the lookups of names that do not exist (a DNS server that answers NXDOMAIN) and run offline otherwise. dns_nx_repeat sleeps about 30 s and needs a per-test time limit of 60 s or more (poly-oracle.ps1 -TestTimeouts dns_nx_repeat=120); dns_hosts_* write to the hosts file and need an administrator token.
+not_covered: >
+  A hosts file with several lines for one name and one family, lines longer than 255 bytes, a hosts file that is not writable, the order of the entries (RFC 6724 sorting depends on the machine's addresses), AI_ADDRCONFIG on a machine without an IPv4 or IPv6 address, link-local scope ids.
