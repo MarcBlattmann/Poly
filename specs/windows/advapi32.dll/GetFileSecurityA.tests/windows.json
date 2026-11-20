@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "gfsa_basic",
+      "exe_sha256": "c6c4bc1ae02eacd93cef6c125782d2ac0122c67ff67b54cb077974a2232b0958",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsZSBtYWRlOiB5ZXMKb3duZXI6IG9rIDEsIFtPOkJBXSwgdmFsaWQgeWVzLCBsZW5ndGggaXMgbW9yZSB0aGFuIDA6IHllcwpncm91cDogb2sgMSwgW0c6V0RdLCB2YWxpZCB5ZXMsIGxlbmd0aCBpcyBtb3JlIHRoYW4gMDogeWVzCkRBQ0w6IG9rIDEsIFtEOihBOztGQTs7O0JBKShBOztGUjs7O1dEKV0sIHZhbGlkIHllcywgbGVuZ3RoIGlzIG1vcmUgdGhhbiAwOiB5ZXMKb3duZXIsIGdyb3VwIGFuZCBEQUNMOiBvayAxLCBbTzpCQUc6V0REOihBOztGQTs7O0JBKShBOztGUjs7O1dEKV0sIHZhbGlkIHllcywgbGVuZ3RoIGlzIG1vcmUgdGhhbiAwOiB5ZXMKbGVuZ3RoIDA6IG9rIDAsIGVycm9yIDEyMiwgbGVuZ3RoIG5lZWRlZCBpcyBtb3JlIHRoYW4gMDogeWVzCm1pc3NpbmcgZmlsZTogb2sgMCwgZXJyb3IgMgptaXNzaW5nIGRpcmVjdG9yeTogb2sgMCwgZXJyb3IgMwpOVUxMIG5hbWU6IG9rIDAsIGVycm9yIDEyMwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "file made: yes\nowner: ok 1, [O:BA], valid yes, length is more than 0: yes\ngroup: ok 1, [G:WD], valid yes, length is more than 0: yes\nDACL: ok 1, [D:(A;;FA;;;BA)(A;;FR;;;WD)], valid yes, length is more than 0: yes\nowner, group and DACL: ok 1, [O:BAG:WDD:(A;;FA;;;BA)(A;;FR;;;WD)], valid yes, length is more than 0: yes\nlength 0: ok 0, error 122, length needed is more than 0: yes\nmissing file: ok 0, error 2\nmissing directory: ok 0, error 3\nNULL name: ok 0, error 123\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 48
+    }
+  ]
+}

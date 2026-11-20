@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "gtga_exattr",
+      "exe_sha256": "6154f7d42e3b60c9d647194e193ba27c604248a7644aa4bd36a77d9ce27f7ea0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIGxvd2VzdCBwcm9jZXNzb3I6IGhhbmRsZTsgcmVhZHMgYmFjayBleGFjdGx5IHRoYXQ6IHllczsgZXF1YWxzIHRoZSBwcm9jZXNzIG1hc2s6IG5vOyBpZGVhbCBwcm9jZXNzb3IgaW5zaWRlIHRoZSBtYXNrOiB5ZXMKdGhlIHdob2xlIHByb2Nlc3MgbWFzazogaGFuZGxlOyByZWFkcyBiYWNrIGV4YWN0bHkgdGhhdDogeWVzOyBlcXVhbHMgdGhlIHByb2Nlc3MgbWFzazogeWVzOyBpZGVhbCBwcm9jZXNzb3IgaW5zaWRlIHRoZSBtYXNrOiB5ZXMKbWFzayAwOiBoYW5kbGU7IHJlYWRzIGJhY2sgZXhhY3RseSB0aGF0OiBubzsgZXF1YWxzIHRoZSBwcm9jZXNzIG1hc2s6IHllczsgaWRlYWwgcHJvY2Vzc29yIGluc2lkZSB0aGUgbWFzazogeWVzCmEgbWFzayBvdXRzaWRlIHRoZSBwcm9jZXNzIG1hc2s6IE5VTEwgZ2xlPTg3IHN0YXR1cz0weGMwMDAwMDBkCmJpdCA2MzogTlVMTCBnbGU9ODcgc3RhdHVzPTB4YzAwMDAwMGQKZ3JvdXAgMTogTlVMTCBnbGU9ODcgc3RhdHVzPTB4YzAwMDAwMGQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the lowest processor: handle; reads back exactly that: yes; equals the process mask: no; ideal processor inside the mask: yes\nthe whole process mask: handle; reads back exactly that: yes; equals the process mask: yes; ideal processor inside the mask: yes\nmask 0: handle; reads back exactly that: no; equals the process mask: yes; ideal processor inside the mask: yes\na mask outside the process mask: NULL gle=87 status=0xc000000d\nbit 63: NULL gle=87 status=0xc000000d\ngroup 1: NULL gle=87 status=0xc000000d\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 284
+    },
+    {
+      "name": "gtga_local",
+      "exe_sha256": "e3231acdd33d036b126703e44776e5049c19bbcfbf1be7af7f744bbd781e3726",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIHByb2Nlc3MgYWZmaW5pdHkgbWFzayBpcyBub3QgemVybzogeWVzCnBzZXVkbyBoYW5kbGUgb2YgdGhlIGN1cnJlbnQgdGhyZWFkOiBvazogZ3JvdXAgMCwgbWFzayBub3QgemVybyB5ZXMsIG1hc2sgaW5zaWRlIHRoZSBwcm9jZXNzIG1hc2sgeWVzLCBtYXNrIGVxdWFscyB0aGUgcHJvY2VzcyBtYXNrIHllcywgcmVzZXJ2ZWQgYWxsIHplcm8geWVzCnJlYWwgaGFuZGxlIHRvIHRoZSBjdXJyZW50IHRocmVhZDogb2s6IGdyb3VwIDAsIG1hc2sgbm90IHplcm8geWVzLCBtYXNrIGluc2lkZSB0aGUgcHJvY2VzcyBtYXNrIHllcywgbWFzayBlcXVhbHMgdGhlIHByb2Nlc3MgbWFzayB5ZXMsIHJlc2VydmVkIGFsbCB6ZXJvIHllcwpuZXcgc3VzcGVuZGVkIHRocmVhZDogb2s6IGdyb3VwIDAsIG1hc2sgbm90IHplcm8geWVzLCBtYXNrIGluc2lkZSB0aGUgcHJvY2VzcyBtYXNrIHllcywgbWFzayBlcXVhbHMgdGhlIHByb2Nlc3MgbWFzayB5ZXMsIHJlc2VydmVkIGFsbCB6ZXJvIHllcwp0aHJlYWQgaGFzIGVuZGVkOiB3YWl0IDB4MApoYW5kbGUgb2YgdGhlIGZpbmlzaGVkIHRocmVhZDogb2s6IGdyb3VwIDAsIG1hc2sgbm90IHplcm8geWVzLCBtYXNrIGluc2lkZSB0aGUgcHJvY2VzcyBtYXNrIHllcywgbWFzayBlcXVhbHMgdGhlIHByb2Nlc3MgbWFzayB5ZXMsIHJlc2VydmVkIGFsbCB6ZXJvIHllcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the process affinity mask is not zero: yes\npseudo handle of the current thread: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nreal handle to the current thread: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nnew suspended thread: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nthread has ended: wait 0x0\nhandle of the finished thread: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    },
+    {
+      "name": "gtga_remote",
+      "exe_sha256": "c0d720d433dffa7375c32966d92da535a4564e05a3858d24b6da2327dd1361cd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIHRhcmdldCdzIGFmZmluaXR5IG1hc2sgaXMgbm90IHplcm86IHllcwpyZW1vdGUgdGhyZWFkIGNyZWF0ZWQ6IGhhbmRsZQp0aGUgcmVtb3RlIHRocmVhZDogb2s6IGdyb3VwIDAsIG1hc2sgbm90IHplcm8geWVzLCBtYXNrIGluc2lkZSB0aGUgcHJvY2VzcyBtYXNrIHllcywgbWFzayBlcXVhbHMgdGhlIHByb2Nlc3MgbWFzayB5ZXMsIHJlc2VydmVkIGFsbCB6ZXJvIHllcwp0aGUgZmlyc3QgdGhyZWFkIG9mIHRoZSB0YXJnZXQ6IG9rOiBncm91cCAwLCBtYXNrIG5vdCB6ZXJvIHllcywgbWFzayBpbnNpZGUgdGhlIHByb2Nlc3MgbWFzayB5ZXMsIG1hc2sgZXF1YWxzIHRoZSBwcm9jZXNzIG1hc2sgeWVzLCByZXNlcnZlZCBhbGwgemVybyB5ZXMKdGhlIHJlbW90ZSB0aHJlYWQgb3BlbmVkIGJ5IGlkIChxdWVyeS1saW1pdGVkKTogb2s6IGdyb3VwIDAsIG1hc2sgbm90IHplcm8geWVzLCBtYXNrIGluc2lkZSB0aGUgcHJvY2VzcyBtYXNrIHllcywgbWFzayBlcXVhbHMgdGhlIHByb2Nlc3MgbWFzayB5ZXMsIHJlc2VydmVkIGFsbCB6ZXJvIHllcwp0aGUgcmVtb3RlIHRocmVhZCBvcGVuZWQgYnkgaWQgd2l0aCBUSFJFQURfU0VUX0lORk9STUFUSU9OIG9ubHk6IGVycm9yIDUKZmlyc3QgdGhyZWFkIG9mIGEgcHJvY2VzcyB0aGF0IGhhcyBub3Qgc3RhcnRlZDogb2s6IGdyb3VwIDAsIG1hc2sgbm90IHplcm8geWVzLCBtYXNrIGluc2lkZSB0aGUgcHJvY2VzcyBtYXNrIHllcywgbWFzayBlcXVhbHMgdGhlIHByb2Nlc3MgbWFzayB5ZXMsIHJlc2VydmVkIGFsbCB6ZXJvIHllcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the target's affinity mask is not zero: yes\nremote thread created: handle\nthe remote thread: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nthe first thread of the target: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nthe remote thread opened by id (query-limited): ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nthe remote thread opened by id with THREAD_SET_INFORMATION only: error 5\nfirst thread of a process that has not started: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 293
+    },
+    {
+      "name": "gtga_rights",
+      "exe_sha256": "4fd0a93bdf82760c78d4bd4d54b218629bb9d4a2c12ce12c4d37a60f06be78ba",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gcmlnaHRzOiBlcnJvciA1ClRIUkVBRF9URVJNSU5BVEU6IGVycm9yIDUKVEhSRUFEX1NVU1BFTkRfUkVTVU1FOiBlcnJvciA1ClRIUkVBRF9TRVRfSU5GT1JNQVRJT046IGVycm9yIDUKVEhSRUFEX1FVRVJZX0lORk9STUFUSU9OOiBvazogZ3JvdXAgMCwgbWFzayBub3QgemVybyB5ZXMsIG1hc2sgaW5zaWRlIHRoZSBwcm9jZXNzIG1hc2sgeWVzLCBtYXNrIGVxdWFscyB0aGUgcHJvY2VzcyBtYXNrIHllcywgcmVzZXJ2ZWQgYWxsIHplcm8geWVzClRIUkVBRF9TRVRfTElNSVRFRF9JTkZPUk1BVElPTjogZXJyb3IgNQpUSFJFQURfUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTjogb2s6IGdyb3VwIDAsIG1hc2sgbm90IHplcm8geWVzLCBtYXNrIGluc2lkZSB0aGUgcHJvY2VzcyBtYXNrIHllcywgbWFzayBlcXVhbHMgdGhlIHByb2Nlc3MgbWFzayB5ZXMsIHJlc2VydmVkIGFsbCB6ZXJvIHllcwpUSFJFQURfUkVTVU1FOiBlcnJvciA1ClNZTkNIUk9OSVpFOiBlcnJvciA1CmFsbCByaWdodHM6IG9rOiBncm91cCAwLCBtYXNrIG5vdCB6ZXJvIHllcywgbWFzayBpbnNpZGUgdGhlIHByb2Nlc3MgbWFzayB5ZXMsIG1hc2sgZXF1YWxzIHRoZSBwcm9jZXNzIG1hc2sgeWVzLCByZXNlcnZlZCBhbGwgemVybyB5ZXMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no rights: error 5\nTHREAD_TERMINATE: error 5\nTHREAD_SUSPEND_RESUME: error 5\nTHREAD_SET_INFORMATION: error 5\nTHREAD_QUERY_INFORMATION: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nTHREAD_SET_LIMITED_INFORMATION: error 5\nTHREAD_QUERY_LIMITED_INFORMATION: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nTHREAD_RESUME: error 5\nSYNCHRONIZE: error 5\nall rights: ok: group 0, mask not zero yes, mask inside the process mask yes, mask equals the process mask yes, reserved all zero yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 42
+    }
+  ]
+}
