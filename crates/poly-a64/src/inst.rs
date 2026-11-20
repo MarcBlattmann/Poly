@@ -425,6 +425,17 @@ pub enum AtomOp {
     Swp,
 }
 
+/// The flag-manipulation instructions without operands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FlagOp {
+    /// `CFINV`: invert C.
+    Cfinv,
+    /// `AXFLAG`: Arm floating-point flags to the "external" format.
+    Axflag,
+    /// `XAFLAG`: the reverse of `AXFLAG`.
+    Xaflag,
+}
+
 /// A floating-point format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FpType {
@@ -556,6 +567,306 @@ pub enum V3Op {
     Sshl,
     /// `USHL`.
     Ushl,
+    /// `SHADD`/`UHADD` (`u` in the name: the unsigned form of each pair below).
+    Shadd,
+    /// `UHADD`.
+    Uhadd,
+    /// `SRHADD`.
+    Srhadd,
+    /// `URHADD`.
+    Urhadd,
+    /// `SHSUB`.
+    Shsub,
+    /// `UHSUB`.
+    Uhsub,
+    /// `SQADD`.
+    Sqadd,
+    /// `UQADD`.
+    Uqadd,
+    /// `SQSUB`.
+    Sqsub,
+    /// `UQSUB`.
+    Uqsub,
+    /// `SQSHL` (register).
+    Sqshl,
+    /// `UQSHL` (register).
+    Uqshl,
+    /// `SRSHL`.
+    Srshl,
+    /// `URSHL`.
+    Urshl,
+    /// `SQRSHL`.
+    Sqrshl,
+    /// `UQRSHL`.
+    Uqrshl,
+    /// `SABD`.
+    Sabd,
+    /// `UABD`.
+    Uabd,
+    /// `SABA`.
+    Saba,
+    /// `UABA`.
+    Uaba,
+    /// `SMAXP`.
+    Smaxp,
+    /// `SMINP`.
+    Sminp,
+    /// `UMAXP`.
+    Umaxp,
+    /// `UMINP`.
+    Uminp,
+    /// `SQDMULH`.
+    Sqdmulh,
+    /// `SQRDMULH`.
+    Sqrdmulh,
+    /// `PMUL` (polynomial, bytes).
+    Pmul,
+    /// `SQRDMLAH` (three same extra).
+    Sqrdmlah,
+    /// `SQRDMLSH`.
+    Sqrdmlsh,
+}
+
+/// Floating-point three-register vector (or scalar) operations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VFp3Op {
+    /// `FADD`.
+    Add,
+    /// `FSUB`.
+    Sub,
+    /// `FMUL`.
+    Mul,
+    /// `FDIV`.
+    Div,
+    /// `FMAX`.
+    Max,
+    /// `FMIN`.
+    Min,
+    /// `FMAXNM`.
+    MaxNm,
+    /// `FMINNM`.
+    MinNm,
+    /// `FMLA` (fused).
+    Mla,
+    /// `FMLS` (fused).
+    Mls,
+    /// `FABD`.
+    Abd,
+    /// `FMULX`.
+    Mulx,
+    /// `FCMEQ`.
+    Cmeq,
+    /// `FCMGE`.
+    Cmge,
+    /// `FCMGT`.
+    Cmgt,
+    /// `FACGE`.
+    Acge,
+    /// `FACGT`.
+    Acgt,
+    /// `FADDP`.
+    Addp,
+    /// `FMAXP`.
+    Maxp,
+    /// `FMINP`.
+    Minp,
+    /// `FMAXNMP`.
+    MaxNmp,
+    /// `FMINNMP`.
+    MinNmp,
+    /// `FRECPS`.
+    Recps,
+    /// `FRSQRTS`.
+    Rsqrts,
+}
+
+/// Floating-point two-register vector (or scalar) operations, including
+/// conversions and estimates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VFp2Op {
+    /// `FABS`.
+    Abs,
+    /// `FNEG`.
+    Neg,
+    /// `FSQRT`.
+    Sqrt,
+    /// `FRINT*` with this rounding (`exact` is `FRINTX`).
+    Rint(FpRound),
+    /// `FRINTX` (rounds to nearest even here) and `FRINTI`.
+    RintX,
+    /// `FCVT[NPMZA]S`/`U` to integers of the element size.
+    ToInt(FpRound, bool),
+    /// `SCVTF`/`UCVTF` (`true` = unsigned) from integers of the element size.
+    FromInt(bool),
+    /// `FCMGT`/`FCMGE`/`FCMEQ`/`FCMLE`/`FCMLT` with zero.
+    CmZero(CmpZero),
+    /// `FRECPE`.
+    Recpe,
+    /// `FRSQRTE`.
+    Rsqrte,
+    /// `URECPE` (32-bit integer lanes).
+    Urecpe,
+    /// `URSQRTE`.
+    Ursqrte,
+    /// `FCVTL`/`FCVTL2`: widen (from the lower or, with `Q`, upper half).
+    Fcvtl,
+    /// `FCVTN`/`FCVTN2`: narrow into the lower or upper half.
+    Fcvtn,
+}
+
+/// The SHA3 extension's operations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sha3Op {
+    /// `EOR3`: three-way exclusive or.
+    Eor3,
+    /// `BCAX`: `Vn EOR (Vm AND NOT Va)`.
+    Bcax,
+    /// `RAX1`: `Vn EOR ROL(Vm, 1)` on 64-bit lanes.
+    Rax1,
+    /// `XAR`: `ROR(Vn EOR Vm, imm)` on 64-bit lanes.
+    Xar,
+}
+
+/// The comparison of an `FCM*` with zero.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CmpZero {
+    /// `>`.
+    Gt,
+    /// `>=`.
+    Ge,
+    /// `==`.
+    Eq,
+    /// `<=`.
+    Le,
+    /// `<`.
+    Lt,
+}
+
+/// Floating-point across-lanes reductions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FAcrossOp {
+    /// `FMAXNMV`.
+    MaxNmv,
+    /// `FMINNMV`.
+    MinNmv,
+    /// `FMAXV`.
+    Maxv,
+    /// `FMINV`.
+    Minv,
+}
+
+/// Three registers of different types (long, wide, narrow).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DiffOp {
+    /// `SADDL`/`UADDL`.
+    Addl,
+    /// `SADDW`/`UADDW`.
+    Addw,
+    /// `SSUBL`/`USUBL`.
+    Subl,
+    /// `SSUBW`/`USUBW`.
+    Subw,
+    /// `ADDHN` (`RADDHN` with `round`).
+    Addhn,
+    /// `SUBHN`/`RSUBHN`.
+    Subhn,
+    /// `SABAL`/`UABAL`.
+    Abal,
+    /// `SABDL`/`UABDL`.
+    Abdl,
+    /// `SMLAL`/`UMLAL`.
+    Mlal,
+    /// `SMLSL`/`UMLSL`.
+    Mlsl,
+    /// `SMULL`/`UMULL`.
+    Mull,
+    /// `SQDMLAL`.
+    Sqdmlal,
+    /// `SQDMLSL`.
+    Sqdmlsl,
+    /// `SQDMULL`.
+    Sqdmull,
+    /// `PMULL` (8-bit or 64-bit polynomial).
+    Pmull,
+}
+
+/// Vector by-element operations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ElemOp {
+    /// `MUL`.
+    Mul,
+    /// `MLA`.
+    Mla,
+    /// `MLS`.
+    Mls,
+    /// `SQDMULH`.
+    Sqdmulh,
+    /// `SQRDMULH`.
+    Sqrdmulh,
+    /// `SQRDMLAH`.
+    Sqrdmlah,
+    /// `SQRDMLSH`.
+    Sqrdmlsh,
+    /// A long form: `SMULL`, `UMLAL`, `SQDMULL`, ... (the `DiffOp` and signedness).
+    Long(DiffOp, bool),
+    /// `SDOT`/`UDOT` (`true` = unsigned).
+    Dot(bool),
+    /// `FMUL`.
+    Fmul,
+    /// `FMLA`.
+    Fmla,
+    /// `FMLS`.
+    Fmls,
+    /// `FMULX`.
+    Fmulx,
+}
+
+/// More two-register integer operations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Misc2Op {
+    /// `SADDLP`/`UADDLP` (`u`).
+    Addlp(bool),
+    /// `SADALP`/`UADALP`.
+    Adalp(bool),
+    /// `SQABS`.
+    Sqabs,
+    /// `SQNEG`.
+    Sqneg,
+    /// `SUQADD`.
+    Suqadd,
+    /// `USQADD`.
+    Usqadd,
+    /// `SQXTN`.
+    Sqxtn,
+    /// `UQXTN`.
+    Uqxtn,
+    /// `SQXTUN`.
+    Sqxtun,
+    /// `SHLL`: widen and shift by the element size.
+    Shll,
+}
+
+/// More shifts by immediate (rounding, saturating, fixed point).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shift2Op {
+    /// `SRSHR`/`URSHR` (`u`).
+    Rshr(bool),
+    /// `SRSRA`/`URSRA`.
+    Rsra(bool),
+    /// `RSHRN`.
+    Rshrn,
+    /// `SQSHL`/`UQSHL` (immediate).
+    Qshl(bool),
+    /// `SQSHLU`.
+    Sqshlu,
+    /// `SQSHRN`/`UQSHRN`, `SQRSHRN`/`UQRSHRN` (`round`).
+    Qshrn { unsigned: bool, round: bool },
+    /// `SQSHRUN`/`SQRSHRUN`.
+    Qshrun { round: bool },
+    /// `SCVTF`/`UCVTF` with fraction bits.
+    CvtFrom(bool),
+    /// `FCVTZS`/`FCVTZU` with fraction bits.
+    CvtTo(bool),
 }
 
 /// Which two-register miscellaneous vector (or scalar) operation.
@@ -729,6 +1040,26 @@ pub enum Inst {
     /// `RBIT`/`REV*`/`CLZ`/`CLS`.
     Bit1 { w: Width, op: Bit1Op, rd: Reg, rn: Reg },
 
+    /// `CRC32B/H/W/X` and `CRC32CB/H/W/X` (`c`): `size` is log2 of the
+    /// bytes taken from `rm` (3 only with an `X` register).
+    Crc32 { c: bool, size: u8, rd: Reg, rn: Reg, rm: Reg },
+    /// `PACIA`/`PACIB`/`PACDA`/`PACDB`/`AUTIA`/... and their `Z` forms
+    /// (`modifier` `None`) on `rd`. `modifier` 31 is `SP`. With the keys
+    /// disabled (what an arm64 process on macOS gets) they leave `rd`
+    /// unchanged; see [`crate::cpu`].
+    Pac { auth: bool, data: bool, key_b: bool, rd: Reg, modifier: Option<Reg> },
+    /// `XPACI`/`XPACD`: strip the authentication code from `rd`.
+    Xpac { data: bool, rd: Reg },
+    /// `PACGA Xd, Xn, Xm|SP`: a 32-bit code of `rn` with modifier `rm` in
+    /// the top half of `rd`.
+    Pacga { rd: Reg, rn: Reg, rm: Reg },
+    /// `RMIF Xn, #shift, #mask` (FEAT_FlagM).
+    Rmif { rn: Reg, shift: u8, mask: u8 },
+    /// `SETF8`/`SETF16 Wn` (FEAT_FlagM).
+    Setf { rn: Reg, sixteen: bool },
+    /// `CFINV`, `AXFLAG`, `XAFLAG` (FEAT_FlagM, FEAT_FlagM2).
+    FlagOp { op: FlagOp },
+
     // ---- branches ----
     /// `B`/`BL`: `offset` is a byte offset from this instruction.
     Branch { link: bool, offset: i64 },
@@ -744,6 +1075,10 @@ pub enum Inst {
     BranchLinkReg { rn: Reg },
     /// `RET`.
     Ret { rn: Reg },
+    /// `BRAA`/`BRAB`/`BLRAA`/`BLRAB`/`RETAA`/`RETAB` and the `Z` forms:
+    /// a branch to `rn` (`X30` for `ret`) after authenticating it with
+    /// `modifier` (`None` for the `Z` forms, 31 is `SP` for `RETA*`).
+    BranchAuth { link: bool, ret: bool, key_b: bool, rn: Reg, modifier: Option<Reg> },
 
     // ---- system ----
     /// `SVC #imm`: a system call (the caller handles it).
@@ -780,6 +1115,12 @@ pub enum Inst {
     /// `LDAR`/`STLR` (and `LDLAR`/`STLLR`, `LDAPR`): ordered, aligned
     /// accesses. `store` is the direction.
     Ordered { store: bool, size: u8, rt: Reg, rn: Reg },
+    /// `LDAPUR*`/`STLUR` (FEAT_LRCPC2): ordered accesses at a signed
+    /// unscaled offset. `kind` is `Store`, `Load` or `LoadSigned`.
+    OrderedImm { kind: MemKind, size: u8, rt: Reg, rn: Reg, offset: i64 },
+    /// `LDRAA`/`LDRAB`: load 64 bits from `rn` (authenticated as a data
+    /// address) plus `offset`; `writeback` is the pre-indexed form.
+    LoadAuth { key_b: bool, rt: Reg, rn: Reg, offset: i64, writeback: bool },
     /// LSE atomics `LDADD`, `LDCLR`, `LDEOR`, `LDSET`, `LDSMAX`, `LDSMIN`,
     /// `LDUMAX`, `LDUMIN`, `SWP` (and the `ST*` aliases when `rt` is 31): the
     /// old memory value goes to `rt` (unless `rt` is 31), the new value is
@@ -858,6 +1199,30 @@ pub enum Inst {
     /// narrowing and widening ones (use the upper half). `scalar` is the
     /// 64-bit scalar form.
     VecShiftImm { op: ShiftImmOp, q: bool, size: u8, scalar: bool, shift: u8, rd: Reg, rn: Reg },
+    /// Floating-point three-register operations (`ft` S or D; `scalar`:
+    /// one element).
+    VecFp3 { op: VFp3Op, q: bool, ft: FpType, scalar: bool, rd: Reg, rn: Reg, rm: Reg },
+    /// Floating-point two-register operations. For `Fcvtl`/`Fcvtn`, `ft` is
+    /// the wider format.
+    VecFp2 { op: VFp2Op, q: bool, ft: FpType, scalar: bool, rd: Reg, rn: Reg },
+    /// `FMAXNMV`/`FMINNMV`/`FMAXV`/`FMINV` (single precision, four lanes).
+    VecFpAcross { op: FAcrossOp, rd: Reg, rn: Reg },
+    /// Scalar pairwise: `ADDP Dd, Vn.2D` (`ft` `None`) or the `F*P` forms on the two
+    /// lanes of a 64-bit (S) or 128-bit (D) vector.
+    ScalarPair { op: Option<VFp3Op>, ft: FpType, rd: Reg, rn: Reg },
+    /// Three registers of different types. `size` is the narrow element
+    /// size (log2 bytes); `q` selects the upper halves (the `2` forms).
+    VecDiff { op: DiffOp, unsigned: bool, round: bool, q: bool, size: u8, rd: Reg, rn: Reg, rm: Reg },
+    /// By-element operations: `size` is the element size (log2 bytes; for
+    /// the long forms the narrow one), `rm` and `index` the element.
+    VecElem { op: ElemOp, q: bool, size: u8, scalar: bool, rd: Reg, rn: Reg, rm: Reg, index: u8 },
+    /// More two-register integer operations; `size` as in `Vec2Misc` (for
+    /// the narrowing ones the narrow size).
+    VecMisc2 { op: Misc2Op, q: bool, size: u8, scalar: bool, rd: Reg, rn: Reg },
+    /// More shifts by immediate; `size` and `shift` as in `VecShiftImm`.
+    VecShift2 { op: Shift2Op, q: bool, size: u8, scalar: bool, shift: u8, rd: Reg, rn: Reg },
+    /// `EOR3`/`BCAX`/`RAX1`/`XAR` (FEAT_SHA3).
+    Sha3 { op: Sha3Op, rd: Reg, rn: Reg, rm: Reg, ra: Reg, imm: u8 },
     /// `LD1`..`LD4`/`ST1`..`ST4` (multiple structures). `regs` is the number
     /// of registers (1 to 4); `interleave` is true for `LD2`..`LD4`.
     VecLdstMulti { load: bool, q: bool, size: u8, regs: u8, interleave: bool, rt: Reg, rn: Reg, post: PostIdx },
