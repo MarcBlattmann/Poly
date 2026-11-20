@@ -213,6 +213,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0234](0234-chrome-qa-fixes-a-window-made-maximized-waits-for-its-show.md) | Chrome QA fixes: a window made maximized waits for its show | Accepted |
 | [0235](0235-system-processes-run-as-localsystem.md) | System processes run as LocalSystem | Accepted |
 | [0237](0237-mach-o-loading-and-polys-own-dyld.md) | Mach-O loading and Poly's own dyld | Accepted |
+| [0238](0238-mach-core-ports-messages-semaphores-ulock-psynch.md) | The Mach core: `poly-mach` and the XNU personality's kernel interface | Accepted |
 | [0240](0240-a-small-cmd-exe.md) | A small `cmd.exe` in `C:\Windows\System32` | Accepted |
 | [0242](0242-user-mode-locks-wake-and-compete.md) | User-mode locks wake a waiter and let it compete (no convoys) | Accepted |
 | [0243](0243-a-page-flip-copies-nothing-in-the-guest-and-does-not-wait-for-the-device.md) | A page flip copies nothing in the guest and does not wait for the device | Accepted |
