@@ -233,6 +233,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0258](0258-polys-own-libsystem.md) | Poly's own libSystem.B.dylib, v0 | Accepted |
 | [0259](0259-32-bit-windows-test-programs-in-the-pipeline.md) | 32-bit Windows test programs in the pipeline | Accepted |
 | [0259](0259-wasapi-an-engine-per-client-on-10-ms-device-periods.md) | WASAPI: an engine per client, on 10 ms device periods | Accepted |
+| [0260](0260-polys-own-corefoundation.md) | Poly's own CoreFoundation.framework, v0 | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

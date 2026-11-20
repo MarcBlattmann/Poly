@@ -28,6 +28,10 @@ Chrome on Windows (in progress), then Chrome on macOS.
   builds it and the six sub-libraries a C program needs from Rust
   (`personalities/xnu/libsystem`, logic in `crates/poly-libsystem`) and
   links them with `rust-lld`'s Mach-O flavour, so any host builds them.
+- **Poly's own `CoreFoundation.framework`** (ADR 0260): `cargo xtask
+  corefoundation` builds it the same way (`personalities/xnu/corefoundation`,
+  logic in `crates/poly-cf`); the boot test group `corefoundation` runs the
+  sheets' visible tests and a C program with it.
 
 ## The order of work
 
