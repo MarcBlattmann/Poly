@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/mach_port_destruct.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in mach_port_destruct.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/mach_port_destruct
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  mach_port_destruct(task, name, send_right_delta, guard) destroys the receive right under name and takes send_right_delta
+  (0 or negative) off its send right's user references at the same time. With delta 0 a send right in the same name becomes a
+  dead name (type 0x100000, one user reference, still there until mach_port_deallocate); with a delta that removes all the
+  send references (-1 for one) nothing is left and the name is invalid; a delta that removes more than there are (-3 for two
+  references) or a positive one is KERN_INVALID_VALUE (18) and changes nothing. guard has to match the port's guard: a guarded
+  port with a wrong or missing guard ends the process with SIGKILL; a port with a context but no guard takes 0. Names that are
+  not in the task, MACH_PORT_NULL and MACH_PORT_DEAD are KERN_INVALID_NAME (15); a name that is a send right only, a dead
+  name or a port set is KERN_INVALID_RIGHT (17) and is left as it was; an invalid task is MACH_SEND_INVALID_DEST. A
+  receive-only name with delta -1 is KERN_INVALID_RIGHT (17) (observed; the port was not looked at afterwards).
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  invalid_name: "KERN_INVALID_NAME (15)"
+  invalid_right: "KERN_INVALID_RIGHT (17): no receive right under the name"
+  invalid_value: "KERN_INVALID_VALUE (18): send_right_delta positive or beyond the references"
+  guard: "SIGKILL for the process when the guard is wrong"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "the port is destroyed: queued messages are lost, every right to it becomes a dead name, notifications requested are sent"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

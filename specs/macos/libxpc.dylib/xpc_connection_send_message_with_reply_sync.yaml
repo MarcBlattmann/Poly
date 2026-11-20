@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libxpc.dylib/xpc_connection_send_message_with_reply_sync.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in xpc_connection_send_message_with_reply_sync.tests/macos.json.
+id: macos/api/libxpc.dylib/xpc_connection_send_message_with_reply_sync
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  xpc_connection_send_message_with_reply_sync(connection, message) sends a dictionary and waits for the reply, which is a new object
+  (a different one for each message): with an anonymous listener (xpc_connection_create(NULL, queue)), an endpoint
+  (xpc_endpoint_create) and a connection made from it (xpc_connection_create_from_endpoint), a server that makes the reply with
+  xpc_dictionary_create_reply and sends it with xpc_connection_send_message to xpc_dictionary_get_remote_connection of the message
+  gives the client the dictionary it set; the message sent is not changed; an empty reply is an empty dictionary. When the
+  connection cannot reach a server (an unknown service, or after xpc_connection_cancel) the result is the error object
+  XPC_ERROR_CONNECTION_INVALID itself (pointer equal, type XPC_TYPE_ERROR, name "error", description "Connection invalid"),
+  never NULL, every time. Cancelling the client gives the client's handler and the server's per-peer handler each
+  XPC_ERROR_CONNECTION_INVALID.
+returns:
+  success: "the reply dictionary"
+  error: "XPC_ERROR_CONNECTION_INVALID (an object, not NULL)"
+errors: {}
+side_effects: "messages are exchanged"
+threading: "blocks the calling thread; handlers run on the connection queues"
+ordering: []
+timing:
+  typical: "milliseconds"
+  guarantees: "none; a server that never answers hangs the call (not tested)"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/mach_port_insert_right.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in mach_port_insert_right.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/mach_port_insert_right
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  mach_port_insert_right(task, name, port, message type) adds the right that `port` (a name in the task) gives, as the
+  message type says, under `name`. A port has one name in a task: MAKE_SEND (20) under the port's own name adds a send
+  right and a user reference (receive+send, 0x30000, one more reference and one more make-send count every call); under a
+  free name that could be a name it is KERN_RIGHT_EXISTS (21) and under a value that cannot be a name (0x7001)
+  KERN_INVALID_VALUE (18); under another receive right's name KERN_RIGHT_EXISTS; MAKE_SEND of a port set is
+  KERN_INVALID_RIGHT (17). MAKE_SEND_ONCE (21) gives a send-once right a name of its own: under any free name it works (each
+  call needs another name; type 0x40000); under the receive right's own name it is KERN_NAME_EXISTS (13). MOVE_SEND_ONCE (18)
+  moves a send-once right to a free name (the old name goes); of a name that is not a send-once right it is KERN_INVALID_RIGHT.
+  MOVE_RECEIVE (16) moves the receive right to a free name (queue limit goes with it, the context is reset to 0), onto its own
+  name it does nothing; when the port also has a send right in the task, or a send-once right outstanding, the call fails
+  (KERN_RIGHT_EXISTS (21) for a send right, KERN_FAILURE (5) for send-once rights) and the receive right being moved is
+  destroyed by the failure (the name turns into a dead name); onto another port's name it is KERN_NAME_EXISTS (13). Port names that are not in the
+  task, MACH_PORT_NULL and MACH_PORT_DEAD are KERN_INVALID_NAME (15); message types that are no right (0, 99) and
+  COPY_RECEIVE are KERN_INVALID_RIGHT; COPY_SEND of a name that has no send right is KERN_INVALID_RIGHT, of a dead name
+  KERN_INVALID_CAPABILITY (20); an invalid task is MACH_SEND_INVALID_DEST.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  right_exists: "KERN_RIGHT_EXISTS (21)"
+  name_exists: "KERN_NAME_EXISTS (13)"
+  invalid_value: "KERN_INVALID_VALUE (18)"
+  invalid_right: "KERN_INVALID_RIGHT (17)"
+  invalid_name: "KERN_INVALID_NAME (15)"
+  invalid_capability: "KERN_INVALID_CAPABILITY (20): COPY_SEND of a dead name"
+  failure: "KERN_FAILURE (5): MOVE_RECEIVE with send-once rights outstanding"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "rights are added, moved or (a failed MOVE_RECEIVE) destroyed"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

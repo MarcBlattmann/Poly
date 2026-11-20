@@ -1,0 +1,14 @@
+# Hand-off of macos/api/CoreText.framework/CTFontManagerCreateFontDescriptorFromData
+
+Date (UTC): 2026-11-20 12:10:07
+Entry id: macos/api/CoreText.framework/CTFontManagerCreateFontDescriptorFromData
+Spec revision (git): 87b1278df494309e15c703ce00ffbb64b6d3ce28
+Spec agent: spec-macos-coretext
+Implementer agent: impl-macos-coretext
+
+Files handed over:
+
+- `specs/macos/CoreText.framework/CTFontManagerCreateFontDescriptorFromData.yaml` sha256:154e6cb9267e91cb11c9ff87edc943657ea02f94b4b142bcc508ace0ad5422e9
+- `specs/macos/CoreText.framework/CTFontManagerCreateFontDescriptorFromData.tests/ctfontmanagercreatefontdescriptorfromdata_dejavu.c` sha256:79d784f0a3562ddf948017bfce7bf3002e72f3fa5cc8825e2fac57ab9e214abd
+- `specs/macos/CoreText.framework/CTFontManagerCreateFontDescriptorFromData.tests/ctfontmanagercreatefontdescriptorfromdata_valid_font.c` sha256:2540559b562d62df25ac24fdb0ae5dd41e10c92f1700a01a893df8ef638f7f9c
+- `specs/macos/CoreText.framework/CTFontManagerCreateFontDescriptorFromData.tests/macos.json` sha256:aee655913c43c8051137e628a86e0d940ad2b5c3d711ade25ab59f70c24e17c1

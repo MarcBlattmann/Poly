@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctlinegetglyphruns_single_and_split",
+      "source_sha256": "ed6d1ea5278c749068ac3a9b1c01d46929c098a01063ccc5cc6688fddfc6b851",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ab7bb5342e423ece444f4e192a7c7e1e53eb030fe140cccbb020651980df9f56",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(runs) == 1\nok CFGetTypeID(r) == CTRunGetTypeID()\nok CTRunGetGlyphCount(r) == 2\nok sr.location == 0 && sr.length == 2\nok pt_is((CTFontRef)CFDictionaryGetValue(CTRunGetAttributes(r), kCTFontAttributeName), \"PolyTest-Regular\")\nok CTRunGetTypographicBounds(r, CFRangeMake(0, 0), &a, &d, &l) is 110\nok a is 80\nok d is 20\nok l is 10\nok CFArrayGetCount(two) == 2\nok CTRunGetGlyphCount(CFArrayGetValueAtIndex(two, 0)) == 1 && CTRunGetGlyphCount(CFArrayGetValueAtIndex(two, 1)) == 2\nok CTRunGetStringRange(CFArrayGetValueAtIndex(two, 1)).location == 1\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "310753ffa401bb8117165b8fca2b53e961632a006b29c0fc2c57aeafe05f8ad3",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(runs) == 1\nok CFGetTypeID(r) == CTRunGetTypeID()\nok CTRunGetGlyphCount(r) == 2\nok sr.location == 0 && sr.length == 2\nok pt_is((CTFontRef)CFDictionaryGetValue(CTRunGetAttributes(r), kCTFontAttributeName), \"PolyTest-Regular\")\nok CTRunGetTypographicBounds(r, CFRangeMake(0, 0), &a, &d, &l) is 110\nok a is 80\nok d is 20\nok l is 10\nok CFArrayGetCount(two) == 2\nok CTRunGetGlyphCount(CFArrayGetValueAtIndex(two, 0)) == 1 && CTRunGetGlyphCount(CFArrayGetValueAtIndex(two, 1)) == 2\nok CTRunGetStringRange(CFArrayGetValueAtIndex(two, 1)).location == 1\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctlinegetglyphruns_sys_fallback_font",
+      "source_sha256": "26b63c2aa5fb173051a829265aa162eaf60452ddf1a26d8ed3c8ec4777371b02",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c510ed6903acc1037ae3c166b4dc9a521a676d720f6aab58fc62edefeb210393",
+          "exit_code": 0,
+          "stdout": "ok pt_is(fb, \"Helvetica\")\nok CTRunGetTypographicBounds(r, CFRangeMake(0, 0), &a, &d, &le) is 50\nok a is 77\nok d is 23\nok g == 93\nok la is 80\nok ld is 23\nok CFArrayGetCount(runs) == 2\nok pt_is((CTFontRef)CFDictionaryGetValue(CTRunGetAttributes(CFArrayGetValueAtIndex(runs, 1)), kCTFontAttributeName), \"PingFangSC-Regular\")\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "99d4bc56f7b4f8028d6252f446ce4790981337b6a34839c112922960df4cb995",
+          "exit_code": 0,
+          "stdout": "ok pt_is(fb, \"Helvetica\")\nok CTRunGetTypographicBounds(r, CFRangeMake(0, 0), &a, &d, &le) is 50\nok a is 77\nok d is 23\nok g == 93\nok la is 80\nok ld is 23\nok CFArrayGetCount(runs) == 2\nok pt_is((CTFontRef)CFDictionaryGetValue(CTRunGetAttributes(CFArrayGetValueAtIndex(runs, 1)), kCTFontAttributeName), \"PingFangSC-Regular\")\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

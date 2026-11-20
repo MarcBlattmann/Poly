@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctrungetpositions_dejavu",
+      "source_sha256": "508caa26d78c6d4c418e9460058976e26a77d9587cca8d1e3ce7e1b512154092",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "cc034e91bb57f4fc533ed30306311da17f455a7cc84b6de18cd28e687499b13f",
+          "exit_code": 0,
+          "stdout": "ok g[0] == 36 && g[1] == 57 && g[2] == 36\nok p[0].x is 0\nok p[1].x is a[0].width\nok p[2].x is a[0].width + a[1].width\nok a[0].width < 68.41 - 1 && near(a[1].width, a[1].width)\nok p[2].x + a[2].width is CTRunGetTypographicBounds(r, CFRangeMake(0, 0), NULL, NULL, NULL)\nok p[0].y is 0\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "45b15db83539e64b3a43fdea789dd0dcab75c1964d06d30fcf304bffcb8355e2",
+          "exit_code": 0,
+          "stdout": "ok g[0] == 36 && g[1] == 57 && g[2] == 36\nok p[0].x is 0\nok p[1].x is a[0].width\nok p[2].x is a[0].width + a[1].width\nok a[0].width < 68.41 - 1 && near(a[1].width, a[1].width)\nok p[2].x + a[2].width is CTRunGetTypographicBounds(r, CFRangeMake(0, 0), NULL, NULL, NULL)\nok p[0].y is 0\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctrungetpositions_marks_and_scaling",
+      "source_sha256": "794d39ad76904a995a16da66feb95edbae9ef54a00d7f4a0f9776b75eebb193f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "332484ae42af6ffc1ac9b5dbfe87d3b4779e1c7bbbc572625ce90bc17146946e",
+          "exit_code": 0,
+          "stdout": "ok sp[1].x is 6\nok mp[0].x is 0\nok mp[1].x is 20\nok mp[1].y is 60\nok ma[0].width is 20\nok ma[1].width is 30\nok CTRunGetStatus(m) == 16\nok CTRunGetStatus(s) == 0\nok ptr == NULL || (near(ptr[1].x, 6))\nok gp == NULL || (gp[0] == 2 && gp[1] == 3)\nok tm.a == 1 && tm.d == 1 && tm.b == 0 && tm.c == 0\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f1291b776d29459b3eefa433ed2eab1defe59459acd8a6264b22188a0c25925f",
+          "exit_code": 0,
+          "stdout": "ok sp[1].x is 6\nok mp[0].x is 0\nok mp[1].x is 20\nok mp[1].y is 60\nok ma[0].width is 20\nok ma[1].width is 30\nok CTRunGetStatus(m) == 16\nok CTRunGetStatus(s) == 0\nok ptr == NULL || (near(ptr[1].x, 6))\nok gp == NULL || (gp[0] == 2 && gp[1] == 3)\nok tm.a == 1 && tm.d == 1 && tm.b == 0 && tm.c == 0\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

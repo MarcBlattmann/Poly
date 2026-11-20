@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "xpc_dictionary_get_string_apply",
+      "source_sha256": "d6bab5ef2ab8e86666153f678aa3662fdb8974f858df0b67bfd083ae9773e661",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ce9845e1d88ce1a2f7e89888a72bea867db931c1f7f18f18b07e6249df416242",
+          "exit_code": 0,
+          "stdout": "ok two string values\nok each under its key\nok the description starts with <dictionary:\nok and says count = 2\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2fbf43197016677b287c37bc74f6112bb246e0be9e6292a0ce677e5fe1ae0c39",
+          "exit_code": 0,
+          "stdout": "ok two string values\nok each under its key\nok the description starts with <dictionary:\nok and says count = 2\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "xpc_dictionary_get_string_lifetime",
+      "source_sha256": "466dbe5900090b256f5e2829bb2e732640ae30b64e4cd16982c96568e9793e0b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "28c18a7e8fc48ee00c170631afb3e8c0eb0454425e2e862878920930acd47d72",
+          "exit_code": 0,
+          "stdout": "ok after a retain and a release the text is the same\nok after more keys the text is the same\nok storing NULL removes it\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "743e6e5d3054433a228e5b6c48a4a03e5aa293da0538627d0090166e10e16e21",
+          "exit_code": 0,
+          "stdout": "ok after a retain and a release the text is the same\nok after more keys the text is the same\nok storing NULL removes it\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

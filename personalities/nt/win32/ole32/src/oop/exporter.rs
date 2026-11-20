@@ -128,6 +128,12 @@ unsafe extern "system" fn listener(first: *mut c_void) -> u32 {
 unsafe extern "system" fn connection(arg: *mut c_void) -> u32 {
     let h = arg as Handle;
     if let Some(payload) = pipe::read_frame(h) {
+        // The call is delivered: from here on a connection that breaks is a call cut off by this
+        // process's end (`pipe::transact`).
+        if !pipe::write_all(h, &[poly_com::wire::RECEIVED]) {
+            close(h);
+            return 0;
+        }
         let reply = match Request::decode(&payload) {
             Ok(Request::Call { oid, op, caller }) => dispatch(oid, op, super::security::pipe_client(h), caller),
             _ => Reply::hr(E_UNEXPECTED),

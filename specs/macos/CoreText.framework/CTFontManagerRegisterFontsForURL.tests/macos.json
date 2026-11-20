@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontmanagerregisterfontsforurl_errors",
+      "source_sha256": "20a5939ca573607b3e22c6637b25670c86753158e348cb76837e2c883626b030",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "86a071c8f463993dad52b54fc3c09b2e5508001ea1e7f9334f1d0d5e8f3f248e",
+          "exit_code": 0,
+          "stdout": "ok !CTFontManagerRegisterFontsForURL(url(\"nothere.ttf\"), kCTFontManagerScopeProcess, &err)\nok err != NULL && CFErrorGetCode(err) == 101 && cf_is(CFErrorGetDomain(err), domain)\nok cf_write_file(\"junk.ttf\", \"this is not a font file at all\", 29)\nok !CTFontManagerRegisterFontsForURL(url(\"junk.ttf\"), kCTFontManagerScopeProcess, &err)\nok err != NULL && CFErrorGetCode(err) == 103 && cf_is(CFErrorGetDomain(err), domain)\nok cf_write_file(\"PolyTest-Regular.ttf\", (const char *)poly_font_regular, sizeof poly_font_regular)\nok CTFontManagerRegisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, &err) && err == NULL\nok !CTFontManagerRegisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, &err)\nok err != NULL && CFErrorGetCode(err) == 105 && cf_is(CFErrorGetDomain(err), domain)\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok !CTFontManagerRegisterFontsForURL(url(\"nothere.ttf\"), kCTFontManagerScopeProcess, NULL)\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fb075690fbee1d76cb0afd23b5902fe1e6c9f37ce1cc4106ab1b34cfdaf56a16",
+          "exit_code": 0,
+          "stdout": "ok !CTFontManagerRegisterFontsForURL(url(\"nothere.ttf\"), kCTFontManagerScopeProcess, &err)\nok err != NULL && CFErrorGetCode(err) == 101 && cf_is(CFErrorGetDomain(err), domain)\nok cf_write_file(\"junk.ttf\", \"this is not a font file at all\", 29)\nok !CTFontManagerRegisterFontsForURL(url(\"junk.ttf\"), kCTFontManagerScopeProcess, &err)\nok err != NULL && CFErrorGetCode(err) == 103 && cf_is(CFErrorGetDomain(err), domain)\nok cf_write_file(\"PolyTest-Regular.ttf\", (const char *)poly_font_regular, sizeof poly_font_regular)\nok CTFontManagerRegisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, &err) && err == NULL\nok !CTFontManagerRegisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, &err)\nok err != NULL && CFErrorGetCode(err) == 105 && cf_is(CFErrorGetDomain(err), domain)\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok !CTFontManagerRegisterFontsForURL(url(\"nothere.ttf\"), kCTFontManagerScopeProcess, NULL)\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontmanagerregisterfontsforurl_register_and_find",
+      "source_sha256": "a9ca219e7d5dc828e2b0091b16f2297da27fba2f0411f20f015a97b363771c22",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0062d6bcf910dc9da0ccae35d3858a666f1db9a3e8dabcc23b65fc033b639ca7",
+          "exit_code": 0,
+          "stdout": "ok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest\"), 20, NULL), \"PolyTest-Regular\")\nok !has_family(\"PolyTest\")\nok cf_write_file(\"PolyTest-Regular.ttf\", (const char *)poly_font_regular, sizeof poly_font_regular)\nok CTFontManagerRegisterFontsForURL(url, kCTFontManagerScopeProcess, &err)\nok err == NULL\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest Regular\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"polytest-regular\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"POLYTEST\"), 20, NULL), \"PolyTest-Regular\")\nok has_family(\"PolyTest\")\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL), \"PolyTest-Bold\")\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c564359b6249afbea82b1f768ceb80dbd12ec78ff79f63a6a93645ae9c708f77",
+          "exit_code": 0,
+          "stdout": "ok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest\"), 20, NULL), \"PolyTest-Regular\")\nok !has_family(\"PolyTest\")\nok cf_write_file(\"PolyTest-Regular.ttf\", (const char *)poly_font_regular, sizeof poly_font_regular)\nok CTFontManagerRegisterFontsForURL(url, kCTFontManagerScopeProcess, &err)\nok err == NULL\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest Regular\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"polytest-regular\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"POLYTEST\"), 20, NULL), \"PolyTest-Regular\")\nok has_family(\"PolyTest\")\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL), \"PolyTest-Bold\")\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontmanagerregisterfontsforurl_unregister",
+      "source_sha256": "803d5345b54d2814c012dc89f3fb1e0d225b32b3a3f4e03c1de2481e445bbdd0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c6b0856fddd6058126350cbee893a2fd7f9d906d29db4c656e88dc4ad6594c6a",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL), \"PolyTest-Bold\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(reg, 0, NULL, kCTFontTraitBold, kCTFontTraitBold), \"PolyTest-Bold\")\nok CTFontManagerUnregisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, &err) && err == NULL\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL), \"PolyTest-Bold\")\nok !CTFontManagerUnregisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, &err)\nok err != NULL && CFErrorGetCode(err) == 201\nok CTFontManagerRegisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, NULL)\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok CTFontManagerUnregisterFontsForURL(url(\"PolyTest-Bold.ttf\"), kCTFontManagerScopeProcess, NULL)\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL), \"PolyTest-Bold\")\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cd85a669496cbceffb65734d1420359ad5568afa0a6885fb8eed18c525444cdf",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL), \"PolyTest-Bold\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(reg, 0, NULL, kCTFontTraitBold, kCTFontTraitBold), \"PolyTest-Bold\")\nok CTFontManagerUnregisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, &err) && err == NULL\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL), \"PolyTest-Bold\")\nok !CTFontManagerUnregisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, &err)\nok err != NULL && CFErrorGetCode(err) == 201\nok CTFontManagerRegisterFontsForURL(url(\"PolyTest-Regular.ttf\"), kCTFontManagerScopeProcess, NULL)\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nok CTFontManagerUnregisterFontsForURL(url(\"PolyTest-Bold.ttf\"), kCTFontManagerScopeProcess, NULL)\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL), \"PolyTest-Bold\")\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

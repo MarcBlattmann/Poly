@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "c6_pb_marquee",
+      "exe_sha256": "6b2ce1961f1542b3ac7c9aca1b6609350c705b5562df1037d0d0ecdf2ed1d139",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgU0VUTUFSUVVFRSgxLCAzMCkgb24gYSBwbGFpbiBiYXIKb2sgdGhlIHN0eWxlIGlzIHVuY2hhbmdlZApvayBTRVRNQVJRVUVFKDAsIDApCm9rIFNFVFBPUyBzdGlsbCB3b3JrcyBvbiBhIHBsYWluIGJhcgpvayBHRVRQT1MKb2sgUEJTX01BUlFVRUUKUEJTX01BUlFVRUU6IHN0eWxlIDB4NDAwMDAwMDgKb2sgc3R5bGUgYXMgY3JlYXRlZApvayBTRVRNQVJRVUVFKDEsIDMwKQpvayBTRVRQT1MgaXMgaWdub3JlZApvayBHRVRQT1MKb2sgU0VUUkFOR0UzMiBzdGlsbCBhbnN3ZXJzICh0aGUgb2xkIHJhbmdlKQpvayBTRVRNQVJRVUVFKDAsIDApCm9rIHN0eWxlIGFmdGVyCm9rIHRoZSBzdGF0ZSBpcyBzdGlsbCBub3JtYWwKb2sgUEJTX01BUlFVRUUgfCBQQlNfU01PT1RIClBCU19NQVJRVUVFIHwgUEJTX1NNT09USDogc3R5bGUgMHg0MDAwMDAwOQpvayBzdHlsZSBhcyBjcmVhdGVkCm9rIFNFVE1BUlFVRUUoMSwgMzApCm9rIFNFVFBPUyBpcyBpZ25vcmVkCm9rIEdFVFBPUwpvayBTRVRSQU5HRTMyIHN0aWxsIGFuc3dlcnMgKHRoZSBvbGQgcmFuZ2UpCm9rIFNFVE1BUlFVRUUoMCwgMCkKb2sgc3R5bGUgYWZ0ZXIKb2sgdGhlIHN0YXRlIGlzIHN0aWxsIG5vcm1hbApzdW1tYXJ5IDIzIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok SETMARQUEE(1, 30) on a plain bar\nok the style is unchanged\nok SETMARQUEE(0, 0)\nok SETPOS still works on a plain bar\nok GETPOS\nok PBS_MARQUEE\nPBS_MARQUEE: style 0x40000008\nok style as created\nok SETMARQUEE(1, 30)\nok SETPOS is ignored\nok GETPOS\nok SETRANGE32 still answers (the old range)\nok SETMARQUEE(0, 0)\nok style after\nok the state is still normal\nok PBS_MARQUEE | PBS_SMOOTH\nPBS_MARQUEE | PBS_SMOOTH: style 0x40000009\nok style as created\nok SETMARQUEE(1, 30)\nok SETPOS is ignored\nok GETPOS\nok SETRANGE32 still answers (the old range)\nok SETMARQUEE(0, 0)\nok style after\nok the state is still normal\nsummary 23 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 63
+    },
+    {
+      "name": "c6_pb_messages",
+      "exe_sha256": "6041ad8472db3e60f5cf1408449bc4105f801056d4d9c4d3d8a2f903856153d6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U0VUUkFOR0UzMigwLCAyMDApIC0+IDB4NjQwMDAwCm9rIHRoZSBvbGQgcmFuZ2UgMC4uMTAwClNFVFJBTkdFMzIoMTAsIDMwMCkgLT4gMHhjODAwMDAKb2sgdGhlIG9sZCByYW5nZSAwLi4yMDAKb2sgR0VUUkFOR0UgbG93Cm9rIEdFVFJBTkdFIGhpZ2gKU0VUUkFOR0UoNSwgNTApIC0+IDB4MTJjMDAwYQpvayB0aGUgb2xkIHJhbmdlIDEwLi4zMDAKb2sgR0VUUkFOR0UgbG93Cm9rIEdFVFJBTkdFIGhpZ2gKb2sgU0VUUE9TKDMwKSByZXR1cm5zIHRoZSBvbGQgcG9zaXRpb24gKDEwOiB0aGUgbmV3IHJhbmdlIGhhZCBtb3ZlZCBpdCB0byBpdHMgbWluaW11bSkKb2sgU0VUUE9TKDEwMDApIHJldHVybnMgMzAKb2sgY2xhbXBlZCB0byB0aGUgbWF4aW11bQpvayBTRVRQT1MoLTUpIHJldHVybnMgNTAKb2sgY2xhbXBlZCB0byB0aGUgbWluaW11bQpvayBERUxUQVBPUyg3KSByZXR1cm5zIHRoZSBvbGQgcG9zaXRpb24Kb2sgcG9zaXRpb24gMTIKb2sgU0VUU1RFUCg0KSByZXR1cm5zIHRoZSBvbGQgc3RlcApvayBHRVRTVEVQCm9rIFNURVBJVCByZXR1cm5zIHRoZSBvbGQgcG9zaXRpb24Kb2sgcG9zaXRpb24gMTYKb2sgdGhlIHBvc2l0aW9uIGZvbGxvd3MgdGhlIG5ldyByYW5nZQpvayBhbiB1bmtub3duIG1lc3NhZ2UgKFdNX1VTRVIgKyAzMCkKb2sgYW4gdW5rbm93biBtZXNzYWdlIChXTV9VU0VSICsgMTgpCnN1bW1hcnkgMjEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SETRANGE32(0, 200) -> 0x640000\nok the old range 0..100\nSETRANGE32(10, 300) -> 0xc80000\nok the old range 0..200\nok GETRANGE low\nok GETRANGE high\nSETRANGE(5, 50) -> 0x12c000a\nok the old range 10..300\nok GETRANGE low\nok GETRANGE high\nok SETPOS(30) returns the old position (10: the new range had moved it to its minimum)\nok SETPOS(1000) returns 30\nok clamped to the maximum\nok SETPOS(-5) returns 50\nok clamped to the minimum\nok DELTAPOS(7) returns the old position\nok position 12\nok SETSTEP(4) returns the old step\nok GETSTEP\nok STEPIT returns the old position\nok position 16\nok the position follows the new range\nok an unknown message (WM_USER + 30)\nok an unknown message (WM_USER + 18)\nsummary 21 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    },
+    {
+      "name": "c6_pb_state",
+      "exe_sha256": "ff5bb3dcf0aea6c907851ec11425bcfdbdbc22f7819f7e97dc065ad17e2f3b68",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U0VUU1RBVEUoUEJTVF9FUlJPUikgLT4gMSBHRVRTVEFURSAyCm9rIFBCU1RfRVJST1IKb2sgR0VUU1RBVEUKU0VUU1RBVEUoUEJTVF9QQVVTRUQpIC0+IDIgR0VUU1RBVEUgMwpvayBQQlNUX1BBVVNFRApvayBHRVRTVEFURQpTRVRTVEFURShQQlNUX05PUk1BTCkgLT4gMyBHRVRTVEFURSAxCm9rIFBCU1RfTk9STUFMCm9rIEdFVFNUQVRFClNFVFNUQVRFKFBCU1RfUEFVU0VEIGFnYWluKSAtPiAxIEdFVFNUQVRFIDMKb2sgUEJTVF9QQVVTRUQgYWdhaW4Kb2sgR0VUU1RBVEUKU0VUU1RBVEUoUEJTVF9QQVVTRUQgdGhlIHNhbWUpIC0+IDMgR0VUU1RBVEUgMwpvayBQQlNUX1BBVVNFRCB0aGUgc2FtZQpvayBHRVRTVEFURQpTRVRTVEFURSgwKSAtPiAwIEdFVFNUQVRFIDMKb2sgcmVmdXNlZApvayB0aGUgc3RhdGUgc3RheXMKU0VUU1RBVEUoNCkgLT4gMCBHRVRTVEFURSAzCm9rIHJlZnVzZWQKb2sgdGhlIHN0YXRlIHN0YXlzClNFVFNUQVRFKDUpIC0+IDAgR0VUU1RBVEUgMwpvayByZWZ1c2VkCm9rIHRoZSBzdGF0ZSBzdGF5cwpTRVRTVEFURSg5OSkgLT4gMCBHRVRTVEFURSAzCm9rIHJlZnVzZWQKb2sgdGhlIHN0YXRlIHN0YXlzClNFVFNUQVRFKDY1NTM2KSAtPiAwIEdFVFNUQVRFIDMKb2sgcmVmdXNlZApvayB0aGUgc3RhdGUgc3RheXMKb2sgdGhlIHBvc2l0aW9uIGlzIHVudG91Y2hlZApvayB0aGUgcmFuZ2UgaXMgdW50b3VjaGVkCm9rIFNFVEJBUkNPTE9SIHJldHVybnMgQ0xSX0RFRkFVTFQKb2sgR0VUQkFSQ09MT1IKb2sgU0VUQktDT0xPUiByZXR1cm5zIENMUl9ERUZBVUxUCm9rIEdFVEJLQ09MT1IKb2sgU0VUQkFSQ09MT1IgcmV0dXJucyB0aGUgcHJldmlvdXMgY29sb3VyCm9rIEdFVEJBUkNPTE9SCm9rIFNFVEJBUkNPTE9SKENMUl9ERUZBVUxUKSByZXR1cm5zIHRoZSBwcmV2aW91cyBjb2xvdXIKb2sgR0VUQkFSQ09MT1IgaXMgQ0xSX0RFRkFVTFQgYWdhaW4Kb2sgdGhlIGJhY2tncm91bmQgY29sb3VyIHdhcyBub3QgdG91Y2hlZApzdW1tYXJ5IDMxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "SETSTATE(PBST_ERROR) -> 1 GETSTATE 2\nok PBST_ERROR\nok GETSTATE\nSETSTATE(PBST_PAUSED) -> 2 GETSTATE 3\nok PBST_PAUSED\nok GETSTATE\nSETSTATE(PBST_NORMAL) -> 3 GETSTATE 1\nok PBST_NORMAL\nok GETSTATE\nSETSTATE(PBST_PAUSED again) -> 1 GETSTATE 3\nok PBST_PAUSED again\nok GETSTATE\nSETSTATE(PBST_PAUSED the same) -> 3 GETSTATE 3\nok PBST_PAUSED the same\nok GETSTATE\nSETSTATE(0) -> 0 GETSTATE 3\nok refused\nok the state stays\nSETSTATE(4) -> 0 GETSTATE 3\nok refused\nok the state stays\nSETSTATE(5) -> 0 GETSTATE 3\nok refused\nok the state stays\nSETSTATE(99) -> 0 GETSTATE 3\nok refused\nok the state stays\nSETSTATE(65536) -> 0 GETSTATE 3\nok refused\nok the state stays\nok the position is untouched\nok the range is untouched\nok SETBARCOLOR returns CLR_DEFAULT\nok GETBARCOLOR\nok SETBKCOLOR returns CLR_DEFAULT\nok GETBKCOLOR\nok SETBARCOLOR returns the previous colour\nok GETBARCOLOR\nok SETBARCOLOR(CLR_DEFAULT) returns the previous colour\nok GETBARCOLOR is CLR_DEFAULT again\nok the background colour was not touched\nsummary 31 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

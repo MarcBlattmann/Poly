@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontcreatecopywithsymbolictraits_bold_and_unbold",
+      "source_sha256": "21eba219fc962d012bd8e4c70e3eb5a26a278157e8a61ca9742657894d030c62",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "cafc09303a70c8ac2433076fa6bad2f0eb2118db562c795d0541f64a3ef88022",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok pt_is(bold, \"PolyTest-Bold\")\nok CTFontGetSize(bold) is 20\nok CTFontGetSymbolicTraits(bold) == kCTFontTraitBold\nok pt_is(back, \"PolyTest-Regular\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(reg, 0, NULL, 0, 0), \"PolyTest-Regular\")\nok CTFontGetSize(CTFontCreateCopyWithSymbolicTraits(reg, 50, NULL, 0, 0)) is 50\nok CTFontGetSize(CTFontCreateCopyWithSymbolicTraits(reg, 0, NULL, 0, 0)) is 20\nok CTFontGetAscent(CTFontCreateCopyWithSymbolicTraits(reg, 50, NULL, kCTFontTraitBold, kCTFontTraitBold)) is 40\nok cf_is(CTFontCopyFamilyName(bold), \"PolyTest\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e3196dac80c988065629ddeae151ca0b07ac1d49e98f2765fbe68b5ffab0b460",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok pt_is(bold, \"PolyTest-Bold\")\nok CTFontGetSize(bold) is 20\nok CTFontGetSymbolicTraits(bold) == kCTFontTraitBold\nok pt_is(back, \"PolyTest-Regular\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(reg, 0, NULL, 0, 0), \"PolyTest-Regular\")\nok CTFontGetSize(CTFontCreateCopyWithSymbolicTraits(reg, 50, NULL, 0, 0)) is 50\nok CTFontGetSize(CTFontCreateCopyWithSymbolicTraits(reg, 0, NULL, 0, 0)) is 20\nok CTFontGetAscent(CTFontCreateCopyWithSymbolicTraits(reg, 50, NULL, kCTFontTraitBold, kCTFontTraitBold)) is 40\nok cf_is(CTFontCopyFamilyName(bold), \"PolyTest\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontcreatecopywithsymbolictraits_dejavu",
+      "source_sha256": "230ecee7c98bc37e1be5976fd0d9877901d45540f0f70133fff3a7afc1b9e42b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9a33c0c2ee36b5de212837a1789a35f0c6baa5b2fec5bdf81743c348c0eb4cab",
+          "exit_code": 0,
+          "stdout": "ok pt_register_files(files, 4) == 4\nok pt_is(sans, \"DejaVuSans\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(sans, 0, NULL, kCTFontTraitBold, kCTFontTraitBold), \"DejaVuSans-Bold\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(sans, 0, NULL, kCTFontTraitItalic, kCTFontTraitItalic), \"DejaVuSans-Oblique\")\nok pt_is(both, \"DejaVuSans-BoldOblique\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(both, 0, NULL, 0, kCTFontTraitBold), \"DejaVuSans-Oblique\")\nok CTFontGetSize(both) is 14\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f847f9083f39126573e10fe636781f71ca3fadf112835537cdbbd61fb13728e9",
+          "exit_code": 0,
+          "stdout": "ok pt_register_files(files, 4) == 4\nok pt_is(sans, \"DejaVuSans\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(sans, 0, NULL, kCTFontTraitBold, kCTFontTraitBold), \"DejaVuSans-Bold\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(sans, 0, NULL, kCTFontTraitItalic, kCTFontTraitItalic), \"DejaVuSans-Oblique\")\nok pt_is(both, \"DejaVuSans-BoldOblique\")\nok pt_is(CTFontCreateCopyWithSymbolicTraits(both, 0, NULL, 0, kCTFontTraitBold), \"DejaVuSans-Oblique\")\nok CTFontGetSize(both) is 14\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

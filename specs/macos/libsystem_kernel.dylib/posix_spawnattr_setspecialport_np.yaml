@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/posix_spawnattr_setspecialport_np.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in posix_spawnattr_setspecialport_np.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/posix_spawnattr_setspecialport_np
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  posix_spawnattr_setspecialport_np(&attr, port, which) records a task special port for the child that posix_spawn starts. It
+  returns 0 for the bootstrap, host and access ports and for numbers that are none (7, 99), for MACH_PORT_NULL and for a port name
+  that does not exist: nothing about the port is checked when it is set, and the port's rights in the caller are untouched
+  (no user reference is added). For an unprivileged caller that is not entitled the setting has no effect on the child: it
+  starts normally (posix_spawn returns 0) with the bootstrap port every process has (a name the parent checked in is found
+  through it; task_get_special_port(TASK_BOOTSTRAP_PORT) agrees with bootstrap_port), and nothing is ever sent to the port
+  that was given, not even when it is MACH_PORT_NULL or a name that does not exist. (Whether a privileged or entitled caller
+  could replace the child's bootstrap port was not tried.)
+returns:
+  success: "0 (an errno-style result: the call returns 0 for every argument tried)"
+errors: {}
+side_effects: "the attribute record holds the setting"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

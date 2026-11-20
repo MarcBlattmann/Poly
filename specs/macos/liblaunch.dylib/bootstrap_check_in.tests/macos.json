@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "bootstrap_check_in_again_after_owner_died",
+      "source_sha256": "d6ac49f26b03cc1896e8bbde9854443ec0bd8f7528ec43ade290825e60018d96",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5f5f71e3dbfc26af292b2263c7d3a5dbbedbf593a04d615e0e73e83bc77e7f7f",
+          "exit_code": 0,
+          "stdout": "ok while the child holds it: BOOTSTRAP_NOT_PRIVILEGED (1100)\nok the child ends with status 0\nok then the parent can check it in\nok and again after it destroyed its receive right\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ae9c51a43dcf866bf124da15b7548a70d365404dfdc8e84afd21b54e84e2c72e",
+          "exit_code": 0,
+          "stdout": "ok while the child holds it: BOOTSTRAP_NOT_PRIVILEGED (1100)\nok the child ends with status 0\nok then the parent can check it in\nok and again after it destroyed its receive right\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "bootstrap_check_in_new_name",
+      "source_sha256": "9c8466bb77b6d3d77bece8af9562c186faf748a90d081a3d14be7ac6759b148c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "af5a99104a654668009d2005627a6ab13de11de869c09fed723e0bd97c64c19f",
+          "exit_code": 0,
+          "stdout": "ok check_in of an unknown name succeeds\nok a receive right\nok with a queue limit of 2, not the default of 5\nok a second check_in is BOOTSTRAP_SERVICE_ACTIVE (1103)\nok and leaves the out port alone\nok the first right is still good\nok any name is accepted, spaces and slashes too\nok the empty name is accepted too\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f2f5e31797fb51e1c01748ba77d69dd659966cf3e171b74bf761cfacc8b1d70b",
+          "exit_code": 0,
+          "stdout": "ok check_in of an unknown name succeeds\nok a receive right\nok with a queue limit of 2, not the default of 5\nok a second check_in is BOOTSTRAP_SERVICE_ACTIVE (1103)\nok and leaves the out port alone\nok the first right is still good\nok any name is accepted, spaces and slashes too\nok the empty name is accepted too\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "bootstrap_check_in_receives",
+      "source_sha256": "254dad08c26518901660d3ecd8d932b6cef1a2c3f14374d34cf5210aa4a73878",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ab94f7b0d3dd34b3cb4a7b4042bbb15b347e85e8afe81038ebb7300814aa1beb",
+          "exit_code": 0,
+          "stdout": "ok two messages can be sent\nok a third finds the queue full (limit 2): MACH_SEND_TIMED_OUT\nok the two arrive in order\nok then the queue is empty\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "900038af5bc4b9562981cfb1c208fdc35ea620c9e96b7ed304ef36afc2cc686f",
+          "exit_code": 0,
+          "stdout": "ok two messages can be sent\nok a third finds the queue full (limit 2): MACH_SEND_TIMED_OUT\nok the two arrive in order\nok then the queue is empty\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

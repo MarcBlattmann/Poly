@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreText.framework/CTLineCreateWithAttributedString.yaml. Observed with C test programs linked against CoreText
+# (tests/macos/include/poly_mct.h, ADR 0182); results per architecture in CTLineCreateWithAttributedString.tests/macos.json.
+id: "macos/api/CoreText.framework/CTLineCreateWithAttributedString"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the CoreText, CoreGraphics and CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes, and the two architectures gave the same results. Tests are C programs that link CoreText (the line `poly-mac: coretext`, tests/macos/include/poly_mct.h). The results do not depend on Apple's fonts: tests use the PolyTest TrueType fonts embedded in poly_mct.h (made by tests/macos/fonts/mkfont.py) and DejaVu Sans 2.37 files the runner copies into the scratch directory (`poly-mac: fonts`); the few tests about Apple's own fonts are named sys_ and described as SYSTEM-DEPENDENT; results and output go through raw system calls"
+  observed_by: spec-macos-coretext
+  date: 2026-11-20
+summary: >
+  CTLineCreateWithAttributedString(attributedString) lays the string out on one line (no wrapping;
+  newlines are not special here) and returns a CTLine: one glyph per character for plain text, so 'AB'
+  has 2 glyphs, the string range (0,2) and one run; the empty string gives a line, not NULL, with 0
+  glyphs, no runs and the range (0,0). Spans with different font attributes (kCTFontAttributeName)
+  become separate runs in string order (A in the regular font, B in the bold one: 2 runs with ranges
+  (0,1) and (1,1), each run's attributes holding its font; the width 60 + 56 at size 100); one font
+  over everything is one run. Clusters: a precomposed e-acute is the font's composite glyph 8; an 'a'
+  followed by the combining mark U+0301 is two glyphs (6, then 9) with the line range (0,2); an emoji
+  (a surrogate pair) is one glyph (10) with the range (0,2) and string index 0 for the glyph; the
+  range always covers the whole string. DejaVu Sans applies its standard ligatures: 'fi' and 'ff' are
+  one glyph each for two characters (range (0,2), string index 0), 'fa' two glyphs; kerning narrows
+  'AV' (130.42 at size 100 against 2 x 68.41). A character the font lacks is displayed by a fallback
+  font in a run of its own (see CTLineGetGlyphRuns). The line object is a CTLine (CTLineGetTypeID).
+  The fonts the tests bring: PolyTest Regular and Bold (units per em 1000; the glyphs are boxes: A box
+  100..500 x 0..700, B 100..400 x 0..500, V a triangle, W two V, a, g, e-acute and the accent mark
+  U+0301 composites, .notdef a box, U+1F600 a box through a format 12 cmap; hhea 800/-200/line gap
+  100, OS/2 typo 700/-300/50, win 900/250, capHeight 700, xHeight 500, a kern pair A,V -100 and V,A
+  -80), and DejaVu Sans 2.37.
+returns:
+  success: "a new CTLine, never NULL"
+errors:
+  null_string: "NULL or invalid arguments not listed here are not supported (the process may crash)"
+side_effects: "allocates the line and its runs"
+threading: "CoreText objects are immutable once made and may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds; linear in the length"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
