@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceGetPlaneCount.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceGetPlaneCount.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceGetPlaneCount
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceGetPlaneCount is 0 for a surface made without plane information (also for a planar pixel format such as '420v' given with bytes per element and no planes) and the number of entries of kIOSurfacePlaneInfo otherwise (1 or 2 were tried). For 'NV12' ('420v' = 0x34323076) 100 by 50 with planes of 100 by 50 one-byte and 50 by 25 two-byte elements: 2 planes,
+  IOSurfaceGetWidthOfPlane / HeightOfPlane 100, 50 and 50, 25, BytesPerElementOfPlane 1 and 2, BytesPerRowOfPlane 128 and 128; the surface's width and height are plane 0's, the pixel format '420v', the surface's BytesPerElement plane 0's. A plane that does not exist gives 0. For a non-planar surface plane 0 is the surface (its width, height, bytes per element) and plane 1 has
+  nothing (0). An empty plane array is refused by IOSurfaceCreate (NULL).
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  value: "the number of planes"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

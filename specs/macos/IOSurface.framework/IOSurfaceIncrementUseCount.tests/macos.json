@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_use_count_increment_port",
+      "source_sha256": "24101bd12f46e154de09199a1d93fe02bb99d4fa7b83bbffb84582e4e73d54e5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2ce9e2390b7e81c080a8bacdd042f9903e619a0adf124cd3a08fe821180d524d",
+          "exit_code": 0,
+          "stdout": "ok three increments through three references: 3 on each\nok releasing a reference does not change the count\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0ddf5c5391e32763e4d143d6bdc31a6606c2c8b74cfe8270a0232db81e308953",
+          "exit_code": 0,
+          "stdout": "ok three increments through three references: 3 on each\nok releasing a reference does not change the count\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_use_count_increment_processes",
+      "source_sha256": "6b84f3103abe8689231d3eb65963ef44ca0411e47b2c5820a51ed9c27fee04c6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c5db2e35d47aa8d8fd4db0e37d9d6a393fcdb8f1e8ce894d71d9d7c51933c53b",
+          "exit_code": 0,
+          "stdout": "ok child: its use count starts at 0 (the parent's increments are not its own)\nok child: but the surface is in use (the parent holds a count)\nok child: after its increment its count is 1\nsummary 3 passed, 0 failed\nok the child ended with status 0\nok the parent's count is still 2\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a6d7201cc43f5a164fdea0947a7652c49e8ef87425bf431df4cb72387870ce01",
+          "exit_code": 0,
+          "stdout": "ok child: its use count starts at 0 (the parent's increments are not its own)\nok child: but the surface is in use (the parent holds a count)\nok child: after its increment its count is 1\nsummary 3 passed, 0 failed\nok the child ended with status 0\nok the parent's count is still 2\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

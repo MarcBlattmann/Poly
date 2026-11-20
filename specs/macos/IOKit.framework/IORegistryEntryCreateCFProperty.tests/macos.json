@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_registry_property_missing",
+      "source_sha256": "7a93cf4b895eb707810365acf605c905f2e1aec6650565063bcd9f63de49e47f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c15d2e20df21908dfc3d7388d3009dbf9c468cddd08097fcbfe7f99afd915c58",
+          "exit_code": 0,
+          "stdout": "ok a key that does not exist: NULL\nok entry 0: NULL\nok entry 0x1234: NULL\nok two calls give equal values, one with an allocator\nok IORegistryEntryCreateCFProperties: 0 and a dictionary\nok it has the model\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "63c5d113aa16941afbbce49afe5cff377e222414709511508fdb1d48cf8d653c",
+          "exit_code": 0,
+          "stdout": "ok a key that does not exist: NULL\nok entry 0: NULL\nok entry 0x1234: NULL\nok two calls give equal values, one with an allocator\nok IORegistryEntryCreateCFProperties: 0 and a dictionary\nok it has the model\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_registry_property_platform",
+      "source_sha256": "a4c9baea6bf58a1bbfa2ce511b94820614bb8de7ace1a86a77fdb6e866f58dbd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b0c84806968911433c366353c878f5e90e24b7c19af471e6f0d9bdd7aeca5faa",
+          "exit_code": 0,
+          "stdout": "ok the UUID is a string of 36 characters\nok with dashes at 8, 13, 18 and 23 and hex digits in capitals elsewhere\nok the serial number is a string\nok of 8 to 14 capital letters and digits\nok the string key gives the same value\nok model: data ending in a 0 byte\nok manufacturer: data ending in a 0 byte\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "33b3281b2138f69456d25278366336ad60430a0ebf2935d2efc441a97f211d55",
+          "exit_code": 0,
+          "stdout": "ok the UUID is a string of 36 characters\nok with dashes at 8, 13, 18 and 23 and hex digits in capitals elsewhere\nok the serial number is a string\nok of 8 to 14 capital letters and digits\nok the string key gives the same value\nok model: data ending in a 0 byte\nok manufacturer: data ending in a 0 byte\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

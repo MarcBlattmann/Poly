@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceIsInUse.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceIsInUse.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceIsInUse
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceIsInUse(surface) is false for a new surface, with a lock held, and for references got by ID; true while any process's use count is above 0, and true once a Mach port was made with IOSurfaceCreateMachPort (while the process's own use count is 0) for as long as its right is held; false again after the right was given back. A child's use count shows in the parent's answer
+  (the child holds 2: the parent's own count is 0 and the surface is in use; after the child dropped one: still in use; after it exited: not in use).
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  value: "true or false"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

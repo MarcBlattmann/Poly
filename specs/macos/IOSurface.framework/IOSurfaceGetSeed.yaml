@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceGetSeed.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceGetSeed.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceGetSeed
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceGetSeed(surface) is 0 for a new surface and is raised by 1 by each read-write IOSurfaceLock (nested ones too); a read-only lock, an unlock, writing to the memory, IOSurfaceSetValue, IOSurfaceCopyValue, the use count calls, IOSurfaceCreateMachPort, IOSurfaceLookupFromMachPort and IOSurfaceLookup do not change it.
+  It is the surface's: every reference in the process, and every process that holds the surface through a Mach port, sees the same seed (a child's read-write lock of the parent's surface at seed 1 stores 2, and the parent then reads 2). The seed that IOSurfaceLock and IOSurfaceUnlock store
+  is this number.
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  value: "the seed"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

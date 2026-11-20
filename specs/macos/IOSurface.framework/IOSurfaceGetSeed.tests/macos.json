@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_seed_other_calls",
+      "source_sha256": "f36580d649cdc3666c2a1e7c45b986623800c1e3ce88449fd32d4c75a876a7db",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8b9d0aa7aeb2c9ee24cc8d1a7b61b6c78de6c6a74d1f43f749ecc35ba333eab3",
+          "exit_code": 0,
+          "stdout": "ok a lock and a write made seed 1\nok a write without a lock does not raise it\nok IOSurfaceSetValue does not\nok IOSurfaceCopyValue does not\nok the use count calls do not\nok creating and looking up a Mach port do not\nok IOSurfaceLookup does not\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7f2237a244d2711227af59526b948537b3b06a3c448e831c97ce9b5c6929a72a",
+          "exit_code": 0,
+          "stdout": "ok a lock and a write made seed 1\nok a write without a lock does not raise it\nok IOSurfaceSetValue does not\nok IOSurfaceCopyValue does not\nok the use count calls do not\nok creating and looking up a Mach port do not\nok IOSurfaceLookup does not\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_seed_two_processes",
+      "source_sha256": "828768bc5d74372b284a154c37e60fcdda1e2f605a52a1e2aa3473cb27b07d66",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "adedc06c629d29cbce78aa020e0a181a62e6181c8819880e9f87e45d5645cd8b",
+          "exit_code": 0,
+          "stdout": "ok child: the surface was found\nok child: its seed is the parent's, 1\nok child: its read-write lock stores 2\nsummary 3 passed, 0 failed\nok the parent sent the port\nok the child ended with status 0\nok the parent now sees seed 2\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "030493fbc47bb9ca5b27883c6a7e316f80b6ec4d8333e69661ab1774f8ab5cfa",
+          "exit_code": 0,
+          "stdout": "ok child: the surface was found\nok child: its seed is the parent's, 1\nok child: its read-write lock stores 2\nsummary 3 passed, 0 failed\nok the parent sent the port\nok the child ended with status 0\nok the parent now sees seed 2\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

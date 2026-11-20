@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_lookup_by_id",
+      "source_sha256": "20beb57288d1b829a412f57b5b776218fab2d86d3f5497c1eaea771a9f991cc8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "27c6f2b40cbb40f8c0512e17b8055d0cd0db86d298b8b4e1faa9b5371fdd30b1",
+          "exit_code": 0,
+          "stdout": "ok found\nok another object for the same surface\nok same ID, width, height, BytesPerRow\nok same base address\nok a byte written through a is read through b\nok ID 0: NULL\nok ID 0xdeadbeef: NULL\nok ID 1: NULL\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "16793251970e45c121a0404d67b78a5571edf55729bcb7eab10555813f4f8801",
+          "exit_code": 0,
+          "stdout": "ok found\nok another object for the same surface\nok same ID, width, height, BytesPerRow\nok same base address\nok a byte written through a is read through b\nok ID 0: NULL\nok ID 0xdeadbeef: NULL\nok ID 1: NULL\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_lookup_released",
+      "source_sha256": "3ba892238b2a65248693fbcdd8cad33fdf9c95fe6539599c2719314120824b77",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7b08855c145376a558c5a25e2123bff1d646bbc152098382130f0e3c74f1d2cf",
+          "exit_code": 0,
+          "stdout": "ok after the only reference was released (no port): NULL\nok with a Mach port held: found after the reference was released\nvalue the surface comes back by the port too 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bf70130941f65d826948b60289ba4e7ef74d1c746535d965eb3b8a22ead39c0d",
+          "exit_code": 0,
+          "stdout": "ok after the only reference was released (no port): NULL\nok with a Mach port held: found after the reference was released\nvalue the surface comes back by the port too 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

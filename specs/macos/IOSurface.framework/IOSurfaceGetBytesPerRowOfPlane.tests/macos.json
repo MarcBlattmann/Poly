@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_plane_bytes_per_row_explicit",
+      "source_sha256": "1ce437d77790063ce8008cd6def4a58d383a22b26f27a02e943b66904f390ccd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "80cadecbf2d2f677b62c0adc97d9eada0d68db0dca85134541014aaf35c75c47",
+          "exit_code": 0,
+          "stdout": "ok the surface is made\nok plane 0 keeps 400\nok plane 1 keeps 300\nvalue the surface's own BytesPerRow 128\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "584e3b439cb9243035479371384dc9787dba42c19165d8dc538dfc405f014d49",
+          "exit_code": 0,
+          "stdout": "ok the surface is made\nok plane 0 keeps 400\nok plane 1 keeps 300\nvalue the surface's own BytesPerRow 128\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_plane_bytes_per_row_flat",
+      "source_sha256": "48b75f7aa825db3f9a2263f97565700a3f82634920560043bb5e2d8df02e88c9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4f20b5fdf191b80e1854bd5c67bb3e78eb44de2143eb0b1248bb253e72cadc8c",
+          "exit_code": 0,
+          "stdout": "ok plane 0 BytesPerRow is the surface's\nok plane 1 BytesPerRow is 0\nok plane 5 BytesPerRow is 0\nok plane 0 width, height, bytes per element are the surface's\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b48cb3e06e7c87e43a8bc3517dc21b4486dbc38276ccaff04eda6889f59bdee5",
+          "exit_code": 0,
+          "stdout": "ok plane 0 BytesPerRow is the surface's\nok plane 1 BytesPerRow is 0\nok plane 5 BytesPerRow is 0\nok plane 0 width, height, bytes per element are the surface's\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_create_explicit",
+      "source_sha256": "9767c8582cb71ce2d16ccbf9f48a5343b4d083cba7386d147fb8ef31532717c3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4822469f1b841b0deeadae6a43aa191db32e25a6f3150c33ffb2dfd7a2af7842",
+          "exit_code": 0,
+          "stdout": "ok BytesPerRow 400 is kept\nok and the allocation holds all the rows\nok BytesPerRow 401 is kept\nok and the allocation holds all the rows\nok BytesPerRow 1000 is kept\nok and the allocation holds all the rows\nok BytesPerRow 5000 is kept\nok and the allocation holds all the rows\nok AllocSize 1000000 is kept exactly\nok an element of 2 by 2 pixels\nok its rows are of 50 elements of 4 bytes, aligned\nok a name is accepted and read back with IOSurfaceCopyValue\nok cache mode 0 is accepted\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "021cbf58d86c3c8ddc77700c247b423e9eb9d23c4d51e020d0bc7ddca52214bb",
+          "exit_code": 0,
+          "stdout": "ok BytesPerRow 400 is kept\nok and the allocation holds all the rows\nok BytesPerRow 401 is kept\nok and the allocation holds all the rows\nok BytesPerRow 1000 is kept\nok and the allocation holds all the rows\nok BytesPerRow 5000 is kept\nok and the allocation holds all the rows\nok AllocSize 1000000 is kept exactly\nok an element of 2 by 2 pixels\nok its rows are of 50 elements of 4 bytes, aligned\nok a name is accepted and read back with IOSurfaceCopyValue\nok cache mode 0 is accepted\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_create_properties",
+      "source_sha256": "bd5cf0be0e6c6ca90eeb35f66be08fcf3baa2f2d17c90b14517d8ee939a6968e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3e280941f8a3ea2eaefbe1a95356df38134fbf0c83f5504bc4e3bf15049bb4fc",
+          "exit_code": 0,
+          "stdout": "ok IOSurfaceCreate makes a surface\nok width 100\nok height 50\nok bytes per element 4\nok pixel format 'BGRA'\nok an element is 1 by 1\nok no planes\nok the seed is 0\nok the use count is 0 and the surface is not in use\nok the ID is not 0\nok another call makes another surface\nok without a pixel format the format is 0\nok without bytes per element the surface has 1\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "69dc2853d1450f3ad77675b39825ccd71fcab8280409efbcd3464a4248d7025c",
+          "exit_code": 0,
+          "stdout": "ok IOSurfaceCreate makes a surface\nok width 100\nok height 50\nok bytes per element 4\nok pixel format 'BGRA'\nok an element is 1 by 1\nok no planes\nok the seed is 0\nok the use count is 0 and the surface is not in use\nok the ID is not 0\nok another call makes another surface\nok without a pixel format the format is 0\nok without bytes per element the surface has 1\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_create_refused",
+      "source_sha256": "741bd357ba36aa8aee545d81b513bc29185ad55702032c65c5e6de0d05ad3aaa",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0a9d29f0b33120650c656fb77096ab1c7bf544ebc52887408678506e6eb3bc27",
+          "exit_code": 0,
+          "stdout": "ok no width\nok no height\nok width 0\nok height 0\nok width -5\nok height -5\nok bytes per element 0\nok an empty dictionary\nok BytesPerRow 399 for 100 elements of 4 bytes\nok AllocSize 100 for a surface that needs more\nok 100000 by 100000\nok a plane info array with no plane\nok a width of 65536 is made\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e1aa49cf6cfcd2b0bcb6d339059a8a7d27dc6d412523993c86c60062ee82f0e4",
+          "exit_code": 0,
+          "stdout": "ok no width\nok no height\nok width 0\nok height 0\nok width -5\nok height -5\nok bytes per element 0\nok an empty dictionary\nok BytesPerRow 399 for 100 elements of 4 bytes\nok AllocSize 100 for a surface that needs more\nok 100000 by 100000\nok a plane info array with no plane\nok a width of 65536 is made\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceSetValue.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceSetValue.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceSetValue
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceSetValue(surface, key, value) attaches a CF property list value (string, number, data, dictionary, array, boolean) to the surface; IOSurfaceCopyValue gives it back with its type and contents; setting the key again replaces it; a hundred keys, a 100000-character string, a megabyte of data and a key of 300 characters were kept in full. It changes nothing else: not the seed, the ID, the
+  memory or the sizes. The creation keys (kIOSurfaceWidth ...) can be set as attachments (IOSurfaceCopyValue then gives what was set) without changing IOSurfaceGetWidth. IOSurfaceRemoveValue takes a value away (a second remove does nothing visible). An attachment is the surface's: a second reference, and another process holding the surface through a Mach port, see it (in both
+  directions). IOSurfaceCopyAllValues returns a snapshot dictionary with the attachments among a few keys of its own.
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  success: "none"
+errors: {}
+side_effects: "the surface holds the value"
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_mach_port_keeps_surface",
+      "source_sha256": "5561d480261224f0a70279da99162e526a5aba492c5b33ab2a0bc8a2b7802ed1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e311f555e2c8bc3758abc2cfd79f54ee756808d241a4f5cee62e96196b58851d",
+          "exit_code": 0,
+          "stdout": "ok the surface comes back from the port\nok with its data\nok and IOSurfaceLookup finds it by its ID\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6e955c9c762fe36ae1663b999e1d0e22cc0acb15a642929583f58c5be2589650",
+          "exit_code": 0,
+          "stdout": "ok the surface comes back from the port\nok with its data\nok and IOSurfaceLookup finds it by its ID\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_mach_port_two_processes",
+      "source_sha256": "e37fb9b22a2c534bf7c1baac0e8ac9922c7f53d3263d82df060d333d214a947f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2c4b19dcea972becfcd4e86b3746917c14c0089e7432708324feccc848ba2720",
+          "exit_code": 0,
+          "stdout": "ok child: found\nok child: sizes and format are the parent's\nok child: sees the parent's bytes\nsummary 3 passed, 0 failed\nok the port was sent\nok the child ended with status 0\nok the parent sees the byte the child wrote\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "704fccbff9c9d3479920acca14d729cbbe7284003aefa2baa451a4a097c9b289",
+          "exit_code": 0,
+          "stdout": "ok child: found\nok child: sizes and format are the parent's\nok child: sees the parent's bytes\nsummary 3 passed, 0 failed\nok the port was sent\nok the child ended with status 0\nok the parent sees the byte the child wrote\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_registry_entry_id",
+      "source_sha256": "e4251a64dac0273c64caa80f26a18c3f93b4f8050e6815512463248422f8b352",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c7b271d97b72ecbb1ddcee64d646e51df438f3e56af47de30d197172cda699b5",
+          "exit_code": 0,
+          "stdout": "ok the calls return 0\nok not 0 and the same for the same entry\nok different for different entries\nok IOObjectIsEqualTo agrees\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d15cbcadb17664fed5e9d506ca7424a70f1281a2de8bdc22e39d380c144bf5e8",
+          "exit_code": 0,
+          "stdout": "ok the calls return 0\nok not 0 and the same for the same entry\nok different for different entries\nok IOObjectIsEqualTo agrees\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_registry_entry_name",
+      "source_sha256": "47c139110e5d20892857292651ad065b63781563f98297e26cc8c5c7cb87b08d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1196c6606c337f1e86cfb65ed6dc5895b7f8da0a44478510e2aaa34f1bffda80",
+          "exit_code": 0,
+          "stdout": "ok returns 0\nok a name of 1 to 127 characters\nok the class of the platform expert\nok a GPU also has a name\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c6a4ee15eb8baa93fe8626288bba57ea5292df4bc5641c1bec3babaab5c6f749",
+          "exit_code": 0,
+          "stdout": "ok returns 0\nok a name of 1 to 127 characters\nok the class of the platform expert\nok a GPU also has a name\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
