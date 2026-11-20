@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_semaphore_create_count",
+      "source_sha256": "ed741be0d1a936a7af9aef2ffcd15aaf3681eaa42bc95c1a5e36a4608502a392",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "dbe5e6f964f42bf75b75b2d3570dafc6d6fc9ff612bb0b78ca47cbafb0341d1b",
+          "exit_code": 0,
+          "stdout": "ok first wait\nok second wait\nok third wait with a timeout: KERN_OPERATION_TIMED_OUT\nok a signal\nok lets one wait through\nok and then it is empty again\nok signal_all with nobody waiting succeeds\nok and does not raise the count\nok value 0: a wait with a timeout times out\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6709e559b355e93fdafb1a342d76cefeec47d999c7a56d9a8150b5374b6dd3a1",
+          "exit_code": 0,
+          "stdout": "ok first wait\nok second wait\nok third wait with a timeout: KERN_OPERATION_TIMED_OUT\nok a signal\nok lets one wait through\nok and then it is empty again\nok signal_all with nobody waiting succeeds\nok and does not raise the count\nok value 0: a wait with a timeout times out\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_semaphore_create_errors",
+      "source_sha256": "4255a00350d88b6b69dbf0136615b1ca05341fbe5c03168714f14e720d4f5825",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "07b166a83e6c485f0d626f75f57a05004b03ed152206976767a8f41868c78e85",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL as the task: MACH_SEND_INVALID_DEST\nok a name that is nothing as the task: MACH_SEND_INVALID_DEST\nok the host port as the task: KERN_INVALID_ARGUMENT\nok the out name is left alone\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "860d60ebf9aedfa1219bf5f0fff842118577e1853a58dcba3c5f5ad88f01b9fb",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL as the task: MACH_SEND_INVALID_DEST\nok a name that is nothing as the task: MACH_SEND_INVALID_DEST\nok the host port as the task: KERN_INVALID_ARGUMENT\nok the out name is left alone\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_semaphore_create_order",
+      "source_sha256": "8471ff0d2628106192149915aa31552d797bbd7e536354cdc858c50b495afb82",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "14f917ea42da993c6a85aa700e5f860a3b859c6228fd2a081d49d04898955152",
+          "exit_code": 0,
+          "stdout": "ok SYNC_POLICY_FIFO: the first waiter is released first\nok SYNC_POLICY_LIFO: the last waiter is released first\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "eb60a74205ea3da85ef404eed29225dddbdb486d0f272fa44a2315c80032c04a",
+          "exit_code": 0,
+          "stdout": "ok SYNC_POLICY_FIFO: the first waiter is released first\nok SYNC_POLICY_LIFO: the last waiter is released first\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
