@@ -134,6 +134,22 @@ fn guest_pages_are_16k_and_follow_map_jit() {
     assert_eq!(f.addr, 0x1_0000_8000);
 }
 
+#[test]
+fn set_mapped_keeps_the_bytes() {
+    use crate::mem::*;
+    let mut m = GuestMem::new(0x1_0000_0000, 8 * PAGE_SIZE);
+    m.poke(0x1_0000_4000, &[1, 2, 3, 4]).unwrap();
+    assert_eq!(m.set_mapped(0x1_0000_4001, PAGE_SIZE, R), Err(MapError::Unaligned));
+    m.set_mapped(0x1_0000_4000, PAGE_SIZE, R | X).unwrap();
+    assert_eq!(poly_a64::Memory::fetch(&mut m, 0x1_0000_4000), Ok(0x0403_0201));
+    assert!(poly_a64::Memory::write(&mut m, 0x1_0000_4000, &[0]).is_err());
+    // A page with translations that is marked again is reported.
+    m.mark_code(0x1_0000_4000, 4);
+    m.set_mapped(0x1_0000_4000, PAGE_SIZE, R | W).unwrap();
+    assert_eq!(m.take_written_code(), alloc::vec![0x1_0000_4000]);
+    assert_eq!(m.set_mapped(0x1_0002_0000, PAGE_SIZE, R), Err(MapError::OutOfRange));
+}
+
 /// Print how each test program ends under the interpreter (for finding
 /// the instructions to add next).
 #[test]

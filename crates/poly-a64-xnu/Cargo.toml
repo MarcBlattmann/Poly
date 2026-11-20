@@ -1,0 +1,22 @@
+[package]
+name = "poly-a64-xnu"
+description = "A translated arm64 XNU process: loading an arm64 Mach-O for the translator, the kernel's hand-off to the runtime, and its system calls (ADR 0257)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-a64.workspace = true
+poly-a64-jit.workspace = true
+poly-abi.workspace = true
+poly-dyld.workspace = true
+poly-macho.workspace = true
+poly-personality-xnu.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+libc.workspace = true
+
+[lints]
+workspace = true

@@ -5,14 +5,17 @@
 //! commit), and the kernel itself goes on. When that happens this thread runs:
 //!
 //! 1. It drops clean page cache pages, which is free memory in all but name.
-//! 2. If free frames are still at the low watermark, it ends the process that holds the most
-//!    memory, except the desktop's own programs (native ones) and the first process
+//! 2. If free frames are still at the low watermark, it ends the process with the highest score,
+//!    except the desktop's own programs (native ones) and the first process
 //!    (`poly_mem::pressure::choose_victim`): a Linux or macOS process as by `SIGKILL`, a Windows
 //!    one as by `NtTerminateProcess` with `STATUS_NO_MEMORY`. It logs the process and waits for it
 //!    to end (at most 5 s) before it ends another.
 //!
-//! So the desktop keeps working when a browser takes all memory: the browser (or its largest
-//! renderer) goes, the rest stays.
+//! The score is the process's memory plus its adjustment in thousandths of all memory, as Linux
+//! scores (ADR 0250 addendum): a Linux process's own `oom_score_adj` (Chromium writes 300 and
+//! more for its renderers), a Windows process's from its relations (`nt::oom_score_adjs`: a child
+//! in a job its parent made). So a browser's renderers go before the browser, and the desktop
+//! keeps working when a browser takes all memory.
 
 use crate::process::{self, ExitStatus};
 use crate::thread::{self, WaitQueue};
@@ -124,19 +127,34 @@ fn relieve() {
     if TESTING.load(Ordering::SeqCst) {
         return;
     }
-    let Some(pid) = choose_victim(&candidates()) else {
+    // One victim at a time (as Linux's killer does not choose another while one is dying): a
+    // process that is ending and still holds memory is giving it back, so wait for that (up to
+    // the time a victim is given) before ending another. Without this, the policy that ran again
+    // right after ending a large child found it "ending" and took the next one, its parent.
+    let deadline = time::now_ns().saturating_add(WAIT_FOR_END_NS);
+    while time::now_ns() < deadline
+        && free_frames() <= low
+        && candidates().iter().any(|c| c.ending && !c.protected && c.resident > 0)
+    {
+        thread::sleep(core::time::Duration::from_millis(50));
+    }
+    if free_frames() > low {
+        return;
+    }
+    let all = candidates();
+    let Some(pid) = choose_victim(&all, frames::total_frames()) else {
         kprintln!("mm: out of memory, and no process the policy may end holds any");
         return;
     };
     let Some(victim) = process::find(pid) else { return };
-    let resident = candidates().iter().find(|c| c.pid == pid).map_or(0, |c| c.resident);
+    let (resident, adj) = all.iter().find(|c| c.pid == pid).map_or((0, 0), |c| (c.resident, c.adj));
     let line = crate::fs::proc::cmdline_of(pid);
     let name = match crate::nt::image_of(pid) {
         Some(image) => image,
         None => String::from_utf8_lossy(line.split(|&b| b == 0).next().unwrap_or(&[])).into_owned(),
     };
     kprintln!(
-        "mm: out of memory ({} frames free): ending process {pid} ({}) holding {} MiB",
+        "mm: out of memory ({} frames free): ending process {pid} ({}) holding {} MiB, score adjustment {adj}",
         free_frames(),
         name,
         (resident * 4096) >> 20
@@ -152,7 +170,7 @@ fn relieve() {
     }
     let _ = victim.wait_until(time::now_ns().saturating_add(WAIT_FOR_END_NS));
     // Still short: run again.
-    if free_frames() <= frames::reserve() {
+    if free_frames() <= frames::policy_reserve() {
         WOKEN.store(true, Ordering::SeqCst);
     }
 }
@@ -183,13 +201,19 @@ pub fn wait_for_memory<E>(
     result
 }
 
-/// The processes the policy might end, with what they hold: a Windows process its own pages
-/// (`nt::own_pages`), any other its resident ones.
+/// The processes the policy might end, with what they hold (a Windows process its own pages,
+/// `nt::own_pages`; any other its resident ones) and their score adjustments (a Linux process its
+/// `oom_score_adj`, a Windows process `nt::oom_score_adjs`).
 fn candidates() -> Vec<Candidate> {
     let nt = crate::nt::own_pages();
+    let nt_adj = crate::nt::oom_score_adjs();
     process::all()
         .into_iter()
         .map(|p| Candidate {
+            adj: match &p.linux {
+                Some(l) => l.with(|s| i32::from(s.oom_score_adj)),
+                None => nt_adj.iter().find(|&&(pid, _)| pid == p.pid).map_or(0, |&(_, a)| a),
+            },
             pid: p.pid,
             resident: nt
                 .iter()

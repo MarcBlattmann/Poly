@@ -183,6 +183,23 @@ impl GuestMem {
         Ok(())
     }
 
+    /// Mark `len` bytes at `addr` (both multiples of 16 KiB) as mapped with
+    /// `prot` without touching their bytes: for pages someone else already
+    /// filled, such as a translated process's images, which the kernel maps
+    /// and writes before the runtime starts (ADR 0257). A window from
+    /// [`GuestMem::from_raw`] then never writes to host pages the guest does
+    /// not use.
+    pub fn set_mapped(&mut self, addr: u64, len: u64, prot: u8) -> Result<(), MapError> {
+        let pages = self.pages(addr, len)?;
+        for i in pages {
+            if self.flags[i] & CODE != 0 {
+                self.written_code.push(self.lo + ((i as u64) << PAGE_SHIFT));
+            }
+            self.flags[i] = prot & (R | W | X);
+        }
+        Ok(())
+    }
+
     /// Unmap a range: further accesses fault.
     pub fn unmap(&mut self, addr: u64, len: u64) -> Result<(), MapError> {
         for i in self.pages(addr, len)? {

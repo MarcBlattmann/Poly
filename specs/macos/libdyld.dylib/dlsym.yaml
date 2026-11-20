@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdyld.dylib/dlsym.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in dlsym.tests/macos.json.
+id: macos/api/libdyld.dylib/dlsym
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  dlsym(handle, name) returns the address of a symbol or NULL; the name is given without the C underscore
+  ("zlibVersion"; "_zlibVersion" is not found). Handles: one from dlopen (a library's own exports, and for libSystem's handle
+  also what it re-exports: malloc, getpid, pthread_create), dlopen(NULL) (the program and all loaded images: finds the
+  program's own exported function and getpid), and the special values RTLD_NEXT (-1), RTLD_DEFAULT (-2), RTLD_SELF
+  (-3) and RTLD_MAIN_ONLY (-5): RTLD_DEFAULT finds malloc and the program's exports (function and variable), RTLD_SELF and
+  RTLD_MAIN_ONLY find the program's function, RTLD_MAIN_ONLY does not find libSystem's malloc. A handle of one library does not
+  find another library's symbols. The same symbol gives the same address on every route (RTLD_DEFAULT, libSystem's handle, the
+  direct pointer). A NULL handle is not RTLD_DEFAULT: it is an invalid handle. Errors (dlerror returns each once): missing
+  symbol, "dlsym(0x<handle in lower case hex>, <name>): symbol not found" (the empty name too); for the special
+  handles "dlsym(RTLD_DEFAULT, <name>): symbol not found" and likewise RTLD_NEXT, RTLD_SELF, RTLD_MAIN_ONLY; a handle
+  that was never given out, "dlsym(0x1234, x): invalid handle" and "dlsym(0x0, malloc): invalid handle". Two failures in
+  a row leave the last message. Same on both architectures (the handle's hex value differs).
+returns:
+  "found": "address, dlerror NULL"
+  "not_found": "NULL"
+errors:
+  "messages": "see summary"
+side_effects: "none"
+threading: "not tested with several threads"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

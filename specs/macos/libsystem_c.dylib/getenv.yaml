@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_c.dylib/getenv.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in getenv.tests/macos.json.
+id: macos/api/libsystem_c.dylib/getenv
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  getenv(name) returns a pointer to the value in the process's environment strings, or NULL. The name must
+  match exactly (case sensitive; a prefix or a longer name does not match; an empty name and a name containing
+  '=' give NULL). An empty value gives a pointer to an empty string, not NULL. The pointer points into the
+  "NAME=value" string kept in environ, 'name length + 1' bytes after its start. The program starts with
+  exactly the environment it was given: here an empty one (environ[0] is NULL). A child started with
+  [DUP=first, DUP=second, EQ=a=b=c, SP=" lead and trail "] sees DUP as "first" (the first of equal names
+  wins), EQ as "a=b=c" (only the first '=' separates), SP with its spaces, and environ holds the four strings
+  in the order given. After setenv, getenv finds the new variables; 300 variables were set and every 7th
+  was found with its own value, a name that was not set stayed NULL, and V1 and V10 stayed distinct.
+returns:
+  "found": "pointer to the value inside the environ string"
+  "not_found": "NULL"
+errors:
+  "none": "no errno is set; NULL means not found"
+side_effects: "none"
+threading: "not tested with several threads"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

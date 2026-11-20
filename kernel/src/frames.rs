@@ -32,9 +32,30 @@ pub fn reserve() -> u64 {
     RESERVE.load(Ordering::Relaxed)
 }
 
+/// The frames the allocator manages (all of usable RAM): what the out-of-memory policy's score
+/// adjustments are thousandths of.
+pub fn total_frames() -> u64 {
+    FRAMES.lock().as_ref().map_or(0, |f| f.total_frames())
+}
+
+/// A floor for user memory a kernel test raises (0: none), so that the out-of-memory path runs
+/// after tens of megabytes instead of all of RAM (fast under emulation): user frames stop there,
+/// and the policy counts it as the reserve.
+static TEST_FLOOR: AtomicU64 = AtomicU64::new(0);
+
+/// Raise (or, with 0, drop) the test floor: user memory stops at `frames` free frames.
+pub fn set_test_floor(frames: u64) {
+    TEST_FLOOR.store(frames, Ordering::SeqCst);
+}
+
+/// Where user memory stops for the out-of-memory policy: the reserve, or the test floor above it.
+pub fn policy_reserve() -> u64 {
+    reserve().max(TEST_FLOOR.load(Ordering::Relaxed))
+}
+
 /// Below this many free frames the page cache gives back clean pages.
 pub fn low_watermark() -> u64 {
-    poly_mem::pressure::low_watermark(reserve())
+    poly_mem::pressure::low_watermark(reserve()).max(TEST_FLOOR.load(Ordering::Relaxed))
 }
 
 /// User or page cache frames refused since boot (the out-of-memory policy and `/proc/meminfo`'s
@@ -47,7 +68,12 @@ pub fn refused() -> u64 {
 /// own programs (native ones, the first process), down to half of it, so the desktop still gets
 /// memory when a program has taken all it may (ADR 0250). Call without [`FRAMES`] held.
 pub fn user_floor() -> u64 {
-    if crate::user::current_process().is_some_and(|p| crate::oom::is_protected(&p)) { reserve() / 2 } else { reserve() }
+    let floor = if crate::user::current_process().is_some_and(|p| crate::oom::is_protected(&p)) {
+        reserve() / 2
+    } else {
+        reserve()
+    };
+    floor.max(TEST_FLOOR.load(Ordering::Relaxed))
 }
 
 /// One frame for user memory or the page cache from `alloc` (whose lock the caller holds), if

@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_setspecific.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_setspecific.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_setspecific
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_setspecific(key, value) sets the calling thread's value for the key and returns 0;
+  pthread_getspecific(key) returns it (NULL when never set). Values are per thread: one thread sets 100, another
+  reads NULL for the same key, sets 200, and the first still reads 100; main's value is untouched by the
+  threads; 100 threads each kept their own value through 200 yields. A pointer is stored unchanged and a value
+  can be set back to NULL. Errors: setspecific on a deleted key or a key number far out of range (100000)
+  is EINVAL (22); pthread_key_delete of a deleted or out-of-range key is EINVAL. getspecific of a deleted key
+  returns NULL; of an out-of-range key number the result is NULL on arm64 and unspecified garbage on x86_64 (not
+  tested).
+returns:
+  "success": "0"
+errors:
+  "EINVAL": "22: key deleted or out of range"
+side_effects: "changes the calling thread's value"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "getspecific of an out-of-range key: NULL on arm64, garbage on x86_64"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
