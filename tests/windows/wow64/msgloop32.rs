@@ -632,12 +632,17 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         si[1] = 0x17;
         si[3] = 100;
         si[4] = 10;
-        SetScrollInfo(h, 1, si.as_ptr() as *const u8, 0);
+        si[5] = 40;
+        let set = SetScrollInfo(h, 1, si.as_ptr() as *const u8, 0) == 40;
         let mut g = Guarded::<28>::sized(28);
         g.bytes[4..8].copy_from_slice(&0x17u32.to_le_bytes());
-        // A fail stub on 32-bit today: only the guard counts.
-        GetScrollInfo(h, 1, g.ptr());
-        check(b"SCROLLINFO (28)", true, g.guard);
+        let ok = set
+            && GetScrollInfo(h, 1, g.ptr()) != 0
+            && u32_at(&g.bytes, 12) == 100
+            && u32_at(&g.bytes, 16) == 10
+            && u32_at(&g.bytes, 20) == 40
+            && u32_at(&g.bytes, 24) == 40;
+        check(b"SCROLLINFO (28): SetScrollInfo/GetScrollInfo", ok, g.guard);
 
         // A posted message through this thread's own loop, into a guarded MSG.
         #[repr(C)]

@@ -7,17 +7,25 @@
 //! `whpx` requires that hypervisor (an error without it), `auto` (or unset)
 //! chooses.
 //!
-//! The CPU model is the same on all: QEMU's default (`qemu64`) unless a
-//! boot asks for another with `-cpu`, so the guest sees the same features
-//! whichever runs it. Under KVM, QEMU adds x2APIC (in-kernel APIC) and the
-//! guest's TSC is the host's (the kernel treats a hypervisor's TSC as
-//! constant-rate either way, ADR 0072); `-cpu max` under KVM is the host
-//! CPU's feature set, under TCG everything TCG emulates. CI runs the
-//! self-test boots under TCG as well (ADR 0077), so code paths only one of
-//! them takes stay tested.
+//! The CPU model depends on the boot (ADR 0255). The boots a person or a
+//! test tool runs programs in (`desktop`, `run`, `chromium run`, `toolkits`,
+//! `chrome-win`, `win-app`: everything that starts QEMU through
+//! [`crate::qemu_with`]) show the guest a real CPU, as Poly on a PC sees one:
+//! `-cpu host` on a hypervisor (KVM, WHPX; HVF on a Mac), `-cpu max` under
+//! TCG (everything TCG emulates). Programs built for x86-64-v2 or v3
+//! (SSE4.2, AVX: the .NET runtime, recent compilers' defaults) refuse to
+//! start on less. The kernel boot tests ([`crate::qemu`]) keep QEMU's
+//! default model (`qemu64`) unless a boot asks for another with `-cpu`, so
+//! the guest sees the same features whichever host runs it. Under KVM, QEMU
+//! adds x2APIC (in-kernel APIC) and the guest's TSC is the host's (the
+//! kernel treats a hypervisor's TSC as constant-rate either way, ADR 0072).
+//! CI runs the self-test boots under TCG as well (ADR 0077), so code paths
+//! only one of them takes stay tested.
 //!
 //! `POLY_QEMU_CPU=<model>` passes `-cpu <model>` to every boot that does not
-//! name a model itself. It is for experiments: `qemu64` has no invariant TSC
+//! name a model itself, in place of the default above (`POLY_QEMU_CPU=qemu64`
+//! gives an interactive boot the boot tests' model). It is for experiments:
+//! `qemu64` has no invariant TSC
 //! (CPUID.80000007H:EDX bit 8), which real machines have and programs test
 //! for with CPUID (Chrome for Windows takes `timeGetTime` instead of
 //! `QueryPerformanceCounter` without it, ADR 0155);
@@ -32,13 +40,25 @@ pub const ENV: &str = "POLY_QEMU_ACCEL";
 pub const CPU_ENV: &str = "POLY_QEMU_CPU";
 
 /// QEMU's arguments for `POLY_QEMU_CPU=<var>` (None: unset): `-cpu <model>`,
-/// or nothing (QEMU's default model) when it is unset or empty. They come
-/// before a boot's own arguments, so a boot that names a model keeps it
-/// (QEMU takes the last `-cpu`).
-pub fn cpu_args(var: Option<&str>) -> Vec<String> {
-    match var.map(str::trim) {
-        Some(model) if !model.is_empty() => vec!["-cpu".to_string(), model.to_string()],
-        _ => Vec::new(),
+/// or `-cpu <default>` when it is unset or empty, or nothing (QEMU's default
+/// model) without a default either. They come before a boot's own
+/// arguments, so a boot that names a model keeps it (QEMU takes the last
+/// `-cpu`).
+pub fn cpu_args(var: Option<&str>, default: Option<&str>) -> Vec<String> {
+    match var.map(str::trim).filter(|m| !m.is_empty()).or(default) {
+        Some(model) => vec!["-cpu".to_string(), model.to_string()],
+        None => Vec::new(),
+    }
+}
+
+/// The CPU model of the boots that run programs (desktop, test tools) on
+/// `accel`: the host's CPU on a hypervisor, everything TCG emulates under
+/// TCG. Either has SSE4.2 and AVX on any machine that runs Poly's programs
+/// (ADR 0255).
+pub fn program_cpu(accel: Accel) -> &'static str {
+    match accel {
+        Accel::Kvm | Accel::Whpx => "host",
+        Accel::Tcg => "max",
     }
 }
 
@@ -190,11 +210,21 @@ mod tests {
 
     #[test]
     fn the_cpu_model_is_passed_only_when_named() {
-        assert!(cpu_args(None).is_empty());
-        assert!(cpu_args(Some("")).is_empty());
-        assert!(cpu_args(Some("  ")).is_empty());
-        assert_eq!(cpu_args(Some("host,+invtsc")), ["-cpu", "host,+invtsc"]);
-        assert_eq!(cpu_args(Some(" max ")), ["-cpu", "max"]);
+        assert!(cpu_args(None, None).is_empty());
+        assert!(cpu_args(Some(""), None).is_empty());
+        assert!(cpu_args(Some("  "), None).is_empty());
+        assert_eq!(cpu_args(Some("host,+invtsc"), None), ["-cpu", "host,+invtsc"]);
+        assert_eq!(cpu_args(Some(" max "), None), ["-cpu", "max"]);
+    }
+
+    #[test]
+    fn program_boots_get_a_real_cpu_unless_one_is_named() {
+        assert_eq!(program_cpu(Accel::Kvm), "host");
+        assert_eq!(program_cpu(Accel::Whpx), "host");
+        assert_eq!(program_cpu(Accel::Tcg), "max");
+        assert_eq!(cpu_args(None, Some("host")), ["-cpu", "host"]);
+        assert_eq!(cpu_args(Some(" "), Some("max")), ["-cpu", "max"]);
+        assert_eq!(cpu_args(Some("qemu64"), Some("host")), ["-cpu", "qemu64"]);
     }
 
     #[test]

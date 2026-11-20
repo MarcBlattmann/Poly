@@ -1324,8 +1324,8 @@
 <g><title>kernel32: 112 / 1,563 done (7.2%)</title>
 <rect x="265.2" y="469.0" width="53.7" height="53.8" fill="#e6eaef"/>
 <rect x="265.2" y="469.0" width="3.8" height="53.8" fill="#2da44e"/>
-<rect x="269.1" y="469.0" width="10.7" height="53.8" fill="#d4a72c"/>
-<rect x="279.7" y="469.0" width="10.9" height="53.8" fill="#218bff"/>
+<rect x="269.1" y="469.0" width="10.5" height="53.8" fill="#d4a72c"/>
+<rect x="279.6" y="469.0" width="11.1" height="53.8" fill="#218bff"/>
 <rect x="264.2" y="468.0" width="55.7" height="55.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="270.2" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">kernel…</text>
 <text x="270.2" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">7%</text>
@@ -1377,7 +1377,7 @@
 <rect x="320.9" y="623.6" width="43.0" height="35.6" fill="#e6eaef"/>
 <rect x="320.9" y="623.6" width="1.0" height="35.6" fill="#2da44e"/>
 <rect x="321.9" y="623.6" width="1.8" height="35.6" fill="#d4a72c"/>
-<rect x="323.8" y="623.6" width="0.4" height="35.6" fill="#218bff"/>
+<rect x="323.8" y="623.6" width="0.5" height="35.6" fill="#218bff"/>
 <rect x="319.9" y="622.6" width="45.0" height="37.6" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="325.9" y="637.6" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">shlw…</text>
 </g>
@@ -1404,8 +1404,8 @@
 <g><title>gdi32: 39 / 545 done (7.2%)</title>
 <rect x="365.9" y="537.7" width="33.0" height="28.9" fill="#e6eaef"/>
 <rect x="365.9" y="537.7" width="2.4" height="28.9" fill="#2da44e"/>
-<rect x="368.3" y="537.7" width="5.6" height="28.9" fill="#d4a72c"/>
-<rect x="373.9" y="537.7" width="0.5" height="28.9" fill="#218bff"/>
+<rect x="368.3" y="537.7" width="5.2" height="28.9" fill="#d4a72c"/>
+<rect x="373.5" y="537.7" width="1.0" height="28.9" fill="#218bff"/>
 <rect x="364.9" y="536.7" width="35.0" height="30.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="370.9" y="551.7" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">gdi…</text>
 </g>
@@ -1561,8 +1561,8 @@
 </g>
 <g><title>dbghelp: 0 / 201 done (0.0%)</title>
 <rect x="530.3" y="520.8" width="17.1" height="18.9" fill="#e6eaef"/>
-<rect x="530.3" y="520.8" width="1.3" height="18.9" fill="#d4a72c"/>
-<rect x="531.6" y="520.8" width="1.3" height="18.9" fill="#218bff"/>
+<rect x="530.3" y="520.8" width="1.2" height="18.9" fill="#d4a72c"/>
+<rect x="531.5" y="520.8" width="1.4" height="18.9" fill="#218bff"/>
 <rect x="529.3" y="519.8" width="19.1" height="20.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>webservices: 0 / 193 done (0.0%)</title>
@@ -1571,6 +1571,7 @@
 </g>
 <g><title>comctl32_v6: 0 / 191 done (0.0%)</title>
 <rect x="567.8" y="520.8" width="16.2" height="18.9" fill="#e6eaef"/>
+<rect x="567.8" y="520.8" width="0.2" height="18.9" fill="#218bff"/>
 <rect x="566.8" y="519.8" width="18.2" height="20.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>mapi32: 0 / 191 done (0.0%)</title>

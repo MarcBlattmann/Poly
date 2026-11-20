@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/gdi32.dll/GetFontData.yaml
+id: windows/api/gdi32.dll/GetFontData
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station, 96 dpi) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output and two complete recordings agreed byte for byte, each run in a fresh scratch directory; the test programs carry no manifest (the icon tests carry the manifest that asks for comctl32 version 6). The fonts the tests use are the test's own TrueType font (added with AddFontMemResourceEx) and DejaVu Sans 2.37 (the file C:\\Windows\\Fonts\\DejaVuSans.ttf, copied there for the recording and removed afterwards, added with AddFontResourceExW and FR_PRIVATE); no Microsoft font is used"
+  observed_by: spec-win-glyphs
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). The fonts are free: a TrueType font the test writes itself (units per em 1024, every outline coordinate a multiple of 64 units, so that at 16 pixels per em every point lies on a whole pixel) and DejaVu Sans 2.37 (Bitstream Vera licence, shipped with Poly); where a number would depend on hinting, the test asks for 2048 pixels per em, the font's units per em, so that one pixel is one font unit and the outline is the file's. Microsoft Learn reference pages of the functions and structures named here and the public headers wingdi.h, winuser.h, winbase.h, shlwapi.h, dbghelp.h, commctrl.h, winerror.h and the TrueType and OpenType font file format documents for table layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Copies bytes of the font file (or one table of it) of the TrueType font selected into a device context. Qt's GDI font engine reads the 'cmap', 'head', 'hhea', 'OS/2', 'name' and 'glyf' tables this way, and treats a font as TrueType when the call works. Observed with DejaVu Sans 2.37 (757076 bytes, 20 tables) added privately from a file and with a font the test writes and adds from memory.
+interface:
+  signature: "DWORD GetFontData(HDC hdc, DWORD dwTable, DWORD dwOffset, PVOID pvBuffer, DWORD cjBuffer)"
+rules:
+  whole_font: "Table 0 is the whole file, byte for byte as it was added: for DejaVu Sans 757076 bytes, equal to the file on disk (sha256 7da195a7...), the same for a memory font written by the test (1776 bytes for the test font). With no buffer the result is the size (the size of the file less dwOffset)."
+  table_tag: "dwTable is the four characters of the tag as they lie in the file read as a little-endian DWORD ('cmap' = 0x70616D63); the tag spelled backwards, or as a big-endian DWORD, is not a table: GDI_ERROR. Tags are case sensitive ('CMAP', 'os/2' fail); 'OS/2' and 'cvt ' (with the space) work, 'cvt' with a NUL does not. A table the font lacks (EBDT, zzzz, 'ttcf' for a font that is not a collection), the tag 1 and 0xFFFFFFFF: GDI_ERROR."
+  table_data: "A table is returned as the directory of the file says: size and bytes (DejaVu Sans: FFTM 28, GDEF 660, GPOS 40586, GSUB 5598, MATH 1598, OS/2 86, cmap 5914, cvt 510, fpgm 171, gasp 12, glyf 556004, head 54, hhea 36, hmtx 24982, kern 16380, loca 25016, maxp 32, name 15624, post 62052, prep 1384; every one equal to the same bytes of the file). The sizes are the exact table lengths, not padded to 4."
+  offset: "dwOffset counts from the start of the file (table 0) or of the table. The result is the number of bytes from the offset to the end of the table (no buffer) or the bytes copied. An offset equal to the size is an error: GDI_ERROR, also with no buffer or with cjBuffer 0; any larger offset, up to 0xFFFFFFFF, is an error too. The last byte (offset size-1) can be read."
+  count: "cjBuffer larger than what is left copies what is left and returns that count (100 asked at size-4: 4; 1000 asked of the 54 byte 'head': 54; 1 MiB asked at offset 100 of 'cmap' (5914): 5814). Nothing beyond is written. A buffer with cjBuffer 0 returns the size that is left like no buffer and writes nothing; no buffer with a nonzero cjBuffer (64) also returns the size that is left, not 64."
+  independent_of_font_state: "The data do not depend on the size, rotation, weight or italic of the selected font: lfHeight -8, -64, 12, -2048, escapement 900, weight 700 and italic asked of a family that has only a regular face all give the same bytes of the one file (no bold or italic file is made up)."
+  bitmap_fonts: "The stock bitmap fonts (OEM_FIXED_FONT, ANSI_FIXED_FONT, SYSTEM_FONT) are not TrueType: GDI_ERROR for table 0."
+errors:
+  bad_dc: "A NULL DC, a made-up handle and a deleted DC: GDI_ERROR (0xFFFFFFFF) with ERROR_INVALID_HANDLE (6)."
+  other_failures: "Every other failure (unknown tag, offset at or beyond the end, a bitmap font): GDI_ERROR and the last error is left as it was (no error code is set)."
+side_effects: "none beyond the rules above"
+threading: "a DC, a font and a font resource belong to the process; fonts added with FR_PRIVATE or from memory are visible to the adding process only; the tests use one thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (the 757 KB whole-font copies of DejaVu Sans a few milliseconds)"
+  guarantees: none
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations and its own TrueType writer. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md), built through polyd. Observations print results, error codes, sizes, glyph metrics, outline records and hashes of long data (the first 8 bytes of a SHA-256); no line holds a handle, an address or a machine, user or time. "err unchanged" in a line means the call left the last error as the test had set it before (a marker), "err N" the value after a failing result; the last error after a succeeding call is not printed. A test that uses DejaVu Sans reads C:\Windows\Fonts\DejaVuSans.ttf: on Poly the DejaVu fonts are in that folder (ADR 0170, `cargo xtask fonts fetch`), on the oracle the same file (757076 bytes, SHA-256 7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954) was copied there for the recording.
+not_covered: >
+  TrueType collections (tag 'ttcf' with a .ttc file), OpenType fonts with CFF outlines, the data of a printer DC, what a DC returns after the font of an earlier selection was removed (it falls back to another font), fonts above 4 GiB.

@@ -275,6 +275,10 @@ impl<F: Clone + PartialEq> VmMap<F> {
                 Op::WipeOnFork(wipe_on_fork) => pieces.push(Vma { wipe_on_fork, ..inside }),
                 Op::Lock(locked) => pieces.push(Vma { locked, ..inside }),
                 Op::Seal => pieces.push(Vma { sealed: true, ..inside }),
+                Op::MaxProt(max) => {
+                    let max_prot = inside.max_prot.intersect(max);
+                    pieces.push(Vma { max_prot, prot: inside.prot.intersect(max_prot), ..inside })
+                }
                 Op::UserFault(uffd) => pieces.push(Vma { uffd, ..inside }),
                 Op::Name(ref name) => pieces.push(Vma { name: name.clone(), ..inside }),
                 Op::Remove | Op::Insert(_) => removed.push(inside),

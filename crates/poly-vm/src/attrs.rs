@@ -56,6 +56,29 @@ impl<F: Clone + PartialEq> VmMap<F> {
         if covered < end { Err(Error::NoMemory) } else { Ok(()) }
     }
 
+    /// Lower the maximum protection of the range to what it shares with
+    /// `max`, and the current protection with it (Mach `vm_protect` with
+    /// `set_maximum`; ADR 0238). The range (`addr` page aligned, `len`
+    /// non-zero) must be mapped ([`Error::NoMemory`], nothing changes). The
+    /// caller re-protects the pages whose current protection went down.
+    pub fn limit_max_prot(&mut self, addr: u64, len: u64, max: Prot) -> Result<(), Error> {
+        let end = addr.checked_add(len).ok_or(Error::NoMemory)?;
+        if !is_page_aligned(addr) || !is_page_aligned(end) || len == 0 {
+            return Err(Error::Invalid);
+        }
+        let mut covered = addr;
+        for v in self.regions_in(addr, end) {
+            if v.start > covered {
+                return Err(Error::NoMemory);
+            }
+            covered = v.end;
+        }
+        if covered < end {
+            return Err(Error::NoMemory);
+        }
+        self.rewrite(addr, end, Op::MaxProt(max)).map(|_| ())
+    }
+
     /// Lock or unlock every region (mlockall(2) `MCL_CURRENT`,
     /// munlockall(2)).
     pub fn set_all_locked(&mut self, on: bool) {

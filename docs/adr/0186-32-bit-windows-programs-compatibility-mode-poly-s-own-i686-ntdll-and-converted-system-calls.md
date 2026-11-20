@@ -609,5 +609,7 @@ declared the same 32-byte `MSG` and so never noticed.
   `TVINSERTSTRUCTW`, `TVITEMW` (handles sign-extended, so `TVI_ROOT` is `TVI_ROOT`), `TCITEMW`,
   `IMAGEINFO`, `IMAGELISTDRAWPARAMS`, the `CREATESTRUCTW` its status bar reads and the
   `ICONINFO` it trades with `user32`. `msgloop32` checks each of them (13 checks failed before).
-  Still fail stubs (in both widths): `GetScrollInfo` and the other scroll functions, `GetWindowInfo`,
-  `GetTitleBarInfo`.
+  The scroll functions (`Get/SetScrollInfo`, `Get/SetScrollPos`, `Get/SetScrollRange`,
+  `ShowScrollBar`, `EnableScrollBar`, the `SBM_*` messages) are implemented for both widths
+  (`user32/src/scroll.rs`, `poly_win32k::scroll`; `SCROLLINFO` has no pointers). Still fail
+  stubs, without a sheet: `GetWindowInfo`, `GetTitleBarInfo`, `GetScrollBarInfo`.

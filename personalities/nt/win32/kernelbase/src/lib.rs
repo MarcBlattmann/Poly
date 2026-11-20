@@ -47,6 +47,7 @@ mod nls;
 mod nlsfmt;
 mod npipe;
 mod nt;
+mod package;
 mod pathcch;
 mod pipe;
 mod power;

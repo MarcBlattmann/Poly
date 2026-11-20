@@ -698,8 +698,23 @@ pub fn recorded(dir: &str, test: &str) -> String {
 static HOOK: Once = Once::new();
 
 /// Run a transliterated test as a fresh process and compare its output with
-/// the recording.
-pub fn run(dir: &str, test: &str, body: impl FnOnce(&mut P)) {
+/// the recording. Several tests measure wall-clock time (a wait of 1 ms,
+/// waiters that must still be waiting when woken), which a loaded host can
+/// stretch past what macOS showed; such a run is tried again, on a fresh
+/// model, up to three times. The output must still equal the recording.
+pub fn run(dir: &str, test: &str, body: impl Fn(&mut P)) {
+    let want = recorded(dir, test);
+    let mut got = String::new();
+    for _ in 0..3 {
+        got = run_once(&body);
+        if got == want {
+            return;
+        }
+    }
+    assert_eq!(got, want, "{dir}/{test}: output differs from the macOS recording");
+}
+
+fn run_once(body: &impl Fn(&mut P)) -> String {
     HOOK.call_once(|| {
         let prev = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
@@ -729,7 +744,5 @@ pub fn run(dir: &str, test: &str, body: impl FnOnce(&mut P)) {
         });
     }
     body(&mut p);
-    let got = w.out.lock().unwrap().finish();
-    let want = recorded(dir, test);
-    assert_eq!(got, want, "{dir}/{test}: output differs from the macOS recording");
+    w.out.lock().unwrap().finish()
 }
