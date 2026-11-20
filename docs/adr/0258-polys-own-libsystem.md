@@ -88,15 +88,32 @@ three-function stand-in for the dyld tests. A program linked the ordinary way ag
     mutexes of the three kinds the SDK's initializers name, `pthread_once`, 512 keys).
     `os_unfair_lock` and `OSSpinLock` spin; `setjmp`/`sigsetjmp` do not save the signal mask.
 
-## Choices the libc sheets (spec-macos-5) are to confirm
+## The libc sheets
 
-No public document settles these; the code says so where they are made: a null `%p` prints `0x0`, a
-null `%s` `(null)`; a NaN keeps its sign; `%a` normalizes subnormals and carries a rounding overflow
-into the exponent; a wide character outside ASCII fails with `EILSEQ`; an unknown conversion and
-positional arguments (`%1$d`) fail with `EINVAL`; `long double` goes through `double`; `puts` and
-`fputs` return 0; `abort` sends SIGABRT and, if that returns, exits with 134; the stack protector's
-canary has a zero low byte; the messages of `__stack_chk_fail`, the `__*_chk` checks and a bad
-`free` are Poly's own. The coverage entries stay `claimed` until those sheets land and pass.
+spec-macos-5's sheets (`specs/macos/libsystem_c.dylib`, `libsystem_malloc.dylib`,
+`libsystem_pthread.dylib`, `libdyld.dylib`) landed while this change was open; where they cover
+what this change implements, it follows them:
+
+- `snprintf`: positional arguments work (an unnumbered conversion after a numbered one takes the
+  next number); an unknown conversion prints its letter (`%5%` pads); a format that ends inside a
+  conversion prints nothing more; `%lc`/`%ls` keep a character up to 0xFF as its byte and fail
+  with `EILSEQ` above; a null `%p` is `0x0`, a null `%s` `(null)` cut by the precision; `%La`
+  prints the 80-bit value as it is (`0x8p-3` for 1.0).
+- `malloc_size`/`malloc_good_size`: x86-64's classes (multiples of 16 up to 1024, of 512 up to
+  32 KiB, then of 32 KiB); `malloc_size(malloc(n))` is `malloc_good_size(n)`; 0 for a freed block
+  or an address malloc does not own, which the heap tests against its arenas before reading.
+- `pthread_key_create`/`pthread_setspecific`: keys are numbered from 258, 509 of them; a deleted
+  key reads NULL and is `EINVAL` to set. `pthread_mutex_trylock`: a mutex the caller holds is
+  `EBUSY` to trylock (normal and error-checking), a destroyed one `EINVAL`.
+- `atexit`/`__cxa_atexit`: one list of 4096 (the sheet saw 1000 succeed). `getenv`: an empty name
+  or one with `=` is NULL.
+
+The entries those sheets cover stay claimed by spec-macos-5 until their hand-off; the rest of this
+change's entries are claimed by `impl-macos-libsystem`. Poly's own choices the sheets do not
+show: a NaN keeps its sign; `%a` normalizes a subnormal `double`; `long double` conversions other
+than `%La` go through `double`; `puts` and `fputs` return 0; `abort` sends SIGABRT and, if that
+returns, exits with 134; the stack protector's canary has a zero low byte; the messages of
+`__stack_chk_fail`, the `__*_chk` checks and a bad `free` are Poly's own.
 
 ## Tests
 
@@ -120,4 +137,5 @@ canary has a zero low byte; the messages of `__stack_chk_fail`, the `__*_chk` ch
   fallbacks stay for a kernel that answers `ENOSYS`.
 - Threads (`bsdthread_create`): locks, per-thread `errno` blocks and keys.
 - `sigaction` with its trampoline and `sigreturn`, `fork`, `posix_spawn`'s attribute objects.
-- The libc, pthread and malloc sheets (spec-macos-5) for the choices above.
+- Running the libc sheets' visible tests on Poly (they need the macOS test harness on Poly) and the
+  hand-off of their entries.

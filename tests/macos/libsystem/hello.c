@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <mach-o/dyld.h>
 #include <mach-o/ldsyms.h>
+#include <malloc/malloc.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,10 +44,18 @@ static int copy_name(char *out, size_t size, const char *entry) {
     return snprintf(out, size, "%s", local);
 }
 
+static void *a_global(void) {
+    static char global[32];
+    return global;
+}
+
 int main(int argc, char **argv) {
     puts("hello, world");
     printf("ok printf: %d %d %x %#x %.2f %.1e [%5s] [%-5s] %s %%\n", 42, -7, 42, 42, 3.14159, 1500.0, "pad", "left",
            (char *)0);
+
+    printf("ok positional printf: %2$s %1$s %3$.1f\n", "b", "a", 2.5);
+    printf("ok unknown conversions print their letter: %y\n");
 
     fputs("ok puts and putcha", stdout);
     putchar('r');
@@ -59,6 +68,8 @@ int main(int argc, char **argv) {
     for (int i = 0; zero && i < 10; i++) zero = z[i] == 0;
     p = realloc(p, 5000);
     check("malloc, calloc, realloc and free", p != 0 && strcmp(p, "heap") == 0 && zero);
+    check("malloc_size and malloc_good_size", malloc_size(z) == 48 && malloc_good_size(100) == 112 &&
+                                                  malloc_size(a_global()) == 0);
     free(p);
     free(z);
 

@@ -317,11 +317,13 @@ fn digit(c: u8) -> Option<u8> {
 /// `name` is a string; `env` is null or a null-terminated array of
 /// strings.
 pub unsafe fn getenv(env: *const *const u8, name: *const u8) -> *const u8 {
-    if env.is_null() {
-        return core::ptr::null();
-    }
     // SAFETY: the caller's contract.
     let n = unsafe { strlen(name) };
+    // An empty name, or one with '=', matches nothing (the getenv sheet).
+    // SAFETY: as above, `n` bytes.
+    if env.is_null() || n == 0 || unsafe { !memchr(name, i32::from(b'='), n).is_null() } {
+        return core::ptr::null();
+    }
     let mut e = env;
     // SAFETY: the array ends with null.
     while let Some(entry) = Some(unsafe { *e }).filter(|p| !p.is_null()) {
@@ -446,6 +448,12 @@ mod tests {
             assert_eq!(getenv(env.as_ptr(), p(b"PATH\0")), c.as_ptr().add(5));
             assert!(getenv(env.as_ptr(), p(b"HOM\0")).is_null());
             assert!(getenv(core::ptr::null(), p(b"HOME\0")).is_null());
+            let odd = [c"=x".as_ptr().cast::<u8>(), c"A=B=c".as_ptr().cast(), c"E=".as_ptr().cast(), core::ptr::null()];
+            assert!(getenv(odd.as_ptr(), p(b"\0")).is_null());
+            assert!(getenv(odd.as_ptr(), p(b"A=B\0")).is_null());
+            assert_eq!(getenv(odd.as_ptr(), p(b"A\0")), odd[1].add(2));
+            // An empty value is an empty string, not null.
+            assert_eq!(*getenv(odd.as_ptr(), p(b"E\0")), 0);
         }
     }
 }

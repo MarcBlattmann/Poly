@@ -66,6 +66,7 @@ pub mod kernel;
 pub mod layout;
 pub mod memory;
 pub mod objects;
+pub mod oomadj;
 pub mod pagemap;
 pub mod params;
 pub mod pe_writer;

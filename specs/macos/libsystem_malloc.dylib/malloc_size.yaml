@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_malloc.dylib/malloc_size.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in malloc_size.tests/macos.json.
+id: macos/api/libsystem_malloc.dylib/malloc_size
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  malloc_size(ptr) returns the usable size of a block that malloc, calloc, realloc, posix_memalign or a zone
+  call returned, and 0 for NULL and for any address malloc does not own (a stack address, a global, a string
+  literal, a block already freed in a large size). Observed: it is never less than the request, always a nonzero
+  multiple of 16 (malloc(0) is a real block of 16), blocks are 16 byte aligned and the whole malloc_size is
+  writable; calloc(10,10) is sized like malloc(100) (112); realloc to the block's own size keeps the block,
+  realloc to a bigger size gives at least that; sizes never decrease as the request grows (0..4096 checked) and
+  malloc_size(malloc(n)) == malloc_good_size(n). The size classes differ per architecture; arm64: multiples of
+  16 up to 128, of 32 up to 256, 64 up to 512, 128 up to 1024, 256 up to 2048, 512 up to 4096, 1024 up to 8192,
+  2048 up to 16384, 4096 up to 32768, then multiples of 16384 (100000 -> 114688, 1000000 -> 1015808, 300000 ->
+  311296); x86_64: multiples of 16 up to 1024, of 512 up to 32768 (15000 -> 15360), then multiples of 32768
+  (100000 -> 131072, 300000 -> 327680, 1000000 -> 1015808). Large blocks (200000 to 100 MiB tested) are multiples
+  of 4096, usable to the last byte of malloc_size, and a freed 1 MiB block is no longer known (size 0).
+returns:
+  "size": "usable size, 0 for NULL or an address not from malloc"
+errors:
+  "none": "no error result"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "size classes above 128 bytes differ (see summary)"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

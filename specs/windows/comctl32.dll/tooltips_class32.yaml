@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32.dll/tooltips_class32.yaml
+id: windows/api/comctl32.dll/tooltips_class32
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, one monitor 1920x1080 at 100 %, 96 dpi), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner's \"keeper\" window in the foreground; the pointer is parked at (1500, 600) and moved only by SetCursorPos, SendInput button events never reach a window of another process; no mouse is attached; every test ran three times with identical output; the test programs carry no manifest (common controls 5.82, no visual styles)"
+  observed_by: spec-win-mouseleave
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: TrackMouseEvent, TRACKMOUSEEVENT, WM_MOUSELEAVE, WM_NCMOUSELEAVE, WM_MOUSEHOVER, WM_MOUSEMOVE, WM_CAPTURECHANGED, WM_SETCURSOR, WM_NCHITTEST, SetCapture, ReleaseCapture, GetCapture, WindowFromPoint, SetCursorPos, GetMessagePos, "About Mouse Input", "Tooltip Controls", the tooltip messages TTM_*; winuser.h and commctrl.h for constants and layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The tooltip window class as a program that draws a tracking tooltip uses it (TTF_TRACK | TTF_ABSOLUTE tool, TTM_TRACKPOSITION, TTM_TRACKACTIVATE). Observed in the interactive session, with the tooltip over a still pointer: the tooltip is an ordinary popup for pointer purposes.
+interface:
+  signature: "the window class \"tooltips_class32\" (common controls 5.82 in the tests: no manifest), messages TTM_ADDTOOLW (0x0432), TTM_GETTOOLCOUNT (0x040D), TTM_TRACKACTIVATE (0x0411), TTM_TRACKPOSITION (0x0412), TTM_DELTOOLW (0x0433)"
+rules:
+  tool_size: "TTM_ADDTOOLW takes the structure size in cbSize: 72 (the size of the Windows 10 structure with lpReserved) returns 0 and adds nothing for version 5.82; 64, 48, 40 and 0 return 1 and each adds a tool (TTM_GETTOOLCOUNT 1, 2, 3, 4); the tool's rectangle may be empty for a tracking tool."
+  track: "With TTF_TRACK | TTF_ABSOLUTE: the tooltip window is not visible before TTM_TRACKACTIVATE; TTM_TRACKPOSITION sets the top-left corner of the window (screen coordinates, left and top equal the position given, also while shown); TTM_TRACKACTIVATE with wParam 1 shows the window, with 0 hides it (IsWindowVisible 1 and 0)."
+  window_styles: "The window created with WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP and WS_EX_TOPMOST has WS_EX_TOOLWINDOW as well (added by the control) and no WS_EX_TRANSPARENT."
+  delete: "TTM_DELTOOLW returns 0 and the tool count goes down by one."
+  pointer: "A tooltip shown so that it covers a still pointer takes it: WM_NCHITTEST of the tooltip at the pointer returns 1 (HTCLIENT), WindowFromPoint returns the tooltip window, and a tracked window below it gets WM_MOUSELEAVE, like an ordinary popup of the same size (WM_SETCURSOR and WM_MOUSEMOVE for the popup, WM_MOUSELEAVE for A). When the tooltip is hidden again A gets WM_SETCURSOR and WM_MOUSEMOVE (client 100,60)."
+errors:
+  none: "No error codes are observed; failures return 0."
+side_effects: "none beyond the rules above"
+threading: "mouse tracking and mouse capture belong to the thread that asked; a window belongs to the thread that created it; the cover tests with a window of another thread use one extra thread"
+ordering: []
+timing:
+  typical: "the messages after a change arrive within about 60 ms"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations and a message log; run with poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because pointer, hit testing and showing windows need the visible desktop. Window A (300x200 at 100,100, WS_EX_NOACTIVATE, never activated) has the pointer in its client area at screen (208,191) (or in its caption at (200,115)); it asks for TME_LEAVE where the rule says so. Every scene prints the mouse messages of every window of the test in the order they arrived, under the window's tag letter (A, B; handles are never printed), repeated identical lines once, then the pointer position and what WindowFromPoint reports; the scenes start with the pointer settled and the log empty, and wait 350 ms at the end. Times are checked against envelopes, never printed. The pointer is parked at (1500, 600) between scenes and put back at the end.
+not_covered: >
+  The text and size of the tip (they depend on the system font), TTS_BALLOON, non-tracking tools and their delays (TTM_SETDELAYTIME), TTM_POPUP, version 6 controls, tools of child windows.

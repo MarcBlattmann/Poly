@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_c.dylib/memset_pattern16.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in memset_pattern16.tests/macos.json.
+id: macos/api/libsystem_c.dylib/memset_pattern16
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  memset_pattern16(b, pattern, len) fills len bytes at b with the 16 byte pattern repeated, the first
+  copy starting at b; the last copy is cut off when len is not a multiple of 16 (len 5: the first 5 pattern
+  bytes; len 17: one full copy and the first byte again; len 40: two copies and 8 bytes). Nothing past len is
+  written and len 0 writes nothing. The destination may have any alignment (0..15 tested, also 100 kB),
+  the pattern may be at any address (tested at an odd offset), and an all-zero pattern zeroes the range.
+  The result is void. A pattern inside the destination is not tested. Same on both architectures.
+returns:
+  "result": "void"
+errors:
+  "none": "the function has no error result"
+side_effects: "writes len bytes at b"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdyld.dylib/_dyld_get_image_header.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in _dyld_get_image_header.tests/macos.json.
+id: macos/api/libdyld.dylib/_dyld_get_image_header
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  _dyld_get_image_header(i) returns a pointer to the Mach-O header (mach_header_64) of image i, or NULL when
+  i >= _dyld_image_count() (also 0x7fffffff and (uint32_t)-1). Image 0 is the program: its header is the program's
+  own _mh_execute_header, magic MH_MAGIC_64 (0xfeedfacf), file type MH_EXECUTE (2). Every other image has the same magic and
+  cpu type (arm64 0x0100000c, x86_64 0x01000007) and file type MH_DYLIB (6). All headers are different, each lists a __TEXT segment, and its load
+  commands can be read from memory: libsystem_malloc's has one LC_UUID and one LC_ID_DYLIB with the name
+  "/usr/lib/system/libsystem_malloc.dylib". The header of an image is the image base dladdr reports (dli_fbase) for
+  any address in it.
+returns:
+  "header": "pointer to mach_header_64, NULL if the index is out of range"
+errors:
+  "none": "no error result"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
