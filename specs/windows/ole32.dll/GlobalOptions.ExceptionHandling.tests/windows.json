@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "go_exc_av",
-      "exe_sha256": "6b18f18fae72e31d9d85a81df17f5049497a34350bb759536c6d9c8db23b425b",
+      "exe_sha256": "99c74803d6034284596c38d3a3340305d3fc8c645cc802a2e3b818142000946b",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -28,7 +28,7 @@
     },
     {
       "name": "go_exc_sta_av",
-      "exe_sha256": "5f98e360beb7269d25fa2825c4b3e3c859ec97468c0005f32a7941df062a8b5e",
+      "exe_sha256": "b9e16883b23530ec1708a9f274679ca7b75c84e6fb1197942e66f13f97e41a86",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -42,7 +42,7 @@
     },
     {
       "name": "go_exc_sta_sw",
-      "exe_sha256": "9a8f697b090b5e82ad4e858d2ee88f7055a1ee40361e5552f797ddaac1622329",
+      "exe_sha256": "d89c76ea3893389fd86ef9a39f0230deef4ba84a5506ceb9f2b1ba5fd2e9cd34",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -56,7 +56,7 @@
     },
     {
       "name": "go_exc_sw",
-      "exe_sha256": "16dedaa0c81b9f73648abaa8ce25df0fff3146db3ea90638c51297a6b5a14fd8",
+      "exe_sha256": "370909f0d6f1b0332a373e98f716211816349c8e14fe2550f2019b2c6d61cf02",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
