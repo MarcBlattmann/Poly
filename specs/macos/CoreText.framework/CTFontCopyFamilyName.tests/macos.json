@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontcopyfamilyname_dejavu",
+      "source_sha256": "23c7404e8b3884e147786b50ef8b26f90d19a4bcbb326f814c3f531027edb8f1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d49f11b7e3c510a8e42102731484b9e3932039a7d92113efc1788634068f888d",
+          "exit_code": 0,
+          "stdout": "ok cf_is(CTFontCopyFamilyName(pt_file_font(\"DejaVuSans.ttf\", 12)), \"DejaVu Sans\")\nok cf_is(CTFontCopyFamilyName(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)), \"DejaVu Sans\")\nok cf_is(CTFontCopyFamilyName(pt_file_font(\"DejaVuSans-Oblique.ttf\", 12)), \"DejaVu Sans\")\nok cf_is(CTFontCopyFamilyName(pt_file_font(\"DejaVuSansMono.ttf\", 12)), \"DejaVu Sans Mono\")\nok cf_is(CTFontCopyLocalizedName(pt_file_font(\"DejaVuSans.ttf\", 12), kCTFontFamilyNameKey, &lang), \"DejaVu Sans\") && cf_is(lang, \"en\")\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fb1fbb07664bf388a080a5481a6306640f616136a651b689ed4aacda6207d58f",
+          "exit_code": 0,
+          "stdout": "ok cf_is(CTFontCopyFamilyName(pt_file_font(\"DejaVuSans.ttf\", 12)), \"DejaVu Sans\")\nok cf_is(CTFontCopyFamilyName(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)), \"DejaVu Sans\")\nok cf_is(CTFontCopyFamilyName(pt_file_font(\"DejaVuSans-Oblique.ttf\", 12)), \"DejaVu Sans\")\nok cf_is(CTFontCopyFamilyName(pt_file_font(\"DejaVuSansMono.ttf\", 12)), \"DejaVu Sans Mono\")\nok cf_is(CTFontCopyLocalizedName(pt_file_font(\"DejaVuSans.ttf\", 12), kCTFontFamilyNameKey, &lang), \"DejaVu Sans\") && cf_is(lang, \"en\")\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontcopyfamilyname_sys_ui",
+      "source_sha256": "d055828803e591210b8b036f2e18f8edad3dea1a42da118ab923b9d7e1756f0d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e2767793f2c3d11a105cbfc42ded8a5e222ae903c36780291cc85f19c81a03a7",
+          "exit_code": 0,
+          "stdout": "ok cf_is(CTFontCopyFamilyName(CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 13, NULL)), \".AppleSystemUIFont\")\nok cf_is(CTFontCopyFamilyName(CTFontCreateWithName(CFSTR(\"Helvetica\"), 13, NULL)), \"Helvetica\")\nok cf_is(CTFontCopyFamilyName(CTFontCreateWithName(CFSTR(\"NoSuchFontZzz\"), 13, NULL)), \"Helvetica\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "45efa9477174f9013169a0389db2061aef2a1d87255c9f34d5ec24130c9bb2f5",
+          "exit_code": 0,
+          "stdout": "ok cf_is(CTFontCopyFamilyName(CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 13, NULL)), \".AppleSystemUIFont\")\nok cf_is(CTFontCopyFamilyName(CTFontCreateWithName(CFSTR(\"Helvetica\"), 13, NULL)), \"Helvetica\")\nok cf_is(CTFontCopyFamilyName(CTFontCreateWithName(CFSTR(\"NoSuchFontZzz\"), 13, NULL)), \"Helvetica\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

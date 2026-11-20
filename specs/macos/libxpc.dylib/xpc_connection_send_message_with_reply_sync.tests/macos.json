@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "xpc_connection_send_message_with_reply_sync_cancel_events",
+      "source_sha256": "815a23395697cdb59698e95daa6fd96f30dc70753f83bc677ef7dbc25469c956",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "10e43b7461ceabcca936aac6e343f5cebc8c0619680d6d48f5da556b614b28f3",
+          "exit_code": 0,
+          "stdout": "ok the server saw the message\nok and answered\nok the client's handler gets XPC_ERROR_CONNECTION_INVALID\nok so does the server's handler for that connection\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "896b179c96b60cb7f04b411f6b5dfe6ea847f7f40d62a881a6a9ff543feaf556",
+          "exit_code": 0,
+          "stdout": "ok the server saw the message\nok and answered\nok the client's handler gets XPC_ERROR_CONNECTION_INVALID\nok so does the server's handler for that connection\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "xpc_connection_send_message_with_reply_sync_roundtrip",
+      "source_sha256": "d0f4b0bcce4ad5cc4e46b7c0c10236853a80e1e5753d72c6f74a7f73d3c9d37d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5b27757ae787ccafc65c32c6158a765b8f59538971ff95099283f47f564b3459",
+          "exit_code": 0,
+          "stdout": "ok an endpoint\nok a connection from it\nok the reply is a dictionary\nok with the values the server set\nok the message sent is unchanged\nok a second message gets its own reply\nok the replies are different objects\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cc50615bc59b520f3b66fa76d6eab9aa1cb04c05ad1c590de3d16c0d59ec6da2",
+          "exit_code": 0,
+          "stdout": "ok an endpoint\nok a connection from it\nok the reply is a dictionary\nok with the values the server set\nok the message sent is unchanged\nok a second message gets its own reply\nok the replies are different objects\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libxpc.dylib/xpc_release.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in xpc_release.tests/macos.json.
+id: macos/api/libxpc.dylib/xpc_release
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  xpc_release(object) drops a reference. Releasing the creator's reference of an object stored in a dictionary leaves the stored
+  one valid; releasing the outer dictionary does not touch an inner dictionary that someone else still holds; a value stored under two
+  keys or in two dictionaries stays in the others when removed from one; ten stored-and-released strings read back. xpc_bool_create(true)
+  and xpc_null_create give shared objects (the same pointer every time). Releasing the last reference frees the object: use afterwards
+  was not tried (it would crash).
+returns:
+  success: "none (void)"
+errors: {}
+side_effects: "a reference is dropped; the last one frees the object"
+threading: "reference counts are atomic: not specified"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

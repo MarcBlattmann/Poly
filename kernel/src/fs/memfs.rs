@@ -81,7 +81,7 @@ pub fn writeback_pass() {
     let all: Vec<Arc<CachedDiskFs>> = MEMORY_FS.lock().iter().filter_map(Weak::upgrade).collect();
     for fs in all {
         let changed = fs.take_changed();
-        if changed || fs.page_counts().1 > 0 {
+        if changed || fs.has_dirty() {
             let _ = fs.writeback(None);
         }
     }

@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libxpc.dylib/xpc_dictionary_set_int64.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in xpc_dictionary_set_int64.tests/macos.json.
+id: macos/api/libxpc.dylib/xpc_dictionary_set_int64
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  xpc_dictionary_set_int64(dict, key, value) stores an int64 object under key (type XPC_TYPE_INT64, type name "int64";
+  xpc_int64_get_value gives the number): negative values, INT64_MIN, INT64_MAX and 0 are kept (a stored 0 is a value, a
+  missing key reads NULL through get_value). Setting again replaces (also a value of another type), the count grows only for new keys;
+  200 keys were stored and visited by xpc_dictionary_apply once each (in no promised order; the block returning false stops
+  it and apply returns false). The object stored is equal (xpc_equal) to xpc_int64_create of the same number, can be retained
+  and put into another dictionary.
+returns:
+  success: "none (void)"
+errors: {}
+side_effects: "the dictionary holds the value"
+threading: "not specified"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

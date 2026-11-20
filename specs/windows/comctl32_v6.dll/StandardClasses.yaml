@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32_v6.dll/StandardClasses.yaml
+id: windows/api/comctl32_v6.dll/StandardClasses
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station: windows and messages work, nothing is visible, no input) as the local account \"server\"; every test program carries a manifest that asks for Microsoft.Windows.Common-Controls 6.0.0.0 (an RT_MANIFEST resource), so it gets the side-by-side comctl32 version 6; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-comctl6-init
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, every one carrying a manifest (an RT_MANIFEST resource) that asks for Microsoft.Windows.Common-Controls 6.0.0.0 (publicKeyToken 6595b64144ccf1df, processorArchitecture *): the programs run with the side-by-side comctl32 version 6, the way Google's updater.exe, Chrome and most current installers do. The same programs built for 32-bit x86 (i686) and run on the same machine (WOW64) printed the same observation files line for line except for one value, named below. Microsoft Learn: "InitCommonControlsEx function (commctrl.h)", "INITCOMMONCONTROLSEX structure", "Common Control Versions", "Enabling Visual Styles", "DllGetVersion function", "DLLVERSIONINFO structure", "Progress Bar Control Reference", "Button Control Reference", "Edit Control Reference", "Subclassing Controls", "SetWindowTheme function (uxtheme.h)", "GetWindowTheme function"; commctrl.h, winuser.h, shlwapi.h, uxtheme.h, winerror.h for constants and layouts. docs/windows/updater-b7 (the coordinator's finding): the updater's UI thread calls InitCommonControlsEx({8, 0x4020}); Poly returned FALSE and the progress-bar window could not be created. No Wine or ReactOS source was read and no Microsoft binary was decompiled or disassembled.
+summary: >
+  The standard classes Button, Edit, Static, ListBox, ComboBox, ScrollBar and ComboLBox in a process with a version 6 manifest: they are comctl32's versions, with the version 6 messages, from the moment the library is loaded; ICC_STANDARD_CLASSES changes nothing they do.
+interface:
+  signature: "BCM_GETIDEALSIZE 0x1601, BCM_GETTEXTMARGIN 0x1605, BCM_SETNOTE 0x1609, BCM_GETNOTE 0x160A, BCM_GETNOTELENGTH 0x160B; EM_SETCUEBANNER 0x1501, EM_GETCUEBANNER 0x1502; CB_SETCUEBANNER 0x1703; BS_SPLITBUTTON 0xC, BS_COMMANDLINK 0xE"
+rules:
+  button: "a push button created with WS_CHILD has that style only and the class name Button; BCM_GETIDEALSIZE (lParam a SIZE) is TRUE and gives a positive size; BCM_GETTEXTMARGIN is TRUE; BM_GETSTATE 0; buttons of style BS_COMMANDLINK and BS_SPLITBUTTON can be created and keep their styles; a command link answers BCM_SETNOTE (TRUE), BCM_GETNOTELENGTH (the length of the note, 4 for \"note\") and BCM_GETNOTE (TRUE, the text); a push button refuses BCM_SETNOTE (0)"
+  edit_combo: "EM_SETCUEBANNER is TRUE and EM_GETCUEBANNER returns TRUE with the banner text; CB_SETCUEBANNER on a drop-down list is TRUE; the older messages behave as always: EM_GETLIMITTEXT of a new edit 30000, CB_ADDSTRING returns 0 then CB_GETCOUNT 1, CB_GETCURSEL of a new combo box -1, LB_ADDSTRING returns 0 then 1 and LB_GETCOUNT 2, SBM_SETRANGE / SBM_SETPOS / SBM_GETPOS of a scroll bar (position 40), a static's text"
+  before_and_after_icc: "the four version 6 messages (BCM_GETIDEALSIZE, BCM_SETNOTE, EM_SETCUEBANNER, CB_SETCUEBANNER) answer TRUE before any InitCommonControlsEx call, and the same after ICC_STANDARD_CLASSES and after ICC_LINK_CLASS (both TRUE); a SysLink window can be created and has the class name SysLink"
+  window_procedures: "GetClassInfoExW (no module) finds Button, Edit, Static, ListBox, ComboBox, ScrollBar and ComboLBox, and the module that holds each class's window procedure is comctl32.dll (version 6 supplies them for the process; user32's own are replaced); #32770 (the dialog class) is found and its procedure is not in comctl32.dll"
+errors:
+  none: "no error codes: results as above"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per message"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing comctl32.dll (when the test uses it), user32.dll and kernel32.dll by name (the subclass tests bind comctl32's functions by the ordinals the updater uses, 410 to 413); uxtheme.dll is loaded at run time with LoadLibraryW. Each test carries the manifest resource of version 6.0.0.0 of the common controls (written as data in the test's source with global_asm!, the way the resource tests carry menus and icons), so the program runs with the side-by-side comctl32 6.x; a Poly that decides the version from the manifest of the process passes them, one that treats every process as version 5.82 does not. Windows are created in session 0 (nothing is visible); controls are children of a plain window the test makes. Observations are results, window styles, class names and relations; no line holds a handle, an address, a path or a time. The 32-bit builds (not part of the pipeline, which builds 64-bit programs) gave the same lines.
+not_covered: >
+  Painting (the oracle session is not interactive: no WM_PAINT, nothing is drawn, visual styles are not active: IsThemeActive is FALSE), mouse and keyboard input, the controls' look and size metrics, DPI, a program with no manifest (version 5.82: see the sheets of comctl32.dll), a manifest of another version, ComCtl32 version 6 loaded by a DLL rather than by the program, and a NULL pointer for InitCommonControlsEx (not tried).

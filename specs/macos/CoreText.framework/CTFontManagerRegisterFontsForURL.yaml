@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreText.framework/CTFontManagerRegisterFontsForURL.yaml. Observed with C test programs linked against CoreText
+# (tests/macos/include/poly_mct.h, ADR 0182); results per architecture in CTFontManagerRegisterFontsForURL.tests/macos.json.
+id: "macos/api/CoreText.framework/CTFontManagerRegisterFontsForURL"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the CoreText, CoreGraphics and CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes, and the two architectures gave the same results. Tests are C programs that link CoreText (the line `poly-mac: coretext`, tests/macos/include/poly_mct.h). The results do not depend on Apple's fonts: tests use the PolyTest TrueType fonts embedded in poly_mct.h (made by tests/macos/fonts/mkfont.py) and DejaVu Sans 2.37 files the runner copies into the scratch directory (`poly-mac: fonts`); the few tests about Apple's own fonts are named sys_ and described as SYSTEM-DEPENDENT; results and output go through raw system calls"
+  observed_by: spec-macos-coretext
+  date: 2026-11-20
+summary: >
+  CTFontManagerRegisterFontsForURL(fontURL, scope, &error) registers the font file at the URL (an
+  absolute file URL) with the font manager for kCTFontManagerScopeProcess (the process only; nothing
+  outside it changes) and returns true with *error unset. From then on CTFontCreateWithName finds the
+  font by PostScript name ('PolyTest-Regular'), full name ('PolyTest Regular') and family name
+  ('PolyTest', giving the regular face), the case of the name does not matter ('polytest-regular',
+  'POLYTEST'), and the family appears in CTFontManagerCopyAvailableFontFamilyNames (absent before).
+  Faces of one family register one by one (the Bold file separately); a face that is not registered is
+  not found (CTFontCreateWithName 'PolyTest-Bold' before registering gives the default font). Failures
+  return false and set the error (CFError, domain 'com.apple.CoreText.CTFontManagerErrorDomain'): a
+  file that does not exist code 101 (kCTFontManagerErrorFileNotFound), a file that is not a font 103
+  (kCTFontManagerErrorInvalidFontData), a font registered a second time 105
+  (kCTFontManagerErrorAlreadyRegistered; the first registration stays). The error pointer may be NULL.
+  CTFontManagerUnregisterFontsForURL(url, scope, &error) undoes it (true; names stop resolving, a face
+  of the same family stays) and a second unregistration fails with code 201
+  (kCTFontManagerErrorNotRegistered); registering again afterwards works. Real fonts register the same
+  way (DejaVu Sans, Bold, Oblique, Mono files: found by PostScript name 'DejaVuSans-Bold', full name
+  'DejaVu Sans Bold' and family 'DejaVu Sans'; the family names list has 'DejaVu Sans' and 'DejaVu
+  Sans Mono'). Registering needs a path, so tests write the embedded font into the scratch directory.
+returns:
+  success: "true, error untouched"
+  failure: "false with a CFError"
+errors:
+  file_not_found: "CTFontManagerErrorDomain 101"
+  invalid_font: "103"
+  already_registered: "105"
+  not_registered_on_unregister: "201"
+side_effects: "makes the font visible to the process's name lookups"
+threading: "safe from any thread"
+ordering: []
+timing:
+  typical: "milliseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

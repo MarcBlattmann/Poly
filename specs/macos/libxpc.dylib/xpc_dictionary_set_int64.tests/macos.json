@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "xpc_dictionary_set_int64_many",
+      "source_sha256": "a45844a24773bdf28f7dce7598b299942386efe67babe6eb690a1cf97cff33ac",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fb110c968c664d9713397549109b40840c027385bb7a31c108a48fbe55cf4719",
+          "exit_code": 0,
+          "stdout": "ok count 200\nok all read back\nok apply visits each once and reports completion\nok with the right values\nok returning false stops it after that one and reports it\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c6f0f5b780f3f26564c550e8550d3bbc271bca926556e5bd19f8799bde7c9a97",
+          "exit_code": 0,
+          "stdout": "ok count 200\nok all read back\nok apply visits each once and reports completion\nok with the right values\nok returning false stops it after that one and reports it\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "xpc_dictionary_set_int64_objects",
+      "source_sha256": "484fecff1722b02cb05a9d0a48588c60370cfa580f93b1467e9200a0043690a5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1ebfac0a69f6a51a0655d05270c8d33acd7f28a862574f45687d6e5567c4307e",
+          "exit_code": 0,
+          "stdout": "ok xpc_equal with xpc_int64_create(123)\nok and not with 124\nok put into another dictionary it reads the same\nok removed from the first it stays in the second\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "376929691cbeac380c920a632388e36cfafb1613b2795c25fa7c823ccc286ee1",
+          "exit_code": 0,
+          "stdout": "ok xpc_equal with xpc_int64_create(123)\nok and not with 124\nok put into another dictionary it reads the same\nok removed from the first it stays in the second\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

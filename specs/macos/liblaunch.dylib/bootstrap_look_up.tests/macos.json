@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "bootstrap_look_up_bad_port",
+      "source_sha256": "57a8a93ccce0a958045ee476939e65753cc8fd1ff63e77fda53de3efb5383970",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c3a8a69409da19e8f58b6337e31d841fb9fb16ff60ad819045753070c2a7d364",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL: MACH_SEND_INVALID_DEST\nok a name that does not exist: MACH_SEND_INVALID_DEST\nok a receive right only: MACH_SEND_INVALID_DEST too\nok a dead name: MACH_SEND_INVALID_DEST\nok the out port is left alone\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "563f367f4341220e572b8447d1705cb52f0f1f16d01e33ce2031f1c920f4575b",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL: MACH_SEND_INVALID_DEST\nok a name that does not exist: MACH_SEND_INVALID_DEST\nok a receive right only: MACH_SEND_INVALID_DEST too\nok a dead name: MACH_SEND_INVALID_DEST\nok the out port is left alone\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "bootstrap_look_up_name_dies_with_owner",
+      "source_sha256": "a4254d59402b551a83101ca79b42dbcf30e2588a7a49a75ade345fbadbb2dba5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f18be548b21fb8230af1ef7dde19c4f1a113d6a3c15372d10acfd759c728316b",
+          "exit_code": 0,
+          "stdout": "ok while the child lives, the name is found\nok the child exits with status 0\nok shortly after it exited the name is unknown\nok a checked-in name is found\nok after the receive right is destroyed it is unknown\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "034b0c8baeea77669e0dd6da9cb296e826ae37eb85eb63746941bbf6f4d76a39",
+          "exit_code": 0,
+          "stdout": "ok while the child lives, the name is found\nok the child exits with status 0\nok shortly after it exited the name is unknown\nok a checked-in name is found\nok after the receive right is destroyed it is unknown\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "bootstrap_look_up_own",
+      "source_sha256": "52170c5d1e1b8ea3d9b7d8f1f4877355f88d9b100283281e40d8e9d7b8079b52",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a643e8c4ac6235d5961677950e0af18e370850f1279100ff212bbd2f941e5f8e",
+          "exit_code": 0,
+          "stdout": "ok check_in succeeds\nok a receive right and nothing else\nok look_up succeeds\nok the right found is a send right to the same port: the name is the receive right's\nok the name now holds receive and send\nok a second look_up succeeds with the same name\nok and adds one user reference\nvalue user references after the first look_up 1\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1b5ea04d076210bd00e08de2bafedda87fb0eda89c7c9d0c86915ec801d987a9",
+          "exit_code": 0,
+          "stdout": "ok check_in succeeds\nok a receive right and nothing else\nok look_up succeeds\nok the right found is a send right to the same port: the name is the receive right's\nok the name now holds receive and send\nok a second look_up succeeds with the same name\nok and adds one user reference\nvalue user references after the first look_up 1\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
