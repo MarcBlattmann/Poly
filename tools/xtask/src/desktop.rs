@@ -331,6 +331,14 @@ fn image_files(test_apps: bool) -> Result<initramfs::Tree> {
     for (path, data) in shell_fonts {
         tree.files.push((path, 0o644, data));
     }
+    // Alpine Shell's pointer: the Bibata theme's files (ADR 0252).
+    let cursors = crate::cursors::tree();
+    if cursors.is_empty() {
+        crate::progress::note("no cursor theme (`cargo xtask cursors fetch`): the compositor draws its own pointer");
+    }
+    for (path, data) in cursors {
+        tree.files.push((path, 0o644, data));
+    }
     // BusyBox, when there is one (a shell for the Terminal, ADR 0134):
     // `/bin/busybox` and its applets, a home and a `/tmp`.
     match crate::busybox::obtain()? {

@@ -5,7 +5,11 @@ These parts of the repository come from elsewhere, under the licences
 listed. Each is kept under `third_party/<name>/` with its licence text;
 anything derived from it says so in its header. Adding to this list needs a
 permissive licence (no GPL or LGPL, see [CLEAN_ROOM.md](CLEAN_ROOM.md)) and
-an entry here.
+an entry here. The one exception is data under the GPL that is never
+committed or compiled in: it is fetched at build time and installed as
+separate files beside its licence, an aggregate, not part of Poly's code.
+The Bibata cursors are the only such data, by the owner's decision
+([ADR 0252](docs/adr/0252-the-bibata-cursor-theme.md)).
 
 | What | Version | Licence | Where | Used for |
 |---|---|---|---|---|
@@ -14,6 +18,7 @@ an entry here.
 | [Droid Sans Fallback](https://android.googlesource.com/platform/frameworks/base/) font by Google: `DroidSansFallbackFull.ttf` (Chinese, Japanese and Korean), from Debian's `fonts-droid-fallback` package | 8.1.0r7 (Debian `1:8.1.0r7-1~1.gbp36536b`) | Apache License 2.0 ([copyright](third_party/droid-sans-fallback/copyright), [text](third_party/droid-sans-fallback/LICENSE-Apache-2.0)) | **not committed**: `tools/xtask/chromium.lock` pins the package by size and SHA-256 (`cargo xtask fonts fetch` / `chromium fetch` download it); only the copyright and licence are in `third_party/droid-sans-fallback/` | CJK text ([ADR 0234](docs/adr/0234-chrome-qa-fixes-a-window-made-maximized-waits-for-its-show.md)): the Chromium disk installs the package; the Chrome for Windows disk carries the file in `/usr/share/fonts/truetype/droid/`, linked into `C:\Windows\Fonts`, where DirectWrite's system fallback finds it |
 | [Geist and Geist Mono](https://github.com/vercel/geist-font) fonts by Vercel: `Geist-Regular.ttf`, `Geist-Medium.ttf`, `Geist-SemiBold.ttf`, `GeistMono-Regular.ttf` | 1.7.2 | SIL Open Font License 1.1 ([text](third_party/geist/OFL.txt)) | **not committed**: `cargo xtask fonts fetch` takes them from the pinned release archive (`geist-font-v1.7.2.zip`) into `target/fonts/`; only the licence is in `third_party/geist/` | the shell's text, as Alpine Shell's ([ADR 0127](docs/adr/0127-the-alpine-shell-look.md)): `/usr/share/poly/fonts/` on the desktop's images |
 | [Averia Serif Libre](https://github.com/google/fonts/tree/main/ofl/averiaseriflibre) font by Dan Sayers: `AveriaSerifLibre-Regular.ttf`, `AveriaSerifLibre-Bold.ttf` | Google Fonts commit `6f3c56c7` | SIL Open Font License 1.1, Reserved Font Names "Averia" and "Averia Libre" ([text](third_party/averia-serif-libre/OFL.txt)) | **not committed**: fetched like Geist; only the licence is in `third_party/averia-serif-libre/` | the settings window's titles, as Alpine Shell's (ADR 0127) |
+| [Bibata](https://github.com/ful1e5/Bibata_Cursor) cursor theme by Abdulkaiz Khatri, variant Bibata-Modern-Ice: 12 XCursor files (`left_ptr`, `left_ptr_watch`, `hand2`, `xterm`, `wait`, `crosshair`, `move`, `circle` and the four resize arrows), sizes 24, 32 and 48 only | 2.0.7 (tag commit `35ccfe2`) | **GPL-3.0** ([text](third_party/bibata-cursors/LICENSE)) | **not committed**: `cargo xtask cursors fetch` downloads the pinned release package (size and SHA-256 in `tools/xtask/src/cursors.rs`) into `target/cursors/`; the licence and the source pointer are in `third_party/bibata-cursors/` | the pointer, as Alpine Shell's ([ADR 0252](docs/adr/0252-the-bibata-cursor-theme.md)): data files in `/usr/share/icons/Bibata-Modern-Ice/` on the desktop's images, read by the compositor at start |
 | Alpine Shell's wallpapers: `Grainy Valley.jpeg`, `Quiet Moment In Nature.jpg` (as `grainy-valley.jpeg`, `quiet-moment-in-nature.jpg`) | Alpine Shell `3557227` | the owner's: he owns Alpine Shell and grants Poly their use (they are his or free to use, ADR 0124, ADR 0127) | `third_party/alpine-shell/wallpapers/` | Poly's desktop wallpapers, Grainy Valley the default: `cargo xtask` decodes them into `/usr/share/poly/wallpapers/` on the desktop's images |
 | [Lucide](https://lucide.dev) icons (lucide-react): the path data of the 35 icons in `crates/poly-shell/src/icons.rs` | 0.575.0 | ISC; parts from Feather, MIT ([text](third_party/lucide/LICENSE)) | `crates/poly-shell/src/icons.rs` (the data), `third_party/lucide/` (the licence) | the shell's icons, the set Alpine Shell draws with (ADR 0127) |
 | Chromium's logo as Debian's `chromium` package ships it: `chromium-16.png`, `chromium-48.png`, `chromium-256.png` (the package's `usr/share/icons/hicolor/<size>/apps/chromium.png`), unmodified | 156.0.8078.73-1~deb13u1 | BSD 3-Clause, The Chromium Authors | `crates/poly-png/tests/data/` | test input for `poly-png` and `poly-shell`'s icon lookup (ADR 0146): real PNGs from a package; not part of any image Poly builds (the Chromium disk takes them from the package itself) |
@@ -34,6 +39,24 @@ each file and each licence by size and SHA-256. The Lucide icons' path
 data is copied into `crates/poly-shell/src/icons.rs` with the ISC notice
 in `third_party/lucide/LICENSE`; the owner, who owns Alpine Shell, allows
 Poly to reuse its choice of icons, tokens and measurements (ADR 0124).
+
+## Bibata
+
+Copyright (C) Abdulkaiz Khatri, under the GNU General Public License 3.0.
+The cursors are the owner's choice, as Alpine Shell's pointer
+([ADR 0252](docs/adr/0252-the-bibata-cursor-theme.md)).
+- **What ships:** the twelve XCursor files of the official release package,
+  each with only its images of sizes 24, 32 and 48 (a modified copy; the
+  README beside them says what was left out).
+- **How:** never committed and never compiled in. They are separate files in
+  `/usr/share/icons/Bibata-Modern-Ice/cursors/` on the desktop's images,
+  with the GPL-3.0 text, the theme's `index.theme` and
+  [third_party/bibata-cursors/README.md](third_party/bibata-cursors/README.md)
+  (author, release, hashes and where the source is: the SVGs and build files
+  of upstream's tag `35ccfe2`) beside them.
+- **What Poly's compositor does with them:** it only reads them as pictures,
+  so the GPL applies to the theme's files and not to Poly. Anyone who
+  redistributes the images passes the licence and the README on with them.
 
 ## Droid Sans Fallback
 

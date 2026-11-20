@@ -117,6 +117,7 @@
 //!                       the console, or on the desktop with screenshots and input (winapps.rs)
 //!   font [--check]      regenerate poly-gfx's glyph tables from the BDF fonts
 //!                       in third_party/ (--check: fail if they are out of date)
+//!   cursors fetch       download the pinned Bibata cursor theme into the cache (cursors.rs, ADR 0252)
 //!   fonts fetch         download the pinned DejaVu fonts of the font store into the cache (fonts.rs)
 //!   fonts list [pattern] [element...] | fonts match [--sort] <pattern>
 //!                       fc-list / fc-match over them with Poly's fonts.conf (poly-font, ADR 0105)
@@ -138,6 +139,7 @@ mod compositor;
 mod compositor_kms;
 mod conflicts;
 mod console;
+mod cursors;
 mod desktop;
 mod drm;
 mod dynamic;
@@ -275,6 +277,7 @@ const COMMANDS: &[&str] = &[
     "symbolize",
     "coverage",
     "font",
+    "cursors",
     "fonts",
     "wayland",
     "nls-tables",
@@ -316,6 +319,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("font") => font::run(&root(), rest),
         Some("nls-tables") => nls::run(&root(), rest),
         Some("system-messages") => sysmsg::run(&root(), rest),
+        Some("cursors") => cursors::command(rest),
         Some("fonts") => fonts::command(rest),
         Some("wayland") => wayland::run(&root(), rest),
         Some("ntdll") => ntdll::command(rest),
