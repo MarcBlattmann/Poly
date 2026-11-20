@@ -1,0 +1,66 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtCreateThreadEx.yaml
+id: windows/api/ntdll.dll/NtCreateThreadEx
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account \"server\" (member of Administrators) with its elevated administrator token; the target processes are started by the test itself, as its children, with the same token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-remote-thread
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above. NtCreateThreadEx has no page on Microsoft Learn (the
+  function is exported by ntdll; kernel32's CreateRemoteThread and CreateRemoteThreadEx are what Learn documents). The
+  parameter list used below (eleven parameters: ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, StartRoutine,
+  Argument, CreateFlags, ZeroBits, StackSize, MaximumStackSize, AttributeList) is the one callers use and the roles of the
+  parameters were checked by the observations. Microsoft Learn: CreateRemoteThread, CreateRemoteThreadEx, Thread Access
+  Rights, Process Security and Access Rights, NtQueryObject, NtQueryInformationThread, OBJECT_ATTRIBUTES, ntstatus.h. No
+  Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  The system call layer under CreateRemoteThread and CreateRemoteThreadEx: creates a thread in the process the handle
+  names (the caller's own with the pseudo handle -1), at StartRoutine with Argument, and returns its handle. It is
+  STRICTER than kernel32: the process handle itself must have PROCESS_CREATE_THREAD (0x2) and nothing else is needed;
+  without it the status is STATUS_ACCESS_DENIED. kernel32's call goes around a missing right by duplicating the
+  handle (see its sheet); this call does not. CreateFlags bit 0x1 creates the thread suspended, bit 0x4 hides it from
+  debuggers; StackSize is the initial commit and MaximumStackSize the reserve.
+interface:
+  signature: "NTSTATUS NtCreateThreadEx(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PVOID StartRoutine, PVOID Argument, ULONG CreateFlags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaximumStackSize, PVOID AttributeList)"
+  result: "STATUS_SUCCESS and the thread handle in *ThreadHandle, or a failure status and nothing in it"
+  relation: "kernel32!CreateRemoteThread(Ex) call it; its NTSTATUS is the value RtlGetLastNtStatus reports after a failed kernel32 call"
+rules:
+  success: "with a process handle that has PROCESS_CREATE_THREAD, DesiredAccess 0x1FFFFF, a StartRoutine of kernel32!ExitThread, Argument 0x1234, flags 0, stack arguments 0: STATUS_SUCCESS; the thread runs in the target (GetProcessIdOfThread = the target's process id, GetThreadId non-zero), ends with exit code 0x1234 (wait WAIT_OBJECT_0), and the handle's granted access is 0x1FFFFF"
+  code_in_target: "a routine written into the target (VirtualAllocEx + WriteProcessMemory) runs there: its return value 0x77 is the exit code, the memory it writes is seen by ReadProcessMemory, it sees the target's process id and its own thread id equal to GetThreadId of the handle"
+  pseudo_handle: "ProcessHandle = the pseudo handle GetCurrentProcess() (-1): the thread is created in the calling process (GetProcessIdOfThread = own pid), runs with the argument (ExitThread 0x77: exit code 0x77)"
+  rights_needed: "exactly PROCESS_CREATE_THREAD: for the 32 combinations of PROCESS_CREATE_THREAD (C), PROCESS_QUERY_INFORMATION (Q), PROCESS_VM_OPERATION (O), PROCESS_VM_WRITE (W), PROCESS_VM_READ (R) the status is STATUS_SUCCESS when C is in the handle's rights and STATUS_ACCESS_DENIED 0xC0000022 when it is not (the 16 without C); PROCESS_QUERY_LIMITED_INFORMATION only, SYNCHRONIZE only, no rights, and 'all rights except PROCESS_CREATE_THREAD' (0x1FFFFD) all give STATUS_ACCESS_DENIED; C with PROCESS_QUERY_LIMITED_INFORMATION and the full set give STATUS_SUCCESS. A handle whose rights were taken away but whose process's security descriptor would allow them is NOT widened here"
+  desired_access: "DesiredAccess 0: STATUS_ACCESS_DENIED 0xC0000022 and no thread. Other masks succeed and the handle's granted access is: 0x100000 (SYNCHRONIZE) -> 0x100000; 0x800 (THREAD_QUERY_LIMITED_INFORMATION) -> 0x800; 0x1 (THREAD_TERMINATE) -> 0x1; 0x2 (THREAD_SUSPEND_RESUME) -> 0x1002; 0x1F03FF -> 0x1F1FFF; 0x1FFFFF -> 0x1FFFFF; MAXIMUM_ALLOWED 0x2000000 -> 0x1FFFFF; GENERIC_ALL 0x10000000 -> 0x1FFFFF; GENERIC_READ 0x80000000 -> 0x20848; 0xFFFFFFFF -> 0x11FFFFF"
+  create_flags: "CreateFlags 0x1 (THREAD_CREATE_FLAGS_CREATE_SUSPENDED): the thread is suspended (a 300 ms wait gives WAIT_TIMEOUT 0x102) until ResumeThread; 0x2 (SKIP_THREAD_ATTACH), 0x8, 0x10, 0x20 and 0x40 are accepted and the thread runs normally (those the tests cover show no difference); 0x4 (HIDE_FROM_DEBUGGER): the thread runs and NtQueryInformationThread class ThreadHideFromDebugger (0x11) reports 1 for it (0 for all other flag values); combinations of the accepted bits work (0x3 suspended + skip-attach, 0x5 suspended + hidden). Any of 0x80, 0x100, 0x1000, 0x10000, 0x80000000: STATUS_INVALID_PARAMETER_7 (0xC00000F5) and no thread"
+  stack_sizes: "StackSize is the initial commit, MaximumStackSize the reserve (a stack looked at from outside with VirtualQueryEx): both 0: reserve 1024 KiB (the target image's SizeOfStackReserve); StackSize 256 KiB, Max 0: reserve 1024 KiB; StackSize 0, Max 2 MiB: reserve 2048 KiB; StackSize 64 KiB, Max 256 KiB: reserve 256 KiB; StackSize 256 KiB, Max 256 KiB (equal): reserve 1024 KiB (the default: Max must be larger than StackSize to be used); StackSize 2 MiB, Max 256 KiB: reserve 2048 KiB (grown to the commit); StackSize 0, Max 4 KiB: reserve 1024 KiB (below 64 KiB the default is used); Max 100000: reserve 128 KiB (rounded up to 64 KiB); StackSize 1: reserve 1024 KiB; Max 1 TiB: reserve 1 TiB; in every case at least one page is committed, and at least StackSize bytes. Max or StackSize 0xFFFFFFFFFFFFFFFF: STATUS_INVALID_PARAMETER 0xC000000D"
+  zero_bits: "ZeroBits 1, 0xFFFFFFFF and 0xFFFFFFFFFFFFFFFF are accepted and make no difference to the stack's reserve"
+  object_attributes: "a well-formed empty OBJECT_ATTRIBUTES (Length 48): STATUS_SUCCESS; OBJ_INHERIT (0x2) in its Attributes: the thread handle is inheritable; Length 0: STATUS_INVALID_PARAMETER 0xC000000D. NULL is fine (every other test)"
+  attribute_list: "an attribute list that is only a header (TotalLength 8) or shorter (TotalLength 4): STATUS_INVALID_PARAMETER 0xC000000D. NULL is fine"
+  null_start: "StartRoutine NULL with CreateFlags 1: STATUS_SUCCESS and a handle (the thread is never resumed in the tests; after such a never-resumed thread was created, a later ordinary thread in the same target ended with 0xC0000005 and took the target down, so a tester creates it last and ends the target afterwards)"
+errors:
+  invalid_handle: "ProcessHandle NULL, a number that is no handle, a closed handle: STATUS_INVALID_HANDLE 0xC0000008"
+  wrong_type: "an event handle, a thread handle, the pseudo handle of the current thread: STATUS_OBJECT_TYPE_MISMATCH 0xC0000024"
+  process_ended: "a handle to a process that has ended (by itself, or by TerminateProcess): STATUS_PROCESS_IS_TERMINATING 0xC000010A"
+  access_denied: "STATUS_ACCESS_DENIED 0xC0000022: no PROCESS_CREATE_THREAD on the handle, or DesiredAccess 0"
+  null_handle_output: "ThreadHandle NULL: STATUS_ACCESS_VIOLATION 0xC0000005 (a status, not an exception); the target stays alive"
+  invalid_parameter: "STATUS_INVALID_PARAMETER 0xC000000D: OBJECT_ATTRIBUTES of length 0, an attribute list shorter than a header, a stack size of all ones"
+  invalid_parameter_7: "STATUS_INVALID_PARAMETER_7 0xC00000F5: unknown CreateFlags bits"
+side_effects: "creates a thread in the target and a handle in the caller; nothing is changed by a failure (no thread)"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "the thread starts within a few milliseconds"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file each, one image in two roles (the test, and its child process that is the target).
+  The function is declared with raw-dylib from ntdll with the parameter list above. Handles with chosen rights are made
+  with DuplicateHandle of the creator's full handle. Observations are NTSTATUS values, booleans, exit codes, wait results,
+  granted access masks and stack sizes in KiB, never ids, handles or addresses.
+not_covered: >
+  PS_ATTRIBUTE_LIST contents (client id, TEB address, and the other attributes; only an empty or invalid list was
+  tried); CreateFlags 0x10 with a security descriptor in OBJECT_ATTRIBUTES and 0x20 (access check in the target) with a
+  restricted token; targets under restricted tokens, at low integrity or in an AppContainer (second batch of this
+  track); a 32-bit caller (WOW64).

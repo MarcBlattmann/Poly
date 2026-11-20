@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "4c5d26b4f117",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T01:31:29Z",
+  "tests": [
+    {
+      "name": "rmte_basic",
+      "exe_sha256": "32d596879e1fc1cb4e2a1a02ac41b16efaf7c0c77b1d9e0152c031c50ac0b816",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlOiBoYW5kbGUKdGhyZWFkIGlkIHJldHVybmVkIG5vbi16ZXJvOiB5ZXMKdGhyZWFkIGlkIGRpZmZlcnMgZnJvbSB0aGUgY2FsbGVyJ3MgdGhyZWFkIGFuZCBmcm9tIHRoZSB0YXJnZXQncyBmaXJzdCB0aHJlYWQ6IHllcwpHZXRUaHJlYWRJZCA9PSByZXR1cm5lZCBpZDogeWVzCkdldFByb2Nlc3NJZE9mVGhyZWFkID09IHRhcmdldCBwaWQ6IHllcwpHZXRQcm9jZXNzSWRPZlRocmVhZCAhPSBjYWxsZXIgcGlkOiB5ZXMKd2FpdCBmb3IgdGhlIHRocmVhZDogMHgwCkdldEV4aXRDb2RlVGhyZWFkOiAweDEyMzQKZ3JhbnRlZCBhY2Nlc3Mgb2YgdGhlIHRocmVhZCBoYW5kbGU6IDB4MWZmZmZmCmNyZWF0ZSBzdXNwZW5kZWQgd2l0aCBjb2RlIGluIHRoZSB0YXJnZXQ6IGhhbmRsZQp3YWl0IDMwMCBtczogMHgxMDIKbWFya2VyIGJlZm9yZSByZXN1bWU6IDB4MApSZXN1bWVUaHJlYWQ6IHByZXZpb3VzIGNvdW50IDEKd2FpdDogMHgwCmV4aXQgY29kZTogMHg3NwptYXJrZXIgYWZ0ZXI6IDB4YzBkZTVlZWQKdGhyZWFkIHNhdyB0aGUgdGFyZ2V0J3MgcHJvY2VzcyBpZDogeWVzCnRocmVhZCBzYXcgaXRzIG93biB0aHJlYWQgaWQgPT0gcmV0dXJuZWQgaWQ6IHllcwpOVUxMIHRocmVhZCBpZCBwb2ludGVyOiBoYW5kbGUKTlVMTCB0aHJlYWQgaWQgcG9pbnRlcjogd2FpdCAweDAgZXhpdCBjb2RlIDB4Nwpjb21taXQgMjU2SzogcmVzZXJ2ZT0xMDI0SywgY29tbWl0dGVkIGF0IGxlYXN0IG9uZSBwYWdlOiB5ZXMKcmVzZXJ2ZSAyTTogcmVzZXJ2ZT0yMDQ4SywgY29tbWl0dGVkIGF0IGxlYXN0IG9uZSBwYWdlOiB5ZXMKcmVzZXJ2ZSAxMDAwMDAgYnl0ZXM6IHJlc2VydmU9MTI4SywgY29tbWl0dGVkIGF0IGxlYXN0IG9uZSBwYWdlOiB5ZXMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create: handle\nthread id returned non-zero: yes\nthread id differs from the caller's thread and from the target's first thread: yes\nGetThreadId == returned id: yes\nGetProcessIdOfThread == target pid: yes\nGetProcessIdOfThread != caller pid: yes\nwait for the thread: 0x0\nGetExitCodeThread: 0x1234\ngranted access of the thread handle: 0x1fffff\ncreate suspended with code in the target: handle\nwait 300 ms: 0x102\nmarker before resume: 0x0\nResumeThread: previous count 1\nwait: 0x0\nexit code: 0x77\nmarker after: 0xc0de5eed\nthread saw the target's process id: yes\nthread saw its own thread id == returned id: yes\nNULL thread id pointer: handle\nNULL thread id pointer: wait 0x0 exit code 0x7\ncommit 256K: reserve=1024K, committed at least one page: yes\nreserve 2M: reserve=2048K, committed at least one page: yes\nreserve 100000 bytes: reserve=128K, committed at least one page: yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 608
+    },
+    {
+      "name": "rmte_errors",
+      "exe_sha256": "babc74f54e5dda48ccc42ea3e6534657ab3267ab05ebc6679e9545d01a69c5d5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTDogTlVMTCBnbGU9NiBzdGF0dXM9MHhjMDAwMDAwOApudW1iZXIgdGhhdCBpcyBubyBoYW5kbGU6IE5VTEwgZ2xlPTYgc3RhdHVzPTB4YzAwMDAwMDgKZXZlbnQgaGFuZGxlOiBOVUxMIGdsZT02IHN0YXR1cz0weGMwMDAwMDI0CnRocmVhZCBoYW5kbGU6IE5VTEwgZ2xlPTYgc3RhdHVzPTB4YzAwMDAwMjQKcHNldWRvIGhhbmRsZSBvZiB0aGUgY3VycmVudCBwcm9jZXNzOiBoYW5kbGUsIHdhaXQgMHgwIGV4aXQgY29kZSAweDQyNDIKcHJvY2VzcyBoYW5kbGUgd2l0aCBubyByaWdodHM6IGhhbmRsZSwgd2FpdCAweDAgZXhpdCBjb2RlIDB4NDI0Mgpwcm9jZXNzIGhhbmRsZSB3aXRoIHF1ZXJ5LWxpbWl0ZWQgb25seTogaGFuZGxlLCB3YWl0IDB4MCBleGl0IGNvZGUgMHg0MjQyCnByb2Nlc3MgaGFuZGxlIHdpdGggY3JlYXRlLXRocmVhZCBvbmx5OiBoYW5kbGUsIHdhaXQgMHgwIGV4aXQgY29kZSAweDQyNDIKcHJvY2VzcyB0aGF0IGhhcyBlbmRlZDogTlVMTCBnbGU9NSBzdGF0dXM9MHhjMDAwMDEwYQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL: NULL gle=6 status=0xc0000008\nnumber that is no handle: NULL gle=6 status=0xc0000008\nevent handle: NULL gle=6 status=0xc0000024\nthread handle: NULL gle=6 status=0xc0000024\npseudo handle of the current process: handle, wait 0x0 exit code 0x4242\nprocess handle with no rights: handle, wait 0x0 exit code 0x4242\nprocess handle with query-limited only: handle, wait 0x0 exit code 0x4242\nprocess handle with create-thread only: handle, wait 0x0 exit code 0x4242\nprocess that has ended: NULL gle=5 status=0xc000010a\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 292
+    }
+  ]
+}

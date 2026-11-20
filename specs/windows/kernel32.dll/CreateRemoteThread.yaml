@@ -1,0 +1,82 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateRemoteThread.yaml
+id: windows/api/kernel32.dll/CreateRemoteThread
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account \"server\" (member of Administrators) with its elevated administrator token; the target processes are started by the test itself, as its children, with the same token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-remote-thread
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (one image in two roles: the test, and the child
+  process that is the target; code written into the target with VirtualAllocEx and WriteProcessMemory where a start
+  routine of our own was needed, otherwise kernel32's ExitThread, ExitProcess and Sleep, which kernel32 has at the same
+  address in every process). Microsoft Learn: CreateRemoteThread, CreateRemoteThreadEx, CreateThread, ExitThread,
+  ExitProcess, ResumeThread, SuspendThread, GetExitCodeThread, GetThreadId, GetProcessIdOfThread, OpenProcess, Process
+  Security and Access Rights, VirtualAllocEx, WriteProcessMemory, ReadProcessMemory, DuplicateHandle, Thread Stack Size,
+  Creation Flags (STACK_SIZE_PARAM_IS_A_RESERVATION), winerror.h and ntstatus.h for the codes. Chrome on Windows' recorded
+  trace (specs/windows/apps/chrome/traces/s2-sandboxed.trace.json: 15 to 19 calls per run, all successful). No Microsoft or
+  Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Creates a thread in ANOTHER process (or in the caller's own, with the pseudo handle GetCurrentProcess() or a real
+  handle to it, where it behaves like CreateThread). The new thread starts at lpStartAddress, an address that must be
+  valid in the TARGET (the call does not look at it), with lpParameter as its only argument, and runs in the target's
+  address space as one of the target's threads. Returns a handle to the thread with every thread access right
+  (granted access 0x1FFFFF) and, when asked, its thread id. The target does not need to have been started, does not
+  notice the thread other than by one more thread existing, and keeps running when the thread ends (unless the start
+  routine is ExitProcess). Chrome for Windows calls it 15 to 19 times per run; on Poly it used to be a stub that always
+  failed, and Chrome then quits by itself.
+interface:
+  signature: "HANDLE CreateRemoteThread(HANDLE hProcess, LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId)"
+  result: "a thread handle, or NULL with the last error set"
+  relation: "kernel32!CreateRemoteThreadEx with a NULL attribute list does the same; ntdll!NtCreateThreadEx is the system call behind both (it is stricter about the process handle's rights: see its sheet)"
+chrome:
+  calls: "15 to 19 calls per run in Windows' recorded trace, all successful (specs/windows/apps/chrome/traces/s2-sandboxed.trace.json), among them three right before the browser exits. The arguments were not recorded. A thread that runs kernel32's ExitProcess in the target ends the target with the parameter as its exit code: this is the way a process can be made to end from outside"
+rules:
+  runs_in_target: "the thread runs in the target process: GetProcessIdOfThread(returned handle) is the target's process id (not the caller's); GetThreadId(handle) is the thread id the call returns through lpThreadId; the id is non-zero and differs from the caller's thread id and from the ids of the target's other threads; code that the thread runs and that asks for 'my process id' gets the target's process id and for 'my thread id' the returned id"
+  start_and_parameter: "the thread calls lpStartAddress(lpParameter) as an ordinary thread routine (one argument, 32-bit result). Start routine kernel32!ExitThread with parameter P: the thread ends with exit code P (wait on the handle: WAIT_OBJECT_0; GetExitCodeThread: P). A routine of our own written into the target (VirtualAllocEx PAGE_EXECUTE_READWRITE + WriteProcessMemory) runs, writes into the target's memory (ReadProcessMemory sees it), and its return value (0x77 in the tests) is the thread's exit code"
+  handle_access: "the returned handle's granted access (NtQueryObject basic information) is 0x1FFFFF (THREAD_ALL_ACCESS), whatever rights the process handle had"
+  target_unaffected: "the target process keeps running; its first thread keeps running; the new thread's end does not end the target"
+  exit_process_routine: "with kernel32!ExitProcess as the start routine and parameter 0x55 the target process ends with exit code 0x55 (wait on the process handle: WAIT_OBJECT_0), the call itself returned a handle, the thread handle then reports WAIT_OBJECT_0, exit code 0x55 and GetProcessIdOfThread still gives the target's id"
+  suspended: "dwCreationFlags CREATE_SUSPENDED (4): the call returns the handle and the id with the thread not running: wait with a 300 ms timeout returns WAIT_TIMEOUT, GetExitCodeThread gives STILL_ACTIVE (259), the start routine has not run (code in the target left its marker unwritten). The suspend count is 1. ResumeThread returns the previous count (1) and the thread runs; SuspendThread on the suspended thread returns 1 (count becomes 2) and then two ResumeThread calls return 2 and 1: the thread runs only after the last. ResumeThread on a thread that has finished returns 0 (no error)"
+  other_flag_bits: "only CREATE_SUSPENDED (4) and STACK_SIZE_PARAM_IS_A_RESERVATION (0x10000) have an effect; every other bit is accepted and ignored: flags 1, 2, 8, 0x10, 0x20, 0x100, 0x8000, 0x20000, 0x100000, 0x80000000 each returned a handle and ran the routine; 0xFFFFFFFF (all bits) returned a handle, created suspended, and ran after ResumeThread"
+  stack: "a thread's stack lives in the target. dwStackSize 0: stack reserve = the SizeOfStackReserve of the target's image (1024 KiB for the test image, whose SizeOfStackCommit is 4 KiB; the stack of a new thread has at least one page committed; looked at from outside with VirtualQueryEx on the page below the thread's stack base). dwStackSize N without STACK_SIZE_PARAM_IS_A_RESERVATION: N is the initial commit (the stack has at least N bytes committed); the reserve stays the image's, unless N is larger than that, then the reserve grows to N (2 MiB request: reserve 2048 KiB, all committed; 1 GiB: reserve 1 GiB, all committed). With STACK_SIZE_PARAM_IS_A_RESERVATION: N is the reserve, rounded up to a multiple of 64 KiB (100000 bytes: 128 KiB; 256 KiB: 256 KiB; 2 MiB: 2 MiB; 64 MiB, 1 GiB and 1 TiB all work, with a small initial commit); a reserve smaller than 64 KiB (4096) gets the image's default reserve; STACK_SIZE_PARAM_IS_A_RESERVATION with size 0 gets the image's default reserve. dwStackSize 1 without the flag: default reserve, commit as for 0"
+  attributes: "lpThreadAttributes NULL: the handle is not inheritable. With bInheritHandle TRUE the handle is inheritable (GetHandleInformation HANDLE_FLAG_INHERIT set); nLength is not checked (0, 24 and 99 all gave an inheritable handle); with bInheritHandle FALSE not inheritable"
+  thread_id_pointer: "lpThreadId may be NULL: the call works and the thread runs"
+  start_not_checked: "the start address is not validated by the call: NULL, an unmapped address (0x10), and an address in a read-write page of the target each returned a thread handle when created suspended (never resumed here: resuming those would crash the target)"
+  never_resumed_start_null_thread: "after a thread was created with a NULL start routine and never resumed, the next thread created in the same target ended with exit code 0xC0000005 (access violation) and took the target down. A tester must not create such a thread unless it ends the target afterwards"
+  process_not_started: "a target created with CREATE_SUSPENDED (so that its first thread has not run and the loader has not started) accepts the call: the thread runs (ExitThread with parameter 0x2222: exit code 0x2222, WAIT_OBJECT_0), the target stays alive, and its first thread stays suspended until resumed (ResumeThread on it returns 1, after which the target runs its own code). A remote thread created suspended there is resumed with ResumeThread (previous count 1) and then runs"
+  own_process: "with GetCurrentProcess() (or a real handle to the own process, also one with only PROCESS_CREATE_THREAD or only PROCESS_QUERY_LIMITED_INFORMATION) the call behaves like CreateThread: a handle, a new thread id different from the caller's, GetProcessIdOfThread = the caller's process id, the routine runs in the caller's process with the parameter (a routine returning parameter+1: exit code 0x5151 for parameter 0x5150), CREATE_SUSPENDED works as above (WAIT_TIMEOUT after 300 ms, routine not yet run)"
+  rights_normal: "kernel32's call does not need any right on the process handle when the caller owns the target (the usual case: a child process, a process of the same user): a handle duplicated with no rights at all, with PROCESS_CREATE_THREAD only, with PROCESS_QUERY_LIMITED_INFORMATION only, with SYNCHRONIZE only, or with all rights except PROCESS_CREATE_THREAD each returned a thread handle whose thread ran in the target. (Learn lists PROCESS_CREATE_THREAD, PROCESS_QUERY_INFORMATION, PROCESS_VM_OPERATION, PROCESS_VM_WRITE and PROCESS_VM_READ; the call obtains what it needs by duplicating the handle with more rights, which the object's security descriptor decides.) All 32 combinations of the five listed rights, and handles with none of them, worked"
+  rights_widening: "the same call fails with ERROR_ACCESS_DENIED when the target's security descriptor does not let the caller have PROCESS_CREATE_THREAD and PROCESS_QUERY_INFORMATION: with a descriptor granting Everyone SYNCHRONIZE only (set with SetKernelObjectSecurity on the process, DACL_SECURITY_INFORMATION), a handle with no rights, with PROCESS_CREATE_THREAD only, with the target's full rights except PROCESS_CREATE_THREAD, and with the rights Q, O, W, R without C all failed; a descriptor granting CREATE_THREAD and QUERY_INFORMATION together (with SYNCHRONIZE) let the call work with a handle that had no rights at all or only PROCESS_CREATE_THREAD; descriptors granting only CREATE_THREAD, or CREATE_THREAD plus VM_OPERATION, plus VM_OPERATION and VM_WRITE, plus all three VM rights, or QUERY_INFORMATION and the VM rights without CREATE_THREAD did not"
+  rights_on_the_handle: "with such a restrictive descriptor (SYNCHRONIZE only) the handle itself must have PROCESS_CREATE_THREAD and either PROCESS_QUERY_INFORMATION or both PROCESS_VM_OPERATION and PROCESS_VM_WRITE (PROCESS_VM_READ does not matter): of the 32 combinations of C, Q, O, W, R exactly those pass: every combination with C and Q (16), plus C+O+W and C+O+W+R. PROCESS_QUERY_LIMITED_INFORMATION is not enough; 'all access except PROCESS_CREATE_THREAD' fails; 'all access except PROCESS_QUERY_INFORMATION' passes (it has O+W)"
+errors:
+  invalid_handle: "a NULL, a number that is not a handle (0x7770, 0x77777770) and a closed handle: returns NULL, GetLastError ERROR_INVALID_HANDLE (6), NTSTATUS (RtlGetLastNtStatus) STATUS_INVALID_HANDLE 0xC0000008"
+  wrong_type: "a handle to an event, a handle to a thread (the target's first thread), the pseudo handle GetCurrentThread() and a real handle to the calling thread: NULL, ERROR_INVALID_HANDLE (6), STATUS_OBJECT_TYPE_MISMATCH 0xC0000024"
+  process_ended: "a handle to a process that has ended (by itself with exit code 7, or ended by TerminateProcess with code 0x66; the handle is still open): NULL, ERROR_ACCESS_DENIED (5), STATUS_PROCESS_IS_TERMINATING 0xC000010A; the same with CREATE_SUSPENDED"
+  access_denied: "see rights_widening and rights_on_the_handle: NULL, ERROR_ACCESS_DENIED (5), STATUS_ACCESS_DENIED 0xC0000022"
+  stack_size_overflow: "dwStackSize 0xFFFFFFFFFFFFFFFF with STACK_SIZE_PARAM_IS_A_RESERVATION: NULL, ERROR_INVALID_PARAMETER (87), STATUS_INVALID_PARAMETER 0xC000000D"
+  last_error_on_success: "unspecified (the tests never look at it after a success)"
+side_effects: "creates a thread in the target process (the thread count of the target rises by one while it runs), a thread handle in the caller; with a restrictive security descriptor nothing is changed by the failed attempts"
+threading: "may be called from any thread of the caller; the new thread starts on its own, independent of the caller's thread"
+ordering:
+  - "with CREATE_SUSPENDED nothing of the thread's routine has run when the call returns, and nothing runs until the suspend count is 0"
+  - "without CREATE_SUSPENDED the routine runs on its own schedule: wait on the thread handle for its end"
+timing:
+  typical: "the thread starts within a few milliseconds"
+  guarantees: none
+tests:
+  visible: 10
+  held_out: 4
+building_tests: >
+  Rust tests (ADR 0075), one file each, one image in two roles: the test starts copies of itself (CreateProcessW with
+  a hidden command-line marker) as the target, waits for a named event that the target signals when it runs its own
+  code, then calls CreateRemoteThread with handles to the target. The tests start no program that is not their own
+  image. Observations are booleans, counts, exit codes, wait results, NTSTATUS and Win32 codes, stack sizes in KiB, never
+  process ids, thread ids, handles or addresses. Handles with chosen rights are made with DuplicateHandle of the
+  creator's full handle; the restrictive security descriptor is set with SetKernelObjectSecurity on the target.
+not_covered: >
+  A 32-bit caller with a 64-bit target and the reverse; targets running with a restricted token, low integrity or in
+  an AppContainer (second batch of this track); targets of another user, of higher integrity, protected processes,
+  processes in a job (OpenProcess usually refuses the handle before this call); lpThreadAttributes with a security
+  descriptor; a start routine that crashes; very many threads; the loader's DLL_THREAD_ATTACH notifications (the test
+  image has no DLLs that would show them).
