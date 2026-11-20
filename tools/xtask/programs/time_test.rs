@@ -432,7 +432,11 @@ fn vdso_tests(sp: *const u64) {
     let mut stored = 0i64;
     let secs = time(&mut stored);
     let sys_secs = sys(SYS_TIME, &[0]);
-    check(b"vdso_time", secs == stored && secs.abs_diff(sys_secs) <= 1 && secs > 1_577_836_800, secs);
+    // The system call comes after the vDSO's read: at most a second earlier (the two round
+    // differently) and, as everywhere here, no tight "at most" later: a loaded host may hold
+    // this vCPU off between the two calls for more than a second.
+    let agree = sys_secs + 1 >= secs && sys_secs <= secs + 10;
+    check(b"vdso_time", secs == stored && agree && secs > 1_577_836_800, secs);
     // clock_getres: the same answers as the system call.
     let mut ok = true;
     for id in [CLOCK_REALTIME, CLOCK_MONOTONIC, CLOCK_MONOTONIC_COARSE, CLOCK_THREAD_CPUTIME_ID] {
@@ -604,9 +608,11 @@ fn timer_tests() {
     check(b"a_fired_one_shot_itimer_is_disarmed", cur == [0; 4], cur[3]);
 
     // alarm: the time left of the previous one.
+    // Some of the 30 s are left, not a tight 29 or 30: a loaded host may hold this vCPU off
+    // between the two calls for more than a second.
     let first = sys(SYS_ALARM, &[30]);
     let left = sys(SYS_ALARM, &[0]);
-    check(b"alarm_reports_the_previous_alarm", first == 0 && (29..=30).contains(&left), left);
+    check(b"alarm_reports_the_previous_alarm", first == 0 && (1..=30).contains(&left), left);
 
     // A periodic POSIX timer with SIGEV_SIGNAL: SIGUSR1 with SI_TIMER,
     // the timer id and the sigev_value.

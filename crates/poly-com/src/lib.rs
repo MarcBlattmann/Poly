@@ -31,6 +31,7 @@ pub mod activation;
 pub mod apartment;
 pub mod classtable;
 pub mod git;
+pub mod globalopts;
 pub mod guid;
 pub mod hresult;
 pub mod hstring;

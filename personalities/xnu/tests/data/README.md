@@ -14,3 +14,12 @@ test's `macos.json`).
 
 The sources are the visible tests under `specs/macos/` and the test header
 `tests/macos/include/poly_mtest.h`.
+
+## Exception tests
+
+`exc/` holds Poly's own Mach exception tests (no spec sheet yet):
+`exc_state` and `exc_default`, built by `exc/build.sh` from our C sources and
+the MIG stubs Apple's `mig` generates, as a black box, from the public SDK's
+`exc.defs`, `mach_exc.defs`, `task.defs` and `thread_act.defs` (only the built
+programs are committed). They run in the same boot group and must pass every
+check they make.

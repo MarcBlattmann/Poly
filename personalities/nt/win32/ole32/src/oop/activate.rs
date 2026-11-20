@@ -165,6 +165,10 @@ pub(crate) fn class_object(clsid: &Guid, ctx: u32, iid: &Guid) -> Result<*mut c_
         }
         Found::Nothing => {}
     }
+    // COM's own options object, built in (no registry entry).
+    if let Some(r) = crate::globalopts::class_object(clsid, ctx, iid) {
+        return r;
+    }
     if ctx & (CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER | CLSCTX_LOCAL_SERVER) == 0 {
         return Err(REGDB_E_CLASSNOTREG);
     }

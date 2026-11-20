@@ -23,6 +23,7 @@ pub mod bsd;
 extern crate alloc;
 
 pub mod errno;
+pub mod exc;
 pub mod kernel;
 pub mod mach;
 pub mod mem;
