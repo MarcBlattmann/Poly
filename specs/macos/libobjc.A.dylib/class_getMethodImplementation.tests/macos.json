@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "getmethodimp_runtime",
+      "source_sha256": "15698c0f04cca8bc6d279a3385a43d7cb3b0fc19c87b0e5d7dbdbcc8946c6eec",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0f0a18cc0fdb7fc518ab01bf3e7f523a9b826e6ec06f99a10a1db5ef40f66a70",
+          "exit_code": 0,
+          "stdout": "ok absent: a forwarding IMP\nok after adding to the superclass: its IMP\nok the subclass sees it (cache is not stale)\nok not the forwarding IMP any more\nok subclass override\nok superclass unchanged\nok after replacement\nok after method_setImplementation\nok after exchange (s)\nok after exchange (t)\nok what is returned is what a message calls\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e78bdaab64a5a5fa437030e30cdc651d2ca73327403e6e5ffb49f33b14afdb3d",
+          "exit_code": 0,
+          "stdout": "ok absent: a forwarding IMP\nok after adding to the superclass: its IMP\nok the subclass sees it (cache is not stale)\nok not the forwarding IMP any more\nok subclass override\nok superclass unchanged\nok after replacement\nok after method_setImplementation\nok after exchange (s)\nok after exchange (t)\nok what is returned is what a message calls\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

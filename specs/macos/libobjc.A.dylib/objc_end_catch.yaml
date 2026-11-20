@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_end_catch.yaml. Observed with Objective-C test programs built for x86_64 and arm64
+# (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in objc_end_catch.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_end_catch
+oracle:
+  os: "macOS 27.0 (26A428)"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 (26A428), Darwin 27.0.0; tests are single C files compiled as Objective-C by `pipeline mac build` (clang, without ARC) and linked with /usr/lib/libobjc.A.dylib and libSystem; each runs 3 times per architecture in a fresh empty scratch directory with an empty environment. arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); no output differed between the two architectures in any test of this entry. No Foundation: the root class NSObject exported by libobjc itself is the only class used."
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  The compiler calls objc_end_catch when an Objective-C @catch handler is left; programs do not call
+  it, so it is observed through handlers. When a handler ends, the reference the runtime holds on
+  the exception object is dropped: an exception that only the runtime still holds is deallocated at
+  that moment (observed: not yet inside the handler, after the handler). This happens however the
+  handler is left: falling off its end, return, break, goto, or a new throw out of it. A handler for
+  which the thrower released its own reference (inside the handler) keeps the object alive (count 1)
+  until the end of the handler, and the dealloc happens right after, before the @finally clause of
+  the same statement runs. An autoreleased exception is not freed at the end of the handler but when
+  its pool is popped. 1000 throw-and-catch rounds each with a fresh object (the handler releases the
+  thrower's reference) leave nothing alive: all 1000 deallocated, at most one alive at a time; 50
+  nested handlers, each for a different exception, all stay alive until their own handler ends and
+  are all freed by the end. When a handler throws another exception both objects are released (the
+  first when the handler is left by the throw; the second where it is caught). An exception thrown
+  and fully caught inside a @finally clause while another is propagating leaves the propagating one
+  undisturbed: it still arrives at its handler as the same object.
+returns:
+  end_of_handler: "the runtime's reference on the exception is released; the object is deallocated now if nobody else holds it"
+errors:
+  none: "not applicable"
+side_effects: >
+  The reference taken for the handler is released; -dealloc of the exception runs at that moment if
+  it was the last reference.
+threading: >
+  Per thread.
+ordering:
+  - "the exception's -dealloc runs when the handler ends, before the @finally clause of the same @try statement"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

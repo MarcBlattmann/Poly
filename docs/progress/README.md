@@ -42,9 +42,9 @@ Roadmap progress and API coverage for [Poly](../../README.md). See [docs/ROADMAP
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,616 | 1,107 | 3,457 | 3,796 | 52,960 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,627 | 1,108 | 3,457 | 3,809 | 52,957 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 20 | 0 | 79 | 418 | 0 | 0 |
-| macOS | framework API | 880,557 | 0 | 0 | 522 | 880,035 | 0 | 0 |
+| macOS | framework API | 880,557 | 0 | 0 | 824 | 879,733 | 0 | 0 |
 
 *API coverage* is green entries out of the entries that are ours to build: *app-provided* entries (libraries the application or its installer supplies, ADR 0055) are listed under *Entries* but left out of the percentages, and so are entries *not applicable by design* (calls the reference OS itself does not offer on x86-64, or that would replace the running kernel; Poly answers them as the reference does). *App-weighted* counts each API by how often the target apps call it; it is the number that tracks real progress and appears once the call tracer exists.
 
@@ -74,6 +74,7 @@ Seeded from (names only):
 - `windows-audio-w2`: The COM audio interfaces of mmdevapi and audioses that Chrome for Windows calls for shared-mode output (device enumerator, devices, IAudioClient, render client, clock, session control), found by a COM-level trace of Chrome on the Windows oracle (spec-win-wasapi); names from Microsoft Learn, mmdeviceapi.h, audioclient.h and audiopolicy.h @ `Windows 11 26H2 build 26300.9974`
 - `windows-com-state`: COM state of a thread and process observed by spec agents on the Windows oracle where Chrome's browser process reaches it (TEB.ReservedForOle, the global interface table, BITS); the names come from Microsoft Learn, objidl.h and bits.h (spec-com-ole-tls) @ `Windows 11 25H2 build 26200.9974`
 - `windows-export-probe`: Exported names of Windows 11 system DLLs (kernelbase.dll, userenv.dll) found by spec agents on the oracle where Chrome's sandbox set-up reaches them; names only (spec-chrome-win-s2b) @ `Windows 11 25H2 build 26200.9974`
+- `windows-registry-defaults`: What a Windows machine's registry holds by default in the 64-bit and the 32-bit view (HKLM\SOFTWARE and its Wow6432Node, the Classes roots, CurrentVersion, the standard COM interface, class and type-library registrations), read by test programs on the oracle; names and the small values the behaviour needs (spec-win-wow64-defaults, docs/windows/registry-defaults.md) @ `Windows 11 26H2 build 26300.9974`
 - `windows-typelib-file`: The binary type-library file (.tlb and the TYPELIB resource of an exe or dll) as ITypeLib and ITypeInfo read it, by black-box observation of files written with CreateTypeLib2 and of the updater's own libraries (docs/windows/typelib-file-format.md; spec-win-typelib-format) @ `Windows 11 25H2 build 26200.9974`
 - `wine-spec`: Wine .spec export lists (wine-mirror/wine dlls/*/*.spec) @ `840a939ee526137639665ff5f587224d6a36403f`
 - `xnu-mach-traps`: XNU osfmk/kern/syscall_sw.c mach_trap_table @ `f6217f891ac0bb64f3d375211650a4c1ff8ca1ea`

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/method_setImplementation.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in method_setImplementation.tests/macos.json.
+id: macos/api/libobjc.A.dylib/method_setImplementation
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  IMP method_setImplementation(Method m, IMP imp). Replaces the method's implementation and returns
+  the previous one (setting the same IMP again returns it). The next message uses the new
+  implementation, also at call sites and caches warmed up before; the Method keeps its selector, its
+  type encoding and its pointer, and class_getMethodImplementation and method_getImplementation show
+  the new IMP. The old IMP remains callable. The change belongs to the class that owns the Method: a
+  Method found through a subclass that merely inherits the method is the superclass's, so the
+  superclass and every subclass that does not override it change together; a subclass override or a
+  Method added to a subclass is unaffected by changes to the superclass's Method and changes only that
+  class. Restoring the old IMP restores the old behaviour. Works on NSObject-derived run-time classes
+  and on compiled classes.
+returns:
+  previous_imp: "the implementation the method held before"
+errors:
+  none: "no error codes"
+  null_method: "not observed"
+side_effects: "the method's implementation changes for every receiver of the owning class and its inheriting subclasses"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "effective for the next message after the call returns"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

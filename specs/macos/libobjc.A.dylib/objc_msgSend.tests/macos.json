@@ -1,0 +1,112 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:01",
+  "tests": [
+    {
+      "name": "msgsend_cache",
+      "source_sha256": "dbd484ab0a41081162a30fbc737fccd029d6c79168085aa84724ef7fcbc2af35",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "358f05c36e95e8780ea332473f203f74f7dd86cd10cbebc479612751449dfc43",
+          "exit_code": 0,
+          "stdout": "ok a\nok b inherits\nok c overrides\nok class_addMethod on B\nok b sees the new method at once\nok a is untouched\nok c keeps its own\nok a sees the replaced method\nok b inherits the replaced method\nok c inherits the replaced method\nok old implementation returned\nok subclass sees the change\nok v now runs w's code\nok w now runs v's code\nok swapped back: v\nok swapped back: w\nok add a class method\nok +w\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7dd1c1b94d5dd58c5436e0ad6db9a8f531e0af18795301f79b2cf38aecb391ef",
+          "exit_code": 0,
+          "stdout": "ok a\nok b inherits\nok c overrides\nok class_addMethod on B\nok b sees the new method at once\nok a is untouched\nok c keeps its own\nok a sees the replaced method\nok b inherits the replaced method\nok c inherits the replaced method\nok old implementation returned\nok subclass sees the change\nok v now runs w's code\nok w now runs v's code\nok swapped back: v\nok swapped back: w\nok add a class method\nok +w\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "msgsend_nil",
+      "source_sha256": "2670f98c813244290d4eb4422cd2e6978fd6928f65c4e9468a7131188c31609f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "969380ec67e2385571443f3659acbae8be4fa3dbc9f4787ea89d7cae94d2fd28",
+          "exit_code": 0,
+          "stdout": "ok int\nok long\nok char\nok BOOL\nok pointer\nok id\nok double\nok float\nok two-long struct (both registers zero)\nok two-int struct\nok two-double struct (both floating registers zero)\nok four-float struct (arm64 registers s0-s3 zero)\nok four-double struct (arm64 registers d0-d3 zero)\nok no method was called\nok +resolveInstanceMethod: is not asked\nok arguments are evaluated\nok unknown selector\nok NULL selector\nok nil Class\nok a live receiver works\nok and the method ran once\nsummary 21 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ad4680991984631c10ec7467d37717c2a07491f46ef0ae9ace89a3ef6adeb372",
+          "exit_code": 0,
+          "stdout": "ok int\nok long\nok char\nok BOOL\nok pointer\nok id\nok double\nok float\nok two-long struct (both registers zero)\nok two-int struct\nok two-double struct (both floating registers zero)\nok no method was called\nok +resolveInstanceMethod: is not asked\nok arguments are evaluated\nok unknown selector\nok NULL selector\nok nil Class\nok stret leaves the buffer alone\nok fpret long double reads zero\nok a live receiver works\nok and the method ran once\nsummary 21 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "msgsend_tagged",
+      "source_sha256": "4414c8ae67ddd40c3ff7751d5bcb7fbfff2f6c1772d890d29931c2070eeb2282",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "cb20ccab7bb844e20d0b04bc9669051b44da66b476f03c999ce2a5c129d50b55",
+          "exit_code": 0,
+          "stdout": "ok Foundation loads\nok NSNumber exists\nok a small NSNumber is a tagged pointer\nvalue its class __NSCFNumber\nok intValue\nok doubleValue\nok boolValue\nok another number\nok isKindOfClass: NSNumber\nok -class is the same as object_getClass\nok -self returns the pointer\nok object_isClass is false\nok objc_retain returns the same pointer\nok still usable after extra releases\nok objc_autorelease returns the same pointer\nok equal small numbers are the same pointer\nok a big NSNumber is not tagged\nok and still answers\nok a short string is a tagged pointer\nvalue its class NSTaggedPointerString\nok length\nvalue UTF8String ab\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "745f7df538a69e7db077cd6572c281d49b56b9250977a2d353df4c435f1b2ba3",
+          "exit_code": 0,
+          "stdout": "ok Foundation loads\nok NSNumber exists\nok a small NSNumber is a tagged pointer\nvalue its class __NSCFNumber\nok intValue\nok doubleValue\nok boolValue\nok another number\nok isKindOfClass: NSNumber\nok -class is the same as object_getClass\nok -self returns the pointer\nok object_isClass is false\nok objc_retain returns the same pointer\nok still usable after extra releases\nok objc_autorelease returns the same pointer\nok equal small numbers are the same pointer\nok a big NSNumber is not tagged\nok and still answers\nok a short string is a tagged pointer\nvalue its class NSTaggedPointerString\nok length\nvalue UTF8String ab\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "msgsend_unrecognized",
+      "source_sha256": "67ae97b2677126503a58437cbcb12c407cda17d9eeda61b448dee985bd08ccd0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5de68a5b435ed693cca10c81118b281ef8b9a47a35c7e271f99c27b1ecaab2bb",
+          "exit_code": 0,
+          "stdout": "child: start\nchild: resolver asked for nosuchmethod\ninstance: killed by signal 6, exit status -1\nok instance\nchild: start\nchild: class resolver asked for nosuchclassmethod\nclass: killed by signal 6, exit status -1\nok class\nchild: start\nchild: resolver asked for claimsToResolve\nliar: killed by signal 6, exit status -1\nok liar\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ad146e46349d070ddb463402597a7de180b9569a369529a531fd5c7aa03deac9",
+          "exit_code": 0,
+          "stdout": "child: start\nchild: resolver asked for nosuchmethod\ninstance: killed by signal 6, exit status -1\nok instance\nchild: start\nchild: class resolver asked for nosuchclassmethod\nclass: killed by signal 6, exit status -1\nok class\nchild: start\nchild: resolver asked for claimsToResolve\nliar: killed by signal 6, exit status -1\nok liar\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/class_replaceMethod.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in class_replaceMethod.tests/macos.json.
+id: macos/api/libobjc.A.dylib/class_replaceMethod
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  IMP class_replaceMethod(Class cls, SEL name, IMP imp, const char *types). Adds the method to cls, or
+  replaces the implementation of the method cls itself already defines, and returns the previous
+  implementation of the class's own method. When the class had no method of its own for the selector
+  (a new selector, or one only a superclass defines) the method is added and the return value is NULL;
+  the superclass's method is not touched. When the class had its own method the previous IMP is
+  returned and the Method object (class_getInstanceMethod gives the same pointer before and after) now
+  holds the new IMP. The next message uses the new implementation, in the class and in subclasses that
+  inherit the method; a subclass with its own method keeps it. The type string of a method that
+  already existed is kept: replacing with another string ("v@:" over "q@:") leaves "q@:"; a new method
+  takes the given string, copied, and a NULL string gives the empty string. Works on a metaclass for
+  class methods (NULL for a new class method, the old IMP for a replaced one, and subclasses inherit
+  the class method).
+returns:
+  previous_imp: "the IMP the class's own method had before"
+  null: "NULL: the class had no method of its own for that selector"
+errors:
+  none: "no error codes"
+side_effects: "adds or replaces a method; method caches are updated so the next message sees it"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "effective for the next message after the call returns"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_allocateClassPair.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in objc_allocateClassPair.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_allocateClassPair
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  Class objc_allocateClassPair(Class superclass, const char *name, size_t extraBytes). Makes a new,
+  not yet registered class and its metaclass and returns the class; nothing is findable by name until
+  objc_registerClassPair. The name is copied. class_getName gives the name for the class and for its
+  metaclass. The class's superclass is the one given, and the metaclass's superclass is the
+  superclass's metaclass; object_getClass(class) is the new metaclass and class_isMetaClass says so.
+  Returns nil, and creates nothing, when the name is already taken by a registered class (compiled or
+  run-time, including "NSObject") or when the superclass is a class that was allocated but not
+  registered yet; once that superclass is registered the same call works. A nil superclass makes a
+  root class: it has no superclass, its metaclass's superclass is the class itself, its instance size
+  is one pointer (8 bytes), and it does not respond to alloc, retain or the other NSObject methods; it
+  needs a +initialize method on its metaclass before the first message is sent to it, otherwise that
+  message ends the process with the message "+[Name initialize]: unrecognized selector sent to
+  instance ... (no message forward handler is installed)" on stderr and SIGABRT. Before registration
+  the class takes methods (class_addMethod, also on the metaclass for class methods) and instance
+  variables (class_addIvar: YES; a name already used by the class gives NO); the instance size of the
+  new class equals the superclass's until it is registered, and after registration it has grown by the
+  ivars added (8 + 4 bytes with alignments 3 and 2 grew it by 16). class_addIvar after registration
+  returns NO. extraBytes (64 was tried) is accepted and the class works. An empty name makes a class
+  whose name is the empty string. Allocating the same still-unregistered name twice gives a class both
+  times. A NULL name crashes the process (SIGSEGV) and must not be tested for.
+returns:
+  class: "a new class (pointer, never a name that is already registered); its metaclass is object_getClass(class)"
+  nil: "the name is taken by a registered class, or the superclass has not been registered"
+errors:
+  name_taken: "nil, with nothing written to stderr"
+  unregistered_superclass: "nil"
+  null_name: "SIGSEGV (crash); not a defined result"
+side_effects: "allocates the class pair and copies the name; reserves nothing visible by name; the superclass is not changed"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "the class pair exists and can be given methods and ivars from the call until objc_registerClassPair; ivars only until then"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_thread_set_errors",
+      "source_sha256": "e7a87b7c4cd7c0bf2179fd75302bf69d1c27e785b98de29e847f4c925b1b3b12",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bc453d8a944478f23a9554ebddca3c061fb3d5faef76f74234b688f4bb2a06d3",
+          "exit_code": 0,
+          "stdout": "ok behavior 99: KERN_INVALID_ARGUMENT\nok flavor 999 with EXCEPTION_STATE: KERN_INVALID_ARGUMENT\nok mask 0x80000000: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the thread: MACH_SEND_INVALID_DEST\nok a name that is nothing as the thread: MACH_SEND_INVALID_DEST\nok the task port as the thread: KERN_INVALID_ARGUMENT\nok nothing was set by the failed calls\nok the same call with good arguments works\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b349bcb0b3e84f06022e5b98e58cb36c66d6d42e7b4f79fbb815cc50b85358e2",
+          "exit_code": 0,
+          "stdout": "ok behavior 99: KERN_INVALID_ARGUMENT\nok flavor 999 with EXCEPTION_STATE: KERN_INVALID_ARGUMENT\nok mask 0x80000000: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the thread: MACH_SEND_INVALID_DEST\nok a name that is nothing as the thread: MACH_SEND_INVALID_DEST\nok the task port as the thread: KERN_INVALID_ARGUMENT\nok nothing was set by the failed calls\nok the same call with good arguments works\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_thread_set_roundtrip",
+      "source_sha256": "e9acfc892e09b2f68db909835f469747ade8bdeaa52f3b185b08be603ca4611d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "50e938ea288b81a0b74e7fc924ec0f33b4074449cee4b7d806ba64d6587fe9a1",
+          "exit_code": 0,
+          "stdout": "ok another thread, fresh: no entries\nok set on another thread succeeds\nok read back: one entry for the two exceptions, as set\nok this thread has none\nok and the task's port for access is untouched (null)\nok a second port for one exception: two entries\nok MACH_PORT_NULL takes the ports away: one entry with a null port\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5ab91766ab3873c5a41fedda757a8dd5f3ad4a1d7ac8246e3d403d2cfb1acdf9",
+          "exit_code": 0,
+          "stdout": "ok another thread, fresh: no entries\nok set on another thread succeeds\nok read back: one entry for the two exceptions, as set\nok this thread has none\nok and the task's port for access is untouched (null)\nok a second port for one exception: two entries\nok MACH_PORT_NULL takes the ports away: one entry with a null port\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

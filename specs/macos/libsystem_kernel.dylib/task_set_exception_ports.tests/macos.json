@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_task_set_errors",
+      "source_sha256": "b494a9a6ca3a889395eba22ba18d7426ce7c8e7ea38d9434147f1eafb7e5d6aa",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "541c2b030427d77ac18b83a66807e6c68391c4d3a256afad80d9d3df48b057a2",
+          "exit_code": 0,
+          "stdout": "ok behavior 99: KERN_INVALID_ARGUMENT\nok flavor 999 with EXCEPTION_STATE: KERN_INVALID_ARGUMENT\nok flavor 999 with EXCEPTION_DEFAULT: KERN_INVALID_ARGUMENT\nok EXCEPTION_STATE with THREAD_STATE_NONE is accepted\nok mask 0x80000000: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the task: MACH_SEND_INVALID_DEST\nok a name that is nothing as the task: MACH_SEND_INVALID_DEST\nok thread_set_exception_ports given the task port: KERN_INVALID_ARGUMENT\nok MACH_PORT_DEAD as the port is accepted\nvalue a port that is a receive right only: kern_return 268435466\nvalue a port name that does not exist: kern_return 268435466\nvalue behavior with the bit 0x40000000: kern_return 0\nvalue behavior with MACH_EXCEPTION_BACKTRACE_PREFERRED: kern_return 4\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e5e008c9089820149adae00aad6da424ca9aa4409493d972117284ef353846ca",
+          "exit_code": 0,
+          "stdout": "ok behavior 99: KERN_INVALID_ARGUMENT\nok flavor 999 with EXCEPTION_STATE: KERN_INVALID_ARGUMENT\nok flavor 999 with EXCEPTION_DEFAULT: KERN_INVALID_ARGUMENT\nok EXCEPTION_STATE with THREAD_STATE_NONE is accepted\nok mask 0x80000000: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the task: MACH_SEND_INVALID_DEST\nok a name that is nothing as the task: MACH_SEND_INVALID_DEST\nok thread_set_exception_ports given the task port: KERN_INVALID_ARGUMENT\nok MACH_PORT_DEAD as the port is accepted\nvalue a port that is a receive right only: kern_return 0\nvalue a port name that does not exist: kern_return 0\nvalue behavior with the bit 0x40000000: kern_return 4\nvalue behavior with MACH_EXCEPTION_BACKTRACE_PREFERRED: kern_return 4\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_task_set_roundtrip",
+      "source_sha256": "31f5fa54a72de4580218b02cb65efc1b374697982ae6348cac971cb7e383672c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fd380f4fd10f470a7ff4f38944dc4ace223bc975e75783cf9b2ec08a189bd369",
+          "exit_code": 0,
+          "stdout": "ok behavior 0x1: set succeeds and reads back in one entry\nok behavior 0x2: set succeeds and reads back in one entry\nok behavior 0x3: set succeeds and reads back in one entry\nok behavior 0x80000001: set succeeds and reads back in one entry\nok behavior 0x80000002: set succeeds and reads back in one entry\nok behavior 0x80000003: set succeeds and reads back in one entry\nok each set added a user reference to the send right\nok flavor THREAD_STATE_NONE reads back as it was given\nvalue the flavor value of THREAD_STATE_NONE here 5\nok two ports for the two exceptions: two entries\nok each with its own port and behavior\nok a mask of 0 changes nothing\nok MACH_PORT_NULL takes the ports away: one entry with a null port\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "32098d9abd94aeef0d1a020e6d43541fc7b86c5255b4d271b8fec6fd5ba92589",
+          "exit_code": 0,
+          "stdout": "ok behavior 0x1: set succeeds and reads back in one entry\nok behavior 0x2: set succeeds and reads back in one entry\nok behavior 0x3: set succeeds and reads back in one entry\nok behavior 0x80000001: set succeeds and reads back in one entry\nok behavior 0x80000002: set succeeds and reads back in one entry\nok behavior 0x80000003: set succeeds and reads back in one entry\nok each set added a user reference to the send right\nok flavor THREAD_STATE_NONE reads back as it was given\nvalue the flavor value of THREAD_STATE_NONE here 13\nok two ports for the two exceptions: two entries\nok each with its own port and behavior\nok a mask of 0 changes nothing\nok MACH_PORT_NULL takes the ports away: one entry with a null port\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

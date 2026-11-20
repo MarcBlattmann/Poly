@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_retainautorelease_basic",
+      "source_sha256": "00f9a1d298da9dc6eee63b05d222deaef4ca31b7cc35b4d13fa1661cb3582ecd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "854cdcbcec295cf63c99bcb328d08b9c3c963c156956889a37bf755cbf784879",
+          "exit_code": 0,
+          "stdout": "ok returns its argument\nvalue retainCount after objc_retainAutorelease 2\nvalue -retain calls 1\nvalue -autorelease calls 1\nvalue retainCount after the pop 1\nvalue deallocs after the pop 0\nvalue deallocs after the release 1\nok nil in, nil out\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "360f2a6b4f4cc954ee538629367bec28d547dc871a3511b02e55c151b5bc2746",
+          "exit_code": 0,
+          "stdout": "ok returns its argument\nvalue retainCount after objc_retainAutorelease 2\nvalue -retain calls 1\nvalue -autorelease calls 1\nvalue retainCount after the pop 1\nvalue deallocs after the pop 0\nvalue deallocs after the release 1\nok nil in, nil out\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_retainautorelease_pool",
+      "source_sha256": "86216ddae3b1a7ef0eedf73bca20b4ac412078bad776c8ff68e7676165d50bd6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6c8424b024d7f6b26a0514e9ad88a422a3429587f31f7bff7da96450ce2ac671",
+          "exit_code": 0,
+          "stdout": "value deallocs after the owner released 0\nvalue retainCount 1\nvalue deallocs after the pop 1\nvalue deallocs after the inner pop 2\nvalue deallocs after the outer pop 2\nvalue retainCount without a pool 2\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f70850698b3de64d323f9451d70f961af8852a871285226430cb7a7fd4d380b5",
+          "exit_code": 0,
+          "stdout": "value deallocs after the owner released 0\nvalue retainCount 1\nvalue deallocs after the pop 1\nvalue deallocs after the inner pop 2\nvalue deallocs after the outer pop 2\nvalue retainCount without a pool 2\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_storeWeak.yaml. Observed with Objective-C test programs built with
+# clang for x86_64 and arm64 (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in
+# objc_storeWeak.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_storeWeak
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively and x86_64 under Rosetta 2; every test printed the same bytes on both architectures and on every run. Test programs are built with `poly-mac: libobjc` (linked against libobjc and the root class NSObject only, no Foundation)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  A "count" below is what the root class's retainCount method reports: 1 for a new object, one per
+  owning reference. objc_storeWeak(location, obj) registers *location as a zeroing weak reference
+  to obj, sets *location to obj and returns obj; it does not change obj's count. When obj is
+  deallocated every registered location becomes nil (50 locations tested). Storing into a location
+  that already refers to another object first unregisters it from that object, so the old object's
+  death does not touch the location any more; storing the same object again is accepted. Storing
+  nil unregisters the location, sets it to nil and returns nil, also for a location that was nil.
+  For a non-nil store the object is asked once whether it allows weak references
+  (-allowsWeakReference once per store; none for a nil store). A class object can be the target.
+  Storing a weak reference to an object that is being deallocated (called from its -dealloc) is
+  fatal: the process aborts with SIGABRT (signal 6) after a message on stderr saying a weak
+  reference cannot be formed because the object may be over-released or in the process of
+  deallocation (the exact words are not part of this sheet). What happens when
+  -allowsWeakReference answers no is not observed. Identical on x86_64 and arm64. ARC-compiled
+  __weak globals, instance variables and locals (clang emits initWeak, storeWeak, loadWeakRetained
+  and destroyWeak for them): they read nil once the object is gone; a weak read gives a strong
+  reference that keeps the object alive while held; leaving the scope of a __weak local does not
+  disturb the object.
+returns:
+  object: "the argument"
+  nil: "nil when obj is nil"
+errors:
+  target_deallocating: "the process aborts (SIGABRT, 6), stderr gets a one-line message"
+side_effects: >
+  The location is registered in a table of weak references keyed by object; no count change.
+threading: >
+  No thread-specific behaviour was observed; every test ran on the main thread of one process.
+  Behaviour with several threads is not observed.
+ordering:
+  - "when the last reference of obj is released, its registered locations are nil by the time that release returns; a load made inside -dealloc already returns nil"
+timing:
+  typical: "microseconds: a few memory operations, no system call in the common case"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

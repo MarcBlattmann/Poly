@@ -26,8 +26,8 @@ pub mod ulock;
 pub mod waitq;
 
 pub use ipc::{
-    Exception, Ipc, KObject, NoThreads, PortId, RcvKey, Received, SendError, SenderInfo, SetId, Signal, Target, TaskId,
-    ThreadServer, WakeReason,
+    Exception, Ipc, KObject, NoThreads, Options, Peeked, PortId, RcvKey, Received, SendError, SenderInfo, Service,
+    SetId, Signal, Target, TaskId, ThreadServer, WakeReason,
 };
 pub use psynch::PsynchTable;
 pub use ulock::UlockTable;
@@ -35,3 +35,5 @@ pub use waitq::{ThreadId, WaitQueue};
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_ports;

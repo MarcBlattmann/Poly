@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:38:47",
+  "tests": [
+    {
+      "name": "allocinit_basic",
+      "source_sha256": "0e22005ffb9d330e7bb2a5c9f88d7075683b93c02871d3bf79dbee7ba6971d68",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2c0d8daaa0ac33fa26dd9b72954d7468b8358120615f82f38c7deccdd4e47c6a",
+          "exit_code": 0,
+          "stdout": "ok object made\nvalue class Ai\nvalue -init calls 1\nvalue +alloc calls 1\nvalue field set by -init 7\nvalue retainCount 1\nok nil class gives nil\nvalue -init calls after nil 1\nvalue NSObject instance NSObject\nvalue retainCount of NSObject instance 1\nvalue dealloc calls 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e8504f7ddfa70e1deb10d5a84f739f5366151c857e1552f4a7e0909ac8cdb150",
+          "exit_code": 0,
+          "stdout": "ok object made\nvalue class Ai\nvalue -init calls 1\nvalue +alloc calls 1\nvalue field set by -init 7\nvalue retainCount 1\nok nil class gives nil\nvalue -init calls after nil 1\nvalue NSObject instance NSObject\nvalue retainCount of NSObject instance 1\nvalue dealloc calls 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "allocinit_class",
+      "source_sha256": "ddf1b3a233319b01df3093e4cc68461a8d8f1a4601e368a5e3db688d3e1770b2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3699d6544d9ec2a3a876ffc4ae38712cdd3c5e10a386a0d8b9c8afa073534740",
+          "exit_code": 0,
+          "stdout": "ok object made\nvalue subclass Sub\nvalue Sub -init calls 1\nvalue run-time subclass RtSub\nvalue Sub -init calls after run-time subclass 2\nok class with +init still gets an instance\nvalue class with +init InitOnClass\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9bade388b5353e975aa403a93e98d95c5f5e019784e6d68e96048270afe5f367",
+          "exit_code": 0,
+          "stdout": "ok object made\nvalue subclass Sub\nvalue Sub -init calls 1\nvalue run-time subclass RtSub\nvalue Sub -init calls after run-time subclass 2\nok class with +init still gets an instance\nvalue class with +init InitOnClass\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

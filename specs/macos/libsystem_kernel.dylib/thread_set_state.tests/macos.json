@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_thread_set_state_errors",
+      "source_sha256": "43a2fa09d280d2af2d8da6fb424c97818ef40e2edc896cc4114d9df6458c3291",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6568cbbb0881cf36458b5df32c63f0cab772675ee082799d4235a8a88625a679",
+          "exit_code": 0,
+          "stdout": "ok a count one too small: KERN_INVALID_ARGUMENT\nok flavor 999: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the thread: MACH_SEND_INVALID_DEST\nok the task port as the thread: KERN_INVALID_ARGUMENT\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d35df9e9a5723cfc8412f9d4a26fd7cfb6b359e5d6cae78f8b89dd28c1a6c179",
+          "exit_code": 0,
+          "stdout": "ok a count one too small: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the thread: MACH_SEND_INVALID_DEST\nok the task port as the thread: KERN_INVALID_ARGUMENT\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_thread_set_state_register",
+      "source_sha256": "0a0aecf49b5ed5c8ee708364a139dc3e6ee3ebddba9ab9b030ed8182ae6dbf15",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "54fa39489ad71ae6f5d2f403bdeb4077843a928db53e5310331648986f05a790",
+          "exit_code": 0,
+          "stdout": "ok one exception handled\nok the thread stored the full 64-bit register the handler wrote\nok without a change the thread keeps its own value, 0x42\nok a register can be set to 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "42217defcdf685ec434fc76e824dc7099ca9ee768279520ff50db60ccaacdf67",
+          "exit_code": 0,
+          "stdout": "ok one exception handled\nok the thread stored the full 64-bit register the handler wrote\nok without a change the thread keeps its own value, 0x42\nok a register can be set to 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_semaphore_destroy_basic",
+      "source_sha256": "2e3ca2fdb9046183226476e21537a503d5b8a709ecb3b05e68bc9df417a3a38f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "89e4cbade8e68f57f2ceef23e9d27e6f5caebeb73d2adaebdbe93594260ae5a6",
+          "exit_code": 0,
+          "stdout": "ok destroy succeeds\nok the name is invalid afterwards\nok a wait on it: KERN_INVALID_NAME\nok a signal on it: KERN_INVALID_NAME\nok a second destroy: MACH_SEND_INVALID_RIGHT\nok the waiter is still waiting\nok destroy with a waiter succeeds\nok and the waiter returned KERN_TERMINATED\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cf6b928ff8b793506120a52b5d20629e24f97ad7f5968f776f298fe5f62a2a9a",
+          "exit_code": 0,
+          "stdout": "ok destroy succeeds\nok the name is invalid afterwards\nok a wait on it: KERN_INVALID_NAME\nok a signal on it: KERN_INVALID_NAME\nok a second destroy: MACH_SEND_INVALID_RIGHT\nok the waiter is still waiting\nok destroy with a waiter succeeds\nok and the waiter returned KERN_TERMINATED\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_semaphore_destroy_errors",
+      "source_sha256": "78147a7b2646470b9156e399e5b97e1f3911b711b61ea16dfabd37946a585cd6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0538559eebc8b4c71c3154c723e91b0aaff5489e653c9b6dad7dea044e5a20ce",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL as the task: MACH_SEND_INVALID_DEST\nok a name that is nothing as the task: MACH_SEND_INVALID_DEST\nok a semaphore name that is nothing: MACH_SEND_INVALID_RIGHT\nok MACH_PORT_NULL as the semaphore: KERN_INVALID_ARGUMENT\nok the task port as the semaphore: KERN_INVALID_ARGUMENT\nok the host port as the semaphore: KERN_INVALID_ARGUMENT\nok the semaphore is untouched: its value 1 lets a wait through\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "024e95617f2f2613e3e690a568b913eaddb71a8401bfff9c45a7ad753d191eae",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL as the task: MACH_SEND_INVALID_DEST\nok a name that is nothing as the task: MACH_SEND_INVALID_DEST\nok a semaphore name that is nothing: MACH_SEND_INVALID_RIGHT\nok MACH_PORT_NULL as the semaphore: KERN_INVALID_ARGUMENT\nok the task port as the semaphore: KERN_INVALID_ARGUMENT\nok the host port as the semaphore: KERN_INVALID_ARGUMENT\nok the semaphore is untouched: its value 1 lets a wait through\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

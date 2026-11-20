@@ -683,7 +683,7 @@ paths), with an empty environment.
 `libsystem_pthread`, `libsystem_malloc`, `libdyld`) are the exception: such a
 test says `poly-mac: libsystem` in a comment among its first 30 lines, includes
 `poly_mlibc.h` (`tests/macos/include`; the bootstrap, `mach_port_*`, XPC and spawn-attribute tests include
-`poly_mapi.h`, same rules) instead and calls the function under test
+`poly_mapi.h`, the exception port and thread state tests `poly_mexc.h`, same rules) instead and calls the function under test
 through libSystem. It still reports with raw `write` calls only (`check`,
 `check_str`, `value`, `finish`, the same output format), so a broken function
 cannot hide behind its own output. `mac build` lets exactly these tests import

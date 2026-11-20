@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_alloc.yaml. Observed with Objective-C test programs built for x86_64 and arm64
+# (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in objc_alloc.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_alloc
+oracle:
+  os: "macOS 27.0 (26A428)"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 (26A428), Darwin 27.0.0; tests are single C files compiled as Objective-C by `pipeline mac build` (clang, without ARC) and linked with /usr/lib/libobjc.A.dylib and libSystem; each runs 3 times per architecture in a fresh empty scratch directory with an empty environment. arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); no output differed between the two architectures in any test of this entry. No Foundation: the root class NSObject exported by libobjc itself is the only class used."
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  objc_alloc(cls) is what the compiler emits for [cls alloc]. It makes a new, uninitialised instance
+  of cls and returns it with a retain count of 1 (-retainCount of an NSObject answers 1); the first
+  word of the object is its class and a plain NSObject subclass without instance variables has an
+  instance size of 8 bytes (the same as NSObject itself). A nil class gives nil. It sends nothing
+  else: -init is not called. The class's own allocation methods are honoured, because the call goes
+  through them: when cls (or a superclass) overrides +alloc, the override runs once per objc_alloc;
+  NSObject's +alloc in turn reaches +allocWithZone:, so an override of +allocWithZone: alone also
+  runs once (the zone argument is not observable and is the default). A subclass inherits the
+  overrides (the override runs, and the object made is a Sub instance). A method added at run time
+  to the metaclass with class_addMethod is honoured by the next objc_alloc (no stale answer is
+  kept). Classes made with objc_allocateClassPair work the same. objc_allocWithZone(cls) is the same
+  as [cls allocWithZone:nil]: +allocWithZone: runs, +alloc does not. The retain count is 1, so one
+  release frees the instance and its -dealloc runs once.
+returns:
+  success: "an instance of cls, retain count 1, -init not called, instance size 8 for a class without instance variables"
+  nil_class: "nil, nothing is called"
+  class_overrides: "+alloc and/or +allocWithZone: of the class run once each; for a class overriding only +allocWithZone: the override ran once for objc_alloc"
+errors:
+  none: "no error is reported; a nil class returns nil"
+side_effects: >
+  The new object is allocated (retain count 1). Nothing else: no -init, no autorelease. Not
+  observed: a metaclass as argument, a class that is not yet realized, memory exhaustion.
+threading: >
+  Not observed to depend on threads; no shared state seen.
+ordering:
+  - "objc_alloc(C) runs C's +alloc (if overridden) exactly once, which reaches +allocWithZone:, which creates the object"
+  - "-init is never called by objc_alloc"
+  - "a method added to the metaclass at run time is called by the next objc_alloc"
+timing:
+  typical: "microseconds: one message send and an allocation"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

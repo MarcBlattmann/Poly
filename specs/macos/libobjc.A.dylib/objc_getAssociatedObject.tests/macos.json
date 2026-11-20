@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:38:53",
+  "tests": [
+    {
+      "name": "assoc_copy_class",
+      "source_sha256": "44e659883c7b52fc84e31f9dcdffb9e2c5769b3891a19f71f73e143f2f39c81b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "70fbe454aaa75ece49a6ab9a4081d88f0de1f0fb85581d24242ba9b9939cf40e",
+          "exit_code": 0,
+          "stdout": "value copyWithZone: calls after COPY_NONATOMIC set 1\nok the stored value is a copy, not the original\nvalue the copy's generation 1\nvalue original retainCount unchanged 1\nvalue copy retainCount 1\nvalue copyWithZone: calls after get 1\nvalue copyWithZone: calls after COPY set 2\nok COPY get returns the stored copy\nvalue copyWithZone: calls after setting nil with COPY 2\nok class object holds one\nok its metaclass does not\nok an instance does not\nvalue association still readable inside the owner's -dealloc 1\nvalue deallocs of Cp objects (the copy) 2\nvalue deallocs of Cp objects after releasing the original 3\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bdbde39b7f3c26c5bc9c6603003a016f1484e86636f3c0e88d4b65481fa17e72",
+          "exit_code": 0,
+          "stdout": "value copyWithZone: calls after COPY_NONATOMIC set 1\nok the stored value is a copy, not the original\nvalue the copy's generation 1\nvalue original retainCount unchanged 1\nvalue copy retainCount 1\nvalue copyWithZone: calls after get 1\nvalue copyWithZone: calls after COPY set 2\nok COPY get returns the stored copy\nvalue copyWithZone: calls after setting nil with COPY 2\nok class object holds one\nok its metaclass does not\nok an instance does not\nvalue association still readable inside the owner's -dealloc 1\nvalue deallocs of Cp objects (the copy) 2\nvalue deallocs of Cp objects after releasing the original 3\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "assoc_keys_nil",
+      "source_sha256": "8cf9d1bf99ea738f157055eac56e6ea51e472d8d076fb3c341c3396e42b6d52b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a7fc0644d3cbdf028a497db53f360d495ce47fcb0e6a76f1aa31fb458a8eb269",
+          "exit_code": 0,
+          "stdout": "ok get on nil owner\nok set of nil on nil owner returns\nok o1 has it\nok o2 does not\nok k1 value kept\nok k2 value\nok key 1 (not an address)\nok key NULL works as a key\nok an equal string at another address is another key\nok selector as key\nok removed\nok k2 removed by objc_removeAssociatedObjects\nok key 1 removed by objc_removeAssociatedObjects\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "13e6532a57211c5300068ed316880b46db2c9734092295100abdd5ef604a3419",
+          "exit_code": 0,
+          "stdout": "ok get on nil owner\nok set of nil on nil owner returns\nok o1 has it\nok o2 does not\nok k1 value kept\nok k2 value\nok key 1 (not an address)\nok key NULL works as a key\nok an equal string at another address is another key\nok selector as key\nok removed\nok k2 removed by objc_removeAssociatedObjects\nok key 1 removed by objc_removeAssociatedObjects\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

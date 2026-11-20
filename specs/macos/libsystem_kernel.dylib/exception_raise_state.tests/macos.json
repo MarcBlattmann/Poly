@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_raise_state_codes32",
+      "source_sha256": "dcd87f0883a0ca7ba4bb0bcdba5a257beb0d9329af5227aeea91b291caa4805a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "806c3684325630b893f6584aca7693d67f2fdc8548d095436799fee4fcc1a9f5",
+          "exit_code": 0,
+          "stdout": "ok task_set_exception_ports succeeds\nok three exceptions were delivered\nok access: message id\nok access: message size\nok access: not complex\nok access: the reply right is a send-once right\nok access: the local port is set\nok access: exception type\nok access: two codes\nok access: no descriptors\nok access: the state flavor is the architecture's thread state\nok access: the state count is that flavor's count\nok access: the default trailer, 8 bytes\nok undefined instruction: message id\nok undefined instruction: message size\nok undefined instruction: not complex\nok undefined instruction: the reply right is a send-once right\nok undefined instruction: the local port is set\nok undefined instruction: exception type\nok undefined instruction: two codes\nok undefined instruction: no descriptors\nok undefined instruction: the state flavor is the architecture's thread state\nok undefined instruction: the state count is that flavor's count\nok undefined instruction: the default trailer, 8 bytes\nok breakpoint: message id\nok breakpoint: message size\nok breakpoint: not complex\nok breakpoint: the reply right is a send-once right\nok breakpoint: the local port is set\nok breakpoint: exception type\nok breakpoint: two codes\nok breakpoint: no descriptors\nok breakpoint: the state flavor is the architecture's thread state\nok breakpoint: the state count is that flavor's count\nok breakpoint: the default trailer, 8 bytes\nok access: code 0 is KERN_PROTECTION_FAILURE\nok access: code 1 is the low 32 bits of the address\nok undefined instruction: code 0 is 1\nvalue breakpoint: code 0 1\nvalue message size, access 328\nok each fault was resumed: the thread went on\nok the register the handler set is what the thread stored\nsummary 40 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "55af43c4bbc52180c8c133c0b22048c471e1562c27921413b7471f1aa13dfcce",
+          "exit_code": 0,
+          "stdout": "ok task_set_exception_ports succeeds\nok three exceptions were delivered\nok access: message id\nok access: message size\nok access: not complex\nok access: the reply right is a send-once right\nok access: the local port is set\nok access: exception type\nok access: two codes\nok access: no descriptors\nok access: the state flavor is the architecture's thread state\nok access: the state count is that flavor's count\nok access: the default trailer, 8 bytes\nok undefined instruction: message id\nok undefined instruction: message size\nok undefined instruction: not complex\nok undefined instruction: the reply right is a send-once right\nok undefined instruction: the local port is set\nok undefined instruction: exception type\nok undefined instruction: two codes\nok undefined instruction: no descriptors\nok undefined instruction: the state flavor is the architecture's thread state\nok undefined instruction: the state count is that flavor's count\nok undefined instruction: the default trailer, 8 bytes\nok breakpoint: message id\nok breakpoint: message size\nok breakpoint: not complex\nok breakpoint: the reply right is a send-once right\nok breakpoint: the local port is set\nok breakpoint: exception type\nok breakpoint: two codes\nok breakpoint: no descriptors\nok breakpoint: the state flavor is the architecture's thread state\nok breakpoint: the state count is that flavor's count\nok breakpoint: the default trailer, 8 bytes\nok access: code 0 is KERN_PROTECTION_FAILURE\nok access: code 1 is the low 32 bits of the address\nok undefined instruction: code 0 is 1\nvalue breakpoint: code 0 2\nvalue message size, access 224\nok each fault was resumed: the thread went on\nok the register the handler set is what the thread stored\nsummary 40 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_raise_state_codes64",
+      "source_sha256": "f2963465e3d7b49ac44428f82a1e510f71a119514650deccfa028528ebd8177a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "dd135ecce2581224bc5fcbfb5826701bb687f775da1b3cc1f737c1aa60af43db",
+          "exit_code": 0,
+          "stdout": "ok task_set_exception_ports succeeds\nok three exceptions were delivered\nok access: message id\nok access: message size\nok access: not complex\nok access: the reply right is a send-once right\nok access: the local port is set\nok access: exception type\nok access: two codes\nok access: no descriptors\nok access: the state flavor is the architecture's thread state\nok access: the state count is that flavor's count\nok access: the default trailer, 8 bytes\nok undefined instruction: message id\nok undefined instruction: message size\nok undefined instruction: not complex\nok undefined instruction: the reply right is a send-once right\nok undefined instruction: the local port is set\nok undefined instruction: exception type\nok undefined instruction: two codes\nok undefined instruction: no descriptors\nok undefined instruction: the state flavor is the architecture's thread state\nok undefined instruction: the state count is that flavor's count\nok undefined instruction: the default trailer, 8 bytes\nok breakpoint: message id\nok breakpoint: message size\nok breakpoint: not complex\nok breakpoint: the reply right is a send-once right\nok breakpoint: the local port is set\nok breakpoint: exception type\nok breakpoint: two codes\nok breakpoint: no descriptors\nok breakpoint: the state flavor is the architecture's thread state\nok breakpoint: the state count is that flavor's count\nok breakpoint: the default trailer, 8 bytes\nok access: code 0 is KERN_PROTECTION_FAILURE\nok access: code 1 is the whole 64-bit address\nok undefined instruction: code 0 is 1\nvalue breakpoint: code 0 1\nvalue message size, access 336\nok each fault was resumed: the thread went on\nok the register the handler set is what the thread stored\nsummary 40 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f532d7b3105f60ea1d52e9d5665062430a81dc1958040b00b73bfd5ae55704e2",
+          "exit_code": 0,
+          "stdout": "ok task_set_exception_ports succeeds\nok three exceptions were delivered\nok access: message id\nok access: message size\nok access: not complex\nok access: the reply right is a send-once right\nok access: the local port is set\nok access: exception type\nok access: two codes\nok access: no descriptors\nok access: the state flavor is the architecture's thread state\nok access: the state count is that flavor's count\nok access: the default trailer, 8 bytes\nok undefined instruction: message id\nok undefined instruction: message size\nok undefined instruction: not complex\nok undefined instruction: the reply right is a send-once right\nok undefined instruction: the local port is set\nok undefined instruction: exception type\nok undefined instruction: two codes\nok undefined instruction: no descriptors\nok undefined instruction: the state flavor is the architecture's thread state\nok undefined instruction: the state count is that flavor's count\nok undefined instruction: the default trailer, 8 bytes\nok breakpoint: message id\nok breakpoint: message size\nok breakpoint: not complex\nok breakpoint: the reply right is a send-once right\nok breakpoint: the local port is set\nok breakpoint: exception type\nok breakpoint: two codes\nok breakpoint: no descriptors\nok breakpoint: the state flavor is the architecture's thread state\nok breakpoint: the state count is that flavor's count\nok breakpoint: the default trailer, 8 bytes\nok access: code 0 is KERN_PROTECTION_FAILURE\nok access: code 1 is the whole 64-bit address\nok undefined instruction: code 0 is 1\nvalue breakpoint: code 0 2\nvalue message size, access 232\nok each fault was resumed: the thread went on\nok the register the handler set is what the thread stored\nsummary 40 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

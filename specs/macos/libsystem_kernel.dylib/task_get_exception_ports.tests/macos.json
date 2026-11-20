@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_task_get_entries",
+      "source_sha256": "8af1c8b02ef269bf2b9b3e6398c180da23c1da6304d7092c80068b7293a9241b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d231388b61307a8e84766e31ec672ef3e35dbb3e4dfa656952c86792b315f34e",
+          "exit_code": 0,
+          "stdout": "ok three entries: a's, b's and the exceptions with no port\nok the access and breakpoint exceptions share an entry with port a\nok the arithmetic and software exceptions share one with port b\nok their behaviors as set\nok the others have a null port\nok the entries are in the order of their lowest exception bit\nok asking for access only: one entry whose mask is just that\nok each get adds a user reference to the port's send right\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0a5e0fffe9c7f6509c6c4596be46938e6b066849356a4a2a0f4970991d0ce7b7",
+          "exit_code": 0,
+          "stdout": "ok three entries: a's, b's and the exceptions with no port\nok the access and breakpoint exceptions share an entry with port a\nok the arithmetic and software exceptions share one with port b\nok their behaviors as set\nok the others have a null port\nok the entries are in the order of their lowest exception bit\nok asking for access only: one entry whose mask is just that\nok each get adds a user reference to the port's send right\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_task_get_fresh",
+      "source_sha256": "baef33cfead35f06a52bcfe45ec7c78ce8f8d11901bf6930af7312ed892a677d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9a1ab4558df12a03ef6b294be86d4d5ae8f32e9afb871fd484323190b8425c16",
+          "exit_code": 0,
+          "stdout": "ok the call succeeds and reports at least one entry\nok the entries together are the mask asked for\nok without overlap\nok every port is null\nok with behavior 0 and flavor 0\nvalue number of entries 1\nok thread_get_exception_ports of a fresh thread succeeds with no entries\nok asking for one exception gives one entry with that mask\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9045fbd7245f8615bef00bd2175ad83d88598e4c2b0e718d71530c75ee1a2c5f",
+          "exit_code": 0,
+          "stdout": "ok the call succeeds and reports at least one entry\nok the entries together are the mask asked for\nok without overlap\nok every port is null\nok with behavior 0 and flavor 0\nvalue number of entries 1\nok thread_get_exception_ports of a fresh thread succeeds with no entries\nok asking for one exception gives one entry with that mask\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

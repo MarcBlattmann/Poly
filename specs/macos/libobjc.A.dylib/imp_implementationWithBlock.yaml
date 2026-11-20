@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/imp_implementationWithBlock.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in imp_implementationWithBlock.tests/macos.json.
+id: macos/api/libobjc.A.dylib/imp_implementationWithBlock
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  IMP imp_implementationWithBlock(id block). Makes an implementation from a block. The IMP can be
+  added with class_addMethod, class_replaceMethod or exchanged; when a message runs it, the block is
+  called with the receiver (self) as its first argument followed by the message's arguments: _cmd is
+  not passed. Arguments and results of integer, double and struct (two longs) types work, a void block
+  works, the same IMP can serve several selectors and classes, and for a class method installed
+  through the metaclass self is the class (and the subclass for a subclass). A different IMP is
+  returned on every call, also for an identical block. The block is copied when the IMP is made: a
+  stack block made in a function that has returned still works, a captured variable has the value it
+  had at the time (changing it later does not matter), and a captured object is retained (retain count
+  1 -> 2) until imp_removeBlock (back to 1). The IMP can also be called directly as a function of
+  (self, _cmd, args...) and class_replaceMethod and method_getImplementation return the same IMP that
+  was installed. The type string for the method is whatever is passed to class_addMethod.
+returns:
+  imp: "a new IMP that calls the block; never NULL for a valid block"
+errors:
+  none: "no error codes"
+  null_block: "not observed"
+side_effects: "copies the block (retaining what it captures) and creates a trampoline IMP that lives until imp_removeBlock"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering: []
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

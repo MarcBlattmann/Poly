@@ -32,6 +32,7 @@ rules:
   mouse_buttons: "VK_LBUTTON is down in the WM_LBUTTONDOWN handler and up in WM_LBUTTONUP; VK_RBUTTON likewise; with the left button held a right click shows both down in WM_RBUTTONDOWN; the button's toggle bit flips per click"
   other_threads: "a second thread of the process (own queue, never received input) created while the main thread holds Shift (retrieved) reads VK_SHIFT down, before and after AttachThreadInput to the main thread (AttachThreadInput returns 1 both ways), and up after the release"
   set_keyboard_state: "after SetKeyboardState with VK_SHIFT = 0x80, GetKeyState(VK_SHIFT) is 0xFF80 (see GetKeyboardState)"
+  follows_read_messages: "The state is the one of the keys the calling thread has read (removed with GetMessage or PeekMessage) so far: Ctrl inserted and waiting is up; once the thread read the key-down it is down; Ctrl up inserted and waiting is still down until read. In a key-down handler it shows the state of the key messages read up to that one, not of the keys already inserted. See GetInputState and WM_KEYDOWN."
 errors:
   above_0xff: "virt_key 0x141, 0x241, 0x10041, -191: 0 (even while 'A' is down), last error ERROR_INVALID_PARAMETER (87)"
   zero_ff: "virt_key 0 and 0xFF: 0, last error unchanged"
