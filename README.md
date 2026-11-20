@@ -116,18 +116,17 @@ Seeded from (names only):
 
 ## What works
 
-Runs in QEMU today (real hardware later).
+<table align="center">
+  <tr>
+    <td align="center" width="110"><img src="https://raw.githubusercontent.com/chromium/chromium/main/chrome/app/theme/chromium/product_logo_64.png" width="40" height="40" alt="Chromium"><br><b>Chromium</b><br><sub>Linux</sub></td>
+    <td align="center" width="110"><img src="https://cdn.simpleicons.org/googlechrome" width="40" height="40" alt="Google Chrome"><br><b>Google Chrome</b><br><sub>Linux</sub></td>
+    <td align="center" width="110"><img src="https://cdn.simpleicons.org/googlechrome" width="40" height="40" alt="Chrome"><br><b>Chrome</b><br><sub>Windows (beta)</sub></td>
+    <td align="center" width="110"><img src="https://cdn.simpleicons.org/7zip" width="40" height="40" alt="7-Zip"><br><b>7-Zip</b><br><sub>Windows</sub></td>
+    <td align="center" width="110"><img src="https://cdn.simpleicons.org/git" width="40" height="40" alt="Git"><br><b>Git</b><br><sub>Windows</sub></td>
+  </tr>
+</table>
 
-| App | Platform | Status | Notes |
-|---|---|---|---|
-| Chromium | Linux | ✅ Works | Preinstalled, with sound |
-| Google Chrome (`.deb`) | Linux | ✅ Works | Installs from Google's `.deb` |
-| 7-Zip, Git | Windows | ✅ Works | Command line works |
-| Chrome (Chrome for Testing) | Windows | 🟡 Works with rough edges | Default settings work; no sound yet |
-| `ChromeSetup.exe` | Windows | 🔧 In progress | Admin prompt, unpack, updater start; stops after |
-| VLC, Notepad++ | Windows | 🟡 Starts with issues | Other app work paused for Chrome |
-| Chrome | macOS | ⏳ Planned | Loader, Mach and arm64 translator underway |
-| GNOME/KDE & OS installer | — | ⏳ Planned | Desktop choice and lean installer later |
+<p align="center"><sub>Runs in QEMU today, real hardware later.<br>Coming next: Google's Chrome installer for Windows, sound in Chrome for Windows, then macOS apps.</sub></p>
 
 ## How it works
 
