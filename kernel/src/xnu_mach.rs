@@ -13,8 +13,8 @@ use crate::time;
 use crate::user::memory::{Backing as VmBacking, Memory, Placement, Prot};
 use crate::user::{self};
 use alloc::sync::Arc;
-use core::sync::atomic::Ordering;
 use alloc::vec::Vec;
+use core::sync::atomic::Ordering;
 use poly_mach::exc::ThreadState64;
 use poly_mach::{TaskId, ThreadId, ulock};
 use poly_personality_xnu::exc;
@@ -262,7 +262,8 @@ impl XnuKernel for MachThread<'_> {
         let einval = poly_personality_xnu::errno::EINVAL;
         let process = crate::process::find(self.process.pid).ok_or(einval)?;
         let memory = self.memory().ok_or(einval)?;
-        let entry = user::Entry { rip: self.thread_entry(), rsp: start.stack, args: [start.pthread, start.func, start.arg] };
+        let entry =
+            user::Entry { rip: self.thread_entry(), rsp: start.stack, args: [start.pthread, start.func, start.arg] };
         let tid = user::spawn_in(process, memory, entry, user::DEFAULT_HOOK).map_err(|_| 35u32)?; // EAGAIN
         let _ = crate::thread::detach(tid);
         Ok(start.pthread)

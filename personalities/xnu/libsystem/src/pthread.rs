@@ -248,7 +248,7 @@ unsafe fn live(a: *const Attr) -> bool {
 #[unsafe(no_mangle)]
 unsafe extern "C" fn pthread_attr_setstacksize(a: *mut Attr, size: usize) -> i32 {
     // SAFETY: as above.
-    if !unsafe { live(a) } || size < STACK_MIN || size % 4096 != 0 {
+    if !unsafe { live(a) } || size < STACK_MIN || !size.is_multiple_of(4096) {
         return EINVAL;
     }
     // SAFETY: as above.

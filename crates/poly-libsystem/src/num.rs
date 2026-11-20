@@ -117,8 +117,7 @@ fn hex(s: &[u8]) -> Option<(f64, usize, bool)> {
     let mut digits = 0;
     let mut i = 0;
     let mut after_point = false;
-    loop {
-        let Some(&c) = s.get(i) else { break };
+    while let Some(&c) = s.get(i) {
         if c == b'.' && !after_point {
             after_point = true;
             i += 1;
@@ -266,7 +265,7 @@ mod tests {
         assert_eq!(v("0x1.fffffffffffff7p0").0, f64::from_bits(0x3fff_ffff_ffff_ffff));
         assert_eq!(v("0x1.0000000000000800000001p0").0, f64::from_bits(0x3ff0_0000_0000_0001));
         assert!(strtod(b"0x1p2000").value.is_infinite());
-        assert_eq!(v("0x123456789abcdef123p0").0, 0x1234_5678_9abc_def1_23u128 as f64);
+        assert_eq!(v("0x123456789abcdef123p0").0, 0x0012_3456_789a_bcde_f123_u128 as f64);
     }
 
     #[test]

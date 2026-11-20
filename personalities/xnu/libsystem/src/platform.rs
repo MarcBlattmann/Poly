@@ -225,4 +225,3 @@ core::arch::global_asm!(
     "    csinc w0, w1, wzr, ne",
     "    ret",
 );
-

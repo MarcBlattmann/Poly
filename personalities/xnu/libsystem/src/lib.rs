@@ -25,14 +25,14 @@ mod mem;
 mod c;
 #[cfg(feature = "compiler_rt")]
 mod compiler_rt;
-#[cfg(feature = "info")]
-mod info;
-#[cfg(feature = "m")]
-mod m;
 #[cfg(feature = "dyld")]
 mod dyld;
+#[cfg(feature = "info")]
+mod info;
 #[cfg(feature = "kernel")]
 mod kernel;
+#[cfg(feature = "m")]
+mod m;
 #[cfg(feature = "malloc")]
 mod malloc;
 #[cfg(feature = "platform")]

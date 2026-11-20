@@ -125,6 +125,11 @@ impl Signals {
     }
 }
 
+/// A signal frame could not be written or read: the guest's stack is not
+/// mapped there.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameError;
+
 /// What a handler is told about the signal (`siginfo_t`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Info {
@@ -133,13 +138,13 @@ pub struct Info {
     pub addr: u64,
 }
 
-fn put(mem: &mut GuestMem, at: u64, bytes: &[u8]) -> Result<(), ()> {
-    mem.poke(at, bytes).map_err(|_| ())
+fn put(mem: &mut GuestMem, at: u64, bytes: &[u8]) -> Result<(), FrameError> {
+    mem.poke(at, bytes).map_err(|_| FrameError)
 }
 
-fn get(mem: &GuestMem, at: u64, n: usize) -> Result<[u8; 16], ()> {
+fn get(mem: &GuestMem, at: u64, n: usize) -> Result<[u8; 16], FrameError> {
     let mut b = [0u8; 16];
-    mem.peek(at, &mut b[..n]).map_err(|_| ())?;
+    mem.peek(at, &mut b[..n]).map_err(|_| FrameError)?;
     Ok(b)
 }
 
@@ -147,7 +152,7 @@ fn get(mem: &GuestMem, at: u64, n: usize) -> Result<[u8; 16], ()> {
 /// its stack, the registers for the trampoline, the blocked set while the
 /// handler runs. `Err` if the frame cannot be written (the process then
 /// ends with the signal).
-pub fn deliver(cpu: &mut Cpu, mem: &mut GuestMem, s: &mut Signals, sig: u32, info: Info) -> Result<(), ()> {
+pub fn deliver(cpu: &mut Cpu, mem: &mut GuestMem, s: &mut Signals, sig: u32, info: Info) -> Result<(), FrameError> {
     let act = s.action(sig);
     let frame_size = (SIGINFO_SIZE + UCONTEXT_SIZE + MCONTEXT_SIZE + 15) & !15;
     let sp = (cpu.sp.wrapping_sub(RED_ZONE).wrapping_sub(frame_size)) & !15;
@@ -155,7 +160,7 @@ pub fn deliver(cpu: &mut Cpu, mem: &mut GuestMem, s: &mut Signals, sig: u32, inf
     let uc = sp + SIGINFO_SIZE;
     let mc = (uc + UCONTEXT_SIZE + 15) & !15;
     if mc + MCONTEXT_SIZE > sp + frame_size + 16 {
-        return Err(());
+        return Err(FrameError);
     }
     // siginfo: signo, errno, code, pid, uid, status, addr.
     let mut si = [0u8; SIGINFO_SIZE as usize];
@@ -213,10 +218,11 @@ pub fn deliver(cpu: &mut Cpu, mem: &mut GuestMem, s: &mut Signals, sig: u32, inf
 
 /// `sigreturn(ucontext, style)`: every register and the blocked set from
 /// the frame.
-pub fn sigreturn(cpu: &mut Cpu, mem: &GuestMem, s: &mut Signals, uc: u64) -> Result<(), ()> {
-    let word =
-        |at: u64| -> Result<u64, ()> { Ok(u64::from_le_bytes(get(mem, at, 8)?[..8].try_into().map_err(|_| ())?)) };
-    let mask = u32::from_le_bytes(get(mem, uc + 4, 4)?[..4].try_into().map_err(|_| ())?);
+pub fn sigreturn(cpu: &mut Cpu, mem: &GuestMem, s: &mut Signals, uc: u64) -> Result<(), FrameError> {
+    let word = |at: u64| -> Result<u64, FrameError> {
+        Ok(u64::from_le_bytes(get(mem, at, 8)?[..8].try_into().map_err(|_| FrameError)?))
+    };
+    let mask = u32::from_le_bytes(get(mem, uc + 4, 4)?[..4].try_into().map_err(|_| FrameError)?);
     let mc = word(uc + 48)?;
     let ss = mc + MC_SS;
     for i in 0..29 {
@@ -226,13 +232,13 @@ pub fn sigreturn(cpu: &mut Cpu, mem: &GuestMem, s: &mut Signals, uc: u64) -> Res
     cpu.x[30] = word(ss + 240)?;
     cpu.sp = word(ss + 248)?;
     cpu.pc = word(ss + 256)?;
-    cpu.nzcv = u32::from_le_bytes(get(mem, ss + 264, 4)?[..4].try_into().map_err(|_| ())?) & 0xf000_0000;
+    cpu.nzcv = u32::from_le_bytes(get(mem, ss + 264, 4)?[..4].try_into().map_err(|_| FrameError)?) & 0xf000_0000;
     let ns = mc + MC_NS;
     for i in 0..32 {
         cpu.v[i] = u128::from_le_bytes(get(mem, ns + 16 * i as u64, 16)?);
     }
-    cpu.fpsr = u32::from_le_bytes(get(mem, ns + 512, 4)?[..4].try_into().map_err(|_| ())?);
-    cpu.fpcr = u32::from_le_bytes(get(mem, ns + 516, 4)?[..4].try_into().map_err(|_| ())?);
+    cpu.fpsr = u32::from_le_bytes(get(mem, ns + 512, 4)?[..4].try_into().map_err(|_| FrameError)?);
+    cpu.fpcr = u32::from_le_bytes(get(mem, ns + 516, 4)?[..4].try_into().map_err(|_| FrameError)?);
     s.blocked = mask & !(bit(SIGKILL) | bit(SIGSTOP));
     Ok(())
 }
@@ -261,7 +267,7 @@ mod tests {
         s.sigaction(30, Some(Action { handler: 0x5000, tramp: 0x6000, mask: 1 << 1, flags: SA_SIGINFO })).unwrap();
         deliver(&mut cpu, &mut mem, &mut s, 30, Info { code: 0, pid: 7, addr: 0 }).unwrap();
         assert_eq!((cpu.pc, cpu.x[0], cpu.x[1], cpu.x[2]), (0x6000, 0x5000, STYLE_SIGINFO, 30));
-        assert!(cpu.sp < before.sp - RED_ZONE && cpu.sp % 16 == 0);
+        assert!(cpu.sp < before.sp - RED_ZONE && cpu.sp.is_multiple_of(16));
         // The signal and the action's mask are blocked inside the handler.
         assert_eq!(s.blocked, 1 << 29 | 1 << 1);
         // siginfo: signo 30, pid 7.

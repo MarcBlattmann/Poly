@@ -117,11 +117,7 @@ fn make(fd: i32, fflags: i16, child: i32) -> *mut File {
             crate::set_errno(ENOMEM);
             return null_mut();
         }
-        o.write(Opened {
-            file: File::new(fd as i16, fflags, null_mut()),
-            stream: Stream::new(fd, Mode::Full),
-            child,
-        });
+        o.write(Opened { file: File::new(fd as i16, fflags, null_mut()), stream: Stream::new(fd, Mode::Full), child });
         (*o).file.cookie = &raw mut (*o).stream as *mut c_void;
         open_list()[slot] = o;
         &raw mut (*o).file
@@ -384,7 +380,7 @@ unsafe extern "C" fn freopen(path: *const u8, mode: *const u8, f: *mut File) -> 
             return null_mut();
         }
         // Keep the descriptor number of a standard stream.
-        let fd = if old >= 0 && old <= 2 && fd != old {
+        let fd = if (0..=2).contains(&old) && fd != old {
             dup2(fd, old);
             close(fd);
             old
@@ -475,7 +471,14 @@ unsafe fn spawn_shell(cmd: *const u8) -> i32 {
     let mut pid = 0;
     // SAFETY: the arguments are strings; `environ` is the environment.
     let r = unsafe {
-        posix_spawn(&mut pid, c"/bin/sh".as_ptr() as *const u8, core::ptr::null(), core::ptr::null(), argv.as_ptr(), environ)
+        posix_spawn(
+            &mut pid,
+            c"/bin/sh".as_ptr() as *const u8,
+            core::ptr::null(),
+            core::ptr::null(),
+            argv.as_ptr(),
+            environ,
+        )
     };
     if r != 0 {
         crate::set_errno(r);

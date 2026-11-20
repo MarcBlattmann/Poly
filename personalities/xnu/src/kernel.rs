@@ -216,7 +216,7 @@ pub trait XnuKernel {
     /// bsdthread_register: remember libpthread's thread entry point; a
     /// second registration is `EINVAL` (the sheet).
     fn register_thread_entry(&mut self, _entry: u64) -> Result<(), u32> {
-        Err(crate::errno::EINVAL as u32)
+        Err(crate::errno::EINVAL)
     }
 
     /// bsdthread_terminate: end the calling thread (not the process) once

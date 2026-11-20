@@ -14,9 +14,15 @@ unsafe extern "C" {
     fn ioctl(fd: i32, req: u64, arg: *mut u8) -> i32;
     fn __sigaction(sig: i32, new: *const KernelAction, old: *mut Action) -> i32;
     fn getrusage(who: i32, usage: *mut u8) -> i32;
-    fn __ulock_wait2(op: u32, addr: *mut u32, value: u64, timeout_ns: u64, value2: u64) -> i32;
-    fn __sysctlbyname(name: *const u8, len: usize, old: *mut u8, oldlen: *mut usize, new: *const u8, newlen: usize)
-    -> i32;
+    fn __ulock_wait2(op: u32, addr: *const u32, value: u64, timeout_ns: u64, value2: u64) -> i32;
+    fn __sysctlbyname(
+        name: *const u8,
+        len: usize,
+        old: *mut u8,
+        oldlen: *mut usize,
+        new: *const u8,
+        newlen: usize,
+    ) -> i32;
 }
 
 // ------------------------------------------------------------ ctype
@@ -391,7 +397,9 @@ extern "C" fn clock() -> u64 {
     // SAFETY: a struct rusage is 144 bytes (<sys/resource.h>); RUSAGE_SELF.
     if unsafe { getrusage(0, ru.as_mut_ptr()) } == 0 {
         let word = |o: usize| i64::from_le_bytes(ru[o..o + 8].try_into().unwrap_or([0; 8]));
-        let micros = |o: usize| word(o) * 1_000_000 + i64::from(i32::from_le_bytes(ru[o + 8..o + 12].try_into().unwrap_or([0; 4])));
+        let micros = |o: usize| {
+            word(o) * 1_000_000 + i64::from(i32::from_le_bytes(ru[o + 8..o + 12].try_into().unwrap_or([0; 4])))
+        };
         return (micros(0) + micros(16)) as u64;
     }
     // SAFETY: one use per call.
@@ -491,9 +499,9 @@ unsafe extern "C" fn nanosleep(req: *const [i64; 2], rem: *mut [i64; 2]) -> i32 
     }
     let ns = (sec as u64).saturating_mul(1_000_000_000).saturating_add(nsec as u64);
     if ns > 0 {
-        let mut word = 0u32;
+        let word = 0u32;
         // SAFETY: our own word; the call returns at the timeout.
-        unsafe { __ulock_wait2(1, &mut word, 0, ns, 0) };
+        unsafe { __ulock_wait2(1, &word, 0, ns, 0) };
     }
     if !rem.is_null() {
         // SAFETY: the C contract.
@@ -571,12 +579,12 @@ extern "C" fn localeconv() -> *const Lconv {
 #[unsafe(no_mangle)]
 extern "C" fn sysconf(name: i32) -> i64 {
     match name {
-        1 => 1 << 20,   // _SC_ARG_MAX
-        3 => 100,       // _SC_CLK_TCK
-        5 => 256,       // _SC_OPEN_MAX
+        1 => 1 << 20,    // _SC_ARG_MAX
+        3 => 100,        // _SC_CLK_TCK
+        5 => 256,        // _SC_OPEN_MAX
         29 => PAGE_SIZE, // _SC_PAGESIZE
-        57 | 58 => 1,   // _SC_NPROCESSORS_CONF, _ONLN
-        200 => 65_536,  // _SC_PHYS_PAGES
+        57 | 58 => 1,    // _SC_NPROCESSORS_CONF, _ONLN
+        200 => 65_536,   // _SC_PHYS_PAGES
         _ => {
             crate::set_errno(EINVAL);
             -1
@@ -617,7 +625,13 @@ unsafe extern "C" fn confstr(name: i32, buf: *mut u8, len: usize) -> usize {
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn sysctlbyname(name: *const u8, old: *mut u8, oldlen: *mut usize, new: *const u8, newlen: usize) -> i32 {
+unsafe extern "C" fn sysctlbyname(
+    name: *const u8,
+    old: *mut u8,
+    oldlen: *mut usize,
+    new: *const u8,
+    newlen: usize,
+) -> i32 {
     // SAFETY: the C contract; the kernel checks the pointers.
     unsafe { __sysctlbyname(name, cstr::strlen(name), old, oldlen, new, newlen) }
 }
