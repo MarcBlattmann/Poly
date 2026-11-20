@@ -24,7 +24,7 @@ rules:
   callback_event: "CALLBACK_EVENT: the callback argument is an event handle; it is set (SetEvent) when the device is opened, whenever a buffer is finished (WHDR_DONE already set) and when the device is closed; not by prepare, write or unprepare; the application resets it. Reset also sets it"
   callback_window: "CALLBACK_WINDOW: the callback argument is a window; MM_WOM_OPEN, MM_WOM_DONE (lParam = header address) and MM_WOM_CLOSE are posted to it, in that order, wParam = the device handle, delivered when the window's thread pumps messages. A value that is not a window is MMSYSERR_INVALPARAM (the handle variable is left alone)"
   callback_thread: "CALLBACK_THREAD: the callback argument is a thread id; the same three messages are posted to that thread's queue as thread messages (no window), wParam = the handle, lParam as above"
-  bad_callback_in_query: "in a query the callback argument is not checked, except that a CALLBACK_WINDOW value that is not a window is MMSYSERR_INVALPARAM"
+  bad_callback_in_query: "(observed once, outside the tests) in a query the callback argument is not checked, except that a CALLBACK_WINDOW value that is not a window is MMSYSERR_INVALPARAM"
   handle: "the handles of several opens (of the same device) are different and non-zero"
   no_device: "with no sound device, every query and every open (device 0, device 1, the mapper) is MMSYSERR_BADDEVICEID (not MMSYSERR_NODRIVER); a query leaves the handle variable alone, an open sets it to 0; no callback is made; calls with a handle that was never made (prepare, close) are MMSYSERR_INVALHANDLE"
 errors:
