@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfrunloopgetcurrent_main_thread",
+      "source_sha256": "1b5c61e3d996fca8c42d781dee66fc87e7e2c82706887dbe80d9cf80a35042a9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ec50cbd2824005d7dcd59bca3119b4b636281e4c2a3c958e978c1bf7e1f2a444",
+          "exit_code": 0,
+          "stdout": "ok cur != NULL\nok CFRunLoopGetCurrent() == cur\nok CFRunLoopGetMain() == cur\nok CFGetTypeID(cur) == CFRunLoopGetTypeID()\nok CFRunLoopCopyCurrentMode(cur) == NULL\nok cf_is(kCFRunLoopDefaultMode, \"kCFRunLoopDefaultMode\")\nok cf_is(kCFRunLoopCommonModes, \"kCFRunLoopCommonModes\")\nok !CFRunLoopIsWaiting(cur)\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c7a41321877ac46d15f8ab8c2abf8ce4f5d9060ef94559340f33391d13861334",
+          "exit_code": 0,
+          "stdout": "ok cur != NULL\nok CFRunLoopGetCurrent() == cur\nok CFRunLoopGetMain() == cur\nok CFGetTypeID(cur) == CFRunLoopGetTypeID()\nok CFRunLoopCopyCurrentMode(cur) == NULL\nok cf_is(kCFRunLoopDefaultMode, \"kCFRunLoopDefaultMode\")\nok cf_is(kCFRunLoopCommonModes, \"kCFRunLoopCommonModes\")\nok !CFRunLoopIsWaiting(cur)\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

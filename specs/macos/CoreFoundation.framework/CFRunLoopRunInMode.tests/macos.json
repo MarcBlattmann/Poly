@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfrunloopruninmode_empty",
+      "source_sha256": "64cbbcfc17e9dd2d0ae560576d1012f6e10195b41a697e56528f8e448ad18876",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a128be23b8181bc59fcd62aea7fb52f484b7e645209a306b8e0abd642a038dda",
+          "exit_code": 0,
+          "stdout": "ok kCFRunLoopRunFinished == 1 && kCFRunLoopRunStopped == 2 && kCFRunLoopRunTimedOut == 3 && kCFRunLoopRunHandledSource == 4\nok r == kCFRunLoopRunFinished\nok CFAbsoluteTimeGetCurrent() - t0 < 1.0\nok r == kCFRunLoopRunFinished\nok r == kCFRunLoopRunTimedOut\nok CFAbsoluteTimeGetCurrent() - t0 >= 0.25\nok CFAbsoluteTimeGetCurrent() - t0 < 2.0\nok r == kCFRunLoopRunTimedOut\nok r == kCFRunLoopRunTimedOut\nok r == kCFRunLoopRunTimedOut\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "59860b90f6ec8e76a50cf3055e232b6355ebd46e20bcd5e9dd543fccaf8c064d",
+          "exit_code": 0,
+          "stdout": "ok kCFRunLoopRunFinished == 1 && kCFRunLoopRunStopped == 2 && kCFRunLoopRunTimedOut == 3 && kCFRunLoopRunHandledSource == 4\nok r == kCFRunLoopRunFinished\nok CFAbsoluteTimeGetCurrent() - t0 < 1.0\nok r == kCFRunLoopRunFinished\nok r == kCFRunLoopRunTimedOut\nok CFAbsoluteTimeGetCurrent() - t0 >= 0.25\nok CFAbsoluteTimeGetCurrent() - t0 < 2.0\nok r == kCFRunLoopRunTimedOut\nok r == kCFRunLoopRunTimedOut\nok r == kCFRunLoopRunTimedOut\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfrunloopruninmode_sources",
+      "source_sha256": "83908ad0a6617c31a12318a71b44a82aedf3c0d255d845828cd24d39b77effa7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4dce71aa55345d27b88a4ce602263aab0a902a1a9cd462bb4b219a3bb3de4d38",
+          "exit_code": 0,
+          "stdout": "ok CFRunLoopRunInMode(mode, 0.05, false) == kCFRunLoopRunTimedOut\nok n == 0\nok n == 0\nok r == kCFRunLoopRunHandledSource\nok seq[0] == 'b'\nok n == 3\nok str_eq(seq, \"bca\")\nok r == kCFRunLoopRunTimedOut\nok CFAbsoluteTimeGetCurrent() - t0 >= 0.15\nok n == 4\nok n == 4\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "51a10d8eecda8062303f9525b47522d173383a07333b830af11f7a4fc66b9b02",
+          "exit_code": 0,
+          "stdout": "ok CFRunLoopRunInMode(mode, 0.05, false) == kCFRunLoopRunTimedOut\nok n == 0\nok n == 0\nok r == kCFRunLoopRunHandledSource\nok seq[0] == 'b'\nok n == 3\nok str_eq(seq, \"bca\")\nok r == kCFRunLoopRunTimedOut\nok CFAbsoluteTimeGetCurrent() - t0 >= 0.15\nok n == 4\nok n == 4\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

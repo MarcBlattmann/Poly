@@ -24,6 +24,13 @@ pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         (_, Personality::Xnu) => (poly_timeline::XNU, regs.rdi),
     };
     let call = poly_timeline::call(table, regs.rax);
+    // A `PolyUserCall`'s first argument points at its request: its first byte names it.
+    let arg = if table == poly_timeline::NT && regs.rax & 0x3fff == 0x1000 {
+        let mut tag = [0u8; 1];
+        crate::arch::user::copy_from_user(&mut tag, arg).map_or(arg, |()| u64::from(tag[0]))
+    } else {
+        arg
+    };
     crate::timeline::syscall(true, call, arg);
     let outcome = route(process, regs);
     crate::timeline::syscall(false, call, regs.rax);
@@ -48,7 +55,7 @@ fn route(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         Personality::Linux => Linux::dispatch(regs),
         Personality::Nt if crate::nt::is_nt_process(process.pid) => crate::nt::syscall(process, regs),
         Personality::Nt => Nt::dispatch(regs),
-        Personality::Xnu if process.xnu => crate::xnu::syscall(process, regs),
+        Personality::Xnu if process.xnu.is_some() => crate::xnu::syscall(process, regs),
         Personality::Xnu => Xnu::dispatch(regs),
         Personality::Native => Native::dispatch(regs),
     };

@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFBundleCopyResourceURL.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFBundleCopyResourceURL.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFBundleCopyResourceURL
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFBundleCopyResourceURL(bundle, resourceName, resourceType, subDirName) returns a new file URL to a
+  file in the bundle's Resources directory (Contents/Resources of an application; the bundle directory
+  itself for a plain bundle), or NULL when there is none. Name 'hello' with type 'txt' finds
+  hello.txt; name 'hello.txt' with type NULL finds it too; name 'hello' with type NULL does not (the
+  extension is not guessed); a wrong type ('png'), an empty type '' or a missing file gives NULL.
+  subDirName 'sub' looks in Resources/sub (deep.txt found there; a missing subdirectory gives NULL;
+  deep.txt without the subdirectory gives NULL). A resource that exists only in a language directory
+  (Resources/en.lproj/loc.txt) is found without naming the directory, via the language search. Name
+  'sub' with type NULL finds the directory (a URL with a directory path). The result has a file path
+  that opens and reads the bytes written there; a URL not relative (its string is file:///...
+  complete). CFBundleCopyResourceURLInDirectory(bundleURL, ...) does the same for a bundle URL;
+  CFBundleCopyResourceURLsOfType(bundle, 'txt', NULL) gives an array of all of them (at least the two
+  seen). A NULL name is not supported (returned a URL here).
+returns:
+  found: "a new URL"
+  not_found: "NULL"
+errors:
+  null_bundle: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "may read directories; allocates"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds to a millisecond (directory reads)"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

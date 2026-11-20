@@ -1729,7 +1729,8 @@ timeline.grab(lambda name, **args: qmp.cmd(name, **args), serial_log_text, '/tmp
 | `--samples` | the user-mode samples by module (`chrome.dll`, `ntdll.dll`, ...): where the programs' own time went |
 | `--lane NAME`, `--key N`, `--ms W`, `--min-bytes B` | one thread's events; another key press; the window; frames at least that big |
 
-Threads are named `role/thread` (`browser/CrBrowserMain`,
+A `PolyUserCall` is named by its request (`PolyUserCall:Window`, `PolyUserCall:Desktop`): the
+kernel records the request's first byte (its tag) as the call's argument. Threads are named `role/thread` (`browser/CrBrowserMain`,
 `gpu-process/VizCompositorThread`, `renderer/Compositor`; Linux Chromium's
 zygote children by pid). The ring holds about 14 s of a busy Chrome at 32 MiB.
 The same commands work for Linux Chromium, so the two can be compared call by

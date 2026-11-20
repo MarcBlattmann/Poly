@@ -347,3 +347,26 @@ shell32!SHAppBarMessage 2
 shell32!SHChangeNotify 4
 shell32!SHGetFileInfoW 5
 gdi32!SetBrushOrgEx 4
+
+# The 32-bit installers of the Windows apps survey (batch W0, `docs/windows/apps-survey.md`): NSIS (Notepad++,
+# Steam, Firefox), Inno Setup (VS Code) and Squirrel's host (Discord). Their imports, and the names they take with
+# `GetProcAddress`, that Poly fails or lacks, from the prototypes on Learn, so a gap fails the call instead of
+# ending the installer.
+kernel32!GetPrivateProfileStringA 6
+kernel32!GetPrivateProfileStringW 6
+kernel32!GetTempFileNameA 4
+kernel32!GetTempFileNameW 4
+kernel32!RtlUnwind 4
+kernel32!SearchPathA 6
+kernel32!SearchPathW 6
+kernel32!SetProcessDEPPolicy 1
+kernel32!SetSearchPathMode 1
+kernel32!WritePrivateProfileStringA 4
+kernel32!WritePrivateProfileStringW 4
+kernel32!lstrcatA 2
+kernel32!lstrcatW 2
+kernel32!lstrcpyA 2
+kernel32!lstrcpyW 2
+kernel32!lstrcpynA 3
+kernelbase!AppPolicyGetProcessTerminationMethod 2
+oleaut32!SafeArrayPtrOfIndex 3

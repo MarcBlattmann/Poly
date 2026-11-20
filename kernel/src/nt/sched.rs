@@ -387,11 +387,16 @@ pub fn create_thread(
                 return Err(e);
             }
         };
-        // The descriptor the creator asked for applies after its own handle is open.
-        if let Some(sd) = req.security.as_deref() {
-            let token = s.sys.objects.security.effective(pid, caller.thread);
-            s.sys.objects.assign_security(obj, poly_ntobj::ObjectType::Thread, token, Some(sd));
-        }
+        // The thread object's descriptor applies after the creator's own handle is open: the one
+        // the creator asked for, or the default of the creator's primary token (Learn,
+        // "CreateRemoteThread": "The access control lists (ACL) in the default security
+        // descriptor for a thread come from the primary token of the creator"), also for a
+        // thread made in another process.
+        let token = match req.security.as_deref() {
+            Some(_) => s.sys.objects.security.effective(pid, caller.thread),
+            None => s.sys.objects.security.process_token(pid),
+        };
+        s.sys.objects.assign_security(obj, poly_ntobj::ObjectType::Thread, token, req.security.as_deref());
         Ok::<_, NtStatus>((start, handle))
     })?;
     let entry = Entry { rip: start.entry, rsp: start.rsp, args: [start.start_routine, start.argument, start.exe_base] };
@@ -441,6 +446,13 @@ fn spawn(
     let tid_u32 = tref.0 as u32;
     match super::spawn_thread(process, memory, entry, teb, user::DEFAULT_HOOK, Some(tid_u32)) {
         Ok(kid) => {
+            // An affinity set while it waited (created suspended) applies from its start.
+            if let Some(mask) = with(|s| s.sys.thread_records.get(&tref).and_then(|r| r.affinity)) {
+                let cpus = thread::CpuSet::from_bits(mask).intersection(thread::online_cpus());
+                if !cpus.is_empty() {
+                    let _ = thread::set_affinity(kid, cpus);
+                }
+            }
             let _ = thread::detach(kid);
             if let Some(f) = process.thread_flags(tid_u32) {
                 with(|s| s.ctl.entry(tref).or_default().flags = Some(f));
@@ -457,6 +469,25 @@ fn spawn(
             });
             Err(STATUS_UNSUCCESSFUL)
         }
+    }
+}
+
+/// Kernel tests only: how long [`resume`] waits between starting a suspended process's first
+/// thread and giving up the hold its creation took, so that the thread runs to its end first
+/// (the order a loaded machine can give: the resuming thread preempted there).
+pub static RESUME_PAUSE_MS: AtomicU64 = AtomicU64::new(0);
+
+/// A hold on NT process `process` was given up (`ended`: what [`Process::release`] or
+/// [`Process::drop_holds`] returned). If that ended the process, its NT end runs now, as when its
+/// last thread leaves (`user::end_thread`): its objects and handles go and its process object is
+/// signalled, so a wait on it is satisfied and `GetExitCodeProcess` gives its status.
+///
+/// [`Process::release`]: crate::process::Process::release
+/// [`Process::drop_holds`]: crate::process::Process::drop_holds
+fn end_if_released(process: &Arc<Process>, memory: &Arc<Memory>, ended: Option<process::ExitStatus>) {
+    if ended.is_some() {
+        super::process_exit(process.pid, memory);
+        process.ended();
     }
 }
 
@@ -508,7 +539,8 @@ pub fn terminate_process_by_id(target: ProcessId, status: NtStatus) -> Result<()
             }
             return Ok(());
         }
-        let _ = process.drop_holds();
+        // The threads other processes made in it may all have left meanwhile.
+        end_if_released(&process, &memory, process.drop_holds());
     }
     for t in threads {
         terminate_other(target, t, status)?;
@@ -620,9 +652,20 @@ pub fn resume(pid: ProcessId, memory: &Arc<Memory>, thread: ThreadRef) -> Result
         if let (Some((entry, teb)), Some((process, child_memory))) = (deferred, &child) {
             let started =
                 super::start_first_thread(process, child_memory, &super::Start { entry, teb, tid: thread.0 as u32 });
-            // The hold `create_process` took while it waited. If it could not start and the
-            // threads other processes made in it have gone, the process ends here.
-            if process.release().is_some() {
+            let pause = RESUME_PAUSE_MS.load(Ordering::Relaxed);
+            if pause > 0 {
+                thread::sleep(core::time::Duration::from_millis(pause));
+            }
+            // The hold `create_process` took while it waited. The thread just started may have
+            // run to its end already (a loaded machine runs the child before this caller): its
+            // leaving did not end the process because of the hold, so the process ends here,
+            // NT object and all, as when its last thread leaves. The same if it could not start
+            // and the threads other processes made in it have gone.
+            let released = process.release();
+            if started.is_ok() {
+                end_if_released(process, child_memory, released);
+            } else if released.is_some() {
+                // `start_first_thread` ended it already (its NT part); only the waiters are left.
                 process.ended();
             }
             return started.map(|()| prev);

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFDataCreate.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFDataCreate.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFDataCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFDataCreate(alloc, bytes, length) copies length bytes into a new immutable data object (later
+  changes to the source do not show), CFDataGetLength is length, CFDataGetBytePtr the stored bytes
+  (for empty data the pointer is NULL), CFDataGetBytes(data, range, buffer) copies a range and writes
+  no further. Length 0 gives empty data, also with bytes NULL; two empty data are equal; a NULL bytes
+  pointer with a length above 0 kills the process. CFDataCreateCopy gives an equal copy,
+  CFDataCreateWithBytesNoCopy(alloc, bytes, length, deallocator) uses the caller's bytes
+  (CFDataGetBytePtr returns the same pointer; kCFAllocatorNull as the deallocator leaves them to the
+  caller). Mutable data (CFDataCreateMutable(alloc, capacity)): length starts 0 whatever capacity;
+  AppendBytes grows it; SetLength grows with zero bytes or truncates; IncreaseLength adds zero bytes;
+  DeleteBytes(range); ReplaceBytes(range, bytes, n) can change the length; CreateMutableCopy copies.
+  With a non-zero capacity the data is fixed in size: appending beyond the capacity traps (SIGTRAP);
+  capacity 0 grows freely. Data is equal to an equal mutable one.
+returns:
+  success: "a new data object"
+errors:
+  null_bytes_with_length: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+  append_beyond_fixed_capacity: "traps"
+side_effects: "allocates and copies"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds; linear in length"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

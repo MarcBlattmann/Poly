@@ -904,7 +904,7 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
                     0,
                 ))
             };
-            let affinity = k.thread_affinity(tid).unwrap_or(0);
+            let affinity = affinity_of(k, tid);
             match class {
                 THREAD_BASIC_INFORMATION => {
                     let mut b = [0u8; THREAD_BASIC_INFORMATION_SIZE];
@@ -946,6 +946,16 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
             abi::write_opt_u32(k, ret, 8)?;
             Ok(STATUS_SUCCESS)
         }
+        // ThreadIdealProcessorEx: a PROCESSOR_NUMBER (WORD group, BYTE number, BYTE reserved)
+        // (specs/windows/kernel32.dll/GetThreadIdealProcessorEx.yaml).
+        THREAD_IDEAL_PROCESSOR_EX => {
+            if length != 4 {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            let tid = t(k, &[QUERY, LIMITED])?;
+            let n = ideal_of(k, tid);
+            reply(k, buf, length, ret, &[0, 0, n, 0])
+        }
         // ThreadHideFromDebugger: one BOOLEAN, 1 for a thread made with
         // THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER (specs/windows/ntdll.dll/NtCreateThreadEx.yaml).
         17 => {
@@ -959,9 +969,7 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
         21 | 29 | 34 => Err(STATUS_ACCESS_DENIED),
         26 => Err(STATUS_ACCESS_VIOLATION),
         37 => Err(STATUS_INVALID_PARAMETER),
-        11 | 12 | 14 | 16 | 18 | 20 | 22 | 24 | 25 | 32 | 33 | 35 | 36 | 40 | 42 | 43 => {
-            Err(STATUS_INFO_LENGTH_MISMATCH)
-        }
+        11 | 12 | 14 | 16 | 18 | 20 | 22 | 24 | 25 | 32 | 35 | 36 | 40 | 42 | 43 => Err(STATUS_INFO_LENGTH_MISMATCH),
         _ => Err(STATUS_INVALID_INFO_CLASS),
     }
 }
@@ -970,16 +978,91 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
 /// `KAFFINITY`.
 pub const THREAD_AFFINITY_MASK: u64 = 4;
 
-/// `NtSetInformationThread(ThreadAffinityMask)`: the thread may run only on the CPUs of the mask
-/// (those the system has; a mask with none is `STATUS_INVALID_PARAMETER`). Needs
-/// `THREAD_SET_INFORMATION`.
+/// `ThreadIdealProcessorEx` (`ntddk.h`'s `THREADINFOCLASS`).
+pub const THREAD_IDEAL_PROCESSOR_EX: u32 = 33;
+
+/// The mask of every processor the system has (a process's mask: Poly has no other).
+pub fn system_mask<K: NtKernel>(k: &K) -> u64 {
+    let n = k.processor_count().clamp(1, 64);
+    if n == 64 { u64::MAX } else { (1u64 << n) - 1 }
+}
+
+/// A thread's affinity mask: the running thread's, else the one set for it, else its process's
+/// (specs/windows/kernel32.dll/GetThreadGroupAffinity.yaml: a suspended or finished thread has
+/// one too).
+pub fn affinity_of<K: NtKernel>(k: &mut K, tid: ThreadRef) -> u64 {
+    if let Ok(m) = k.thread_affinity(tid)
+        && m != 0
+    {
+        return m;
+    }
+    let all = system_mask(k);
+    k.with_state(|sys, _, _| sys.thread_records.get(&tid).and_then(|r| r.affinity)).unwrap_or(all)
+}
+
+/// A thread's ideal processor (specs/windows/kernel32.dll/GetThreadIdealProcessorEx.yaml): the
+/// one set, while it lies in the thread's affinity mask; otherwise one the system picks inside
+/// the mask, spread over the threads by their ids.
+pub fn ideal_of<K: NtKernel>(k: &mut K, tid: ThreadRef) -> u8 {
+    let mask = affinity_of(k, tid).max(1);
+    let set = k.with_state(|sys, _, _| sys.thread_records.get(&tid).and_then(|r| r.ideal));
+    if let Some(n) = set
+        && n < 64
+        && mask & (1 << n) != 0
+    {
+        return n;
+    }
+    let count = mask.count_ones() as u64;
+    let pick = (tid.0 / 4) % count;
+    (0..64u8).filter(|b| mask & (1 << b) != 0).nth(pick as usize).unwrap_or(0)
+}
+
+/// `NtSetInformationThread(ThreadAffinityMask)`: the thread may run only on the CPUs of the mask,
+/// which must be processors the system has (a mask with none, or with one the system lacks, is
+/// `STATUS_INVALID_PARAMETER`: Learn, "SetThreadAffinityMask"). Needs `THREAD_SET_INFORMATION`.
+/// A thread that is not running keeps the mask until it starts.
 pub fn set_thread_affinity<K: NtKernel>(k: &mut K, h: Handle, info: u64, length: u64) -> Result<NtStatus> {
     let tid = thread_of(k, h, THREAD_SET_INFORMATION)?;
     if length != 8 {
         return Err(STATUS_INFO_LENGTH_MISMATCH);
     }
     let mask = abi::read_u64(k, info)?;
-    k.set_thread_affinity(tid, mask)?;
+    if mask == 0 || mask & !system_mask(k) != 0 {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    k.with_state(|sys, _, _| {
+        if let Some(r) = sys.thread_records.get_mut(&tid) {
+            r.affinity = Some(mask);
+        }
+    });
+    match k.set_thread_affinity(tid, mask) {
+        Ok(()) | Err(STATUS_THREAD_IS_TERMINATING) => Ok(STATUS_SUCCESS),
+        Err(e) => Err(e),
+    }
+}
+
+/// `NtSetInformationThread(ThreadIdealProcessorEx)`: a PROCESSOR_NUMBER of group 0 and a
+/// processor the system has (else `STATUS_INVALID_PARAMETER`); needs `THREAD_SET_INFORMATION`.
+/// The previous ideal processor comes back in the same buffer (Poly's own convention between
+/// `kernelbase` and the kernel: `SetThreadIdealProcessorEx` returns it).
+pub fn set_thread_ideal<K: NtKernel>(k: &mut K, h: Handle, info: u64, length: u64) -> Result<NtStatus> {
+    let tid = thread_of(k, h, THREAD_SET_INFORMATION)?;
+    if length != 4 {
+        return Err(STATUS_INFO_LENGTH_MISMATCH);
+    }
+    let mut b = [0u8; 4];
+    abi::read(k, info, &mut b)?;
+    let (group, number, reserved) = (u16::from_le_bytes([b[0], b[1]]), b[2], b[3]);
+    if group != 0 || reserved != 0 || u32::from(number) >= k.processor_count().min(64) {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    let previous = ideal_of(k, tid);
+    k.with_state(|sys, _, _| {
+        if let Some(r) = sys.thread_records.get_mut(&tid) {
+            r.ideal = Some(number);
+        }
+    });
+    abi::write(k, info, &[0, 0, previous, 0])?;
     Ok(STATUS_SUCCESS)
 }
 

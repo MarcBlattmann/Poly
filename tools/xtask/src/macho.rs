@@ -11,6 +11,11 @@
 //! - `/bin/mhello-classic`: the same with classic rebase, bind and lazy bind
 //!   opcodes and `__mod_init_func` (`libgreetc.dylib`);
 //! - `/bin/mstatic`: a static program (`LC_UNIXTHREAD`, no dyld);
+//! - `/bin/mbsd`: the BSD layer (ADR 0246): it opens and reads
+//!   `/etc/mbsd.txt`, lists a directory, maps memory and the file, asks
+//!   sysctl, blocks and sends signals, and starts itself as a child with
+//!   `posix_spawn` that writes through an inherited pipe and is reaped
+//!   with `wait4`;
 //! - `/usr/lib/libSystem.B.dylib`: the stand-in, whose `exit` ends a program
 //!   when `main` returns.
 //!
@@ -52,7 +57,9 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let mhello = read("hello_x64")?;
     let classic = read("helloc_x64")?;
     let mstatic = read("static_x64")?;
-    let programs: Vec<(&str, &[u8])> = vec![("mhello", &mhello), ("mhello-classic", &classic), ("mstatic", &mstatic)];
+    let mbsd = read("bsd_x64")?;
+    let programs: Vec<(&str, &[u8])> =
+        vec![("mhello", &mhello), ("mhello-classic", &classic), ("mstatic", &mstatic), ("mbsd", &mbsd)];
     let mut tree = Tree::default();
     for (at, file) in [
         ("usr/lib/libSystem.B.dylib", "libSystem_x64.dylib"),
@@ -61,6 +68,7 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     ] {
         tree.files.push((at.into(), 0o755, read(file)?));
     }
+    tree.files.push(("etc/mbsd.txt".into(), 0o644, b"poly reads macos io\n".to_vec()));
     let image =
         initramfs::write(&root(), "poly-macho-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))?;
 
@@ -80,6 +88,12 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         if let Some(line) = b.output.lines().find(|l| l.contains("not ok ") || l.contains(" not implemented")) {
             return Err(format!("/bin/{program}: {line}"));
         }
+    }
+
+    eprintln!("==> boot test: the BSD layer: files, a directory, mmap, sysctl, signals, posix_spawn and wait4");
+    let b = run_as_init(kernel, syms, &image, "mbsd", "bsd: done\n")?;
+    if let Some(line) = b.output.lines().find(|l| l.contains("not ok ") || l.contains(" not implemented")) {
+        return Err(format!("/bin/mbsd: {line}"));
     }
     Ok(())
 }

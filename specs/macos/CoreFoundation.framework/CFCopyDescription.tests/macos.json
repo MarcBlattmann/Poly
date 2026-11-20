@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfcopydescription_arrays_and_dictionaries",
+      "source_sha256": "902beed92a465b5a918a13b37e2ea9d581e680f09f80a5249ca48b832fe6b8ec",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f8d294a73344537f3d0a91d5d9b224e3a0e8ccb5538ec6a35df9db75962b2a01",
+          "exit_code": 0,
+          "stdout": "value array of two (\\n    x,\\n    y\\n)\nvalue array of one (\\n    only\\n)\nvalue dictionary of one {\\n    key = value;\\n}\nvalue empty dictionary {\\n}\nvalue array of a number (\\n    5\\n)\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "aa240a4f2fa4d2dc8f31a310515bf151579bc3f9583a57f3a31d0c8d07198525",
+          "exit_code": 0,
+          "stdout": "value array of two (\\n    x,\\n    y\\n)\nvalue array of one (\\n    only\\n)\nvalue dictionary of one {\\n    key = value;\\n}\nvalue empty dictionary {\\n}\nvalue array of a number (\\n    5\\n)\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfcopydescription_scalars",
+      "source_sha256": "378266eaf998ce8f44e326bc9a2339ec186c9b2036e9dd586ef3291867c991db",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "392dea8ae3982d3f9a0971d713487422dea25fbf0403fda4b46cab8765ec4d8a",
+          "exit_code": 0,
+          "stdout": "value null <CFNull 0xADDR [0xADDR]>\nvalue true <CFBoolean 0xADDR [0xADDR]>{value = true}\nvalue false <CFBoolean 0xADDR [0xADDR]>{value = false}\nvalue int <CFNumber 0xADDR [0xADDR]>{value = +1, type = kCFNumberSInt32Type}\nvalue long long <CFNumber 0xADDR [0xADDR]>{value = +9223372036854775807, type = kCFNumberSInt64Type}\nvalue double <CFNumber 0xADDR [0xADDR]>{value = +2.50000000000000000000, type = kCFNumberFloat64Type}\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a16f998fa7554b284fb81dfaee38fe8a9e95b24e84b96b3e0c7cbc71a235271d",
+          "exit_code": 0,
+          "stdout": "value null <CFNull 0xADDR [0xADDR]>\nvalue true <CFBoolean 0xADDR [0xADDR]>{value = true}\nvalue false <CFBoolean 0xADDR [0xADDR]>{value = false}\nvalue int <CFNumber 0xADDR [0xADDR]>{value = +1, type = kCFNumberSInt32Type}\nvalue long long <CFNumber 0xADDR [0xADDR]>{value = +9223372036854775807, type = kCFNumberSInt64Type}\nvalue double <CFNumber 0xADDR [0xADDR]>{value = +2.50000000000000000000, type = kCFNumberFloat64Type}\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfcopydescription_strings",
+      "source_sha256": "ca882a73eeeab27933e2c349b6890ed59aa80f74db4975228f760199985fb3d4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "934497bed526b130b542c6ae58a64a1c1b136bbe4be00f3800dce4296c1accce",
+          "exit_code": 0,
+          "stdout": "value constant <CFString 0xADDR [0xADDR]>{contents = \"hello\"}\nvalue empty constant <CFString 0xADDR [0xADDR]>{contents = \"\"}\nvalue constant with accents <CFString 0xADDR [0xADDR]>{contents = \"héllo\"}\nvalue long dynamic string <CFString 0xADDR [0xADDR]>{contents = \"a string that is longer than any short string could be\"}\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4cd22dccd72264760695b1c5b8ce3d619990ba17ce9808498b33de0abfe6e9ca",
+          "exit_code": 0,
+          "stdout": "value constant <CFString 0xADDR [0xADDR]>{contents = \"hello\"}\nvalue empty constant <CFString 0xADDR [0xADDR]>{contents = \"\"}\nvalue constant with accents <CFString 0xADDR [0xADDR]>{contents = \"héllo\"}\nvalue long dynamic string <CFString 0xADDR [0xADDR]>{contents = \"a string that is longer than any short string could be\"}\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
