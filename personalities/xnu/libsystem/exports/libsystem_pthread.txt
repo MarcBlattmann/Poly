@@ -1,6 +1,22 @@
 _pthread_atfork
+_pthread_attr_destroy
+_pthread_attr_getdetachstate
+_pthread_attr_getstacksize
+_pthread_attr_init
+_pthread_attr_setdetachstate
+_pthread_attr_setstacksize
+_pthread_cond_broadcast
+_pthread_cond_destroy
+_pthread_cond_init
+_pthread_cond_signal
+_pthread_cond_timedwait
+_pthread_cond_wait
+_pthread_create
+_pthread_detach
 _pthread_equal
+_pthread_exit
 _pthread_getspecific
+_pthread_join
 _pthread_key_create
 _pthread_key_delete
 _pthread_main_np
@@ -16,3 +32,4 @@ _pthread_mutexattr_settype
 _pthread_once
 _pthread_self
 _pthread_setspecific
+_sched_yield

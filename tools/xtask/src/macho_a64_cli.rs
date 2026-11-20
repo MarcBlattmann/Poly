@@ -25,7 +25,9 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let hello = read("tests/macos/libsystem/hello_a64")?;
     let lua = read("tests/a64/cli/bin/lua")?;
     let sqlite = read("tests/a64/cli/bin/sqlite3")?;
-    let programs: Vec<(&str, &[u8])> = vec![("mhello-libsystem", &hello), ("lua", &lua), ("sqlite3", &sqlite)];
+    let threads = read("tests/a64/cli/bin/threads")?;
+    let programs: Vec<(&str, &[u8])> =
+        vec![("mhello-libsystem", &hello), ("lua", &lua), ("sqlite3", &sqlite), ("a64-threads", &threads)];
     let mut tree = Tree { files: native::runtime_files()?, ..Default::default() };
     tree.files.push(("usr/share/poly-a64/hello.lua".into(), 0o644, read("tests/a64/cli/hello.lua")?));
     tree.files.push(("usr/share/poly-a64/session.sql".into(), 0o644, read("tests/a64/cli/session.sql")?));
@@ -60,5 +62,9 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let want = String::from_utf8(read("tests/a64/cli/session.out")?).map_err(|e| e.to_string())?;
     let lines: Vec<String> = want.lines().map(String::from).collect();
     in_order("sqlite3", &b.output, &lines)?;
+
+    eprintln!("==> boot test: an arm64 C program with threads, signals and memory mappings");
+    let b = run_ending(kernel, syms, &image, "a64-threads", &[], &[], "code=0")?;
+    in_order("a64-threads", &b.output, &["threads: done, 0 failed".to_string()])?;
     Ok(())
 }

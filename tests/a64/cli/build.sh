@@ -43,5 +43,8 @@ unzip -q sqlite.zip
 (cd "sqlite-amalgamation-$SQLITE_TAG" &&
     clang $CFLAGS -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=0 -o "$out/sqlite3" shell.c sqlite3.c)
 
+# Poly's own test of threads, signals and mappings.
+clang $CFLAGS -o "$out/threads" "$here/threads.c"
+
 strip -S "$out/lua" "$out/sqlite3"
 ls -l "$out"

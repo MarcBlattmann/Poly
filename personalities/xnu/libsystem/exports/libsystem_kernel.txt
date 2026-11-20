@@ -1,5 +1,6 @@
 ___bsdthread_create
 ___bsdthread_register
+___bsdthread_terminate
 ___error
 ___exit
 ___getdirentries64

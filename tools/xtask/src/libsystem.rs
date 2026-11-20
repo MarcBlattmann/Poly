@@ -89,7 +89,7 @@ const LIBS: [Lib; 10] = [
         install: "/usr/lib/system/libsystem_pthread.dylib",
         compatibility: "1",
         current: "553.40.2",
-        links: &[],
+        links: &["libsystem_kernel"],
     },
     Lib {
         feature: "malloc",

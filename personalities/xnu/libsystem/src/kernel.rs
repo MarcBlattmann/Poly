@@ -151,6 +151,7 @@ bsd! {
     "lstat64" = 340,
     "__getdirentries64" = 344,
     "__bsdthread_create" = 360,
+    "__bsdthread_terminate" = 361,
     "kqueue" = 362,
     "kevent" = 363,
     "__bsdthread_register" = 366,
