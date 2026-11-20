@@ -371,6 +371,15 @@ cargo xtask pipeline win show <results.json>        # the observations in a resu
 cargo xtask pipeline win diff --reference <windows results.json> [--build-kernel] [--target <file.json>]
 ```
 
+**A 32-bit test** (ADR 0259) has the line `// poly-arch: x86` (anywhere in the
+file). `win build` builds it for `i686-pc-windows-msvc` (its own package under
+`target/pipeline/windows/build32`, linked as a legacy image with `/safeseh:no`, with
+Poly's own `poly-msvc32` helper routines); it runs under WOW64 on Windows and in
+compatibility mode on Poly (ADR 0186). The declarations use
+`import_name_type = "undecorated"` in `#[link]` (x86 `stdcall` names are decorated
+otherwise). The manifest says `"arch": "x86"`. Use it for what only a 32-bit process
+shows (the registry views, `Wow6432Node`, `IsWow64Process`); every other test stays x64.
+
 A test that imports `dwrite.dll` is booted with the DejaVu fonts in
 `C:\Windows\Fonts` (ADR 0170): `win poly` puts the files of `$POLY_FONT_DIR` or
 `target/fonts/dejavu-*` (`cargo xtask fonts fetch`) in its initramfs. A test
@@ -720,6 +729,19 @@ few helpers: a counting allocator, `cf_enter_app` (builds `T.app` in the scratch
 starts a copy of the test from inside it, so that the main bundle is a real application) and
 `cf_prefs_clean`. Preferences tests use domains named `test.poly.cfspec.<name>` only and remove
 their keys.
+
+**Tests about Foundation** (`specs/macos/Foundation.framework/<symbol>.tests/`; entry ids of methods are
+`objc:Class.method:`, `objc:Class+classMethod:` and `objc:Class.@property` as in the coverage map, written
+with `:` as `%3A` in file names): a test whose header comment has the line `poly-mac: foundation` stays a
+`.c` file but is compiled as Objective-C with ARC (`-x objective-c -fobjc-arc`, `-framework Foundation`),
+may load Foundation, CoreFoundation and libobjc and import their symbols (`NS...`, `CF...`,
+`_OBJC_...`, `_objc_...`, plus the blocks and unwinder symbols the compiler emits); everything else is
+refused as before. A second line `poly-mac: no-arc` builds it without ARC (NSAutoreleasePool is not
+available under ARC). It includes `poly_mfn.h`, which pulls in `poly_mcf.h` and wraps `test_main` in an
+autorelease pool; `ns_is` compares strings through CoreFoundation, so a test of an NSString method does not
+rest on that method. Tests that need a real bundle, arguments or an environment start a copy of themselves
+inside `T.app` with `cf_enter_app` / `cf_enter_app_ex(plist, extra_argument, envp)`. The defaults tests use
+suites named `test.poly.nsspec.<name>` only and remove them with `removePersistentDomainForName:`.
 
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.

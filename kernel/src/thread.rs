@@ -1196,8 +1196,9 @@ kernel_test! {
         let mut ids = alloc::vec![None; MAX_THREADS];
         let (frames_before, threads_before) = (free_frames(), live_threads());
         let room = MAX_THREADS - threads_before;
-        // Fill the table three times over, joining every thread each time.
-        for _ in 0..3 {
+        // Fill the table twice, joining every thread each time: the second fill takes the slots
+        // and stacks the first one left.
+        for _ in 0..2 {
             ids.fill(None);
             let mut n = 0;
             loop {

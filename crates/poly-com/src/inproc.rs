@@ -37,6 +37,10 @@ pub const CLSID_SHELL: Guid =
 pub const CLSID_SHELL_WINDOWS: Guid =
     Guid { data1: 0x9BA0_5972, data2: 0xF6A8, data3: 0x11CF, data4: [0xA4, 0x42, 0x00, 0xA0, 0xC9, 0x0A, 0x8F, 0x39] };
 
+/// `CLSID_MMDeviceEnumerator` (`mmdeviceapi.h`): {BCDE0395-E52F-467C-8E3D-C4579291692E}.
+pub const CLSID_MM_DEVICE_ENUMERATOR: Guid =
+    Guid { data1: 0xBCDE_0395, data2: 0xE52F, data3: 0x467C, data4: [0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E] };
+
 /// `CLSID_ShellLink` (`shobjidl_core.h`): {00021401-0000-0000-C000-000000000046}.
 pub const CLSID_SHELL_LINK: Guid =
     Guid { data1: 0x0002_1401, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
@@ -60,6 +64,8 @@ const CLASSES: &[(Guid, &str)] = &[
     (CLSID_NET_FW_POLICY2, "hnetcfg.dll\0"),
     (CLSID_NET_FW_RULE, "hnetcfg.dll\0"),
     (CLSID_SHELL, "shell32.dll\0"),
+    // The audio endpoints (audio plan W2): `mmdevapi`'s classes, filled as W2's sheets come.
+    (CLSID_MM_DEVICE_ENUMERATOR, "mmdevapi.dll\0"),
 ];
 
 /// The classes Windows serves from the desktop's own process (Explorer) as a local server.
@@ -113,6 +119,7 @@ mod tests {
         assert_eq!(server_of(&CLSID_SHELL_WINDOWS), None);
         assert_eq!(desktop_server_of(&CLSID_SHELL_WINDOWS), Some("shell32.dll\0"));
         assert_eq!(desktop_server_of(&CLSID_SHELL), None);
+        assert_eq!(server_of(&CLSID_MM_DEVICE_ENUMERATOR), Some("mmdevapi.dll\0"));
     }
 
     #[test]
@@ -124,6 +131,7 @@ mod tests {
         assert_eq!(text(&CLSID_FILE_SAVE_DIALOG), "{C0B4E2F3-BA21-4773-8DBA-335EC946EB8B}");
         assert_eq!(text(&CLSID_SHELL), "{13709620-C279-11CE-A49E-444553540000}");
         assert_eq!(text(&CLSID_SHELL_WINDOWS), "{9BA05972-F6A8-11CF-A442-00A0C90A8F39}");
+        assert_eq!(text(&CLSID_MM_DEVICE_ENUMERATOR), "{BCDE0395-E52F-467C-8E3D-C4579291692E}");
     }
 
     #[test]

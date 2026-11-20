@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsarray_arraywithobjectscount_errors_and_mutation",
+      "source_sha256": "15d5f12d5787f206465b1f3810df056f145db1275158a1064bd9d7616ceef01b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6f6fcf3d1ddad22e13131ff9e8d6ed96d41801bb6cb629dce50b66fd1fa4dc44",
+          "exit_code": 0,
+          "stdout": "ok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok r != nil && ns_is(r, \"NSRangeException\")\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok ns_is([m componentsJoinedByString:@\",\"], \"z,y,c\")\nok arr.count == 2\nok copy.count == 0 && arr.count == 2\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5e125777b78dcd4bc4f57a8345cd3863dd801a8d36aecb67950ef5b0f34c9611",
+          "exit_code": 0,
+          "stdout": "ok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok r != nil && ns_is(r, \"NSRangeException\")\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok ns_is([m componentsJoinedByString:@\",\"], \"z,y,c\")\nok arr.count == 2\nok copy.count == 0 && arr.count == 2\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsarray_bridging",
+      "source_sha256": "c8c563ecd8969fd0a32c58a7f580b8eb99a3e795f0df8fb7c1389079f5927a57",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a61893beb95783691a9d7459dd7a4f8e081ea6dc88582bb233232f5a1213799e",
+          "exit_code": 0,
+          "stdout": "ok CFGetTypeID(cf) == CFArrayGetTypeID()\nok CFArrayGetCount(cf) == 2\nok CFArrayGetValueAtIndex(cf, 0) == (__bridge const void *)a\nok ns.count == 2 && ns_is(ns[1], \"y\")\nok [ns isKindOfClass:[NSArray class]]\nok [ns isEqualToArray:@[@\"x\", @\"y\"]]\nok CFEqual((__bridge CFTypeRef)ns, (__bridge CFTypeRef)@[@\"x\", @\"y\"])\nok CFHash((__bridge CFTypeRef)ns) == [ns hash]\nok CFArrayGetCount((__bridge CFArrayRef)nm) == 1\nok nm.count == 2 && ns_is(nm[1], \"viaCF\")\nok ns_is(d, \"(\\n    a\\n)\")\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "01382f6911a0be614d378f4b10692241f4d05e8381a29a0406542f8be205c85b",
+          "exit_code": 0,
+          "stdout": "ok CFGetTypeID(cf) == CFArrayGetTypeID()\nok CFArrayGetCount(cf) == 2\nok CFArrayGetValueAtIndex(cf, 0) == (__bridge const void *)a\nok ns.count == 2 && ns_is(ns[1], \"y\")\nok [ns isKindOfClass:[NSArray class]]\nok [ns isEqualToArray:@[@\"x\", @\"y\"]]\nok CFEqual((__bridge CFTypeRef)ns, (__bridge CFTypeRef)@[@\"x\", @\"y\"])\nok CFHash((__bridge CFTypeRef)ns) == [ns hash]\nok CFArrayGetCount((__bridge CFArrayRef)nm) == 1\nok nm.count == 2 && ns_is(nm[1], \"viaCF\")\nok ns_is(d, \"(\\n    a\\n)\")\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

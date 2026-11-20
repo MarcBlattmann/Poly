@@ -1007,6 +1007,30 @@ impl VirtualMemory {
             return AccessFault::Exception(STATUS_ACCESS_VIOLATION);
         };
         let i = a.index(page);
+        // A function of an x64 program needs no stack probe for a frame of up to 8 KiB (Learn,
+        // "_chkstk Routine": "for x64 compilers it is 8K"), so it may touch the page below a
+        // stack's guard page without touching the guard page first: the stack grows over both,
+        // as if the guard page had been touched (Chrome's video decoder threads do this).
+        if a.pages.get(i) == PageState::Reserved
+            && i + 1 < a.pages.len()
+            && matches!(a.pages.get(i + 1), PageState::Committed(g) if g.is_guard())
+        {
+            let teb_stack = stack_base.is_some_and(|top| addr < top && top > a.base && a.contains(top - 1));
+            if a.stack || teb_stack {
+                let base = a.base;
+                let above = page + PAGE_SIZE;
+                if let AccessFault::Exception(e) = self.access_fault_in_stack(b, above, stack_base) {
+                    return AccessFault::Exception(e);
+                }
+                // The guard page that growth put below `above` is this page: grow through it too.
+                let a = self.allocation_mut(base).expect("live");
+                if matches!(a.pages.get(a.index(page)), PageState::Committed(g) if g.is_guard()) {
+                    return self.access_fault_in_stack(b, addr, stack_base);
+                }
+            }
+        }
+        let a = self.allocation_mut(page).expect("live");
+        let i = a.index(page);
         let PageState::Committed(p) = a.pages.get(i) else {
             return AccessFault::Exception(STATUS_ACCESS_VIOLATION);
         };

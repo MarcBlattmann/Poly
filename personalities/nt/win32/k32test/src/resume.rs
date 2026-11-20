@@ -2,8 +2,9 @@
 //! before `ResumeThread` has returned in the parent still ends as a process: the wait on it is
 //! satisfied at once and its exit code is the one it gave. The kernel test
 //! `nt_suspended_child_that_ends_during_resume_is_signalled` runs it with the kernel's resume
-//! pausing between starting the thread and letting go of the creation's hold, which is the order
-//! a loaded machine can give (the parent preempted there, the child quick).
+//! waiting, between starting the thread and letting go of the creation's hold, until the child's
+//! threads have left: the order a loaded machine can give (the parent preempted there, the child
+//! quick).
 //!
 //! Every call is on Microsoft Learn (`CreateProcessW`, `ResumeThread`, `WaitForSingleObject`,
 //! `GetExitCodeProcess`, `GetTickCount64`, `CloseHandle`, `ExitProcess`); `CREATE_SUSPENDED` is
@@ -24,7 +25,7 @@ const CHILD_CODE: u32 = 0x5EED;
 /// How many children are started, one after another.
 const CHILDREN: u32 = 4;
 /// The longest a child may take from `ResumeThread`'s return to its wait being satisfied (the
-/// kernel test's pause is spent inside `ResumeThread`, so this is the time the end takes).
+/// kernel test's wait is spent inside `ResumeThread`, so this is the time the end takes).
 const MAX_END_MS: u64 = 3000;
 
 /// `--resume-race` and `--resume-race-child`.

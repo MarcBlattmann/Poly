@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsbundle_infodictionary_plain",
+      "source_sha256": "5e0c8ef934a3948bf14f7b29094ff493e411c7c08d4980c568c74f94cacf2d06",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4d73426d62010ced09cceb2459aaa41245f15c94a032e14aa3a7cd3feed77dea",
+          "exit_code": 0,
+          "stdout": "ok info != nil && info.count == 0\nok [b objectForInfoDictionaryKey:@\"CFBundleIdentifier\"] == nil\nok [b objectForInfoDictionaryKey:@\"CFBundleName\"] == nil\nok cf != NULL && CFDictionaryGetCount(cf) == 0\nok CFGetTypeID((__bridge CFTypeRef)info) == CFDictionaryGetTypeID()\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "aa51413fd7370df334ab0c5b465707e166db35f2933dd295c1d5af033a99877d",
+          "exit_code": 0,
+          "stdout": "ok info != nil && info.count == 0\nok [b objectForInfoDictionaryKey:@\"CFBundleIdentifier\"] == nil\nok [b objectForInfoDictionaryKey:@\"CFBundleName\"] == nil\nok cf != NULL && CFDictionaryGetCount(cf) == 0\nok CFGetTypeID((__bridge CFTypeRef)info) == CFDictionaryGetTypeID()\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsbundle_infodictionary_values",
+      "source_sha256": "95a1719030942ed0d10394790d8dc9d0a3e964d506e5b5eb8c01db32b204d3e9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2ac08a4a4f0faed9dc7b19029e31fef9e52422c96ab833d54a6069ae8738c9e0",
+          "exit_code": 0,
+          "stdout": "ok info != nil && info.count == 10\nok ns_is(info[@\"CFBundleName\"], \"Probe\") && ns_is(info[@\"CFBundleVersion\"], \"42\")\nok ns_is(info[@\"CFBundleShortVersionString\"], \"1.2.3\")\nok [info[@\"MyInt\"] isKindOfClass:[NSNumber class]] && [info[@\"MyInt\"] intValue] == 7\nok info[@\"MyBool\"] == (id)kCFBooleanTrue && [info[@\"MyBool\"] boolValue]\nok [info[@\"MyArr\"] count] == 2 && ns_is(info[@\"MyArr\"][1], \"b\")\nok [info[@\"CFBundleNumericVersion\"] longLongValue] == 1107329024\nok ns_is([b objectForInfoDictionaryKey:@\"CFBundleName\"], \"Probe\")\nok [b objectForInfoDictionaryKey:@\"NoSuchKey\"] == nil && [b objectForInfoDictionaryKey:@\"cfbundlename\"] == nil\nok info == b.infoDictionary || [info isEqualToDictionary:b.infoDictionary]\nok CFBundleGetInfoDictionary(CFBundleGetMainBundle()) != NULL\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "22fa586ab6ffbcf751afe9040fae6edffc4c6c57214628565e8c16c437f5a585",
+          "exit_code": 0,
+          "stdout": "ok info != nil && info.count == 10\nok ns_is(info[@\"CFBundleName\"], \"Probe\") && ns_is(info[@\"CFBundleVersion\"], \"42\")\nok ns_is(info[@\"CFBundleShortVersionString\"], \"1.2.3\")\nok [info[@\"MyInt\"] isKindOfClass:[NSNumber class]] && [info[@\"MyInt\"] intValue] == 7\nok info[@\"MyBool\"] == (id)kCFBooleanTrue && [info[@\"MyBool\"] boolValue]\nok [info[@\"MyArr\"] count] == 2 && ns_is(info[@\"MyArr\"][1], \"b\")\nok [info[@\"CFBundleNumericVersion\"] longLongValue] == 1107329024\nok ns_is([b objectForInfoDictionaryKey:@\"CFBundleName\"], \"Probe\")\nok [b objectForInfoDictionaryKey:@\"NoSuchKey\"] == nil && [b objectForInfoDictionaryKey:@\"cfbundlename\"] == nil\nok info == b.infoDictionary || [info isEqualToDictionary:b.infoDictionary]\nok CFBundleGetInfoDictionary(CFBundleGetMainBundle()) != NULL\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
