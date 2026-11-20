@@ -101,9 +101,9 @@ pub const THREAD_STACKS_BASE: u64 = 0xffff_c080_0000_0000;
 const TABLE_SPAN: u64 = (ENTRIES as u64) * PAGE_SIZE;
 
 /// Page tables of the thread stack area, consecutive in one page directory:
-/// 16 MiB, room for 512 threads' stacks and guards (`thread::STACKS`;
-/// Chromium alone runs about 250 threads).
-pub const THREAD_STACK_TABLES: usize = 8;
+/// 128 MiB, room for 4096 threads' stacks and guards (`thread::STACKS`,
+/// `thread::MAX_THREADS`).
+pub const THREAD_STACK_TABLES: usize = 64;
 
 /// Size of the thread stack area: what its page tables map, so its tables
 /// are made once at boot and the area never needs another one.
