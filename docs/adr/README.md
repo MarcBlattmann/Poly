@@ -223,6 +223,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0246](0246-the-xnu-bsd-layer-files-memory-sysctl-signals-and-posix-spawn.md) | The XNU BSD layer: files, memory, sysctl, signals and posix_spawn | Accepted |
 | [0247](0247-a-timeline-of-one-key-press-and-fewer-nt-lock-waits.md) | A timeline of one key press, and fewer NT lock waits | Accepted |
 | [0248](0248-threads-in-another-process.md) | Threads in another process | Accepted |
+| [0249](0249-user32-keeps-window-records-while-the-window-state-is-unchanged.md) | user32 keeps window records while the window state is unchanged | Accepted |
 | [0250](0250-out-of-memory-never-panics-the-kernel.md) | Out of memory never panics the kernel | Accepted |
 | [0252](0252-the-bibata-cursor-theme.md) | The Bibata cursor theme | Accepted |
 | [0253](0253-file-descriptors-set-as-given-and-new-files-get-their-creators-default.md) | File descriptors set as given, and new files get their creator's default | Accepted |

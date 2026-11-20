@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFArrayGetValueAtIndex.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFArrayGetValueAtIndex.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFArrayGetValueAtIndex
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFArrayGetValueAtIndex(array, idx) returns the stored pointer at the index: for an array of objects
+  the very object (same pointer, not a copy and not retained for the caller), whether the array was
+  made at once or by appends. CFArrayGetCount is the number of values; CFArrayGetValues(array, range,
+  buffer) copies a range of pointers into buffer and writes nothing beyond range.length entries;
+  CFArrayApplyFunction(array, range, fn, context) calls fn(value, context) for each value of the range
+  in index order and not at all for an empty range. An index below 0 or at or beyond the count raises
+  an Objective-C exception (NSRangeException) that ends the process; not to be relied on.
+returns:
+  success: "the stored value pointer"
+errors:
+  out_of_range: "raises an exception and ends the process"
+  null: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "none"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "a few nanoseconds to microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfrelease_array_releases_elements",
+      "source_sha256": "8ffbfd7e74cf962c17731dc470d9724b2a2e233dbd4f54408c3439a25c81bad3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bbd6d9242d284918b0325cd278fd12c652d512f52ed34cdf04812d45c84a3efb",
+          "exit_code": 0,
+          "stdout": "ok ca_deallocs == 0\nok CFDataGetLength((CFDataRef)CFArrayGetValueAtIndex(arr, 1)) == 1\nok ca_deallocs >= 3\nok ca_deallocs == ca_allocs\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1652b6e17f75671950b218555dc43bbfea21779195b5b14fb39e73fa80a01770",
+          "exit_code": 0,
+          "stdout": "ok ca_deallocs == 0\nok CFDataGetLength((CFDataRef)CFArrayGetValueAtIndex(arr, 1)) == 1\nok ca_deallocs >= 3\nok ca_deallocs == ca_allocs\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfrelease_dictionary_releases_keys_and_values",
+      "source_sha256": "e29eabf8fe136d395d52ea1f718bda736f3fc91d54ddafbf08cbb18df9d76c53",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7cb3556461b9ae9343496fc6d5b0fab782eba266773008496d307b2e77b31e8f",
+          "exit_code": 0,
+          "stdout": "ok ca_deallocs == 0\nok ca_deallocs >= 3\nok ca_deallocs == ca_allocs\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b1b5f05dbcbcc840e8d5fe8b33e63f335587fea41707448cbf3ddf457f3a09dd",
+          "exit_code": 0,
+          "stdout": "ok ca_deallocs == 0\nok ca_deallocs >= 3\nok ca_deallocs == ca_allocs\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfrelease_final_release_deallocates",
+      "source_sha256": "2ad830e8baf030e98cf0db66c27059f048ca7405b724087c9444e1b9e75616a0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ef47bc4318cd9ac834ab67c465365d093dec0b7a10600bc29d6feb8723b17914",
+          "exit_code": 0,
+          "stdout": "ok ca_deallocs == 0\nok ca_deallocs == 1\nok ca_deallocs >= 2\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "feb3edda44f07278274836eb57e707905b344ec1ddf6e4b656df6d887c8e38c5",
+          "exit_code": 0,
+          "stdout": "ok ca_deallocs == 0\nok ca_deallocs == 1\nok ca_deallocs >= 2\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

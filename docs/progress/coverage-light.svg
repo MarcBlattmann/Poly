@@ -274,6 +274,7 @@
 </g>
 <g><title>CoreFoundation: 0 / 3,247 done (0.0%)</title>
 <rect x="695.0" y="128.0" width="32.4" height="28.8" fill="#e6eaef"/>
+<rect x="695.0" y="128.0" width="0.5" height="28.8" fill="#218bff"/>
 <rect x="694.0" y="127.0" width="34.4" height="30.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>StoreKit: 0 / 3,181 done (0.0%)</title>
