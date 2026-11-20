@@ -224,6 +224,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-mach"
+version = "0.0.1"
+
+[[package]]
 name = "poly-macho"
 version = "0.0.1"
 
@@ -318,6 +322,7 @@ name = "poly-personality-xnu"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-mach",
 ]
 
 [[package]]

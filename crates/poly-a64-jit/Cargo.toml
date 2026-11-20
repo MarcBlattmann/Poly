@@ -1,0 +1,21 @@
+[package]
+name = "poly-a64-jit"
+description = "arm64 to x86-64 block translator on poly-a64's decoder: guest memory with 16 KiB pages, MAP_JIT, code cache and invalidation (ADR 0239)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-a64.workspace = true
+poly-macho.workspace = true
+
+[dev-dependencies]
+poly-personality-xnu.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+libc.workspace = true
+
+[lints]
+workspace = true

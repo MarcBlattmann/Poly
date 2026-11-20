@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/waitid.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# waitid.tests/macos.json.
+id: macos/syscall/bsd/waitid
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-19
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 173,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 173, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. The siginfo is 104
+  bytes: si_signo (i32, offset 0), si_errno (4), si_code (8), si_pid (12),
+  si_uid (u32, 16), si_status (20), si_addr (24), si_value (32), si_band
+  (40), the rest zero. waitid(idtype, id, siginfo, options) waits for a
+  child like wait4 but reports through siginfo and returns 0. idtype P_ALL
+  0 (any child), P_PID 1 (that child), P_PGID 2 (a process group: the id
+  of the children's group works, id 0 is ECHILD, a negative id EINVAL);
+  any other idtype (7, 3) behaves like P_ALL. options: WEXITED 4, WSTOPPED
+  8, WCONTINUED 0x10, WNOWAIT 0x20 (report without reaping), WNOHANG 1. An
+  exited child: si_signo SIGCHLD (20), si_code CLD_EXITED 1 with the exit
+  code in si_status, or CLD_KILLED 2 with the signal number; si_pid is the
+  child, si_uid is 0 (not filled in), the other fields 0. A stopped child
+  (WSTOPPED): CLD_STOPPED 5, si_status SIGSTOP (17), reported once; a
+  continued child (WCONTINUED): CLD_CONTINUED 6, si_status SIGCONT (19),
+  once. The reported exited child is reaped (a second wait is ECHILD 10)
+  unless WNOWAIT. WNOHANG with nothing to report returns 0 and leaves the
+  siginfo untouched, also when only WNOHANG is given (no
+  WEXITED/WSTOPPED/WCONTINUED: accepted, nothing reported, no child
+  reaped). No option at all is EINVAL (22), as is an undefined option bit.
+  An unwritable or NULL siginfo is EFAULT (14) and the child stays
+  waitable. No children, a pid that is not a child, or a group that is not
+  the children's is ECHILD (10).
+returns:
+  success: "0; siginfo filled (or untouched with WNOHANG and nothing to report)"
+errors:
+  no_child: "ECHILD (10)"
+  bad_options: "EINVAL (22)"
+  bad_pointer: "EFAULT (14)"
+side_effects: "the reported child is reaped unless WNOWAIT"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

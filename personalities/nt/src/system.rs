@@ -337,6 +337,10 @@ pub struct NtProcess {
     pub priority_class: u8,
     /// The process that created it (0: the kernel started it).
     pub parent: u32,
+    /// Its executable's subsystem (`IMAGE_SUBSYSTEM_*`, the optional header's `Subsystem`): 2 for a
+    /// GUI program, 3 for a console one; 0 before an image is mapped. `WaitForInputIdle` refuses
+    /// console programs (ADR 0245).
+    pub subsystem: u16,
 }
 
 impl NtProcess {
@@ -368,6 +372,7 @@ impl NtProcess {
             wow64: false,
             priority_class: 2,
             parent: 0,
+            subsystem: 0,
         }
     }
 

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "clone_links_dirs",
+      "source_sha256": "7e70a9421125601dfab8305e1f14aa7b5f4abd871df4f6f990fb0da42f7c8e9e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b3b947e114cf66a8a470f811ce349c8eb66fb8ca0a15a8c75ad24321ff473ad0",
+          "exit_code": 0,
+          "stdout": "ok clone through a link\nok the copy is a regular file\nok clone with CLONE_NOFOLLOW\nok the copy is a symbolic link\nok with the same target \"src\"\nok a dangling link followed is ENOENT\nok not followed, a dangling link can be cloned\nok clone a directory\nok its files and subdirectories are there with content\nok a link inside is a link\nok the subdirectory's mode is kept (0750)\nok the copy is independent: a new file is not in the original\nok and removing from the original keeps the copy\nok a destination directory that exists is EEXIST\nok flag bit 8 is accepted\nok flag bit 0x10000 is EINVAL\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "clone_perms",
+      "source_sha256": "7bc28edd019c31fb48defe9ba5cfe1a6f4c72e9f065b78703b2404ef04f99d92",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "73daa3e1ba9039d02f34444d9d060264ebe62ca0d2276afcf0b809df8f5160ae",
+          "exit_code": 0,
+          "stdout": "ok clone an empty file\nok it is empty\nok mode 0600 is kept\nok owner is the caller\nok CLONE_NOOWNERCOPY\nok the owner is still the caller\nok a source without read permission is EACCES\nok nothing was created\nok a destination directory without write permission is EACCES\nok a file with a hole keeps its size\nok cloning leaves the source's times alone\nok a clone of a file open for writing has what was written before\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -793,6 +793,31 @@ impl Scm {
         Ok(fx)
     }
 
+    /// Start service `name` for the system itself (ADR 0235): what `StartServiceW` does, without a
+    /// handle or a caller's rights, and with nobody waiting on the result. Poly's own programs ask
+    /// for this through the kernel when they need one of the system's services and their user
+    /// may not start it (on Windows such services run from boot). Already running (or starting)
+    /// is not an error; the manager's other errors are the same as `StartServiceW`'s.
+    pub fn start_for_system(&mut self, name: &[u16]) -> Result<Vec<Effect>, u32> {
+        config::check_name(name)?;
+        let k = fold(name);
+        let s = self.services.get(&k).ok_or(ERROR_SERVICE_DOES_NOT_EXIST)?;
+        if s.config.start == SERVICE_DISABLED {
+            return Err(ERROR_SERVICE_DISABLED);
+        }
+        if s.builtin || s.status.state != SERVICE_STOPPED || s.phase != Phase::Idle {
+            return Ok(Vec::new());
+        }
+        let mut order = Vec::new();
+        self.dependencies(&k, &mut order, &mut BTreeSet::new())?;
+        let mut fx = Vec::new();
+        for d in order {
+            self.begin(&d, Vec::new(), None, &mut fx);
+        }
+        self.begin(&k, Vec::new(), None, &mut fx);
+        Ok(fx)
+    }
+
     /// The services `key` depends on that are not running, deepest first; 1075 for one that does
     /// not exist (or is marked for deletion), 1068 for a disabled one.
     fn dependencies(&self, key: &[u16], out: &mut Vec<Vec<u16>>, seen: &mut BTreeSet<Vec<u16>>) -> Result<(), u32> {

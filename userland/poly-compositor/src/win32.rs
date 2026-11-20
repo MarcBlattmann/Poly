@@ -498,7 +498,9 @@ impl WindowsSurfaces {
             ToCompositor::Margins { surface, left, top, right, bottom } => {
                 let u = self.units;
                 if let Some(s) = self.surfaces.get_mut(&surface) {
-                    s.margins = [left, top, right, bottom].map(|m| i32::from(m) / u);
+                    // Rounded up, so the whole sizing border takes the pointer (13 pixels at
+                    // 200 % are 7 logical, not 6; ADR 0234).
+                    s.margins = [left, top, right, bottom].map(|m| (i32::from(m) + u - 1) / u);
                     if let Some(win) = scene.window(s.window) {
                         println!("poly-compositor: window {:?} own borders {left},{top},{right},{bottom}", win.title());
                     }

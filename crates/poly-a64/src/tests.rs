@@ -822,18 +822,23 @@ fn exclusives() {
 }
 
 #[test]
-fn exclusive_and_atomic_accesses_must_be_aligned() {
+fn exclusive_and_atomic_accesses_stay_in_16_bytes() {
+    // FEAT_LSE2 as Apple silicon has it: unaligned is fine within an aligned
+    // 16-byte block; crossing a block boundary is an alignment fault.
     let mut t = T::new();
-    t.cpu.x[1] = DATA + 4;
+    t.cpu.x[1] = DATA + 12;
     let r = t.run(&["ldxr x0, [x1]"]);
-    assert_eq!(r, Outcome::Fault(MemFault { addr: DATA + 4, access: Access::Read, alignment: true }));
+    assert_eq!(r, Outcome::Fault(MemFault { addr: DATA + 12, access: Access::Read, alignment: true }));
     assert!(matches!(t.run(&["ldar x0, [x1]"]), Outcome::Fault(MemFault { alignment: true, .. })));
     assert!(matches!(t.run(&["ldadd x0, x1, [x1]"]), Outcome::Fault(MemFault { alignment: true, .. })));
     assert!(matches!(t.run(&["cas x0, x1, [x1]"]), Outcome::Fault(MemFault { alignment: true, .. })));
-    // CASP needs the whole pair aligned.
+    // CASP needs the whole pair in one block.
     t.cpu.x[4] = DATA + 8;
     assert!(matches!(t.run(&["casp x0, x1, x2, x3, [x4]"]), Outcome::Fault(MemFault { alignment: true, .. })));
     t.ok(&["ldar w0, [x1]"]);
+    t.cpu.x[1] = DATA + 4;
+    t.ok(&["ldxr x0, [x1]"]);
+    t.ok(&["ldadd x0, x1, [x1]"]);
 }
 
 #[test]
@@ -1616,4 +1621,89 @@ fn executing_arbitrary_words_never_panics() {
         let mut mem = SliceMemory::new(0x1000, &mut mem_bytes);
         let _ = cpu.step(&mut mem);
     }
+}
+
+// ---- Instructions checked against Apple silicon (words from the system
+// assembler, expected values from running them on an M1 Pro) ----
+
+fn vec(t: &mut T, r: usize, hi: u64, lo: u64) {
+    t.cpu.v[r] = (u128::from(hi) << 64) | u128::from(lo);
+}
+
+#[test]
+fn pointer_authentication_as_on_an_arm64_process() {
+    let mut t = T::new();
+    // PACIA x9, x10 and AUTIA x9, x10 leave x9 alone (keys disabled).
+    t.cpu.x[9] = 0x0000_0001_0234_5678;
+    t.cpu.x[10] = 0x1234;
+    assert_eq!(t.run_words(&[0xDAC1_0149, 0xDAC1_1149]), Outcome::Continue);
+    assert_eq!(t.cpu.x[9], 0x0000_0001_0234_5678);
+    // XPACD: top byte kept below bit 55 (top-byte-ignore), all copies of bit 55 above.
+    for (input, want) in
+        [(0xAB23_0001_0234_5678u64, 0xAB00_0001_0234_5678u64), (0xAB80_0001_0234_5678, 0xFFFF_8001_0234_5678)]
+    {
+        let mut t = T::new();
+        t.cpu.x[0] = input;
+        t.run_words(&[0xDAC1_47E0]);
+        assert_eq!(t.cpu.x[0], want, "xpacd {input:#x}");
+    }
+    // XPACI strips the top byte too.
+    let mut t = T::new();
+    t.cpu.x[0] = 0xAB23_0001_0234_5678;
+    t.run_words(&[0xDAC1_43E0]);
+    assert_eq!(t.cpu.x[0], 0x0000_0001_0234_5678);
+}
+
+#[test]
+fn crc32_and_crc32c() {
+    let mut t = T::new();
+    t.cpu.x[0] = 0xFFFF_FFFF;
+    t.cpu.x[1] = 0x0123_4567_89AB_CDEF;
+    t.run_words(&[0x9AC1_5C00]); // crc32cx w0, w0, x1
+    assert_eq!(t.cpu.x[0], 0x9A4F_27DC);
+    let mut t = T::new();
+    t.cpu.x[1] = 0x61;
+    t.run_words(&[0x1AC1_4000]); // crc32b w0, w0, w1
+    assert_eq!(t.cpu.x[0], 0x3AB5_51CE);
+}
+
+#[test]
+fn flag_manipulation() {
+    let mut t = T::new();
+    t.cpu.x[0] = 0x50;
+    t.run_words(&[0xBA01_840B]); // rmif x0, #3, #0xb
+    assert_eq!(t.cpu.nzcv, 0xA000_0000);
+    let mut t = T::new();
+    t.cpu.x[0] = 0x180;
+    t.run_words(&[0x3A00_080D]); // setf8 w0
+    assert_eq!(t.cpu.nzcv, 0x8000_0000);
+}
+
+#[test]
+fn advanced_simd_beyond_the_first_subset() {
+    // uaddl.8h v0, v1, v2
+    let mut t = T::new();
+    vec(&mut t, 1, 0xFFFE_FDFC_FBFA_F9F8, 0xF7F6_F5F4_F3F2_F1F0);
+    vec(&mut t, 2, 0x8780_7972_6B64_5D56, 0x514A_433C_352E_2720);
+    t.run_words(&[0x2E22_0020]);
+    assert_eq!(t.cpu.v[0], 0x0148_0140_0138_0130_0128_0120_0118_0110);
+    // fmla.4s v0, v1, v2[3]
+    let mut t = T::new();
+    vec(&mut t, 0, 0x4080_0000_4040_0000, 0x4000_0000_3F80_0000); // 4, 3, 2, 1
+    vec(&mut t, 1, 0x4040_0000_7149_F2CA, 0xBFC0_0000_3F00_0000); // 3, 1e30, -1.5, 0.5
+    vec(&mut t, 2, 0xC010_0000_4110_0000, 0x4110_0000_4110_0000); // -2.25, 9, 9, 9
+    t.run_words(&[0x4FA2_1820]);
+    assert_eq!(t.cpu.v[0], 0xC030_0000_F1E3_3123_40AC_0000_BE00_0000);
+    // frecpe.4s v0, v1 on 1.0, 3.0, -0.5, 1e-40 (a subnormal: the estimate overflows)
+    let mut t = T::new();
+    vec(&mut t, 1, 0x0001_16C2_BF00_0000, 0x4040_0000_3F80_0000);
+    t.run_words(&[0x4EA1_D820]);
+    assert_eq!(t.cpu.v[0], 0x7F80_0000_BFFF_8000_3EAA_8000_3F7F_8000);
+    // sqadd.8h v0, v1, v2 saturates and sets FPSR.QC
+    let mut t = T::new();
+    vec(&mut t, 1, 0xFFFF_0000_0001_4000, 0xFF9C_0064_8000_7FFF);
+    vec(&mut t, 2, 0xFFFF_0000_FFFF_4000, 0xFF38_00C8_FFFF_0001);
+    t.run_words(&[0x4E62_0C20]);
+    assert_eq!(t.cpu.v[0], 0xFFFE_0000_0000_7FFF_FED4_012C_8000_7FFF);
+    assert_eq!(t.cpu.fpsr, 1 << 27);
 }

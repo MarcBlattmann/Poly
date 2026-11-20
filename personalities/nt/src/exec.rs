@@ -340,6 +340,7 @@ pub fn start_process_listed(
     let l = proc.layout();
     let ntdll = ImageSection::from_file(if proc.wow64 { sys.ntdll32 } else { ntdll })?;
     let entries = NtdllEntries::of(&ntdll)?;
+    let subsystem = image.info.optional.subsystem;
     let (entry_rva, reserve, commit) = (
         u64::from(image.info.entry_point()),
         image.info.optional.size_of_stack_reserve,
@@ -390,6 +391,7 @@ pub fn start_process_listed(
     });
     proc.peb = peb;
     proc.image_base = image_base;
+    proc.subsystem = subsystem;
     proc.default_stack_reserve = reserve;
     proc.default_stack_commit = commit;
 

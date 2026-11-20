@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/sigaltstack.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# sigaltstack.tests/macos.json.
+id: macos/syscall/bsd/sigaltstack
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-19
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 53,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 53, arguments in x0..x5 (second result in x1). On
+  failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. sigaltstack(new,
+  old) sets and reads the alternate signal stack, a 24-byte struct {sp
+  (8), size (8), flags (4), 4 bytes padding}; either pointer may be NULL.
+  A process starts with none: flags SS_DISABLE 4, sp 0, size 0. Setting
+  {sp, size, 0} enables it and returns the old one in old; it reads back
+  with flags 0, the same sp and size. A size of 100 or 0 is ENOMEM (12),
+  8192 and 32768 were accepted; flags 8 and SS_ONSTACK (1) as a request
+  are EINVAL (22); flags SS_DISABLE turns it off (the old struct then
+  reads flags 4 with sp and size as set). A forked child does not inherit
+  the stack: it starts with none (flags 4, sp 0, size 0). Bad pointers are
+  EFAULT (14). A handler installed with SA_ONSTACK (0x1) runs on the
+  alternate stack (its locals lie inside it) and sees SS_ONSTACK (1) in
+  the flags; one without SA_ONSTACK runs on the normal stack and sees
+  flags 0 even when a stack is set; replacing the stack from inside the
+  handler running on it is EPERM (1); after the handler flags are 0 again;
+  with the stack disabled SA_ONSTACK handlers use the normal stack. A
+  SIGSEGV or SIGBUS handler with SA_ONSTACK runs after a stack overflow
+  (the process can then exit normally); without an alternate stack the
+  overflowing process is killed by a signal (signal 4, SIGILL, was
+  observed).
+returns:
+  success: "0; old stack stored if requested"
+errors:
+  too_small: "ENOMEM (12)"
+  bad_flags: "EINVAL (22)"
+  in_use: "EPERM (1) while running on the stack"
+  bad_pointer: "EFAULT (14)"
+side_effects: "the alternate stack of the calling thread changes"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

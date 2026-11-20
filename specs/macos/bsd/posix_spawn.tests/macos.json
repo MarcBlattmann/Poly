@@ -10,8 +10,23 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 20:07:17",
   "tests": [
+    {
+      "name": "spawn_edges",
+      "source_sha256": "e7314d46ed14cc6d80baa399167a1b01326f380d0c68cd6086f2855b33a4eb0e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "090116909f9b1eabe78335e4cdf3a91a23ea315b5986fe60e83cb6c10620c778",
+          "exit_code": 0,
+          "stdout": "ok spawn the test itself\nchild ppid_is_parent=1 envc=0\nok the child's parent is the caller, envc 0: it exits 0\nok a second spawn gives a new pid\nchild ppid_is_parent=1 envc=2\nok exit status 255 is reported\nok a spawned child can be killed: signal 9\nok spawn a script with #!\nok it ran through the interpreter, whose last argument was \"17\": exit 17\nok a text file without #! is ENOEXEC\nok arguments over 1 MiB are E2BIG\nok a path of 256 bytes is ENAMETOOLONG\nok an unreadable argv is EFAULT\nok an unreadable path is EFAULT\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
     {
       "name": "spawn_errors",
       "source_sha256": "ba8b4a7fa58d651aa725acdb8f1f5a222b50118da6d60ab3f21c144b1bc5e5d7",

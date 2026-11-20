@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "fsetx_flags",
+      "source_sha256": "f374ee666dbc22c13a9d68ebbdb995cf21a684a6c14e51996df2b4f55136e60e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4399e48d6c89d73b89b1768aa71c63d8aeb28d77e0538192d1dc98be98247dbb",
+          "exit_code": 0,
+          "stdout": "ok REPLACE on a missing attribute is ENOATTR\nok CREATE works and returns 0\nok CREATE on an existing attribute is EEXIST\nok REPLACE on an existing one\nok path-based getxattr sees the new value\nok CREATE|REPLACE is EINVAL\nok option 8 is EINVAL\nok option 0x10 is EINVAL\nok an undefined option bit is ignored\nok a position other than 0 is EINVAL\nok a bad descriptor is EBADF\nok an empty name is EINVAL\nok an unreadable value is EFAULT\nok a read-only descriptor can set attributes\nok and it is there\nok size 0 stores an empty attribute\nok which has length 0\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

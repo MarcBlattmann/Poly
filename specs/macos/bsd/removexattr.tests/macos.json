@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "removex_basic",
+      "source_sha256": "69973dea66a1be8e3fa43428c53d5c2288c2a221162191fbd9fb4bf50395dcd2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a81485103ec8918aff636e406398304c226802d14c2e5a2c894463ceec9296a5",
+          "exit_code": 0,
+          "stdout": "ok remove returns 0\nok the attribute is gone\nok the other one is still there\nok removing it again is ENOATTR\nok removing one never set is ENOATTR\nok a missing file is ENOENT\nok an empty name is EINVAL\nok an unreadable name is EFAULT\nok an unreadable path is EFAULT\nok a path through a file is ENOTDIR\nok a removed name can be set again\nok through the link the target has no 'user.own'\nok with XATTR_NOFOLLOW the link's own is removed\nok the target's attribute through the link is untouched\nok and now gone from the target\nok a directory's attribute\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

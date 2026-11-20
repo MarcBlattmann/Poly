@@ -148,7 +148,7 @@ fn ms<K: NtKernel>(k: &K) -> u64 {
 }
 
 /// The environment the system's programs get (to expand `%SystemRoot%` and its kind).
-fn system_environment(sys: &NtSystem, processors: u32) -> crate::layout::env::Block {
+pub(crate) fn system_environment(sys: &NtSystem, processors: u32) -> crate::layout::env::Block {
     crate::layout::env::build(
         &sys.registry.reg,
         &crate::layout::POLY_USER,
@@ -563,78 +563,48 @@ fn host<K: NtKernel>(k: &mut K, after: &mut After) -> Result<Vec<u8>> {
 }
 
 /// Make the process of a service from the host's call, suspended: its id and first thread, or a
-/// Win32 error (2 for a program that is not there).
+/// Win32 error (2 for a program that is not there). Its token is its account's
+/// ([`crate::sysproc::spawn_as`]), its station the account's services'.
 fn spawn<K: NtKernel>(k: &mut K, s: &Spawn) -> core::result::Result<(u32, poly_ntobj::ThreadRef), u32> {
-    use crate::io::consts::*;
     let processors = k.processor_count();
-    let caller = k.caller();
     let (env, command) = k.with_state(|sys, _, _| {
         let env = system_environment(sys, processors);
         let cmd = poly_scm::config::expand(&s.command_line, &lookup(&env));
         (env.to_utf16(), cmd)
     });
-    let image = poly_scm::config::image_of(&command);
     let not_found = |e: NtStatus| match e.0 {
         0xC000_0034 | 0xC000_003A | 0xC000_000F | 0xC000_0033 | 0xC000_0039 | 0xC000_003B => ERROR_FILE_NOT_FOUND,
         0xC000_0022 => ERROR_ACCESS_DENIED,
         0xC000_007B | 0xC000_012F | 0xC000_0130 | 0xC000_0131 => ERROR_BAD_EXE_FORMAT,
+        0xC000_009A => ERROR_INVALID_PARAMETER,
         _ => ERROR_FILE_NOT_FOUND,
     };
-    let name = crate::threads::image_nt_name(&image).map_err(not_found)?;
-    let attrs =
-        abi::Attributes { root: None, name: Some(name), attributes: poly_ntobj::OBJ_CASE_INSENSITIVE, security: None };
-    let section = crate::io::services::with_named(
-        k,
-        &attrs,
-        FILE_EXECUTE | FILE_READ_DATA | SYNCHRONIZE,
-        FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT,
-        |sys, cookie| crate::image::ImageSection::from_reader(sys.io.image_file(cookie)?),
-    )
-    .map_err(not_found)?;
-    let image_text = alloc::string::String::from_utf16_lossy(&image);
-    let mut params = crate::params::for_program(&image_text, &[], env);
-    params.command_line = command;
-    params.current_dir = crate::layout::SYSTEM32.encode_utf16().chain("\\".encode_utf16()).collect();
     let account = account_of(&s.account).unwrap_or(Account::LocalSystem);
     let sid = s.service_sid.then(|| service_sid(&s.name));
-    let station: Vec<u16> = account.station_name().encode_utf16().collect();
-    let (token_id, token_obj, desktop) = k
-        .with_state(|sys, _, _| -> Result<(u64, ObjectId, crate::winsta::Start)> {
-            let (id, obj) = sys.objects.new_token(Token::service(account, sid, 0), caller.thread)?;
-            sys.objects.assign_security(obj, poly_ntobj::ObjectType::Token, Some(id), None);
-            let desktop = sys.winsta.service_start(&mut sys.objects, &station, caller.thread);
-            Ok((id, obj, desktop))
-        })
-        .map_err(|_| ERROR_INVALID_PARAMETER)?;
-    let req = crate::kernel::ProcessCreate {
-        image: section,
-        params,
-        process_access: poly_ntobj::access::PROCESS_ALL_ACCESS,
-        thread_access: poly_ntobj::access::THREAD_ALL_ACCESS,
-        inherit_handles: false,
-        suspended: true,
-        token: Some(token_id),
-        inherit_only: None,
-        jobs: Vec::new(),
-        join_creator_jobs: false,
-        mitigation: poly_kernelbase::mitigation::State::new(),
-        desktop,
-        error_mode: 0,
-        process_security: None,
-        thread_security: None,
-    };
-    let created = k.create_process(req);
-    k.with_state(|sys, _, _| {
-        let _ = sys.objects.dereference(token_obj);
-        if let Ok(c) = &created {
-            let _ = sys.objects.close(&caller, c.process);
-            let _ = sys.objects.close(&caller, c.thread);
-        }
+    crate::sysproc::spawn_as(k, command, env, account, sid, crate::sysproc::Place::ServiceStation, true, None)
+        .map_err(not_found)
+}
+
+/// Start service `name` for the system (ADR 0235, `PolyStartSystemProcess`): the manager starts
+/// it as its configuration says, whoever asked. `STATUS_SUCCESS` when it starts or already runs;
+/// `STATUS_OBJECT_NAME_NOT_FOUND` for no such service, `STATUS_UNSUCCESSFUL` for the manager's
+/// other errors (disabled, a dependency that cannot start).
+pub fn start_for_system<K: NtKernel>(k: &mut K, name: &[u16]) -> Result<NtStatus> {
+    let ft = k.system_time();
+    let mut after = After::default();
+    let r = k.with_state(|sys, _, _| {
+        ScmState::ready(sys, ft);
+        let fx = sys.scm.scm.start_for_system(name)?;
+        apply(sys, fx, &mut after);
+        sys.scm.scm.sync(&mut sys.registry.reg, ft);
+        Ok(())
     });
-    created.map(|c| (c.client.process.0, c.client.thread)).map_err(|e| match e.0 {
-        0xC000_009A => ERROR_INVALID_PARAMETER,
-        _ => not_found(e),
-    })
+    finish(k, after);
+    match r {
+        Ok(_) => Ok(STATUS_SUCCESS),
+        Err(ERROR_SERVICE_DOES_NOT_EXIST) => Err(NtStatus(0xC000_0034)),
+        Err(_) => Err(NtStatus(0xC000_0001)),
+    }
 }
 
 /// A process ended: the manager closes its handles and stops the service it ran. Returns whether

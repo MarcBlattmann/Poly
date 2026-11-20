@@ -46,6 +46,7 @@ use poly_win32k::wire;
 
 mod headless;
 mod hooks;
+mod idle;
 mod winevent;
 
 #[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -376,6 +377,10 @@ impl Env for Sys {
     fn pump_events(&self) {
         winevent::pump();
         headless::pump_power_settings();
+    }
+
+    fn input_idle(&self, blocking: bool) {
+        idle::note(self, blocking);
     }
 }
 

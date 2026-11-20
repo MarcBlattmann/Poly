@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "fclone_dirs",
+      "source_sha256": "a0057e28f14418155d592d1844e9a8221fd991b8f51f4d5b94187f2029f51102",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "090b6b3864cf55a60744eec7c15c96c0db5fb5452e3117224a7720d5b3b6becb",
+          "exit_code": 0,
+          "stdout": "ok clone a directory tree\nok files and content\nok the subdirectory's mode 0750\nok clone an O_SYMLINK descriptor\nok the copy is a symbolic link\nok clone a descriptor opened through the link\nok the copy is the target's file\nok the source was unlinked: the descriptor still clones\nok with the content\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

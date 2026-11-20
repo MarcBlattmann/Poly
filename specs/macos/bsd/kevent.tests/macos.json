@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 20:07:17",
   "tests": [
     {
       "name": "kevent_errors",
@@ -21,6 +21,21 @@
           "executable_sha256": "91a453b9d5708194aa041b9aa7e281b1043d168aa11189efb26af18251ed53fa",
           "exit_code": 0,
           "stdout": "ok a bad descriptor with room: one event\nok EV_ERROR|EV_ADD, data EBADF, ident and udata echoed\nok without room: EBADF\nok an unknown filter: an event with data EINVAL\nok EV_RECEIPT: one event for the successful change\nok flags EV_ERROR|EV_RECEIPT|EV_ADD, data 0\nok a queue that is not open: EBADF\nok a descriptor that is not a queue: EBADF\nok the change list at address 8: EFAULT\nok a timeout of 2e9 ns: EINVAL\nok a negative timeout: EINVAL\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "kevent_fd_states",
+      "source_sha256": "d7ab85ad69f53b7eb57be6d6a7b2f92d07966349f06c0723030b72634a16b69e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "03f1704430c7c2844a7e517985e5cfe85f5e9cbcbd0e85ada238f4f3e79625ec",
+          "exit_code": 0,
+          "stdout": "ok EV_CLEAR: reported once with data 3\nok and not again though the data is unread\nok new data: reported again, data 5\nok EV_ONESHOT: reported\nok and removed though the data is unread\nok EV_DISPATCH: reported\nok and then disabled\nok EV_ENABLE: reported again\nok EV_DISABLE hides a ready event\nok EV_ENABLE shows it\nvalue EV_ADD of an existing registration: events returned by that call 0\nvalue and the next call without changes 0\nok EVFILT_WRITE on a pipe: ready, data > 0\nok a write event arrived\nok closing the descriptor dropped the registration: delete is ENOENT or EBADF as an event\nvalue the error of deleting a closed descriptor's event 2\nok socketpair\nok peer closed: EVFILT_READ with EV_EOF and data 0\nok and EVFILT_WRITE with EV_EOF\nsummary 16 passed, 0 failed\n",
           "stderr": "",
           "runs": 3,
           "stable": true
@@ -51,6 +66,21 @@
           "executable_sha256": "878ca2e1b43cf7f90ecf011744f6b04c9076d060c49f16fc16e12c1fdfabb612",
           "exit_code": 0,
           "stdout": "ok add a 20 ms one-shot timer\nok waiting up to 1 s: the timer fires\nok ident 1, EVFILT_TIMER, 1 expiration\nok flags as added (EV_ADD|EV_ONESHOT|EV_CLEAR)\nok udata echoed\nok a one-shot timer is gone afterwards\nok a 50 ms wait with nothing to report: 0\nok two ignored SIGUSR1: one event\nok ident 30, EVFILT_SIGNAL, data 2\nok reported once: then nothing\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "kevent_user_states",
+      "source_sha256": "19a97c3163747f1466ddf2eaaee92153b9b05dab8d0a69846476314a85b6c00e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6d590ea693d63936cfc80213479ec1470572d5dea2456b4d9ffaa2ca6eccd91b",
+          "exit_code": 0,
+          "stdout": "ok add: no events\nok trigger: one event\nok ident 1, EVFILT_USER, flags 0x21, data 42, udata echoed\nok EV_CLEAR: not reported again\nok without EV_CLEAR a triggered event is reported again\nok and again\nok after a delete: nothing\nok FFOR: fflags 0xc00000ff\nok FFAND 0x3c: low bits 0x3c\nok FFCOPY 5: low bits 5\nok EV_DISPATCH: reported, flags 0x81\nok a trigger while it is disabled reports nothing\nok EV_ENABLE delivers the pending trigger\nok a disabled event is not reported\nok after EV_ENABLE the trigger is reported\nok EV_ONESHOT reports once\nok then the event is gone: a trigger is an error event ENOENT\nok adding an ident twice keeps one event, with the later udata\nok triggering an event never added: an error event with ENOENT\nsummary 19 passed, 0 failed\n",
           "stderr": "",
           "runs": 3,
           "stable": true

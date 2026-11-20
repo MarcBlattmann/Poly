@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "getx_paths",
+      "source_sha256": "2727f07679122a1b21085a3ef09ae423190afe9a51229546ed89db20842561b5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "52e30cff8a84d4414c4f3bc12182f843ee1252e2713839c9980dd4f51164642f",
+          "exit_code": 0,
+          "stdout": "ok a missing file is ENOENT\nok a path through a file is ENOTDIR\nok an empty path is ENOENT\nok an unreadable name pointer is EFAULT\nok an unreadable path pointer is EFAULT\nok an unwritable buffer is EFAULT\nok through a link: the target's attribute\nok with XATTR_NOFOLLOW the link itself has none: ENOATTR\nok an attribute can be set on the link itself\nok and read from it\nok the target does not have the link's attribute\nok a loop of links is ELOOP\nok with XATTR_NOFOLLOW the loop is not followed: ENOATTR\nok a dangling link is ENOENT\nok a directory has attributes too\nok a file with mode 0 refuses getxattr: EACCES\nok an option bit nobody defined is ignored\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "getx_values",
+      "source_sha256": "c671005b7d24961687356eb10004dd0f29cc9bdcb9d7529c4496e599f7c5a551",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b8ca2b158c808cb49133a116f73b0e163c89d3ae25b430c3fef8c25c39f5bf6e",
+          "exit_code": 0,
+          "stdout": "ok a missing attribute is ENOATTR\nok setxattr\nok the length is 5\nok the value is copied\nok nothing is copied past the length\nok a NULL buffer asks for the length\nok a buffer of exactly the length works\nok a buffer one byte short is ERANGE\nok size 0 with a buffer is ERANGE (only a NULL buffer asks for the length)\nok names are case sensitive\nok an empty value can be set\nok and reads back with length 0\nok a value with NUL bytes keeps them\nok a position other than 0 is EINVAL for an ordinary attribute\nok an empty name is EINVAL\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
