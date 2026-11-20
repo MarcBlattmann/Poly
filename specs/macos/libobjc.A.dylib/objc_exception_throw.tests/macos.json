@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:38:56",
+  "tests": [
+    {
+      "name": "exc_throw_catch",
+      "source_sha256": "f260341bcc1c41d0f653a40b45ba16d069c732f193beda6cfde60dedf9075b9b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b127a228e6413ef4479774d0736d15e4394529c22b06176e5b74806700026dcd",
+          "exit_code": 0,
+          "stdout": "ok the caught object is the thrown one\nok code after the throw is not run\nok the handler ran\nvalue caught as Ex: code 5\nok falls to the id clause\nok catch (...) catches it\nok a subclass instance matches its superclass clause\nok so it falls through\nok outer clause catches what the inner did not\nvalue inner @finally runs before the outer handler 1\nok @finally without a throw\nok through six C frames\nok a class object is thrown and caught\nok nil thrown, nil caught\nvalue 1000 throws caught 1000\nvalue retainCount after all of them 1\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "adf9570ae4c7bdfde7e4e95580d6cd08538f342b676bceccd0b2701f2099e83c",
+          "exit_code": 0,
+          "stdout": "ok the caught object is the thrown one\nok code after the throw is not run\nok the handler ran\nvalue caught as Ex: code 5\nok falls to the id clause\nok catch (...) catches it\nok a subclass instance matches its superclass clause\nok so it falls through\nok outer clause catches what the inner did not\nvalue inner @finally runs before the outer handler 1\nok @finally without a throw\nok through six C frames\nok a class object is thrown and caught\nok nil thrown, nil caught\nvalue 1000 throws caught 1000\nvalue retainCount after all of them 1\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_throw_uncaught",
+      "source_sha256": "93593de9bec363b1da9ad018da155e535651cc6b3cc61660abd3504e79dc9698",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "58893b34385d2172fd16306e9a7ab5b9e87427a29f2efc59a10a1e7082b4e475",
+          "exit_code": 0,
+          "stdout": "child: before the throw\n-- object\nok the child did not exit normally\nvalue terminating signal (SIGABRT is 6) 6\nok stderr starts with the libc++abi message\nvalue type named in the message Boom\nchild: before the throw\n-- class\nok the child did not exit normally\nvalue terminating signal (SIGABRT is 6) 6\nok stderr starts with the libc++abi message\nvalue type named in the message Boom\nchild: before the throw\n-- nil\nok the child did not exit normally\nvalue terminating signal (SIGABRT is 6) 6\nok stderr starts with the libc++abi message\nvalue type named in the message nil\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "83d7fb062037564315fd3004c4e0fecd88dcc0ecdca602a34d8f5e0a6230711d",
+          "exit_code": 0,
+          "stdout": "child: before the throw\n-- object\nok the child did not exit normally\nvalue terminating signal (SIGABRT is 6) 6\nok stderr starts with the libc++abi message\nvalue type named in the message Boom\nchild: before the throw\n-- class\nok the child did not exit normally\nvalue terminating signal (SIGABRT is 6) 6\nok stderr starts with the libc++abi message\nvalue type named in the message Boom\nchild: before the throw\n-- nil\nok the child did not exit normally\nvalue terminating signal (SIGABRT is 6) 6\nok stderr starts with the libc++abi message\nvalue type named in the message nil\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

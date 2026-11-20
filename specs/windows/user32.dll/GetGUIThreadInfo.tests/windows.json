@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "2c44ff600c90",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:21:59Z",
+  "tests": [
+    {
+      "name": "fk_gui_drop",
+      "exe_sha256": "ed3efbcd7bf3c294a2a282f2370ef531b9644b4e1eacca2fb46774ba5636be03",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBhYmMgc2VudCB0byBQLCB0aGVuIGF0IG9uY2UgdGhlIGZvcmVncm91bmQgZ29lcyB0byBRIChpdHMgZWRpdCBIIGhhcyB0aGUgZm9jdXMpCiAgaW5zZXJ0ZWQgNjsgU2V0Rm9yZWdyb3VuZFdpbmRvdyhRKSB0cnVlCiAgRSBXTV9LSUxMRk9DVVMgb3RoZXI9bnVsbAogIHRleHQgb2YgSDogIiIKICBmb3JlZ3JvdW5kIFEKICBHVUkgaW5mbyBvZiBtYWluOiBvayB0cnVlIGFjdGl2ZSBudWxsIGZvY3VzIG51bGwgY2FwdHVyZSBudWxsCiAgdGV4dHM6IEUgIiIgRiAiIiBHICIiOyBmb2N1cyBudWxsOyBmb3JlZ3JvdW5kIG91cnMgdHJ1ZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== abc sent to P, then at once the foreground goes to Q (its edit H has the focus)\n  inserted 6; SetForegroundWindow(Q) true\n  E WM_KILLFOCUS other=null\n  text of H: \"\"\n  foreground Q\n  GUI info of main: ok true active null focus null capture null\n  texts: E \"\" F \"\" G \"\"; focus null; foreground ours true\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1572
+    }
+  ]
+}

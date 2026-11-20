@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextStrokePath.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextStrokePath.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextStrokePath
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextStrokePath(context) draws the current path as a line of the stroke colour with the line width of the state, then empties the path. The default stroke colour is opaque black and the default width 1. The line is centred on the path: a width 1 line on a pixel centre (y = 2.5) gives one row of alpha ff; on a pixel edge (y = 3) two rows of 7f; width 2 on y = 3 two rows of ff; width 1.5: bf bf; width 0.5 on a centre: 7f; width 0 draws nothing. A width 1 diagonal (1,1) to (9,5) gives edge pixels 4f cf cf 4f; width 2: 03 5e da ff ff ... CGContextStrokeRect of (2,2,6,6) at width 1 on the pixel edges gives half-covered rows 7f/81 (the two sides of the line do not add up to exactly the same value: 7f and 81), at (2.5,2.5,5,5) one row of ff with fe at the corners; StrokeRectWithWidth does not change the state's line width. The stroke colour is separate from the fill colour; DrawPath(kCGPathFillStroke) fills with the fill colour and draws the stroke over it.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "writes pixels and empties the current path"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

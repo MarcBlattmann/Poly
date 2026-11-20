@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGColorSpaceCreateWithName.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGColorSpaceCreateWithName.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGColorSpaceCreateWithName
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGColorSpaceCreateWithName(name) returns the named space (the same object each call) or NULL for an unknown name. Names observed to exist, all giving back their own name through CGColorSpaceCopyName: kCGColorSpaceSRGB, DisplayP3, GenericRGB, GenericRGBLinear, ExtendedSRGB, LinearSRGB, ExtendedLinearSRGB, ExtendedLinearITUR_2020, ITUR_2100_PQ, ITUR_2100_HLG, AdobeRGB1998 (model 1, 3 components), kCGColorSpaceGenericGray (model 0, 1 component), GenericCMYK (model 2, 4 components), GenericGrayGamma2_2. The conversion into an sRGB bitmap of a colour (0.2, 0.4, 0.6) given in each space gives the bytes: sRGB 33 66 99; Display P3 1b 68 9d; GenericRGB 40 7a aa; LinearSRGB 7c aa cb; out-of-gamut values are clamped (P3 red -> ff 00 00; extended sRGB (1.2, -0.1, 0.5) -> ff 00 80); white stays ff ff ff. Generic gray levels 0, .1, .25, .5, .75, 1 become gray bytes 00 22 51 92 cb ff; gamma 2.2 gray gives 00 1a 40 80 bf ff.
+returns:
+  "colour space": "the named space, NULL if unknown"
+errors:
+  "unknown_name": "NULL"
+side_effects: "none"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

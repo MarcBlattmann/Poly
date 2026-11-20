@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:38:50",
+  "tests": [
+    {
+      "name": "assoc_policies",
+      "source_sha256": "daca805cbaada8406a68c226e7137f3302632b3087d731d57a02b99957fcde1d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0852321312f86d794f9c04c7b0fde3e52d3e2e35e44e5ed35a401fba143e1e2c",
+          "exit_code": 0,
+          "stdout": "ok none yet\nok assign: get returns it\nvalue assign: retainCount 1\nvalue retain_nonatomic: retainCount 2\nok retain_nonatomic: get returns it\nvalue retain: retainCount after set 3\nok retain: get returns it\nvalue retain: retainCount after get inside pool 5\nvalue retain: retainCount after pool popped 4\nvalue nonatomic: retainCount after get inside pool 4\nvalue nonatomic: retainCount after pool popped 4\nvalue retainCount after nil on k3 3\nok k3 gone\nvalue retainCount after nil on k2 (policy of the nil call differs) 2\nok k2 gone\nok k1 still there\nvalue dealloc so far 0\nvalue dealloc after our release (the leaked autorelease of the first get is still pending) 0\nvalue dealloc after the outer pool is popped 1\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "88bc95989fd590172b90739f7f66fe0e0589144577baf97a213742bf87e8e929",
+          "exit_code": 0,
+          "stdout": "ok none yet\nok assign: get returns it\nvalue assign: retainCount 1\nvalue retain_nonatomic: retainCount 2\nok retain_nonatomic: get returns it\nvalue retain: retainCount after set 3\nok retain: get returns it\nvalue retain: retainCount after get inside pool 5\nvalue retain: retainCount after pool popped 4\nvalue nonatomic: retainCount after get inside pool 4\nvalue nonatomic: retainCount after pool popped 4\nvalue retainCount after nil on k3 3\nok k3 gone\nvalue retainCount after nil on k2 (policy of the nil call differs) 2\nok k2 gone\nok k1 still there\nvalue dealloc so far 0\nvalue dealloc after our release (the leaked autorelease of the first get is still pending) 0\nvalue dealloc after the outer pool is popped 1\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "assoc_replace_dealloc",
+      "source_sha256": "32240b42fe8ca8631549c384a2ff67f9f140e94292da4cf45ac4cf83b3d7e39a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d2b1fdffc264bb4db5fc30fca5f03bf0c2395cf77e94ed157bd0813d5dbab9cf",
+          "exit_code": 0,
+          "stdout": "value owns a: retainCount 1\nvalue a released when replaced: dealloc count 1\nvalue a's tag first in the dealloc log 1\nvalue b retainCount (ours + the association) 2\nok get returns the new value\nvalue same value set again: dealloc count 1\nvalue same value set again: retainCount 1\nvalue deallocs when the owner goes 3\nvalue owner position in the dealloc log 0\nvalue values released 2\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6367fb2c81c5ae75373260863bd0a8d44832ccf8159046829f17ec4d3792087f",
+          "exit_code": 0,
+          "stdout": "value owns a: retainCount 1\nvalue a released when replaced: dealloc count 1\nvalue a's tag first in the dealloc log 1\nvalue b retainCount (ours + the association) 2\nok get returns the new value\nvalue same value set again: dealloc count 1\nvalue same value set again: retainCount 1\nvalue deallocs when the owner goes 3\nvalue owner position in the dealloc log 0\nvalue values released 2\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

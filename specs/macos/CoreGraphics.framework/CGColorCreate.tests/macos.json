@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgcol_basic",
+      "source_sha256": "aaf800bbbb49adb0528df2a0ff901a34ea7065736e284ceb5faa9424c06954b9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "79953d297ff984ff1abfd36417903615e19f8233c8dab8e3b1e976c066dc20c3",
+          "exit_code": 0,
+          "stdout": "ok a generic RGB colour\nok 4 components (RGB + alpha)\nvalue generic RGB (0.1 0.5 0.9 0.7) 0 3fb999999999999a\nvalue generic RGB (0.1 0.5 0.9 0.7) 1 3fe0000000000000\nvalue generic RGB (0.1 0.5 0.9 0.7) 2 3feccccccccccccd\nvalue generic RGB (0.1 0.5 0.9 0.7) 3 3fe6666666666666\nvalue alpha 3fe6666666666666\nok generic gray has 2 components\nvalue generic gray (0.3, 0.6) 0 3fd3333333333333\nvalue generic gray (0.3, 0.6) 1 3fe3333333333333\nok the colour space is the one given\nvalue sRGB (0.2 0.4 0.6 0.8) 0 3fc999999999999a\nvalue sRGB (0.2 0.4 0.6 0.8) 1 3fd999999999999a\nvalue sRGB (0.2 0.4 0.6 0.8) 2 3fe3333333333333\nvalue sRGB (0.2 0.4 0.6 0.8) 3 3fe999999999999a\nok equal colours compare equal\nvalue kCGColorBlack 0 0000000000000000\nvalue kCGColorBlack 1 3ff0000000000000\nvalue kCGColorWhite 0 3ff0000000000000\nvalue kCGColorWhite 1 3ff0000000000000\nvalue kCGColorClear 0 0000000000000000\nvalue kCGColorClear 1 0000000000000000\nvalue a colour made from out-of-range components (2 -1 0.5 1) keeps them 0 3ff0000000000000\nvalue a colour made from out-of-range components (2 -1 0.5 1) keeps them 1 0000000000000000\nvalue a colour made from out-of-range components (2 -1 0.5 1) keeps them 2 3fe0000000000000\nvalue a colour made from out-of-range components (2 -1 0.5 1) keeps them 3 3ff0000000000000\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6817faa7e2a75c352738d2c76ba0792cb8a4aa1df4c982515f5a3ac36a696f02",
+          "exit_code": 0,
+          "stdout": "ok a generic RGB colour\nok 4 components (RGB + alpha)\nvalue generic RGB (0.1 0.5 0.9 0.7) 0 3fb999999999999a\nvalue generic RGB (0.1 0.5 0.9 0.7) 1 3fe0000000000000\nvalue generic RGB (0.1 0.5 0.9 0.7) 2 3feccccccccccccd\nvalue generic RGB (0.1 0.5 0.9 0.7) 3 3fe6666666666666\nvalue alpha 3fe6666666666666\nok generic gray has 2 components\nvalue generic gray (0.3, 0.6) 0 3fd3333333333333\nvalue generic gray (0.3, 0.6) 1 3fe3333333333333\nok the colour space is the one given\nvalue sRGB (0.2 0.4 0.6 0.8) 0 3fc999999999999a\nvalue sRGB (0.2 0.4 0.6 0.8) 1 3fd999999999999a\nvalue sRGB (0.2 0.4 0.6 0.8) 2 3fe3333333333333\nvalue sRGB (0.2 0.4 0.6 0.8) 3 3fe999999999999a\nok equal colours compare equal\nvalue kCGColorBlack 0 0000000000000000\nvalue kCGColorBlack 1 3ff0000000000000\nvalue kCGColorWhite 0 3ff0000000000000\nvalue kCGColorWhite 1 3ff0000000000000\nvalue kCGColorClear 0 0000000000000000\nvalue kCGColorClear 1 0000000000000000\nvalue a colour made from out-of-range components (2 -1 0.5 1) keeps them 0 3ff0000000000000\nvalue a colour made from out-of-range components (2 -1 0.5 1) keeps them 1 0000000000000000\nvalue a colour made from out-of-range components (2 -1 0.5 1) keeps them 2 3fe0000000000000\nvalue a colour made from out-of-range components (2 -1 0.5 1) keeps them 3 3ff0000000000000\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

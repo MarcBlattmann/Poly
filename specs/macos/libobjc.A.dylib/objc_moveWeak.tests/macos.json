@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_moveweak_basic",
+      "source_sha256": "62a6509095f43a57f5eb49bc9cf7324c31c245e4af7f236ef293e88f394d26e9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "63880c41a8b10eab4aabb8b5a67de5ed919278ad56c209e8d681422c549649b0",
+          "exit_code": 0,
+          "stdout": "ok the destination holds the object\nvalue the source is nil afterwards 1\nvalue retainCount unchanged 1\nvalue deallocs 1\nok the destination was zeroed at the death\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c3a928680627f11b19a1171d2d57825166c84de12bc0a6b98b5ee39dfeb68eca",
+          "exit_code": 0,
+          "stdout": "ok the destination holds the object\nvalue the source is nil afterwards 1\nvalue retainCount unchanged 1\nvalue deallocs 1\nok the destination was zeroed at the death\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_moveweak_chain",
+      "source_sha256": "f614cc17c9b3740912a9a0dcccca24df9e209336bce91cc0509cfb52d67152fc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1c750de1ab4f1ec5bf3fce12082d959b6799d51731312e02614293b4a7a0e515",
+          "exit_code": 0,
+          "stdout": "value sources nil 10\nvalue destinations holding the object 10\nvalue retainCount 1\nvalue deallocs 1\nvalue destinations zeroed 9\nok the destroyed one was left alone\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bdcb727e3169ac434577bed62e524aef906d7402c0d698c84a653da41643bbd3",
+          "exit_code": 0,
+          "stdout": "value sources nil 10\nvalue destinations holding the object 10\nvalue retainCount 1\nvalue deallocs 1\nvalue destinations zeroed 9\nok the destroyed one was left alone\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -29,6 +29,7 @@ rules:
   error_places: "on failure the return value, WSAGetLastError and GetLastError are equal (11001, 10109, 10047, 10044, 10022, 11003)"
   last_error_on_success: "WSASetLastError(12345) before a successful call: WSAGetLastError() is 0 afterwards (and GetLastError() 0)"
   free: "freeaddrinfo(NULL) returns without harm; two calls give two independent lists"
+  time_failing_lookups: "Time of lookups of names that do not exist (observed 2026-11-20 on a network with an answering DNS server, bounds in the tests): a new fully qualified name fails with 11001 in 10 to 25 ms, a repeat in under 15 ms (the failed answer is kept for at least 30 s); a new single-label name without AI_DNS_ONLY fails after 1.1 to 1.3 s and is not kept, with AI_DNS_ONLY in 2 to 7 ms; a DNS server that never answers makes a new name fail with 11001 after about 12 s. See getaddrinfo.FailureTiming, getaddrinfo.SingleLabel, getaddrinfo.Parallel, getaddrinfo.Local and getaddrinfo.Families for the rules and tests."
 errors:
   host_not_found: "WSAHOST_NOT_FOUND (11001)"
   service: "WSATYPE_NOT_FOUND (10109)"

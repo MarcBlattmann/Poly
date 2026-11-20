@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/class_getInstanceMethod.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in class_getInstanceMethod.tests/macos.json.
+id: macos/api/libobjc.A.dylib/class_getInstanceMethod
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  Method class_getInstanceMethod(Class cls, SEL name). Finds the instance method for a selector in cls
+  and then in its superclasses and returns its Method (an opaque pointer, stable while the method
+  exists), or NULL. A method inherited from a superclass returns that superclass's Method (the same
+  pointer class_getInstanceMethod gives for the superclass); an override in a subclass returns the
+  subclass's own, a different pointer. Calling twice returns the same pointer. Class methods are not
+  found on the class; ask the metaclass (object_getClass(cls)): it finds class methods, including
+  inherited ones and NSObject's +alloc and +new, and it also reaches the root class's instance methods
+  as the last link of the chain (an NSObject instance-only method such as -finalize is found through
+  NSObject's metaclass, with the same Method as NSObject has; a selector both NSObject sides define,
+  such as -init, is the class-method version). Instance methods of a subclass are not found on any
+  metaclass. Nil cls or a NULL selector gives NULL. method_getName gives the selector back. Methods
+  added by class_addMethod and replaced by class_replaceMethod are visible at once, and replacing
+  keeps the Method pointer (only its IMP changes); method_exchangeImplementations keeps both pointers
+  and their names. For a selector the class does not have, the result is NULL, but a class that
+  implements +resolveInstanceMethod: has it called once for that selector first, and a method it adds
+  is then found (the resolver ran once per class and selector; a later call does not call it again).
+  Does not send +initialize.
+returns:
+  method: "the Method of the class or of the nearest superclass defining it"
+  null: "NULL: absent, a class method asked of the class, nil class, NULL selector"
+errors:
+  none: "no error codes"
+side_effects: "none, except that +resolveInstanceMethod: of the class may be called once for an unknown selector"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "+resolveInstanceMethod: runs before the lookup result is returned, at most once per class and selector"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

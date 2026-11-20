@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d45892328ab7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:26:42Z",
+  "tests": [
+    {
+      "name": "cnet_regwait",
+      "exe_sha256": "249be8c94ff8c3b75c02b153b88e68b33e509d214a172ee06452c2f81f808388",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVnaXN0ZXJlZDogaGFuZGxlIHJldHVybmVkIHllcwppdCByYW4gMSB0aW1lKHMpIHdpdGggdGhlIGV2ZW50IHN0aWxsIHNpZ25hbGxlZDsgb24gYW5vdGhlciB0aHJlYWQgeWVzOyB0aW1lZE91dCAwCndoaWxlIHRoZSBmaXJzdCBjYWxsYmFjayBibG9ja3MsIHRoZSBzZWNvbmQgb25lIHJhbjogbm8KVW5yZWdpc3RlcldhaXRFeChoLCBldmVudCkgd2hpbGUgaXRzIGNhbGxiYWNrIHJ1bnM6IG5vIChlcnJvciA5OTcpLCBldmVudCBzaWduYWxsZWQgYXQgb25jZSBubwpVbnJlZ2lzdGVyV2FpdEV4KGgsIElOVkFMSURfSEFORExFX1ZBTFVFKSB3aGlsZSBpdHMgY2FsbGJhY2sgcnVuczogeWVzOyB0aGUgY2FsbGJhY2sgaGFkIGZpbmlzaGVkIHdoZW4gaXQgcmV0dXJuZWQgeWVzCnRoZXkgcmFuIG9uIDEgZGlzdGluY3QgdGhyZWFkKHMpLCBub25lIG9mIHRoZW0gdGhpcyBvbmU6IHllcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "registered: handle returned yes\nit ran 1 time(s) with the event still signalled; on another thread yes; timedOut 0\nwhile the first callback blocks, the second one ran: no\nUnregisterWaitEx(h, event) while its callback runs: no (error 997), event signalled at once no\nUnregisterWaitEx(h, INVALID_HANDLE_VALUE) while its callback runs: yes; the callback had finished when it returned yes\nthey ran on 1 distinct thread(s), none of them this one: yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1090
+    },
+    {
+      "name": "cnet_regwait_c",
+      "exe_sha256": "82a7668cc65d3c8b17cd35da7d6cc0fbd3e4dde0d09f1e8d4f7e70aec6c15839",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YSBjYWxsYmFjayBhZnRlciBTZXRFdmVudDogeWVzClVucmVnaXN0ZXJXYWl0RXgoaCwgSU5WQUxJRF9IQU5ETEVfVkFMVUUpIGJlZm9yZSB0aGUgZXZlbnQ6IHllczsgdGhlIGNhbGxiYWNrIHJhbiBhZnRlciBTZXRFdmVudDogbm8KYWZ0ZXIgdGhlIGNhbGxiYWNrIGlzIHJlbGVhc2VkOiB0aGUgZmlyc3QgY2FsbGJhY2sgZmluaXNoZWQgeWVzLCB0aGUgc2Vjb25kIHJhbiB5ZXMKdGhlIGNhbGxiYWNrIGhhZCBmaW5pc2hlZCBieSB0aGVuOiB5ZXMKYWxsIDIwMCBjYWxsYmFja3MgcmFuLCBlYWNoIG9uY2U6IHllcwpVbnJlZ2lzdGVyV2FpdCBvZiBhIHdhaXQgdGhhdCBuZXZlciBmaXJlZDogeWVzIChlcnJvciAwKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "a callback after SetEvent: yes\nUnregisterWaitEx(h, INVALID_HANDLE_VALUE) before the event: yes; the callback ran after SetEvent: no\nafter the callback is released: the first callback finished yes, the second ran yes\nthe callback had finished by then: yes\nall 200 callbacks ran, each once: yes\nUnregisterWait of a wait that never fired: yes (error 0)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1103
+    }
+  ]
+}

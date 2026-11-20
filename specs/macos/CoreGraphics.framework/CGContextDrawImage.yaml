@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextDrawImage.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextDrawImage.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextDrawImage
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextDrawImage(context, rect, image) draws the image scaled into the rect (user space). An image of 4x3 drawn at (1,1) with its own size gives the same pixels, the image's first row on the top row of the drawn picture; under a CTM flipped in y (translate by the height, scale (1,-1)) the picture is upside down relative to the unflipped draw: the first image row ends on the bottom; a rect hanging over the bitmap is clipped. Enlarging a 2x2 image (red green / blue white) to 6x6 at the default quality blends the colours smoothly (the default quality is bilinear-like: row 0: ff0000 ff0000 c03f00 3fc000 00ff00 00ff00; row 2: c0003f ...), reducing a 6x6 image to 2x2 averages (002828 ffa028 / ff28a0 00a0a0); a fractional rect (0.5,0.5,4,4) gives edge pixels of partial alpha (3f 00 00 3f ...). Alpha: an image row of (opaque red, half red [80 00 00 80], clear, quarter teal [00 40 40 40]) over opaque blue gives ff0000ff, 80007fff, 0000ffff, 0040ffff; with the context alpha 0.5: 80007fff, 4000bfff, 0000ffff, 0020ffff; onto a transparent bitmap the image's own bytes (premultiplied). A quarter-turn rotated draw of the 2x2 image rotates it exactly; a rect with negative width and height is standardised (the image is not mirrored); a clip restricts it.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "writes pixels"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

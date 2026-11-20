@@ -189,6 +189,15 @@ pub trait NtKernel {
     /// [`write_user`](Self::write_user).
     fn with_state<R>(&mut self, f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn Backend) -> R) -> R;
 
+    /// Run `f` on the calling process's own state and memory with only that process locked, not
+    /// the system's state (ADR 0262: a process's memory calls on its own private memory, the
+    /// common case, wait for no other process). `f` must not need the system's state, its objects
+    /// or its sections. A host model without a separate process lock runs it through
+    /// [`with_state`](Self::with_state).
+    fn with_own_vm<R>(&mut self, f: impl FnOnce(&mut NtProcess, &mut dyn Backend) -> R) -> R {
+        self.with_state(|_, proc, b| f(proc, b))
+    }
+
     /// End the calling process with `status` once the current call
     /// returns (`NtTerminateProcess` of the current process).
     fn terminate_process(&mut self, status: NtStatus);

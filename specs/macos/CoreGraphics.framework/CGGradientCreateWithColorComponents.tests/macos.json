@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cggrad_more",
+      "source_sha256": "8f1a58e776bbd90848143b9bc94ce5f85312aa4f5c03c90e691358613788de28",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b0f6a3df6773b22a598c4c6d275a956f4cd172d64f8a3d824d847d37fc07fa6e",
+          "exit_code": 0,
+          "stdout": "value device gray black to white 00 0a0a0aff 2e2e2eff 3f3f3fff 646464ff 767676ff 9b9b9bff bfbfbfff d2d2d2ff f6f6f6ff\nvalue Display P3 red to green into an sRGB bitmap 00 ff0000ff e50300ff cf3100ff a46100ff 8c7500ff 529d00ff 00c300ff 00d600ff 00fa00ff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1502940aa80941086b57b7ef483ce1747bf539a97f74405f4446d45d0ff64f96",
+          "exit_code": 0,
+          "stdout": "value device gray black to white 00 0a0a0aff 2e2e2eff 3f3f3fff 646464ff 767676ff 9b9b9bff bfbfbfff d2d2d2ff f6f6f6ff\nvalue Display P3 red to green into an sRGB bitmap 00 ff0000ff e50300ff cf3100ff a46100ff 8c7500ff 529d00ff 00c300ff 00d600ff 00fa00ff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cggrad_stops",
+      "source_sha256": "326a22b8a8f5c0600bb724911c62921fa8959e222a2e76b09d7a03aaf7ae74da",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a4394eab5fed07db6d266525f6f3dae07278dd22134ee4db08239c135fb8ed78",
+          "exit_code": 0,
+          "stdout": "value red to blue, locations 0 and 1 00 fb0005ff ea0015ff d80026ff c80037ff bf0040ff af0051ff 9d0062ff 8d0073ff 84007bff 73008cff 61009dff 5100aeff 4000c0ff 3700c7ff 2600d9ff 1600eaff 0500fbff\nvalue red green blue, evenly spaced (NULL locations) 00 f70900ff d52b00ff b24c00ff 916f00ff 7f7f00ff 5ea200ff 3cc400ff 1ae600ff 08f600ff 00e61aff 00c33bff 00a25eff 008080ff 006e90ff 004db3ff 002bd5ff 0009f7ff\nvalue red green blue at 0, 0.5, 1 00 f70900ff d52b00ff b24c00ff 916f00ff 7f7f00ff 5ea200ff 3cc400ff 1ae600ff 08f600ff 00e61aff 00c33bff 00a25eff 008080ff 006e90ff 004db3ff 002bd5ff 0009f7ff\nvalue red green blue at 0, 0.2, 1 00 ea1600ff 956a00ff 3fbf00ff 00fa05ff 00ef10ff 00da25ff 00c53bff 00b050ff 00a55aff 009070ff 007a84ff 00659aff 0050b0ff 0045b9ff 0030cfff 001be5ff 0006faff\nvalue black opaque to black clear 00 000000fb 000000ea 000000d8 000000c8 000000bf 000000af 0000009d 0000008d 00000084 00000073 00000061 00000051 00000040 00000037 00000026 00000016 00000005\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ad7810489c37d4b5b33d792b4eaafc7d3deb59bc0a826673b653742fb6676c9d",
+          "exit_code": 0,
+          "stdout": "value red to blue, locations 0 and 1 00 fb0005ff ea0015ff d80026ff c80037ff bf0040ff af0051ff 9d0062ff 8d0073ff 84007bff 73008cff 61009dff 5100aeff 4000c0ff 3700c7ff 2600d9ff 1600eaff 0500fbff\nvalue red green blue, evenly spaced (NULL locations) 00 f70900ff d52b00ff b24c00ff 916f00ff 7f7f00ff 5ea200ff 3cc400ff 1ae600ff 08f600ff 00e61aff 00c33bff 00a25eff 008080ff 006e90ff 004db3ff 002bd5ff 0009f7ff\nvalue red green blue at 0, 0.5, 1 00 f70900ff d52b00ff b24c00ff 916f00ff 7f7f00ff 5ea200ff 3cc400ff 1ae600ff 08f600ff 00e61aff 00c33bff 00a25eff 008080ff 006e90ff 004db3ff 002bd5ff 0009f7ff\nvalue red green blue at 0, 0.2, 1 00 ea1600ff 956a00ff 3fbf00ff 00fa05ff 00ef10ff 00da25ff 00c53bff 00b050ff 00a55aff 009070ff 007a84ff 00659aff 0050b0ff 0045b9ff 0030cfff 001be5ff 0006faff\nvalue black opaque to black clear 00 000000fb 000000ea 000000d8 000000c8 000000bf 000000af 0000009d 0000008d 00000084 00000073 00000061 00000051 00000040 00000037 00000026 00000016 00000005\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

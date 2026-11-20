@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/class_respondsToSelector.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in class_respondsToSelector.tests/macos.json.
+id: macos/api/libobjc.A.dylib/class_respondsToSelector
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  BOOL class_respondsToSelector(Class cls, SEL sel). Whether instances of cls (or, for a metaclass,
+  the class) would find an implementation: own methods and inherited ones (NSObject's -hash for any
+  subclass) answer YES; a selector nobody implements answers NO; a class method is not an instance
+  response, so class_respondsToSelector(cls, classMethod) is NO and the metaclass answers YES (also
+  for subclasses' metaclasses, and NSObject's metaclass answers YES for +alloc while NSObject does not
+  answer -alloc). Nil cls answers NO and so does a NULL selector. The result is 1 or 0. It agrees with
+  the instance method -respondsToSelector:, with +instancesRespondToSelector: and, for class methods,
+  with +respondsToSelector:. It does consult +resolveInstanceMethod: of the class for a selector the
+  class does not have: the resolver (called with the class as receiver) runs once per class and
+  selector, a method it adds makes the answer YES, and a later call does not run it again (the same
+  holds for class_getInstanceMethod, class_getMethodImplementation, -respondsToSelector: and
+  +instancesRespondToSelector:: the first of them to ask runs the resolver). It does not send
+  +initialize.
+returns:
+  yes: "1: the class has the method itself or inherits it, or +resolveInstanceMethod: added it"
+  no: "0"
+errors:
+  none: "no error codes"
+side_effects: "may call the class's +resolveInstanceMethod: once for an unknown selector, which can add the method"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "the resolver runs inside the first call that asks about the selector"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

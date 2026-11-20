@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "lookupclass_runtime",
+      "source_sha256": "432253788572836b8b08e4cd6df78efac2cf3eb0d61875f3e0a58e21c2ba7b4d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f7b0e0fa674cfb3f1a3c9f05dcc318d2a7e601b356082dee61bc003f892697f1",
+          "exit_code": 0,
+          "stdout": "ok A allocated\nok A is not found before registration\nok A found\nok B is unknown before it exists\nok B allocated\nok B still not found\nok B found\nok B's superclass is A\nok both agree with getClass\nok duplicate name: no class\nok first still found\nok C allocated\nok C unknown\nvalue allocating the same unregistered name twice gives a class 1\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "04ed4d56ab5206e833bc18de2293452b7ddc91d82ac7b7f1b4e86690fa0ff4cd",
+          "exit_code": 0,
+          "stdout": "ok A allocated\nok A is not found before registration\nok A found\nok B is unknown before it exists\nok B allocated\nok B still not found\nok B found\nok B's superclass is A\nok both agree with getClass\nok duplicate name: no class\nok first still found\nok C allocated\nok C unknown\nvalue allocating the same unregistered name twice gives a class 1\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

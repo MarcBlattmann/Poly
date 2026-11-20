@@ -760,8 +760,9 @@ impl Link {
 
     /// Input for a Windows surface's scene window (the server's internal
     /// events of adopted windows): forwarded to win32k. False when the
-    /// event is not about one of ours.
-    pub fn input(&mut self, ev: &poly_wayland::server::InternalEvent) -> bool {
+    /// event is not about one of ours. `at`: where the pointer is, relative to
+    /// the event's window (logical), for a `Leave`.
+    pub fn input(&mut self, ev: &poly_wayland::server::InternalEvent, at: (i32, i32)) -> bool {
         use poly_wayland::server::InternalEvent as E;
         let window = match *ev {
             E::Motion { window, .. }
@@ -793,7 +794,7 @@ impl Link {
                 }]
             }
             E::Key { key, pressed, .. } => vec![FromCompositor::Key { code: key as u16, pressed, time }],
-            E::Leave(_) => vec![FromCompositor::Leave { surface }],
+            E::Leave(_) => vec![FromCompositor::Leave { surface, x: at.0 * u, y: at.1 * u }],
             E::Close(_) => vec![FromCompositor::Request { surface, request: poly_win32k::link::Request::Close }],
             E::Resize { .. } => Vec::new(),
             // A resize by the window's border: win32k has the app's thread

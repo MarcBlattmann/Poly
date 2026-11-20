@@ -24,8 +24,10 @@
 //!   `/dev/input/event*` routed to the clients (`wl_pointer`, `wl_keyboard`
 //!   with an XKB keymap of the settings' or `--keymap`'s layout), a
 //!   software cursor, and Poly's shell (`poly-shell`, `desk.rs`): the ridge
-//!   along the top, the launcher in the middle (shown on an empty desktop;
-//!   the Windows key or Ctrl+Space toggles it; Enter starts the app chosen
+//!   along the top, the launcher in the middle (closed at the start unless
+//!   `--launcher` asks for it, shown again when the last window closes;
+//!   typing on the empty desktop opens it with the letters typed; the
+//!   Windows key or Ctrl+Space toggles it; Enter starts the app chosen
 //!   with `WAYLAND_DISPLAY` set), window management (the frame's buttons,
 //!   snapping, Alt+Tab, Super+arrows, Alt+F4), notifications through a
 //!   session bus at `$XDG_RUNTIME_DIR/bus`, the settings window, kept in
@@ -54,7 +56,7 @@
 //!
 //! ```text
 //! poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats]
-//!                 [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]]
+//!                 [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE] [--launcher]]
 //!                 [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy]
 //!                 [--exec PROGRAM [ARGS...]]
 //! ```
@@ -136,6 +138,9 @@ struct Options {
     /// `--keymap` as given (it wins over the settings).
     keymap: Option<String>,
     settings: Option<String>,
+    /// `--launcher`: the desktop starts with the launcher open (it is
+    /// closed after a normal boot).
+    launcher: bool,
     /// On the screen without the shell.
     kms: bool,
     drm: String,
@@ -151,7 +156,7 @@ struct Options {
     app_user: Option<String>,
 }
 
-const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats] [--windows-hidpi] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--app-user PROGRAM] [--exec PROGRAM [ARGS...]]";
+const USAGE: &str = "usage: poly-compositor [--socket NAME] [--size WxH] [--scale N|PERCENT|auto] [--dump FILE] [--stats] [--windows-hidpi] [--probe X,Y]... [--desktop [--fb PATH] [--keymap NAME] [--settings FILE] [--launcher]] [--kms] [--drm PATH] [--no-kms] [--xwayland | --xwayland-lazy] [--app-user PROGRAM] [--exec PROGRAM [ARGS...]]";
 
 /// A scale given as `auto`, a factor (`2`, `1.5`) or a percentage (`150`,
 /// `150%`; [`Scale::parse`]).
@@ -179,6 +184,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
         fb: "/dev/fb0".into(),
         keymap: None,
         settings: None,
+        launcher: false,
         kms: false,
         drm: "/dev/dri/card0".into(),
         no_kms: false,
@@ -216,6 +222,7 @@ fn parse_args(args: &[String]) -> Result<Options, String> {
                 o.keymap = Some(v);
             }
             "--settings" => o.settings = Some(value()?),
+            "--launcher" => o.launcher = true,
             "--xwayland" => o.xwayland = Some(xwayland::Start::Now),
             "--xwayland-lazy" => o.xwayland = Some(xwayland::Start::Lazy),
             "--app-user" => o.app_user = Some(value()?),
@@ -732,6 +739,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             keymap: o.keymap.as_deref(),
             scale: o.scale,
             settings: o.settings.clone(),
+            launcher: o.launcher,
         };
         let mut d = desk::Desktop::new(&opts, &mut server, keymap, desktop::shell_fonts());
         d.app_user = o.app_user.clone();
@@ -1036,8 +1044,17 @@ fn run(args: &[String]) -> Result<u8, String> {
         if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {
             // Windows apps type with the desktop's keyboard layout (ADR 0209).
             l.set_layout(d.layout.name);
+            // Where the pointer went when it left a Windows surface: win32k's cursor follows it.
+            let (px, py) = server.pointer();
             for ev in core::mem::take(&mut d.foreign) {
-                l.input(&ev);
+                let at = match ev {
+                    poly_wayland::server::InternalEvent::Leave(w) => server.scene().window(w).map_or((0, 0), |win| {
+                        let (wx, wy) = win.position();
+                        (px.floor() - wx, py.floor() - wy)
+                    }),
+                    _ => (0, 0),
+                };
+                l.input(&ev, at);
             }
         }
         // Consent prompts Windows programs asked for (ADR 0222): the desktop shows them; without
@@ -1119,7 +1136,8 @@ fn run(args: &[String]) -> Result<u8, String> {
             {
                 d.ready = true;
                 let ms = (shown - now) / 1_000_000;
-                println!("poly-compositor: desktop ready (first frame drawn in {ms} ms; launcher shown)");
+                let launcher = if d.shell.launcher().is_visible() { "shown" } else { "hidden" };
+                println!("poly-compositor: desktop ready (first frame drawn in {ms} ms; launcher {launcher})");
             }
         }
 
@@ -1235,6 +1253,8 @@ mod tests {
         assert_eq!((o.fb.as_str(), o.keymap.as_deref()), ("/dev/fb1", Some("de-ch")));
         let o = parse_args(&args("--desktop --settings /tmp/s.conf --scale 2")).unwrap();
         assert_eq!((o.settings, o.scale, o.keymap), (Some("/tmp/s.conf".into()), Some(Scale::from_int(2)), None));
+        assert!(!o.launcher, "the launcher is closed after a normal boot");
+        assert!(parse_args(&args("--desktop --launcher")).unwrap().launcher);
         let f = parse_args(&args("--scale 1.5")).unwrap();
         assert_eq!(f.scale.map(Scale::percent), Some(150));
         assert_eq!(parse_args(&args("--scale 175")).unwrap().scale.map(Scale::percent), Some(175));

@@ -228,6 +228,7 @@ mod oom;
 mod resume;
 mod sevenzip;
 mod slice2;
+mod vmstress;
 
 use basic::*;
 use inherit::*;
@@ -441,6 +442,10 @@ pub extern "system" fn k32test_main(_peb: *mut u8) -> u32 {
     if contains(cmd, b"--resume-race") {
         // SAFETY: as below.
         unsafe { resume::run(cmd) }
+    }
+    if contains(cmd, b"--vm-stress") {
+        // SAFETY: as below.
+        unsafe { vmstress::run(cmd) }
     }
     if contains(cmd, b"--child") {
         // SAFETY: as below.

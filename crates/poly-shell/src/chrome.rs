@@ -171,6 +171,11 @@ impl<K: Copy + PartialEq> Motion<K> {
         self.animate = on;
     }
 
+    /// Whether it animates ([`Motion::set_animate`]).
+    pub fn animate(&self) -> bool {
+        self.animate
+    }
+
     /// How open the surface is at `now`, 0 to 1.
     pub fn openness(&self, now: u64) -> f32 {
         let (from, to, start, dur, e) = self.open;
@@ -194,6 +199,8 @@ impl<K: Copy + PartialEq> Motion<K> {
 
     fn start_open(&mut self, to: f32, dur: u64, e: Ease, now: u64) {
         let from = self.openness(now);
+        // Not animating: there at once, also after animating is on again.
+        let dur = if self.animate { dur } else { 0 };
         self.open = (from, to, now, dur, e);
     }
 

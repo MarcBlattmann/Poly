@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:14",
+  "tests": [
+    {
+      "name": "imageload_categories",
+      "source_sha256": "83fcd423732de399f00c23e777f3176991c72d184e500f86d6ee62ebc9e2be0b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6a7b0aaf7b35099213aef7cbd4be1fec56db3ee714d48a37783fc01da5a56ad1",
+          "exit_code": 0,
+          "stdout": "ok +load of the class saw the category method\nok the class's own method\nok a category adds a method\nok class_getInstanceMethod finds it\nok a category method replaces the class's own\nvalue two categories define -twice: the answer 31\nok the later category in the image wins\nvalue a category's +cls over the class's 101\nok a category class method replaces the class's\nok a category on NSObject reaches every object\nok and every class object, through NSObject's instance methods\nvalue the class's method list, in order twice fromOne shadowed twice own shadowed twice \nvalue methods in the class's list (own + categories) 7\nvalue entries named -shadowed in the list 2\nok -own is listed once\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b19dede7ef69e6a618efaf56cf9e9eee5cef2f227d78459939d4e876f47173de",
+          "exit_code": 0,
+          "stdout": "ok +load of the class saw the category method\nok the class's own method\nok a category adds a method\nok class_getInstanceMethod finds it\nok a category method replaces the class's own\nvalue two categories define -twice: the answer 31\nok the later category in the image wins\nvalue a category's +cls over the class's 101\nok a category class method replaces the class's\nok a category on NSObject reaches every object\nok and every class object, through NSObject's instance methods\nvalue the class's method list, in order own fromOne shadowed shadowed twice twice twice \nvalue methods in the class's list (own + categories) 7\nvalue entries named -shadowed in the list 2\nok -own is listed once\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "imageload_classes",
+      "source_sha256": "8cd3e7b8b51773fdb36bc5e834325d52d82689b926bfd5fbfaf45b0049651236",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3fd6e3eece142d950384338aead59836b83b8a0d17b4ff5a3d9271fed05e38f1",
+          "exit_code": 0,
+          "stdout": "ok Animal is found by name\nok Dog is found by name\nok Dog's superclass is Animal\nok Animal's superclass is NSObject\nok a class and its metaclass\nok the metaclass chain follows the classes\nok [Dog class] is the registered class\nvalue a class list is not empty 1\nok there is a class list\nok it holds as many as asked\nok Animal, Dog, Cat are in it\nok NSObject is in it\nok no class twice\nok a class of the executable has an image name\nok Dog and Cat are of the same image\nok NSObject is of libobjc's image\nok not the executable's image\nok the executable's classes can be listed\nvalue classes of the executable 3\nvalue their names, in order Animal Dog Cat \nok a class made at run time has no image name\nok compiled protocols are registered\nok Animal conforms to Walker\nok Dog conforms to Runner\nok Dog conforms to Walker (through Animal and Runner)\nok Cat does not conform to Runner\nok Runner extends Walker\nvalue protocol name Runner\nok an unknown protocol is nil\nsummary 25 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3c2756477279b62d5ba99e3a458482f4f4a6a9e372da75d07d04d92b61784afc",
+          "exit_code": 0,
+          "stdout": "ok Animal is found by name\nok Dog is found by name\nok Dog's superclass is Animal\nok Animal's superclass is NSObject\nok a class and its metaclass\nok the metaclass chain follows the classes\nok [Dog class] is the registered class\nvalue a class list is not empty 1\nok there is a class list\nok it holds as many as asked\nok Animal, Dog, Cat are in it\nok NSObject is in it\nok no class twice\nok a class of the executable has an image name\nok Dog and Cat are of the same image\nok NSObject is of libobjc's image\nok not the executable's image\nok the executable's classes can be listed\nvalue classes of the executable 3\nvalue their names, in order Animal Dog Cat \nok a class made at run time has no image name\nok compiled protocols are registered\nok Animal conforms to Walker\nok Dog conforms to Runner\nok Dog conforms to Walker (through Animal and Runner)\nok Cat does not conform to Runner\nok Runner extends Walker\nvalue protocol name Runner\nok an unknown protocol is nil\nsummary 25 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

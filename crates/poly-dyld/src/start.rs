@@ -39,7 +39,7 @@ pub const X86_64_START: [u8; 169] = [
     0x48, 0x83, 0xc5, 0x08, 0x48, 0x83, 0xe4, 0xf0, 0x6a, 0x00, 0x6a, 0x00,
     0x48, 0x8b, 0x04, 0x24, 0x48, 0x3b, 0x43, 0x18, 0x73, 0x1c, 0x48, 0x8b,
     0x44, 0xc3, 0x20, 0x48, 0xff, 0x04, 0x24, 0x4c, 0x89, 0xef, 0x4c, 0x89,
-    0xf6, 0x4c, 0x89, 0xfa, 0x48, 0x89, 0xe9, 0x45, 0x31, 0xc0, 0xff, 0xd0,
+    0xf6, 0x4c, 0x89, 0xfa, 0x48, 0x89, 0xe9, 0x49, 0x89, 0xd8, 0xff, 0xd0,
     0xeb, 0xda, 0x48, 0x83, 0x7b, 0x08, 0x01, 0x75, 0x07, 0x49, 0x8d, 0x64,
     0x24, 0x08, 0xff, 0x23, 0x4c, 0x89, 0xef, 0x4c, 0x89, 0xf6, 0x4c, 0x89,
     0xfa, 0x48, 0x89, 0xe9, 0xff, 0x13, 0x89, 0xc7, 0x48, 0x8b, 0x43, 0x10,
@@ -102,20 +102,51 @@ pub struct StartData {
     /// libSystem's `exit`, 0 for the raw exit system call.
     pub exit: u64,
     /// The initializers, in the order to call them, each with `(argc, argv,
-    /// envp, apple, 0)`.
+    /// envp, apple, data)`: the fifth argument is the address of this block
+    /// (ADR 0258), where libdyld finds [`StartData::images`].
     pub initializers: Vec<u64>,
+    /// The loaded images in load order, the program first: what libdyld's
+    /// `_dyld_image_count` and `_dyld_get_image_*` report (ADR 0258).
+    pub images: Vec<ImageInfo>,
 }
+
+/// One loaded image, for libdyld.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImageInfo {
+    /// The address of its mapped Mach-O header.
+    pub header: u64,
+    /// How far it was moved from its preferred address.
+    pub slide: u64,
+    /// The path it was loaded from.
+    pub path: alloc::string::String,
+}
+
+/// The word that starts the image table after the initializers: "PolyImgs".
+pub const IMAGES_MAGIC: u64 = u64::from_le_bytes(*b"PolyImgs");
 
 impl StartData {
     /// The block as the start code reads it: entry, mode, exit, count,
-    /// then the initializers, 64-bit little-endian words.
+    /// then the initializers, 64-bit little-endian words. Then the image
+    /// table: [`IMAGES_MAGIC`], the number of images, per image its header
+    /// address, slide and the offset of its path from the start of the
+    /// block; then the paths, each ending with a NUL.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(32 + 8 * self.initializers.len());
-        for w in [self.entry, self.mode as u64, self.exit, self.initializers.len() as u64]
-            .into_iter()
-            .chain(self.initializers.iter().copied())
-        {
+        let mut out = Vec::with_capacity(48 + 8 * self.initializers.len() + 24 * self.images.len());
+        let words = [self.entry, self.mode as u64, self.exit, self.initializers.len() as u64];
+        let table = [IMAGES_MAGIC, self.images.len() as u64];
+        for w in words.into_iter().chain(self.initializers.iter().copied()).chain(table) {
             out.extend_from_slice(&w.to_le_bytes());
+        }
+        let mut path_at = (out.len() + 24 * self.images.len()) as u64;
+        for im in &self.images {
+            for w in [im.header, im.slide, path_at] {
+                out.extend_from_slice(&w.to_le_bytes());
+            }
+            path_at += im.path.len() as u64 + 1;
+        }
+        for im in &self.images {
+            out.extend_from_slice(im.path.as_bytes());
+            out.push(0);
         }
         out
     }
@@ -127,10 +158,24 @@ mod tests {
 
     #[test]
     fn data_block_layout() {
-        let d = StartData { entry: 0x1000, mode: Mode::CallMain, exit: 0x2000, initializers: alloc::vec![7, 8] };
+        let images = alloc::vec![
+            ImageInfo { header: 0x1_0000_0000, slide: 0, path: "/bin/a".into() },
+            ImageInfo { header: 0x8_0000_0000, slide: 0x8_0000_0000, path: "/usr/lib/libSystem.B.dylib".into() },
+        ];
+        let d =
+            StartData { entry: 0x1000, mode: Mode::CallMain, exit: 0x2000, initializers: alloc::vec![7, 8], images };
         let b = d.to_bytes();
         let w = |i: usize| u64::from_le_bytes(b[i * 8..i * 8 + 8].try_into().unwrap());
         assert_eq!((w(0), w(1), w(2), w(3), w(4), w(5)), (0x1000, 0, 0x2000, 2, 7, 8));
+        assert_eq!((w(6), w(7)), (IMAGES_MAGIC, 2));
+        assert_eq!((w(8), w(9), w(11), w(12)), (0x1_0000_0000, 0, 0x8_0000_0000, 0x8_0000_0000));
+        let path = |at: u64| {
+            let rest = &b[at as usize..];
+            core::str::from_utf8(&rest[..rest.iter().position(|&c| c == 0).unwrap()]).unwrap()
+        };
+        assert_eq!(path(w(10)), "/bin/a");
+        assert_eq!(path(w(13)), "/usr/lib/libSystem.B.dylib");
+        assert_eq!(b.len() as u64, w(13) + 27);
     }
 
     #[test]
@@ -144,6 +189,8 @@ mod tests {
         // The raw exit call: mov $0x2000001,%eax; syscall.
         let exit = [0xb8, 0x01, 0x00, 0x00, 0x02, 0x0f, 0x05];
         assert!(X86_64_START.windows(7).any(|w| w == exit));
+        // Initializers get the data block as their fifth argument: mov %rbx,%r8.
+        assert!(X86_64_START.windows(3).any(|w| w == [0x49, 0x89, 0xd8]));
     }
 
     #[test]

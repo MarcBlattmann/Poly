@@ -9,7 +9,9 @@ use crate::image::ImageSection;
 use crate::protect::Protection;
 use crate::vm::VirtualMemory;
 use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU64, Ordering};
 use poly_ntobj::{ObjectId, ObjectManager, ObjectType, ProcessId, ThreadRef};
 
 /// What a section's pages are.
@@ -77,17 +79,65 @@ pub struct ThreadRecord {
     pub ideal: Option<u8>,
 }
 
+/// The system's commit charge (ADR 0250): the private memory every process has committed through
+/// `NtAllocateVirtualMemory` and not freed, and the most that may be. Atomics, shared by the
+/// system and every process ([`NtProcess::commit`]), so a process's own memory calls charge it
+/// under the process's lock alone (ADR 0262).
+#[derive(Debug)]
+pub struct CommitCharge {
+    total: AtomicU64,
+    limit: AtomicU64,
+}
+
+impl CommitCharge {
+    pub fn new(limit: u64) -> CommitCharge {
+        CommitCharge { total: AtomicU64::new(0), limit: AtomicU64::new(limit) }
+    }
+
+    /// What is committed now.
+    pub fn total(&self) -> u64 {
+        self.total.load(Ordering::Relaxed)
+    }
+
+    /// The most that may be committed: the machine's RAM less what the kernel keeps, set by the
+    /// kernel (Poly has no pagefile, so every committed page has a frame waiting for it).
+    /// `u64::MAX` until then.
+    pub fn limit(&self) -> u64 {
+        self.limit.load(Ordering::Relaxed)
+    }
+
+    pub fn set_limit(&self, limit: u64) {
+        self.limit.store(limit, Ordering::Relaxed);
+    }
+
+    /// Add `bytes`, if they fit under the limit: whether they did. Checked and added in one step,
+    /// so two processes committing at once cannot both take the last room.
+    pub fn try_charge(&self, bytes: u64) -> bool {
+        let limit = self.limit();
+        self.total
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |t| t.checked_add(bytes).filter(|&n| n <= limit))
+            .is_ok()
+    }
+
+    /// Add `bytes` without a check (memory that is committed already).
+    pub fn charge(&self, bytes: u64) {
+        self.total.fetch_add(bytes, Ordering::Relaxed);
+    }
+
+    /// Give `bytes` back.
+    pub fn refund(&self, bytes: u64) {
+        let _ = self.total.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |t| Some(t.saturating_sub(bytes)));
+    }
+}
+
 /// The machine-wide NT state.
 #[derive(Debug)]
 pub struct NtSystem {
     pub objects: ObjectManager,
-    /// The system's commit charge: the private memory every process has committed through
-    /// `NtAllocateVirtualMemory` and not freed (ADR 0250).
-    pub commit_total: u64,
-    /// The most that may be committed: the machine's RAM less what the kernel keeps, set by the
-    /// kernel (Poly has no pagefile, so every committed page has a frame waiting for it).
-    /// `u64::MAX` until then.
-    pub commit_limit: u64,
+    /// The system's commit charge (ADR 0250), shared with every process ([`NtSystem::adopt`]).
+    pub commit: Arc<CommitCharge>,
+    /// Big image files' checked relocation tables, for their relocated views (ADR 0262).
+    pub reloc_tables: crate::image::RelocTables,
     /// File I/O: volumes, file objects, share access, locks, IRPs (ADR 0067).
     pub io: crate::io::IoState,
     /// The registry, reached through the `\REGISTRY` object (ADR 0066).
@@ -149,6 +199,13 @@ impl Default for NtSystem {
 }
 
 impl NtSystem {
+    /// Make `proc` one of the system's processes for its memory accounting: it charges the system's
+    /// commit charge, and the jobs keep its commit limit (ADR 0262).
+    pub fn adopt(&mut self, proc: &mut NtProcess) {
+        proc.commit = Arc::clone(&self.commit);
+        self.jobs.register_commit_cell(proc.pid, Arc::clone(&proc.job_commit_limit));
+    }
+
     /// The number the system gives a container's SID: the same every time, a later SID a
     /// larger one (the sheet of `CreateAppContainerToken`).
     pub fn lowbox_number(&mut self, sid: &poly_security::sid::Sid) -> u32 {
@@ -196,8 +253,8 @@ impl NtSystem {
             working_sets: BTreeMap::new(),
             ntdll32: &[],
             logon: poly_security::token::Logon::Admin,
-            commit_total: 0,
-            commit_limit: u64::MAX,
+            commit: Arc::new(CommitCharge::new(u64::MAX)),
+            reloc_tables: crate::image::RelocTables::default(),
             consent: crate::consent::Broker::default(),
             sections: BTreeMap::new(),
             next_key: 1,
@@ -376,9 +433,16 @@ pub struct NtProcess {
     pub priority_class: u8,
     /// The process that created it (0: the kernel started it).
     pub parent: u32,
-    /// What it has added to the system's commit charge (`NtSystem::commit_total`, ADR 0250),
+    /// What it has added to the system's commit charge ([`NtSystem::commit`], ADR 0250),
     /// given back when it frees memory and when it ends.
     pub commit_charged: u64,
+    /// The system's commit charge, the same object as [`NtSystem::commit`] once the system
+    /// adopted the process ([`NtSystem::adopt`]).
+    pub commit: Arc<CommitCharge>,
+    /// The smallest commit limit of the jobs it is in (`u64::MAX`: none), which the jobs keep up
+    /// to date ([`crate::job::Jobs::commit_limit_of`]): what its own memory calls check under its
+    /// lock alone (ADR 0262).
+    pub job_commit_limit: Arc<AtomicU64>,
     /// Its executable's subsystem (`IMAGE_SUBSYSTEM_*`, the optional header's `Subsystem`): 2 for a
     /// GUI program, 3 for a console one; 0 before an image is mapped. `WaitForInputIdle` refuses
     /// console programs (ADR 0245).
@@ -416,6 +480,8 @@ impl NtProcess {
             priority_class: 2,
             parent: 0,
             commit_charged: 0,
+            commit: Arc::new(CommitCharge::new(u64::MAX)),
+            job_commit_limit: Arc::new(AtomicU64::new(u64::MAX)),
             subsystem: 0,
         }
     }

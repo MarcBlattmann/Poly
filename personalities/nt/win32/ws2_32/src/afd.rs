@@ -2,6 +2,7 @@
 //! `poly_winsock::afd`), through our `ntdll`.
 
 use crate::Handle;
+use crate::lock::{Held, Locked};
 use core::sync::atomic::{AtomicIsize, Ordering};
 use poly_winsock::afd;
 use poly_winsock::error::{STATUS_PENDING, STATUS_SUCCESS};
@@ -91,27 +92,10 @@ const OBJ_CASE_INSENSITIVE: u32 = 0x40;
 const OBJ_INHERIT: u32 = 0x02;
 
 /// The sockets this process made that `closesocket` has not closed (a `CloseHandle` leaves them).
-struct KnownSockets {
-    locked: core::sync::atomic::AtomicBool,
-    list: core::cell::UnsafeCell<Known>,
-}
-
-// SAFETY: access to `list` is serialised by `locked`.
-unsafe impl Sync for KnownSockets {}
-
-static KNOWN: KnownSockets = KnownSockets {
-    locked: core::sync::atomic::AtomicBool::new(false),
-    list: core::cell::UnsafeCell::new(Known::new()),
-};
+static KNOWN: Locked<Known> = Locked::new(Known::new());
 
 fn with_known<R>(f: impl FnOnce(&mut Known) -> R) -> R {
-    while KNOWN.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-        core::hint::spin_loop();
-    }
-    // SAFETY: the lock is held.
-    let r = f(unsafe { &mut *KNOWN.list.get() });
-    KNOWN.locked.store(false, Ordering::Release);
-    r
+    KNOWN.with(f)
 }
 
 /// `closesocket` of a value that is no socket any more: it was a socket of this process whose
@@ -124,22 +108,14 @@ pub fn forget_orphan(h: Handle) -> bool {
 /// threads reading it at once (the event helper and the program) must not interleave, or the one
 /// that comes second reads 0 while the first has not stored the error yet (a refused connect
 /// seen as `FD_CONNECT`, then `SO_ERROR` 0).
-static SO_ERROR_LOCK: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+static SO_ERROR_LOCK: Locked<()> = Locked::new(());
 
-pub struct SoErrorGuard;
+/// The `SO_ERROR` lock, held.
+pub type SoErrorGuard = Held<'static, ()>;
 
 /// Wait for and take the `SO_ERROR` lock.
 pub fn so_error_guard() -> SoErrorGuard {
-    while SO_ERROR_LOCK.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-        core::hint::spin_loop();
-    }
-    SoErrorGuard
-}
-
-impl Drop for SoErrorGuard {
-    fn drop(&mut self) {
-        SO_ERROR_LOCK.store(false, Ordering::Release);
-    }
+    SO_ERROR_LOCK.hold()
 }
 
 /// Is `h` an event object (`NtQueryEvent(EventBasicInformation)` answers)?

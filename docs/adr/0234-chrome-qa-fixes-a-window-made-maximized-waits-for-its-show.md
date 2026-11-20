@@ -237,3 +237,49 @@ left-right arrows at the window's edge, both in Chrome for Windows and in Linux 
    - Boot check in `desktop-shell`: the Windows key right after the start, then "send", Enter;
      the same after the launcher came back. With the old toggle the check fails: "the Windows
      key keeps the launcher shown at the start".
+
+## Addendum: no launcher after boot, and typing on the empty desktop
+
+QA round 3, item 6 (`chrome-qa-3.md`, track `desktop-shell-fixes`). Two problems:
+
+- After a normal boot the launcher was open over the wallpaper.
+- After Chrome quit, "chrome" typed on the empty desktop was lost. The desktop waits up to 10 s
+  for the next window of an app that still runs (`REOPEN_WAIT_MS`) before it shows the launcher
+  by itself. Keys typed during that wait went to no window, and then the empty launcher came up.
+
+The owner asked for the launcher to be closed after a normal boot. The decision above ("keeping
+the launcher at the start keeps every flow that types right after boot working") then needs
+another way to keep those flows working. The shell's design has the launcher as the place
+where typing goes on an empty desktop (ADR 0127: the launcher opens with "the Windows key,
+Ctrl+Space, an empty desktop"). So the choice is that **the first keys land in the launcher**,
+not that typing on the desktop does nothing:
+
+1. **The launcher is closed at the start.** `Shell::new` no longer shows it. A session that
+   wants it open passes `--launcher` to the compositor (`Shell::show_launcher_at_start`: shown
+   as the desktop shows it by itself, so the Windows key keeps it). A normal boot (the menu, the
+   Chromium and Chrome disks) does not pass it. The "desktop ready" line says `launcher hidden`
+   or `launcher shown`.
+2. **Typing on the empty desktop opens the launcher with what was typed.** A key press that
+   makes a character (no Ctrl, Alt or Super) while no window is visible and the launcher is
+   closed opens the launcher with that character as its query (`Shell::type_on_desktop`). The
+   key does not go to the clients. The next keys go to the launcher as before, so "chrome"
+   typed on the desktop finds Chrome, also during the 10 s wait after Chrome quit. The user
+   asked for this launcher, so the Windows key closes it (with text in it, it closed anyway).
+3. The desktop still shows the launcher by itself when the last window closes. Nothing asked
+   for a change there.
+
+Checks:
+- Unit tests `the_launcher_is_closed_at_the_start` and
+  `typing_on_the_desktop_opens_the_launcher_with_the_letters`.
+- Boot group `desktop`: no launcher in the first screenshot; "files" typed on the empty desktop
+  gives the queries `"f"` … `"files"`.
+- Boot group `desktop-shell`: the Windows key at the start opens the launcher.
+
+The same QA run hit a compositor panic: `Bitmap::draw` sliced past an icon's last row when the
+launcher opened during an installer run. `compose::Rect::intersect` kept the other side's rows
+for rectangles that only shared rows. A clip strip right of an icon gave a rectangle with no
+width but the icon's height, and the row loop then read columns beyond the icon. An
+intersection without overlap is now empty both ways (no width and no height, at the corner where
+it would start), as `poly_gfx::Rect::intersect` already was. `Bitmap::draw` returns early for an
+empty area. Unit tests cover zero width, zero height, fully outside on each side, and touching
+edges.

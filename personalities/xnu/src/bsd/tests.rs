@@ -63,6 +63,10 @@ impl Fake {
 }
 
 impl BsdKernel for Fake {
+    fn wall_clock_ns(&self) -> u64 {
+        1_700_000_000_123_456_789
+    }
+
     fn copy_in(&self, addr: u64, buf: &mut [u8]) -> Result<(), ()> {
         let o = addr.checked_sub(BASE).ok_or(())? as usize;
         let src = self.mem.get(o..o + buf.len()).ok_or(())?;
@@ -321,6 +325,18 @@ fn write_and_exit() {
 }
 
 #[test]
+fn gettimeofday_writes_a_timeval() {
+    let mut k = Fake::new();
+    k.poke(BUF, &[0xAA; 16]);
+    assert_eq!(k.call(nr::GETTIMEOFDAY, &[BUF, 0]).unwrap().value, 0);
+    // The fake's clock: 1_700_000_000.123456789 s.
+    assert_eq!(k.u64_at(BUF), 1_700_000_000);
+    assert_eq!(u32::from_le_bytes(k.peek(BUF + 8, 4).try_into().unwrap()), 123_456);
+    assert_eq!(k.call(nr::GETTIMEOFDAY, &[0, 0]).unwrap().value, 0, "a null timeval is allowed");
+    assert_eq!(k.call(nr::GETTIMEOFDAY, &[8, 0]), Err(EFAULT));
+}
+
+#[test]
 fn stat_calls() {
     let mut k = Fake::new();
     k.poke(PATH, b"hello.txt\0");
@@ -544,4 +560,70 @@ fn registers() {
     assert_eq!(dispatch_with(&mut k, &mut r), None);
     let mut r = SyscallRegs { rax: 0x100_001f, ..SyscallRegs::default() };
     assert_eq!(dispatch_with(&mut k, &mut r), None);
+}
+
+// ----- ADR 0246 addendum: waitid, vfork, execve's order, xattr names, ioctl -----
+
+#[test]
+fn waitid_checks_its_options_first() {
+    use crate::bsd::nr::WAITID;
+    let mut f = Fake::new();
+    // No option at all, an unknown bit: EINVAL; a group id 0: ECHILD; a
+    // negative one: EINVAL.
+    assert_eq!(f.call(WAITID, &[0, 0, Fake::BUF, 0]), Err(EINVAL));
+    assert_eq!(f.call(WAITID, &[0, 0, Fake::BUF, 0x4 | 0x1000]), Err(EINVAL));
+    assert_eq!(f.call(WAITID, &[2, 0, Fake::BUF, 0x4]), Err(ECHILD));
+    assert_eq!(f.call(WAITID, &[2, (-3i64) as u64, Fake::BUF, 0x4]), Err(EINVAL));
+    // Only WNOHANG: accepted, nothing reported.
+    assert_eq!(f.call(WAITID, &[0, 0, Fake::BUF, 0x1]).map(|r| r.value), Ok(0));
+}
+
+#[test]
+fn vfork_ends_the_caller_with_sigsys() {
+    let mut f = Fake::new();
+    let _ = f.call(crate::bsd::nr::VFORK, &[]);
+    assert_eq!(f.killed_by, Some(crate::bsd::signal::SIGSYS));
+}
+
+#[test]
+fn execve_reads_its_arguments_first() {
+    use crate::bsd::nr::EXECVE;
+    let mut f = Fake::new();
+    // An unreadable path is EFAULT; an empty one ENOENT.
+    assert_eq!(f.call(EXECVE, &[8, 0, 0]), Err(EFAULT));
+    f.poke(Fake::BUF, b"\0");
+    assert_eq!(f.call(EXECVE, &[Fake::BUF, 0, 0]), Err(ENOENT));
+}
+
+#[test]
+fn xattr_names_are_checked() {
+    use crate::bsd::nr::GETXATTR;
+    let mut f = Fake::new();
+    f.poke(Fake::BUF, b"file\0");
+    // An empty name: EINVAL; 128 bytes: ENAMETOOLONG; not UTF-8: EINVAL.
+    f.poke(Fake::BUF + 64, b"\0");
+    assert_eq!(f.call(GETXATTR, &[Fake::BUF, Fake::BUF + 64, 0, 0, 0, 0]), Err(EINVAL));
+    let long = [b'a'; 128];
+    f.poke(Fake::BUF + 64, &long);
+    f.poke(Fake::BUF + 64 + 128, b"\0");
+    assert_eq!(f.call(GETXATTR, &[Fake::BUF, Fake::BUF + 64, 0, 0, 0, 0]), Err(ENAMETOOLONG));
+    f.poke(Fake::BUF + 64, b"\xff\xfe\0");
+    assert_eq!(f.call(GETXATTR, &[Fake::BUF, Fake::BUF + 64, 0, 0, 0, 0]), Err(EINVAL));
+    // A position on an attribute other than the resource fork: EINVAL.
+    f.poke(Fake::BUF + 64, b"name\0");
+    assert_eq!(f.call(GETXATTR, &[Fake::BUF, Fake::BUF + 64, 0, 0, 3, 0]), Err(EINVAL));
+    // The descriptor forms take no XATTR_NOFOLLOW.
+    assert_eq!(f.call(crate::bsd::nr::FGETXATTR, &[1, Fake::BUF + 64, 0, 0, 0, 1]), Err(EINVAL));
+}
+
+#[test]
+fn ioctl_requests() {
+    use crate::bsd::nr::IOCTL;
+    let mut f = Fake::new();
+    assert_eq!(f.call(IOCTL, &[42, 0x1234_5678, 0]), Err(EBADF));
+    assert_eq!(f.call(IOCTL, &[1, 0x1234_5678, 0]), Err(25));
+    assert_eq!(f.call(IOCTL, &[1, u64::from(crate::bsd::FIOCLEX), 0]).map(|r| r.value), Ok(0));
+    assert_eq!(f.cloexec(1), Ok(true));
+    assert_eq!(f.call(IOCTL, &[1, u64::from(crate::bsd::FIONCLEX), 0]).map(|r| r.value), Ok(0));
+    assert_eq!(f.cloexec(1), Ok(false));
 }

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_destroyWeak.yaml. Observed with Objective-C test programs built with
+# clang for x86_64 and arm64 (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in
+# objc_destroyWeak.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_destroyWeak
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively and x86_64 under Rosetta 2; every test printed the same bytes on both architectures and on every run. Test programs are built with `poly-mac: libobjc` (linked against libobjc and the root class NSObject only, no Foundation)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  A "count" below is what the root class's retainCount method reports: 1 for a new object, one per
+  owning reference. objc_destroyWeak(location) ends a weak reference whose storage is about to go
+  away: the location is unregistered from its object, no count changes, and the object's later
+  death does not write to the storage any more (storage reused as a plain value kept its value; of
+  two locations of one object, destroying one leaves the other zeroed at death). It accepts a
+  location that was set to nil, a location whose object has already died, and one registered with
+  objc_storeWeak, and the storage may be initialised again afterwards (100 init/destroy cycles).
+  What the storage holds after the call is not specified: it was neither nil nor the object (a
+  stale value), so do not read it. There is no return value. Identical on x86_64 and arm64.
+returns:
+  value: "none (void)"
+errors:
+  none: "no error"
+side_effects: >
+  The location is removed from the object's weak table.
+threading: >
+  No thread-specific behaviour was observed; every test ran on the main thread of one process.
+  Behaviour with several threads is not observed.
+ordering: []
+timing:
+  typical: "microseconds: a few memory operations, no system call in the common case"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

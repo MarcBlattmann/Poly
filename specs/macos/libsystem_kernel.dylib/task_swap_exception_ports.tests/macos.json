@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_task_swap_basic",
+      "source_sha256": "c8646e8209aca74ebc21d12941076f19ffa66408a44fd7e76da8c0a0410a6684",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c4e9e99a3107b8f0d05a1ef4d4d18aab279d40f00b44eb3328f33e24481d946f",
+          "exit_code": 0,
+          "stdout": "ok swap on exceptions that had no port: one old entry covering the mask, with a null port\nok swap on one exception that had port a: the old entry is a's, for that exception only\nok afterwards access has port b and arithmetic still port a\nok a swap across two ports: two old entries, one each\nok swapping in MACH_PORT_NULL returns the old port and leaves a null one\nok a swap hands out user references to the old ports\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9eed08942894dcb316577a655681050fbd136bbdf97e6fd124ffbf5a41a64a70",
+          "exit_code": 0,
+          "stdout": "ok swap on exceptions that had no port: one old entry covering the mask, with a null port\nok swap on one exception that had port a: the old entry is a's, for that exception only\nok afterwards access has port b and arithmetic still port a\nok a swap across two ports: two old entries, one each\nok swapping in MACH_PORT_NULL returns the old port and leaves a null one\nok a swap hands out user references to the old ports\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_task_swap_effect",
+      "source_sha256": "9db816c6f41317ab1e7e3d6a331e57dfdebfe95e66af4ad63894605ba369e782",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "39160e2ad27b5f0faded651b4fb8024c139fb94c80c3235ff0b4c78d67208b8b",
+          "exit_code": 0,
+          "stdout": "ok the swap succeeds and returns the old port\nok the breakpoint is handled by the new port's handler\nok and the thread continued\nok set back to the old port: its handler gets the next one\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f0409b0fa1ffde2c6a2393551f79a340cbdfe6925d507fb9ae88383e1e596212",
+          "exit_code": 0,
+          "stdout": "ok the swap succeeds and returns the old port\nok the breakpoint is handled by the new port's handler\nok and the thread continued\nok set back to the old port: its handler gets the next one\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

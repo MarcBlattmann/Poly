@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_msgSendSuper2_stret.yaml. Observed with Objective-C test programs (tests/macos/include/poly_mobjc.h,
+# ADR 0182); results per architecture in objc_msgSendSuper2_stret.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_msgSendSuper2_stret
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, 3 runs per architecture with identical output; arm64 observed natively, x86_64 under Rosetta 2 (no native Intel Mac was available, so a difference between Rosetta and real Intel hardware would not show); the programs are Objective-C compiled with Apple clang, loading /usr/lib/libobjc.A.dylib, with no Foundation except where a sheet says so (poly-mac: libobjc, poly_mobjc.h)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  x86_64 only (the symbol does not exist on arm64: dlsym finds nothing): the
+  struct-in-memory variant of objc_msgSendSuper2, for [super message] where the
+  method returns a struct that does not fit in two registers. Arguments: the
+  result buffer, the pair (receiver, class), the selector, then the method's
+  arguments (observed with a stack-passed mixture of eight integer and double
+  arguments after the selector). The search starts in the superclass of the
+  class in the pair; self is the receiver. A nil receiver is not short-circuited:
+  the method runs with self == nil and writes the buffer (observed: the result
+  was written and self was nil in the method). A class-method super send (receiver
+  a class, the pair's class its metaclass) and an unresolved selector (the
+  resolver of the class where the search started is asked and its added method is
+  called with this convention) behave as for objc_msgSendSuper2.
+returns:
+  success: "void; the buffer holds the method's struct"
+  nil_receiver: "the method runs; the buffer is written"
+  arm64: "symbol absent"
+errors:
+side_effects: "as objc_msgSendSuper2"
+threading: "as objc_msgSendSuper2"
+ordering: []
+timing:
+  typical: "nanoseconds to microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

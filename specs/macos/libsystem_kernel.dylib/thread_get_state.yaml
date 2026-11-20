@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/thread_get_state.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mexc.h; ADR 0182);
+# results per architecture in thread_get_state.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/thread_get_state
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mexc.h, poly_mlibc.h) so that they call libSystem; each makes its own faults in its own threads or child processes and catches them with exception ports of its own, in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); results are equal on both except where the sheet names a difference"
+  observed_by: spec-macos-mach-exc
+  date: 2026-11-20
+summary: >
+  thread_get_state(thread, flavor, state, &count) copies a thread's registers. count is in (the size of the buffer in 32-bit words) and out. A count smaller than the
+  flavor's (also 0) and a flavor that is none (999) are KERN_INVALID_ARGUMENT (4), the count left as given; an invalid thread (MACH_PORT_NULL, a name that is nothing)
+  is MACH_SEND_INVALID_DEST (0x10000003); a task port or the host port instead of a thread is KERN_INVALID_ARGUMENT; a port the program made for itself
+  as the thread ends the process (the message is refused as a guard violation: SIGKILL). Counts, arm64: ARM_THREAD_STATE64 (6) 68, ARM_EXCEPTION_STATE64 (7) 4,
+  ARM_NEON_STATE64 (17) 132, ARM_DEBUG_STATE64 (15) 130, ARM_THREAD_STATE (1) 70, ARM_VFP_STATE (2) 65; x86_64: x86_THREAD_STATE64 (4) 42, x86_EXCEPTION_STATE64 (6) 4,
+  x86_FLOAT_STATE64 (5) 131, x86_AVX_STATE64 (17) 211, x86_DEBUG_STATE64 (11) 16, x86_THREAD_STATE (7) 44, x86_FLOAT_STATE (8) 133 (the count is
+  the structure's size / 4). Of a suspended thread (thread_suspend) two reads give the same registers; the state of the faulting thread read by an exception handler shows the registers
+  at the fault (the test register 0x42 it had set, a pc inside the program). The pc is __pc on arm64 and __rip on x86_64. Under Rosetta 2 reading
+  x86_EXCEPTION_STATE (9) of the calling thread was seen to hang the program, and a flavor that is none for thread_set_state ends it: the tests do not ask.
+  Observations of both architectures agree unless a difference is named (x86_64 was observed under Rosetta 2: a few answers there are the
+  translator's, named below). Exception ports: a task starts with no port for the classic exceptions 1 to 9 (EXC_MASK_CLASSIC, 0x3fe); on arm64 the
+  harness's processes also inherited a port for EXC_RESOURCE (mask 0x800, behavior 0xa0000004), which the tests never look at.
+returns:
+  success: "KERN_SUCCESS (0); the registers and the count"
+errors:
+  invalid_argument: "KERN_INVALID_ARGUMENT (4)"
+  bad_thread: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: none
+threading: "the target thread should be suspended or stopped for a consistent state"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call (an exception round trip is some tens of microseconds)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
