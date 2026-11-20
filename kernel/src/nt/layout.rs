@@ -230,6 +230,16 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Err(e) => crate::kprintln!("nt: layout: cannot install stdole2.tlb ({:#x})", e.0),
         }
     }
+    /// Poly's `win.ini`: its own comment and the sections, CR LF ends of lines.
+    const WIN_INI: &[u8] = b"; Poly\r\n[fonts]\r\n[extensions]\r\n[files]\r\n";
+    // `C:\Windows\win.ini`: every Windows has one (programs open it as a file any user may read,
+    // the ImpersonateNamedPipeClient sheet's tests among them). Poly's own, with the sections of
+    // the profile functions' documentation (Learn, "GetProfileStringW") and nothing in them.
+    match create::install_file(&vr, &root, "Windows", "win.ini", WIN_INI) {
+        Ok(create::Installed::Written) => crate::kprintln!("nt: layout: win.ini written to Windows"),
+        Ok(_) => {}
+        Err(e) => crate::kprintln!("nt: layout: cannot install win.ini ({:#x})", e.0),
+    }
     // The session shell's stand-in (ADR 0222), where Windows keeps its shell.
     if !super::EXPLORER_EXE.is_empty() {
         match create::install_file(&vr, &root, "Windows", "explorer.exe", super::EXPLORER_EXE) {

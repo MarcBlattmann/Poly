@@ -1,0 +1,70 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/WaitForInputIdle.yaml
+id: windows/api/user32.dll/WaitForInputIdle
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran twice with identical output. All ten tests were run once more in the user's interactive session (poly-oracle.ps1 -Interactive: session 1, the filtered token) and gave byte-identical observations, so the recording is the SSH one and the rules hold for both sessions."
+  observed_by: spec-win-waitforinputidle
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: WaitForInputIdle ("returns as soon as any
+  thread of the process becomes idle", "waits only once for a process to become idle", "if this process is a console
+  application or does not have a message queue, WaitForInputIdle returns immediately"), ShellExecuteEx, GetMessage,
+  PeekMessage, WaitMessage, MsgWaitForMultipleObjects, IsGUIThread, "System Error Codes" (ERROR_NOT_GUI_PROCESS 1471,
+  ERROR_INVALID_HANDLE 6), winbase.h and winerror.h for constants. The implementer's list of cases is
+  poly-dev/handoff/wait-for-input-idle.md. Wine's tests were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  `DWORD WaitForInputIdle(HANDLE process, DWORD ms)`: a parent waits until a GUI child has finished starting up, which means
+  until a thread of the child is waiting for input with nothing in its queue. Returns 0 when the child has become idle (or ended
+  during the wait), WAIT_TIMEOUT (0x102) when `ms` ran out, WAIT_FAILED (0xFFFFFFFF) on an error. What counts as the idle point:
+  a thread that BLOCKS in GetMessage, WaitMessage or MsgWaitForMultipleObjects with an empty queue. PeekMessage that finds nothing
+  does not count (it does not wait). A child of the console subsystem is refused at once (WAIT_FAILED, ERROR_NOT_GUI_PROCESS
+  1471), whatever it does. A GUI child that never reaches an idle point makes the call wait for the whole timeout. Every
+  line in the tests says whether the call returned before the child's idle point (the child signals a named event just before
+  its first message call), within 2 s after it, or more than 2 s after it (the child signals a second event 2 s after the
+  first, from another thread), so nothing depends on how fast the machine is; the children's delays (1.5 s) and lifetimes (4.5 s)
+  are far from those borders.
+interface:
+  signature: "DWORD WaitForInputIdle(HANDLE hProcess, DWORD dwMilliseconds)"
+  returns: "0 satisfied; WAIT_TIMEOUT 0x102; WAIT_FAILED 0xFFFFFFFF"
+rules:
+  last_error: "0 and WAIT_TIMEOUT leave the last error as it was (the tests set the sentinel 0x12345 right before the call and find it unchanged). WAIT_FAILED sets it to 1471 (console-subsystem target) or 6 (a handle that is not acceptable); WAIT_FAILED for a process that has ended leaves it unchanged."
+  console_target: "a child of the console subsystem (the test's own image, which is console): WAIT_FAILED, ERROR_NOT_GUI_PROCESS (1471), at once, for every kind of child: one that never loads user32, one that loads it and calls nothing, one with only a thread queue (IsGUIThread), one with a GetMessage loop and no window, one with a hidden window and a GetMessage loop (all five the same). A handle of the calling process itself (GetCurrentProcess(), the current console image) gives 1471 too, whether the calling thread has no queue, a queue (IsGUIThread) or a window."
+  gui_idle_points: "a GUI-subsystem child (the same image with the subsystem field of its header changed to 2), 1.5 s after its start: GetMessage with an empty queue (no window needed), a hidden window and then GetMessage, WaitMessage and MsgWaitForMultipleObjects(QS_ALLINPUT) each make the call return 0 within 2 s after the idle point, with the sentinel last error unchanged."
+  peek_is_no_idle_point: "a GUI child whose first message call is PeekMessage returning FALSE (PM_REMOVE or PM_NOREMOVE) and that then stays busy for 4.5 s: the call returns 0 only more than 2 s after that call, i.e. when the child ends: the peek is not an idle point."
+  pending_input: "a GUI child that first gets a message into its queue (PostThreadMessage to itself), retrieves it with GetMessage (returns at once) and 1.5 s later blocks in GetMessage with an empty queue: the call returns within 2 s after the signal that comes just before the BLOCKING call, not at the first retrieval: input that is already in the queue is not idle."
+  any_thread: "the main thread of a GUI child stays busy and a second thread blocks in GetMessage after 1.5 s: the call returns 0 within 2 s after it. Two parent threads waiting for the same child at once: both return 0 (the same moment, within 2 s after the idle point)."
+  no_idle_point: "a GUI child that never calls a message function (a sleeping one that never loads user32, one that loads it, one with a hidden window, one with only a queue from IsGUIThread, one busy-looping): WAIT_TIMEOUT after the timeout, tested with 100, 3000 and 0 ms (0 returns at once), error unchanged. A GUI child idle only 1.5 s after its start, waited for with 100 ms: WAIT_TIMEOUT, and with 10000 ms: 0 within 2 s after the idle point. A GUI child that ends during the wait without having been idle: 0 (the call returns when the process ends; with INFINITE too)."
+  once: "a child that is idle at 0.7 s (a blocking wait of 0.5 s) and busy for 4.5 s afterwards: the first call returns 0 within 2 s after the idle point; a second call 1 s later (child busy again) with timeout 200, one with timeout 0 and one with INFINITE each return 0 at once (within 2 s after the idle point): after one success a later call is satisfied immediately, the process is not re-measured. Calls that TIMED OUT do not count: after a call with timeout 0 or 100 that returned WAIT_TIMEOUT on a child that was not idle yet, a call with timeout 10000 returns 0 within 2 s after the idle point, and one with timeout 0 afterwards returns 0."
+  suspended: "a GUI child created with CREATE_SUSPENDED: timeout 300: WAIT_TIMEOUT; after ResumeThread the same call with timeout 10000: 0 within 2 s after the idle point. A suspended never-idle GUI child: WAIT_TIMEOUT."
+  ended_process: "a child that has already ended when the call is made: WAIT_FAILED with the last error unchanged, whether it never was idle, was idle and then ended, or was ended with TerminateProcess. A child that ends during the wait without being idle: 0. A child that is idle at 0.7 s and ends 0.5 s later: 0 within 2 s after the idle point."
+  handles: "NULL, a value that is no handle (0x1234), a handle that was closed, a thread handle of the child and an event handle: WAIT_FAILED, ERROR_INVALID_HANDLE (6). A process handle opened with PROCESS_QUERY_LIMITED_INFORMATION (0x1000) alone, with PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, with PROCESS_QUERY_INFORMATION (0x400) alone or with it and SYNCHRONIZE, and the handle CreateProcessW returned: 0 on an idle child. A handle with only SYNCHRONIZE or only PROCESS_VM_READ: WAIT_FAILED, ERROR_INVALID_HANDLE (6) (not ERROR_ACCESS_DENIED)."
+  sessions: "the same results in session 0 (SSH) and in the interactive session of the user (session 1, filtered token), for all of the above (the long never-idle case of ShellExecuteExW.WaitForInputIdle.yaml (sxwii_cap) was run in session 0 only)."
+errors:
+  not_gui_process: "ERROR_NOT_GUI_PROCESS (1471): the target is a console-subsystem process (or the calling process, which is one)"
+  invalid_handle: "ERROR_INVALID_HANDLE (6): not a process handle, or a process handle without PROCESS_QUERY_LIMITED_INFORMATION or PROCESS_QUERY_INFORMATION"
+side_effects: "none on the target; the call may be long"
+threading: "may be called from several threads at once for one child; the idle state belongs to the child, not to the call"
+ordering: "the call returns after the child's blocking message call has started, never before it; a call made after the child went idle once returns at once"
+timing:
+  typical: "bounded by the timeout; for an idle child a few milliseconds"
+  guarantees: none
+tests:
+  visible: 5
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file per test. The image does not import user32: the test loads it at run time (LoadLibraryW,
+  GetProcAddress) so that a child can be one that never loads it. A test is also its own children: `<image> --child <kind>
+  <event name> <delay ms>`; a GUI child is a copy of the image, written beside it, with the Subsystem field of its optional header
+  changed from 3 to 2 (and deleted afterwards). The parent creates two named events; the child opens them, sets the first right
+  before its first message call and a helper thread sets the second 2 s later. The parent sets the sentinel last error 0x12345
+  right before the call (the function address is looked up before) and prints the result, the error ('unchanged' if it is still
+  the sentinel) and `before`, `within 2 s after` or `more than 2 s after` the child's idle point. Children end themselves after
+  4.5 s of busy time (150 s watchdog); the parent ends them with TerminateProcess. The tests take about 30 to 60 s each.
+  Poly's runner needs a timeout of 400 s for them (`-TestTimeouts name=400`).
+not_covered: >
+  SendMessage to another thread as the idle point, a console child that is started by a GUI program, a child with its own
+  console AND windows through AllocConsole, 32-bit (WOW64) processes, a service or a process of another user (access rights
+  beyond the table above), job objects, a target with a message-only window, the hung-application states ('not responding'),
+  input injected with SendInput (no input was sent: the 'input pending' case is a posted thread message), and timing values
+  in milliseconds (deliberately never recorded).

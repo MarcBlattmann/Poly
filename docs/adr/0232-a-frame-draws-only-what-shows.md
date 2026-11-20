@@ -73,3 +73,67 @@ numbers are in the track's hand-back.
   track.
 - A window that claims opacity it does not have would show stale pixels. The count is exact for
   what the link copies, and a window starts as not opaque.
+
+## Addendum (2026-11-20): Linux Chromium's frames, track `chromium-damage`
+
+Chromium on Poly is native Wayland (`--ozone-platform=wayland`, software `wl_shm` buffers). Observed
+on Poly with temporary counters (removed): at 200 % it attaches a buffer of scale 1 twice its
+surface's size and shows it through **`wp_viewporter`** (2100x1560 shown 1050x780), on every commit,
+and it damages only what changed (`wl_surface.damage_buffer`: the text cursor, a 2x34 rectangle per
+key). Poly already kept that damage and copied only it, and released each buffer right after the
+copy (`wl_buffer.release`), so Chromium was never short of buffers. The cost was in the scene:
+
+1. **Damage behind a viewport was taken as the whole surface** (`Scene::damage_content`: "through a
+   transform or a viewport: all of it"): every keystroke redrew Chromium's whole window, 77 % of a
+   2560x1600 screen. Now `View::logical_rect`, the inverse of `View::buffer_rect`, maps the
+   buffer rectangle back through the transform, the buffer scale and the viewport's crop and scale
+   (rounded outwards; one pixel more where the scaling is not whole pixels, for the filter).
+2. **A viewport was always drawn by sampling each pixel and blending it**, even when it maps one
+   buffer pixel to one output pixel. `render::pixel_for_pixel` now also accepts a view with no
+   transform, no source and a destination that is the buffer's size in output pixels; it is drawn
+   with the row copy (`over_row`) and counts for the occlusion test.
+3. **The opaque region was kept but not used.** A Wayland window's content is now opaque when its
+   buffer has no alpha (`xrgb8888`, `xbgr8888`) or its opaque region covers the whole surface
+   (`Region::covers`; wayland.xml lets the compositor treat that region's pixels as opaque), so
+   the wallpaper and the windows under Chromium are not drawn under it.
+
+Measured as above (WHPX on the owner's PC, 2560x1600 at 200 %, `desktop --release --chromium
+--compositor-stats`, the same driver; one key every 0.25 s while typing), `main` and this change in
+the same session:
+
+| Linux Chromium | `main` | After |
+|---|---|---|
+| Text field: damage per frame | 77 % | 1–2.5 % |
+| Text field: compose; key → frame | 22–28 ms; 33–42 ms | 0.05–0.15 ms; 6–8 ms |
+| Omnibox: damage; key → frame | 35–41 %; 35–43 ms | 6–9 %; 13–15 ms |
+| Whole-page animation (65 %): compose; fps | 21–23 ms; ~25 | 2.6–2.8 ms; 64–72 |
+
+Presentation feedback (`wp_presentation`) and frame callbacks were already in place and were not
+the cause; Xwayland is not involved.
+
+## Addendum: a commit's copy in one pass (2026-11-20)
+
+With the scene fixed, taking Chromium's buffers in was the next cost: about 3.5 ms per frame of
+the whole-page animation (`take_avg_ms`). The copy was already limited to the damage, the
+`wl_shm` buffer's damaged rectangles only, but it went through the client's memory twice per row:
+`ShmMap::read` copied the row into a scratch buffer, and a loop then put each pixel together from
+its four bytes into the window's content. `ShmMap::read_pixels` (new; its default still reads
+bytes) now lets the compositor's mapping copy a row straight into the content with one `memcpy`;
+`Buffer::copy_rect` then sets the alpha of `xrgb8888` in place and swaps red and blue only for the
+`bgr` formats. Chrome for Windows already copied its rows this way (ADR 0224) and is unchanged.
+
+Measured as before (same session, the commit before this one against this one):
+
+| Linux Chromium | Before | After |
+|---|---|---|
+| Whole-page animation (65 %): take; fps | 3.4–3.7 ms; 70–74 | 0.67–0.76 ms; 74–75 |
+| Text field: take | 0.17–0.21 ms | 0.06–0.07 ms |
+| Chrome for Windows animation: take; fps | 1.8–1.9 ms; 57–60 | 1.9–2.0 ms; 53–60 |
+
+The 0.7 ms left is the copy of 2.65 million pixels at memory speed. Composing straight from the
+client's memory (no copy) was considered and not done: Poly would have to keep each buffer until the
+next commit replaced it instead of releasing it after the copy, which costs a client one more buffer
+in flight and is a protocol-visible change (`wl_buffer.release` comes later); the scene would read
+memory another process owns and could change after a misbehaving client's early reuse, at every
+redraw instead of once; and the formats would have to be converted while drawing. All that for at
+most 0.7 ms of a 13 ms frame.

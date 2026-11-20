@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "6cb2adb1fc72",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T00:05:19Z",
+  "tests": [
+    {
+      "name": "sxwii_cap",
+      "exe_sha256": "2cacf7ec02e3cfcc5fc8cf9ce593f4da520bdd3611b58ed0ce2c6afe5a96bd48",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V0FJVEZPUklOUFVUSURMRTogR1VJIGNoaWxkIHdpdGggYSB3aW5kb3cgYW5kIG5vIG1lc3NhZ2UgY2FsbCBmb3IgMTEwIHM6IG9rIDEgZXJyb3IgdW5jaGFuZ2VkIGhJbnN0QXBwIHN1Y2Nlc3MoPjMyKSBoUHJvY2VzcyBzZXQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQsIHRoZSBjYWxsIHRvb2sgNTUgdG8gNzAgcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WAITFORINPUTIDLE: GUI child with a window and no message call for 110 s: ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point, the call took 55 to 70 s\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60706
+    },
+    {
+      "name": "sxwii_gui",
+      "exe_sha256": "19b9f8f459f1bc0aef2449895ba455f89663309b4e9a03d05a41fb1bc262f93c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gV0FJVEZPUklOUFVUSURMRTogR1VJIGNoaWxkIHdpdGggYSBtZXNzYWdlIGxvb3AgYWZ0ZXIgMS41IHM6IG9rIDEgZXJyb3IgdW5jaGFuZ2VkIGhJbnN0QXBwIHN1Y2Nlc3MoPjMyKSBoUHJvY2VzcyBzZXQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKV0FJVEZPUklOUFVUSURMRTogR1VJIGNoaWxkIHdpdGggYSBtZXNzYWdlIGxvb3AgYWZ0ZXIgMS41IHM6IG9rIDEgZXJyb3IgdW5jaGFuZ2VkIGhJbnN0QXBwIHN1Y2Nlc3MoPjMyKSBoUHJvY2VzcyBzZXQgcmV0dXJuZWQgd2l0aGluIDIgcyBhZnRlciB0aGUgY2hpbGQncyBpZGxlIHBvaW50CldBSVRGT1JJTlBVVElETEUgfCBOT0FTWU5DOiBzYW1lIGNoaWxkOiBvayAxIGVycm9yIHVuY2hhbmdlZCBoSW5zdEFwcCBzdWNjZXNzKD4zMikgaFByb2Nlc3Mgc2V0IHJldHVybmVkIHdpdGhpbiAyIHMgYWZ0ZXIgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludApXQUlURk9SSU5QVVRJRExFIHwgTk9fVUk6IHNhbWUgY2hpbGQ6IG9rIDEgZXJyb3IgdW5jaGFuZ2VkIGhJbnN0QXBwIHN1Y2Nlc3MoPjMyKSBoUHJvY2VzcyBzZXQgcmV0dXJuZWQgd2l0aGluIDIgcyBhZnRlciB0aGUgY2hpbGQncyBpZGxlIHBvaW50CldBSVRGT1JJTlBVVElETEU6IEdVSSBjaGlsZCB3aXRoIGEgaGlkZGVuIHdpbmRvdyBhZnRlciAxLjUgczogb2sgMSBlcnJvciB1bmNoYW5nZWQgaEluc3RBcHAgc3VjY2Vzcyg+MzIpIGhQcm9jZXNzIHNldCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKV0FJVEZPUklOUFVUSURMRTogR1VJIGNoaWxkLCBQZWVrTWVzc2FnZSBhZnRlciAxLjUgczogb2sgMSBlcnJvciB1bmNoYW5nZWQgaEluc3RBcHAgc3VjY2Vzcyg+MzIpIGhQcm9jZXNzIHNldCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKV0FJVEZPUklOUFVUSURMRTogR1VJIGNoaWxkIHRoYXQgbmV2ZXIgbG9hZHMgdXNlcjMyOiBvayAxIGVycm9yIHVuY2hhbmdlZCBoSW5zdEFwcCBzdWNjZXNzKD4zMikgaFByb2Nlc3Mgc2V0IHJldHVybmVkIGJlZm9yZSB0aGUgY2hpbGQncyBpZGxlIHBvaW50CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no WAITFORINPUTIDLE: GUI child with a message loop after 1.5 s: ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point\nWAITFORINPUTIDLE: GUI child with a message loop after 1.5 s: ok 1 error unchanged hInstApp success(>32) hProcess set returned within 2 s after the child's idle point\nWAITFORINPUTIDLE | NOASYNC: same child: ok 1 error unchanged hInstApp success(>32) hProcess set returned within 2 s after the child's idle point\nWAITFORINPUTIDLE | NO_UI: same child: ok 1 error unchanged hInstApp success(>32) hProcess set returned within 2 s after the child's idle point\nWAITFORINPUTIDLE: GUI child with a hidden window after 1.5 s: ok 1 error unchanged hInstApp success(>32) hProcess set returned within 2 s after the child's idle point\nWAITFORINPUTIDLE: GUI child, PeekMessage after 1.5 s: ok 1 error unchanged hInstApp success(>32) hProcess set returned within 2 s after the child's idle point\nWAITFORINPUTIDLE: GUI child that never loads user32: ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 12921
+    },
+    {
+      "name": "sxwii_never",
+      "exe_sha256": "18eefb5d0c4c1f690513a12039634d5931af8e5affaa3faee3907a1a8b04c14d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V0FJVEZPUklOUFVUSURMRTogY2hpbGQgdGhhdCBleGl0cyBhZnRlciAzIHMgd2l0aG91dCBiZWluZyBpZGxlOiBvayAxIGVycm9yIHVuY2hhbmdlZCBoSW5zdEFwcCBzdWNjZXNzKD4zMikgaFByb2Nlc3Mgc2V0IHJldHVybmVkIGJlZm9yZSB0aGUgY2hpbGQncyBpZGxlIHBvaW50LCB0aGUgY2FsbCB0b29rIGxlc3MgdGhhbiAxIHMKV0FJVEZPUklOUFVUSURMRSB8IE5PQVNZTkM6IGNoaWxkIHRoYXQgZXhpdHMgYWZ0ZXIgMyBzIHdpdGhvdXQgYmVpbmcgaWRsZTogb2sgMSBlcnJvciB1bmNoYW5nZWQgaEluc3RBcHAgc3VjY2Vzcyg+MzIpIGhQcm9jZXNzIHNldCByZXR1cm5lZCBiZWZvcmUgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludCwgdGhlIGNhbGwgdG9vayBsZXNzIHRoYW4gMSBzCldBSVRGT1JJTlBVVElETEU6IEdVSSBjaGlsZCB0aGF0IGV4aXRzIGFmdGVyIDMgcyB3aXRob3V0IGJlaW5nIGlkbGU6IG9rIDEgZXJyb3IgdW5jaGFuZ2VkIGhJbnN0QXBwIHN1Y2Nlc3MoPjMyKSBoUHJvY2VzcyBzZXQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQsIHRoZSBjYWxsIHRvb2sgMi41IHRvIDYgcwpXQUlURk9SSU5QVVRJRExFOiBHVUkgY2hpbGQgd2l0aCBhIHdpbmRvdyBhbmQgbm8gbWVzc2FnZSBjYWxsOiBvayAxIGVycm9yIHVuY2hhbmdlZCBoSW5zdEFwcCBzdWNjZXNzKD4zMikgaFByb2Nlc3Mgc2V0IHJldHVybmVkIGJlZm9yZSB0aGUgY2hpbGQncyBpZGxlIHBvaW50LCB0aGUgY2FsbCB0b29rIDIuNSB0byA2IHMKV0FJVEZPUklOUFVUSURMRTogR1VJIGNoaWxkIHdpdGggYSB3aW5kb3cgYW5kIG5vIG1lc3NhZ2UgY2FsbCBmb3IgMTQgczogb2sgMSBlcnJvciB1bmNoYW5nZWQgaEluc3RBcHAgc3VjY2Vzcyg+MzIpIGhQcm9jZXNzIHNldCByZXR1cm5lZCBiZWZvcmUgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludCwgdGhlIGNhbGwgdG9vayAxMiB0byAzMCBzCldBSVRGT1JJTlBVVElETEU6IGNvbnNvbGUgY2hpbGQsIGJ1c3kgbG9vcCAoOCBzKTogb2sgMSBlcnJvciB1bmNoYW5nZWQgaEluc3RBcHAgc3VjY2Vzcyg+MzIpIGhQcm9jZXNzIHNldCByZXR1cm5lZCBiZWZvcmUgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludCwgdGhlIGNhbGwgdG9vayBsZXNzIHRoYW4gMSBzCldBSVRGT1JJTlBVVElETEU6IEdVSSBjaGlsZCB3aXRoIGEgcXVldWUgYW5kIG5vIG1lc3NhZ2UgY2FsbDogb2sgMSBlcnJvciB1bmNoYW5nZWQgaEluc3RBcHAgc3VjY2Vzcyg+MzIpIGhQcm9jZXNzIHNldCByZXR1cm5lZCBiZWZvcmUgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludCwgdGhlIGNhbGwgdG9vayAyLjUgdG8gNiBzCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WAITFORINPUTIDLE: child that exits after 3 s without being idle: ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point, the call took less than 1 s\nWAITFORINPUTIDLE | NOASYNC: child that exits after 3 s without being idle: ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point, the call took less than 1 s\nWAITFORINPUTIDLE: GUI child that exits after 3 s without being idle: ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point, the call took 2.5 to 6 s\nWAITFORINPUTIDLE: GUI child with a window and no message call: ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point, the call took 2.5 to 6 s\nWAITFORINPUTIDLE: GUI child with a window and no message call for 14 s: ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point, the call took 12 to 30 s\nWAITFORINPUTIDLE: console child, busy loop (8 s): ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point, the call took less than 1 s\nWAITFORINPUTIDLE: GUI child with a queue and no message call: ok 1 error unchanged hInstApp success(>32) hProcess set returned before the child's idle point, the call took 2.5 to 6 s\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 26672
+    }
+  ]
+}

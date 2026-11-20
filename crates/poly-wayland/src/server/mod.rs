@@ -101,6 +101,21 @@ pub trait ShmMap {
     /// Copy `dst.len()` bytes from `offset`; false (and nothing copied) if
     /// that is not inside the mapping.
     fn read(&self, offset: usize, dst: &mut [u8]) -> bool;
+    /// Copy `dst.len()` pixels of 4 little-endian bytes from `offset`;
+    /// false (and nothing copied) if that is not inside the mapping. The
+    /// default reads the bytes and puts them together; a host whose mapping
+    /// is in its own memory copies straight into `dst` (one pass, what a
+    /// commit's copy costs).
+    fn read_pixels(&self, offset: usize, dst: &mut [u32]) -> bool {
+        let mut bytes = alloc::vec![0u8; dst.len() * 4];
+        if !self.read(offset, &mut bytes) {
+            return false;
+        }
+        for (px, b) in dst.iter_mut().zip(bytes.chunks_exact(4)) {
+            *px = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+        }
+        true
+    }
 }
 
 /// What the server needs from its environment.

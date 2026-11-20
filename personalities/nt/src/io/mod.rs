@@ -170,6 +170,8 @@ pub enum Device {
     NamedPipe,
     /// `\Device\Null`, reached as `\??\NUL` (the reserved name `NUL`).
     Null,
+    /// `\Device\PolyAudio`, the audio server's streams (ADR 0244, [`crate::audio`]).
+    Audio,
 }
 
 /// The null device's name in the object namespace.
@@ -220,6 +222,8 @@ pub enum Target {
     Null,
     /// A volume opened as a device (`\\.\C:`, [`volume`]), by its index.
     Volume(usize),
+    /// A stream of `\Device\PolyAudio` (ADR 0244).
+    Audio(crate::audio::AudioEnd),
 }
 
 /// The kernel's data for one file object.
@@ -601,6 +605,14 @@ impl IoState {
         )?;
         self.devices.insert(cookie, Device::Null);
         add_named(om, &kernel, &wide("\\??\\NUL"), NewObject::SymbolicLink { target: &null })?;
+        let cookie = self.cookie();
+        add_named(
+            om,
+            &kernel,
+            &wide(poly_audio::nt::DEVICE_NAME),
+            NewObject::Opaque { kind: ObjectType::Device, cookie, signaled: None, parse: true },
+        )?;
+        self.devices.insert(cookie, Device::Audio);
         self.root = Some(VfsRoot::new(vfs, ctx, cred));
         Ok(())
     }
@@ -778,7 +790,7 @@ impl IoState {
         }
         match rec.target {
             Target::NamedPipe(end) => self.np_closed(cookie, end),
-            Target::PipeRoot | Target::PipeDevice | Target::Null | Target::Volume(_) => {}
+            Target::PipeRoot | Target::PipeDevice | Target::Null | Target::Volume(_) | Target::Audio(_) => {}
             Target::Console(t) => self.console_file_closed(cookie, t),
             Target::Host(_) => {}
             Target::Socket(e) => crate::afd::services::endpoint_closed(e),

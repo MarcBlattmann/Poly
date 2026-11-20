@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_getvol_after_set",
+      "exe_sha256": "e99e2752d7d607db3771c8c85b3c2e63572066623aa9d2a3f5e2c2dd478dac28",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKc2V0IG9uIGFub3RoZXIgdGhyZWFkID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgc2V0IG9uIGFub3RoZXIgdGhyZWFkCnJlYWQgb24gdGhpcyB0aHJlYWQgMHgyMjIyOTk5OQpvayB0aGlzIHRocmVhZCBzZWVzIGl0Cm9rIHNvIGRvZXMgYSBoYW5kbGUKbGVmdCBvbmx5OiAweGZmZmYKb2sgbGVmdCBvbmx5CnJpZ2h0IG9ubHk6IDB4ZmZmZjAwMDAKb2sgcmlnaHQgb25seQpib3RoIHNpbGVudDogMHgwCm9rIGJvdGggc2lsZW50CnJlc3RvcmUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayByZXN0b3JlCm9rIHJlc3RvcmVkCnN1bW1hcnkgOSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nset on another thread = MMSYSERR_NOERROR (0)\nok set on another thread\nread on this thread 0x22229999\nok this thread sees it\nok so does a handle\nleft only: 0xffff\nok left only\nright only: 0xffff0000\nok right only\nboth silent: 0x0\nok both silent\nrestore = MMSYSERR_NOERROR (0)\nok restore\nok restored\nsummary 9 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 193
+    },
+    {
+      "name": "wo_getvol_basic",
+      "exe_sha256": "c6c8b1a7febd44f26fdb3553299ddb63df40bcccdc81bbd472ba708b45095d49",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKZGV2aWNlIDAgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBkZXZpY2UgMAppbml0aWFsIHZvbHVtZSAweGZmZmZmZmZmCm9rIGZ1bGwgdm9sdW1lIG9uIGJvdGggY2hhbm5lbHMKdGhlIG1hcHBlciA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHRoZSBtYXBwZXIKb2sgZnVsbCB2b2x1bWUKYnkgaGFuZGxlID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgYnkgaGFuZGxlCm9rIGZ1bGwgdm9sdW1lCmRldmljZSAxID0gTU1TWVNFUlJfQkFEREVWSUNFSUQgKDIpCm9rIGRldmljZSAxCm9rIHZhbHVlIHVudG91Y2hlZApkZXZpY2UgMHg3ZmZmZmZmZiA9IE1NU1lTRVJSX0JBRERFVklDRUlEICgyKQpvayBkZXZpY2UgMHg3ZmZmZmZmZgpudWxsIHBvaW50ZXIgPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgbnVsbCBwb2ludGVyCmNsb3NlZCBoYW5kbGUgPSBNTVNZU0VSUl9CQURERVZJQ0VJRCAoMikKb2sgY2xvc2VkIGhhbmRsZQpzdW1tYXJ5IDEyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\ndevice 0 = MMSYSERR_NOERROR (0)\nok device 0\ninitial volume 0xffffffff\nok full volume on both channels\nthe mapper = MMSYSERR_NOERROR (0)\nok the mapper\nok full volume\nby handle = MMSYSERR_NOERROR (0)\nok by handle\nok full volume\ndevice 1 = MMSYSERR_BADDEVICEID (2)\nok device 1\nok value untouched\ndevice 0x7fffffff = MMSYSERR_BADDEVICEID (2)\nok device 0x7fffffff\nnull pointer = MMSYSERR_INVALPARAM (11)\nok null pointer\nclosed handle = MMSYSERR_BADDEVICEID (2)\nok closed handle\nsummary 12 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 202
+    }
+  ]
+}

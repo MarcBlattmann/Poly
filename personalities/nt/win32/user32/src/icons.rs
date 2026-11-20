@@ -495,7 +495,10 @@ pub unsafe extern "system" fn GetCursorInfo(ci: *mut u8) -> i32 {
         return 0;
     }
     // SAFETY: cbSize is the first field.
-    if unsafe { core::ptr::read_unaligned(ci as *const u32) } != 24 {
+    // 24 bytes on x64, 20 in a 32-bit process (winuser.h).
+    if unsafe { core::ptr::read_unaligned(ci as *const u32) } as usize
+        != core::mem::size_of::<super::cstructs::CursorInfo>()
+    {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }

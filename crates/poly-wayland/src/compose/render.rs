@@ -70,14 +70,33 @@ pub(super) fn draw(
     }
 }
 
+/// Whether content `c` shown over the physical rectangle `dest` is drawn pixel for pixel: one
+/// buffer pixel per output pixel, in place. Its buffer scale the output's without a view, or a
+/// viewport that only scales by exactly the output's scale over its buffer scale: no transform,
+/// no source, a destination the buffer's size in output pixels (a client drawing for a 2x output
+/// with `wp_viewporter`: a 2100x1560 buffer of scale 1 shown 1050x780 at 200%).
+pub(super) fn pixel_for_pixel(c: &Content, dest: Rect, s: Scale) -> bool {
+    if c.view.is_identity() {
+        return s.as_120ths() == c.scale.max(1) * SCALE_UNIT;
+    }
+    c.view.transform == 0
+        && c.view.source.is_none()
+        && dest.width >= 0
+        && dest.height >= 0
+        && (dest.width as u32, dest.height as u32) == (c.width, c.height)
+}
+
 /// Whether window `w` hides all of `clip`: shown, its content opaque and drawn pixel for pixel,
 /// and `clip` inside the part of it that is drawn.
 fn hides(w: &Window, clip: Rect, s: Scale) -> bool {
     let c = w.content();
-    if !w.is_visible() || !c.opaque || !c.view.is_identity() || s.as_120ths() != c.scale.max(1) * SCALE_UNIT {
+    if !w.is_visible() || !c.opaque {
         return false;
     }
     let placed = w.placed(s);
+    if !pixel_for_pixel(c, placed.surface, s) {
+        return false;
+    }
     let shown = if w.is_decorated() { placed.bounds } else { placed.surface };
     let drawn = shown.intersect(&placed.surface);
     drawn.intersect(&clip) == clip
@@ -265,6 +284,19 @@ fn draw_content(fb: &mut dyn Framebuffer, clip: Rect, w: &Window, placed: &Place
 fn draw_image(fb: &mut dyn Framebuffer, clip: Rect, c: &Content, dest: Rect, shown: Rect, s: Scale) {
     let area = shown.intersect(&clip).intersect(&dest);
     if area.is_empty() {
+        return;
+    }
+    if pixel_for_pixel(c, dest, s) {
+        // One buffer pixel per output pixel: rows copied (opaque runs whole), as a buffer of the
+        // output's scale is, whether or not a viewport says so.
+        let width = c.width as usize;
+        for y in area.y..area.bottom() {
+            let sy = (y - dest.y) as usize;
+            let x0 = (area.x - dest.x) as usize;
+            let src = &c.pixels[sy * width + x0..sy * width + x0 + area.width as usize];
+            let row = fb.row_mut(y as u32);
+            over_row(&mut row[area.x as usize..area.right() as usize], src);
+        }
         return;
     }
     if !c.view.is_identity() {

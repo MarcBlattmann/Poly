@@ -11,7 +11,6 @@ use crate::wire::ObjectId;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::rc::Rc;
-use alloc::vec;
 use core::cell::RefCell;
 
 /// The formats the server takes, as `wl_shm.format` events announce.
@@ -64,18 +63,25 @@ impl Buffer {
             _ => 0,
         };
         let swap = matches!(self.format, wl_shm::Format::ABGR8888 | wl_shm::Format::XBGR8888);
-        let mut bytes = vec![0u8; r.width as usize * 4];
         let map = self.pool.map.borrow();
         for y in r.y..r.bottom() {
             let row = if self.y_invert { self.height - 1 - y } else { y };
             let at = self.offset + row as usize * self.stride + r.x as usize * 4;
-            if !map.read(at, &mut bytes) {
+            let out = &mut dst[y as usize * dst_width + r.x as usize..][..r.width as usize];
+            // The row straight into the content, then made opaque or
+            // swapped there: one read of the client's memory.
+            if !map.read_pixels(at, out) {
                 continue;
             }
-            let row = &mut dst[y as usize * dst_width + r.x as usize..][..r.width as usize];
-            for (px, b) in row.iter_mut().zip(bytes.chunks_exact(4)) {
-                let p = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) | opaque;
-                *px = if swap { (p & 0xff00_ff00) | (p >> 16 & 0xff) | (p & 0xff) << 16 } else { p };
+            if swap {
+                for px in out.iter_mut() {
+                    let p = *px | opaque;
+                    *px = (p & 0xff00_ff00) | (p >> 16 & 0xff) | (p & 0xff) << 16;
+                }
+            } else if opaque != 0 {
+                for px in out.iter_mut() {
+                    *px |= opaque;
+                }
             }
         }
     }

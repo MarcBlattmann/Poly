@@ -76,7 +76,7 @@ pub fn modules() -> impl Iterator<Item = &'static str> {
     CORE_MODULES.iter().chain(SYSTEM_MODULES).copied()
 }
 /// The test programs (`tests/windows/wow64/<name>.rs`).
-pub const PROGRAMS: &[&str] = &["hello32", "gui32", "sys32", "safeseh32", "ansi32"];
+pub const PROGRAMS: &[&str] = &["hello32", "gui32", "sys32", "safeseh32", "ansi32", "msgloop32"];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 /// Exports the kernel and every 32-bit program need from the i686 `ntdll`.
@@ -237,6 +237,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "tests/windows/wow64/sys32.rs",
             "tests/windows/wow64/safeseh32.rs",
             "tests/windows/wow64/ansi32.rs",
+            "tests/windows/wow64/msgloop32.rs",
             "personalities/nt/win32/Cargo.toml",
             "personalities/nt/win32/Cargo.lock",
             "personalities/nt/src/services.rs",

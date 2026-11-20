@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/winmm.dll/waveOutGetErrorTextW.yaml
+id: windows/api/winmm.dll/waveOutGetErrorTextW
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-waveout
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only). Microsoft Learn: "waveOutOpen function", "waveOutClose", "waveOutPrepareHeader", "waveOutUnprepareHeader", "waveOutWrite", "waveOutPause", "waveOutRestart", "waveOutReset", "waveOutBreakLoop", "waveOutGetPosition", "waveOutGetVolume", "waveOutSetVolume", "waveOutGetDevCaps", "waveOutGetNumDevs", "waveOutGetID", "waveOutGetErrorText", "waveOutMessage", "WAVEHDR", "WAVEFORMATEX", "WAVEFORMATEXTENSIBLE", "WAVEOUTCAPS", "MMTIME", "waveOutProc callback function", "Multimedia Error Codes"; constants and layouts from mmsystem.h, mmeapi.h, mmreg.h and ksmedia.h. The import names of Chrome's chrome.dll come from the survey in docs/windows/audio-plan.md. No Wine, ReactOS or Chromium source was read and no Microsoft binary was disassembled.
+summary: >
+  Text for an MMSYSERR_* or WAVERR_* code. The size is in characters.
+interface:
+  signature: "MMRESULT waveOutGetErrorTextW(MMRESULT error, LPWSTR text, UINT size)"
+rules:
+  texts: "the exact texts (two spaces after a full stop inside the longer ones): 0 \"The specified command was carried out.\"; 1 \"Undefined external error.\"; 2 \"A device ID has been used that is out of range for your system.\"; 4 \"The specified device is already in use.  Wait until it is free, and then try again.\"; 5 \"The specified device handle is invalid.\"; 6 \"There is no driver installed on your system.\"; 7 \"There is not enough memory available for this task.  Quit one or more applications to increase available memory, and then try again.\"; 8 \"This function is not supported.  Use the Capabilities function to determine which functions and messages the driver supports.\"; 9 \"An error number was specified that is not defined in the system.\"; 10 \"An invalid flag was passed to a system function.\"; 11 \"An invalid parameter was passed to a system function.\"; 12 \"Handle being used simultaneously on another thread (eg callback).\"; 20 \"The driver did not generate a valid OPEN callback.\"; 32 \"The specified format is not supported or cannot be translated.  Use the Capabilities function to determine the supported formats.\"; 33 \"Cannot perform this operation while media data is still playing.  Reset the device, or wait until the data is finished playing.\"; 34 \"The wave header was not prepared.  Use the Prepare function to prepare the header, and then try again.\"; 35 \"Cannot open the device without using the WAVE_ALLOWSYNC flag.  Use the flag, and then try again.\""
+  no_text: "codes 21, 36, 99 and 1000 have no text: MMSYSERR_BADERRNUM (9) and the buffer's first character is set to 0 (an empty string)"
+  size: "a text longer than the buffer is cut to size - 1 characters and always ends with a 0 (size 1: only the 0; size 5: \"Cann\"); size 0 succeeds and writes nothing; nothing is written past the size"
+  null: "a null buffer is MMSYSERR_INVALPARAM"
+errors:
+  no_text: "MMSYSERR_BADERRNUM (9)"
+  null_buffer: "MMSYSERR_INVALPARAM (11)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing winmm.dll, kernel32.dll (and user32.dll for the window and thread callback tests) by name, built with the pipeline's usual flags. Every test needs a wave output device: it first checks that waveOutGetNumDevs is at least 1 and fails if not. Audio data is always silence (zero samples; never 8-bit data, whose silence is not zero), so nothing is audible. Observations are return codes, header flags, booleans, counts, orders of callbacks and positions that follow from the bytes written; never handles, thread ids, addresses or times. Waiting is bounded: a buffer of 50 or 100 ms is waited for up to 5 s, and "nothing happens" checks look for 100 to 400 ms. The tests that change the volume restore it; the volume is per process, so a test that fails does not leave it changed. A few tests are the exception: they say "NO SOUND DEVICE" in their first line and must be run with no sound device present; their recording was made with the oracle's sound card disabled (the HD audio function turned off in Device Manager terms, and turned on again after the run); where such a test runs with a device it fails.
+not_covered: >
+  Machines with no sound device, except for the no-device rules named above; devices other than device 0 and the mapper; how long a buffer takes to start or the latency of any call; capture (waveIn) and MIDI. Texts of codes between 13 and 19 and other languages (the oracle is English).

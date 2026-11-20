@@ -88,6 +88,19 @@ impl ShmMap for Mapping {
         unsafe { core::ptr::copy_nonoverlapping(self.ptr.add(offset), dst.as_mut_ptr(), dst.len()) };
         true
     }
+
+    fn read_pixels(&self, offset: usize, dst: &mut [u32]) -> bool {
+        // Pixels are 4 little-endian bytes; this machine's `u32`s are too (x86-64).
+        const _: () = assert!(cfg!(target_endian = "little"));
+        let Some(bytes) = dst.len().checked_mul(4) else { return false };
+        if offset.checked_add(bytes).is_none_or(|end| end > self.len) {
+            return false;
+        }
+        // SAFETY: as in `read`: the range is inside the mapping, which stays mapped while
+        // `self` lives; `dst` is `bytes` writable bytes, and any byte pattern is a `u32`.
+        unsafe { core::ptr::copy_nonoverlapping(self.ptr.add(offset), dst.as_mut_ptr().cast::<u8>(), bytes) };
+        true
+    }
 }
 
 impl Drop for Mapping {

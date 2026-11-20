@@ -146,6 +146,7 @@ mod ext4disk;
 mod font;
 mod fonts;
 mod gitwin;
+mod hostaudio;
 mod hostfs;
 mod hostscreen;
 mod initramfs;

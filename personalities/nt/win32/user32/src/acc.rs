@@ -140,8 +140,8 @@ pub unsafe extern "system" fn TranslateAcceleratorW(hwnd: H, table: usize, msg: 
         return 0;
     }
     let Some(entries) = entries_of(table) else { return 0 };
-    // SAFETY: the caller's MSG.
-    let m = unsafe { *msg };
+    // SAFETY: the caller's MSG, read in its own size.
+    let m = unsafe { poly_win32k::user::get_msg(msg) };
     let down = |vk: i32| super::GetKeyState(vk) < 0;
     let mods = Mods { shift: down(0x10), ctrl: down(0x11), alt: down(0x12) };
     let Some(a) = dlg::match_accel(&entries, m.message, m.w as u16, mods) else { return 0 };

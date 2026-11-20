@@ -63,6 +63,7 @@ struct PaintStruct {
     reserved: [u8; 32],
 }
 
+/// `MSG` on x86: 28 bytes (`winuser.h`; `lPrivate` is `_MAC` only).
 #[repr(C)]
 #[derive(Default)]
 struct Msg {
@@ -72,7 +73,6 @@ struct Msg {
     lparam: isize,
     time: u32,
     pt: [i32; 2],
-    private: u32,
 }
 
 #[link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated")]

@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_capsw_errors",
+      "exe_sha256": "ee9312794adc01baad996240e60ea725ebd15a75546367f2bb58a4679383131d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKZGV2aWNlIGNvdW50ID0gTU1TWVNFUlJfQkFEREVWSUNFSUQgKDIpCm9rIGRldmljZSBjb3VudApvayBub3RoaW5nIHdyaXR0ZW4gZm9yIGEgYmFkIGlkCmRldmljZSBjb3VudCArIDEgPSBNTVNZU0VSUl9CQURERVZJQ0VJRCAoMikKb2sgZGV2aWNlIGNvdW50ICsgMQpvayBub3RoaW5nIHdyaXR0ZW4gZm9yIGEgYmFkIGlkCmlkIC0yID0gTU1TWVNFUlJfQkFEREVWSUNFSUQgKDIpCm9rIGlkIC0yCm9rIG5vdGhpbmcgd3JpdHRlbiBmb3IgYSBiYWQgaWQKaWQgNzcgPSBNTVNZU0VSUl9CQURERVZJQ0VJRCAoMikKb2sgaWQgNzcKb2sgbm90aGluZyB3cml0dGVuIGZvciBhIGJhZCBpZAppZCAweDdmZmZmZmZmID0gTU1TWVNFUlJfQkFEREVWSUNFSUQgKDIpCm9rIGlkIDB4N2ZmZmZmZmYKb2sgbm90aGluZyB3cml0dGVuIGZvciBhIGJhZCBpZApzaXplIG9mIFdBVkVPVVRDQVBTVyA4NApvayBXQVZFT1VUQ0FQU1cgaXMgODQgYnl0ZXMKc2l6ZSA0ID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIHNpemUgNApzaXplIDggPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgc2l6ZSA4CnNpemUgNDggPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgc2l6ZSA0OApzaXplIDgzID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIHNpemUgODMKc2l6ZSAwID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgc2l6ZSAwCm9rIHNpemUgMCB3cml0ZXMgbm90aGluZwpzaXplIDEwMCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHNpemUgMTAwCm9rIHNpemUgMTAwIGRvZXMgbm90IHdyaXRlIHBhc3QgODQgYnl0ZXMKbnVsbCBidWZmZXIgPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgbnVsbCBidWZmZXIKc3VtbWFyeSAyMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\ndevice count = MMSYSERR_BADDEVICEID (2)\nok device count\nok nothing written for a bad id\ndevice count + 1 = MMSYSERR_BADDEVICEID (2)\nok device count + 1\nok nothing written for a bad id\nid -2 = MMSYSERR_BADDEVICEID (2)\nok id -2\nok nothing written for a bad id\nid 77 = MMSYSERR_BADDEVICEID (2)\nok id 77\nok nothing written for a bad id\nid 0x7fffffff = MMSYSERR_BADDEVICEID (2)\nok id 0x7fffffff\nok nothing written for a bad id\nsize of WAVEOUTCAPSW 84\nok WAVEOUTCAPSW is 84 bytes\nsize 4 = MMSYSERR_INVALPARAM (11)\nok size 4\nsize 8 = MMSYSERR_INVALPARAM (11)\nok size 8\nsize 48 = MMSYSERR_INVALPARAM (11)\nok size 48\nsize 83 = MMSYSERR_INVALPARAM (11)\nok size 83\nsize 0 = MMSYSERR_NOERROR (0)\nok size 0\nok size 0 writes nothing\nsize 100 = MMSYSERR_NOERROR (0)\nok size 100\nok size 100 does not write past 84 bytes\nnull buffer = MMSYSERR_INVALPARAM (11)\nok null buffer\nsummary 21 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 84
+    },
+    {
+      "name": "wo_capsw_handle",
+      "exe_sha256": "e44ae7227e6b42346746c5e76a1c34007c16996c2c44f008fef90b99becc5468",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4KY2FwcyBieSBoYW5kbGUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBjYXBzIGJ5IGhhbmRsZQpvayBzYW1lIGRldmljZSBuYW1lCm9rIHNhbWUgZm9ybWF0cwpvayBzYW1lIGNoYW5uZWxzCm9rIHNhbWUgc3VwcG9ydApjbG9zZSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIGNsb3NlCm9rIHRoZSBjbG9zZWQgaGFuZGxlIGlzIG5vIGxvbmdlciBhIHZhbGlkIGlkCmNsb3NlZCBoYW5kbGUgYXMgaWQgLT4gTU1TWVNFUlJfQkFEREVWSUNFSUQKc3VtbWFyeSA5IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen = MMSYSERR_NOERROR (0)\nok open\ncaps by handle = MMSYSERR_NOERROR (0)\nok caps by handle\nok same device name\nok same formats\nok same channels\nok same support\nclose = MMSYSERR_NOERROR (0)\nok close\nok the closed handle is no longer a valid id\nclosed handle as id -> MMSYSERR_BADDEVICEID\nsummary 9 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 188
+    },
+    {
+      "name": "wo_nodev_caps",
+      "exe_sha256": "9713ee3bb8134250277b0919678aaea4a6ddf9127f13cf94239beb2b5cde3802",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgbm8gZGV2aWNlcwpXIGRldmljZSAwID0gTU1TWVNFUlJfQkFEREVWSUNFSUQgKDIpCm9rIFcgZGV2aWNlIDAKVyBtYXBwZXIgPSBNTVNZU0VSUl9CQURERVZJQ0VJRCAoMikKb2sgVyBtYXBwZXIKQSBkZXZpY2UgMCA9IE1NU1lTRVJSX0JBRERFVklDRUlEICgyKQpvayBBIGRldmljZSAwCkEgbWFwcGVyID0gTU1TWVNFUlJfQkFEREVWSUNFSUQgKDIpCm9rIEEgbWFwcGVyCnNpemUgOCBvbiBkZXZpY2UgMCAtPiBNTVNZU0VSUl9CQURERVZJQ0VJRApudWxsIGJ1ZmZlciBvbiBkZXZpY2UgMCAtPiBNTVNZU0VSUl9JTlZBTFBBUkFNCnN1bW1hcnkgNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok no devices\nW device 0 = MMSYSERR_BADDEVICEID (2)\nok W device 0\nW mapper = MMSYSERR_BADDEVICEID (2)\nok W mapper\nA device 0 = MMSYSERR_BADDEVICEID (2)\nok A device 0\nA mapper = MMSYSERR_BADDEVICEID (2)\nok A mapper\nsize 8 on device 0 -> MMSYSERR_BADDEVICEID\nnull buffer on device 0 -> MMSYSERR_INVALPARAM\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 105
+    }
+  ]
+}

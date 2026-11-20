@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_pos_progress",
+      "exe_sha256": "ccbd276731cf62ed93a5ca9805e344b964bd539433b002bb8f6e368b44376a53",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb2sgcG9zaXRpb24gb2YgYSBmcmVzaCBoYW5kbGUKb2sgc2FtcGxlcyBvZiBhIGZyZXNoIGhhbmRsZQpvayBxdWV1ZQpvayBxdWV1ZQpvayBxdWV1ZQpvayBxdWV1ZQpuZXZlciBkZWNyZWFzZWQ6IHRydWUgbmV2ZXIgYmV5b25kIHRoZSB0b3RhbDogdHJ1ZQpvayBuZXZlciBkZWNyZWFzZWQKb2sgbmV2ZXIgYmV5b25kIHRoZSB3cml0dGVuIHRvdGFsCm9rIHRoZSB0b3RhbCBhZnRlciB0aGUgbGFzdCBidWZmZXIKb2sgdGhlIHNhbWUgaW4gc2FtcGxlcwpvayBhIG5ldyBoYW5kbGUgc3RhcnRzIGF0IDAKc3VtbWFyeSAxMiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nok position of a fresh handle\nok samples of a fresh handle\nok queue\nok queue\nok queue\nok queue\nnever decreased: true never beyond the total: true\nok never decreased\nok never beyond the written total\nok the total after the last buffer\nok the same in samples\nok a new handle starts at 0\nsummary 12 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 535
+    },
+    {
+      "name": "wo_pos_types",
+      "exe_sha256": "2e3fbc92a3a8ed279bca0b8b7900aeccd7a9c0d6d3635cb795dc9c20b99d995b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb2sgcXVldWUKb2sgZG9uZQpieXRlcyA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIGJ5dGVzCm9rIHR5cGUgaXMgYnl0ZXMKb2sgdmFsdWUKc2FtcGxlcyA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHNhbXBsZXMKb2sgdHlwZSBpcyBzYW1wbGVzCm9rIHZhbHVlIGlzIGZyYW1lcwpUSU1FX01TIC0+IE1NU1lTRVJSX05PRVJST1IgdHlwZSA0IHZhbHVlIDk2MDAKVElNRV9NUyA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIFRJTUVfTVMKb2sgYW5zd2VyZWQgaW4gYnl0ZXMKb2sgdmFsdWUgaW4gYnl0ZXMKVElNRV9TTVBURSAtPiBNTVNZU0VSUl9OT0VSUk9SIHR5cGUgNCB2YWx1ZSA5NjAwClRJTUVfU01QVEUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBUSU1FX1NNUFRFCm9rIGFuc3dlcmVkIGluIGJ5dGVzCm9rIHZhbHVlIGluIGJ5dGVzClRJTUVfTUlESSAtPiBNTVNZU0VSUl9OT0VSUk9SIHR5cGUgNCB2YWx1ZSA5NjAwClRJTUVfTUlESSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIFRJTUVfTUlESQpvayBhbnN3ZXJlZCBpbiBieXRlcwpvayB2YWx1ZSBpbiBieXRlcwpUSU1FX1RJQ0tTIC0+IE1NU1lTRVJSX05PRVJST1IgdHlwZSA0IHZhbHVlIDk2MDAKVElNRV9USUNLUyA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIFRJTUVfVElDS1MKb2sgYW5zd2VyZWQgaW4gYnl0ZXMKb2sgdmFsdWUgaW4gYnl0ZXMKdHlwZSAwIC0+IE1NU1lTRVJSX05PRVJST1IgdHlwZSA0IHZhbHVlIDk2MDAKdHlwZSAwID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgdHlwZSAwCm9rIGFuc3dlcmVkIGluIGJ5dGVzCm9rIHZhbHVlIGluIGJ5dGVzCnVuZGVmaW5lZCB0eXBlIDB4NDAgLT4gTU1TWVNFUlJfTk9FUlJPUiB0eXBlIDQgdmFsdWUgOTYwMAp1bmRlZmluZWQgdHlwZSAweDQwID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgdW5kZWZpbmVkIHR5cGUgMHg0MApvayBhbnN3ZXJlZCBpbiBieXRlcwpvayB2YWx1ZSBpbiBieXRlcwpzdW1tYXJ5IDI3IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nok queue\nok done\nbytes = MMSYSERR_NOERROR (0)\nok bytes\nok type is bytes\nok value\nsamples = MMSYSERR_NOERROR (0)\nok samples\nok type is samples\nok value is frames\nTIME_MS -> MMSYSERR_NOERROR type 4 value 9600\nTIME_MS = MMSYSERR_NOERROR (0)\nok TIME_MS\nok answered in bytes\nok value in bytes\nTIME_SMPTE -> MMSYSERR_NOERROR type 4 value 9600\nTIME_SMPTE = MMSYSERR_NOERROR (0)\nok TIME_SMPTE\nok answered in bytes\nok value in bytes\nTIME_MIDI -> MMSYSERR_NOERROR type 4 value 9600\nTIME_MIDI = MMSYSERR_NOERROR (0)\nok TIME_MIDI\nok answered in bytes\nok value in bytes\nTIME_TICKS -> MMSYSERR_NOERROR type 4 value 9600\nTIME_TICKS = MMSYSERR_NOERROR (0)\nok TIME_TICKS\nok answered in bytes\nok value in bytes\ntype 0 -> MMSYSERR_NOERROR type 4 value 9600\ntype 0 = MMSYSERR_NOERROR (0)\nok type 0\nok answered in bytes\nok value in bytes\nundefined type 0x40 -> MMSYSERR_NOERROR type 4 value 9600\nundefined type 0x40 = MMSYSERR_NOERROR (0)\nok undefined type 0x40\nok answered in bytes\nok value in bytes\nsummary 27 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 272
+    }
+  ]
+}

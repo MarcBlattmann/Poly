@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_reset_event",
+      "exe_sha256": "74b186b5ba1f0ded49efb0074fdbe3b5ce659308bab472e84f00d5ee74782b6f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4Kb2sgcXVldWUgYSBsb25nIGJ1ZmZlcgpvayBldmVudCBub3Qgc2V0IHdoaWxlIHRoZSBidWZmZXIgcGxheXMKcmVzZXQgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayByZXNldApvayBldmVudCBzZXQgYnkgdGhlIHJlc2V0Cm9rIHRoZSBidWZmZXIgd2FzIGdpdmVuIGJhY2sKc3VtbWFyeSA3IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen = MMSYSERR_NOERROR (0)\nok open\nok queue a long buffer\nok event not set while the buffer plays\nreset = MMSYSERR_NOERROR (0)\nok reset\nok event set by the reset\nok the buffer was given back\nsummary 7 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 221
+    },
+    {
+      "name": "wo_reset_idle",
+      "exe_sha256": "4212c4c6888d5f83d839c8cfc1cfdd06c6a65a6670dba21c539abeb796ebecb3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKaGFuZGxlIDAgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgaGFuZGxlIDAKbWFkZS11cCBoYW5kbGUgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgbWFkZS11cCBoYW5kbGUKcmVzZXQgYW4gaWRsZSBoYW5kbGUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayByZXNldCBhbiBpZGxlIGhhbmRsZQpyZXNldCBhZ2FpbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHJlc2V0IGFnYWluCm9rIHF1ZXVlCm9rIGRvbmUKb2sgcG9zaXRpb24gYWZ0ZXIgcGxheWluZwpyZXNldCBhZnRlciBwbGF5aW5nID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgcmVzZXQgYWZ0ZXIgcGxheWluZwpvayBwb3NpdGlvbiBpcyAwIGFmdGVyIHRoZSByZXNldApvayB0aGUgZmluaXNoZWQgaGVhZGVyIGlzIHVuY2hhbmdlZApzdW1tYXJ5IDExIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nhandle 0 = MMSYSERR_INVALHANDLE (5)\nok handle 0\nmade-up handle = MMSYSERR_INVALHANDLE (5)\nok made-up handle\nreset an idle handle = MMSYSERR_NOERROR (0)\nok reset an idle handle\nreset again = MMSYSERR_NOERROR (0)\nok reset again\nok queue\nok done\nok position after playing\nreset after playing = MMSYSERR_NOERROR (0)\nok reset after playing\nok position is 0 after the reset\nok the finished header is unchanged\nsummary 11 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 228
+    },
+    {
+      "name": "wo_reset_returns_buffers",
+      "exe_sha256": "4a0c38f96848120d379008bbc35602ea719d9ea38fedc7a3d499ed0a0a1e3974",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4Kb2sgcXVldWUKb2sgcXVldWUKb2sgcXVldWUKb2sgbm90IGZpbmlzaGVkIHlldApyZXNldCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHJlc2V0Cm9rIGFsbCB0aHJlZSBXT01fRE9ORSBoYXZlIGFycml2ZWQgd2hlbiByZXNldCByZXR1cm5zCm9rIGZsYWdzCm9rIGZsYWdzCm9rIGZsYWdzCm9rIHBvc2l0aW9uIGlzIDAgYWZ0ZXIgdGhlIHJlc2V0CnJlc2V0IGNhbGxiYWNrcyA9IDQKcmVzZXQgY2IgMCBXT01fT1BFTiB0aHJlYWQ9bWFpbiBpbnN0PW9rIHAyPTAKcmVzZXQgY2IgMSBXT01fRE9ORSBoZHI9MCBmbGFncz1ET05FfFBSRVBBUkVEIHRocmVhZD1vdGhlciBpbnN0PW9rIHAyPTAKcmVzZXQgY2IgMiBXT01fRE9ORSBoZHI9MSBmbGFncz1ET05FfFBSRVBBUkVEIHRocmVhZD1vdGhlciBpbnN0PW9rIHAyPTAKcmVzZXQgY2IgMyBXT01fRE9ORSBoZHI9MiBmbGFncz1ET05FfFBSRVBBUkVEIHRocmVhZD1vdGhlciBpbnN0PW9rIHAyPTAKb2sgbm8gZnVydGhlciBjYWxsYmFjawpvayBpbiB0aGUgb3JkZXIgd3JpdHRlbgpvayBpbiB0aGUgb3JkZXIgd3JpdHRlbgpvayBpbiB0aGUgb3JkZXIgd3JpdHRlbgp1bnByZXBhcmUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayB1bnByZXBhcmUKdW5wcmVwYXJlID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgdW5wcmVwYXJlCnVucHJlcGFyZSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHVucHJlcGFyZQpzdW1tYXJ5IDE5IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen = MMSYSERR_NOERROR (0)\nok open\nok queue\nok queue\nok queue\nok not finished yet\nreset = MMSYSERR_NOERROR (0)\nok reset\nok all three WOM_DONE have arrived when reset returns\nok flags\nok flags\nok flags\nok position is 0 after the reset\nreset callbacks = 4\nreset cb 0 WOM_OPEN thread=main inst=ok p2=0\nreset cb 1 WOM_DONE hdr=0 flags=DONE|PREPARED thread=other inst=ok p2=0\nreset cb 2 WOM_DONE hdr=1 flags=DONE|PREPARED thread=other inst=ok p2=0\nreset cb 3 WOM_DONE hdr=2 flags=DONE|PREPARED thread=other inst=ok p2=0\nok no further callback\nok in the order written\nok in the order written\nok in the order written\nunprepare = MMSYSERR_NOERROR (0)\nok unprepare\nunprepare = MMSYSERR_NOERROR (0)\nok unprepare\nunprepare = MMSYSERR_NOERROR (0)\nok unprepare\nsummary 19 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 367
+    }
+  ]
+}

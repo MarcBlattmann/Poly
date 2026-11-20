@@ -18,6 +18,7 @@
 //! [ADR 0063]: ../../../docs/adr/0063-nt-processes-object-manager-and-memory.md
 
 mod afd;
+mod audio;
 mod backend;
 pub mod console;
 mod io;
@@ -65,6 +66,7 @@ pub static GUI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-gui32.
 pub static SYS32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-sys32.exe"));
 pub static SAFESEH32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-safeseh32.exe"));
 pub static ANSI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-ansi32.exe"));
+pub static MSGLOOP32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-msgloop32.exe"));
 
 include!(concat!(env!("OUT_DIR"), "/wow64_dlls.rs"));
 mod test_wow64;
@@ -1209,6 +1211,25 @@ impl NtKernel for Kernel {
 
     fn net_info(&self) -> (Vec<[u8; 4]>, String) {
         afd::net_info()
+    }
+
+    fn audio_device(&mut self) -> Option<poly_audio::nt::DeviceInfo> {
+        audio::device()
+    }
+
+    fn audio_open(
+        &mut self,
+        format: poly_audio::Format,
+        buffer_frames: u32,
+    ) -> Result<Arc<dyn poly_personality_nt::audio::NtAudioStream>, NtStatus> {
+        audio::open(format, buffer_frames)
+    }
+
+    fn audio_pend(
+        &mut self,
+        w: poly_personality_nt::audio::AudioWait,
+    ) -> Result<(), poly_personality_nt::audio::AudioWait> {
+        audio::pend(w)
     }
 
     fn net_interfaces(&self) -> Vec<poly_personality_nt::afd::IfInfo> {
