@@ -170,6 +170,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     fs::init(&boot, initrd);
     // The out-of-memory policy (ADR 0250), once the page cache is there.
     oom::init(&boot);
+    // Frees what unmaps without waiting kept for their shootdowns (ADR 0254).
+    arch::user::start_reaper();
     // /dev/dri on the virtio GPU the display found (ADR 0108).
     drm::init(&boot);
     tty::init(&boot);

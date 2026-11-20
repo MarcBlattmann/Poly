@@ -527,6 +527,8 @@ between the client start and the server's `ConnectNamedPipe`, the old tests hang
 with the recorded output. Tests that open a pipe from the same thread as the server (the kernel32 pipe entries) are not
 affected: they are sequential, and `dnp_basic` asserts the busy answer on purpose.
 
+**A test waits for its child before it reads the child's exit code** (`coverage check` warns): `GetExitCodeProcess` answers 259 (`STILL_ACTIVE`) until the process has ended, so a read that comes before any wait in its function (`WaitForSingleObject`, `wait_exit`, `.finish()`, ...) depends on timing and fails on a loaded CI runner. The check lists such reads (`tools/coverage/src/childwait.rs`); a read on purpose (a suspended or running process answering 259) goes into `tools/coverage/childwait-baseline.txt` as `path:function` once someone has looked at it. The check does not look at the length of the wait: a bound of 5 or 10 s for a child is short under CI load (`finish()` of the copied child helper waits 10 s, then ends the child and waits 5 s); give a wait for a child 30 s or more.
+
 **Keeping green Windows entries green** ([ADR 0099](adr/0099-cpp-exception-handling-in-msvcrt.md)):
 `cargo xtask pipeline win polycheck` (in `cargo xtask ci pipeline`) builds
 the visible tests of every green Windows entry that has a `windows.json`,

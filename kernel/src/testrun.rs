@@ -42,6 +42,9 @@ pub const INIT_ARG: &str = "poly.init";
 /// its path, in order (`poly.init.arg=a poly.init.arg=t.7z`; no spaces in
 /// one; ADR 0087).
 pub const INIT_ARGV: &str = "poly.init.arg";
+/// Kernel argument, once per variable: the first program's environment
+/// (`poly.init.env=POLY_A64_ENGINE=interp`; no spaces in one; ADR 0257).
+pub const INIT_ENV: &str = "poly.init.env";
 /// Kernel flag: trace the first program (`POLY-SYSCALL`, `POLY-OUT`,
 /// `POLY-SIGNAL` records).
 pub const CAPTURE_FLAG: &str = "poly.test.capture";

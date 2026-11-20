@@ -1,6 +1,6 @@
 //! What is generated, and only on `main` (ADR 0213): the README's progress
-//! section and phase table, `docs/progress/*.svg` and the ADR index in
-//! `docs/adr/README.md`.
+//! badges, the detailed progress page (`docs/progress/README.md`),
+//! `docs/progress/*.svg` and the ADR index in `docs/adr/README.md`.
 //!
 //! Every pull request that touched `coverage/` or the roadmap used to
 //! rewrite these, so every merge made the next pull request conflict in
@@ -8,7 +8,7 @@
 //! readme`), and a pull request must leave them alone: [`changed`] finds
 //! what a branch changed in them, compared with the commit it branched from.
 
-use crate::readme::{ASSET_DIR, BEGIN, END, PHASES_BEGIN, PHASES_END};
+use crate::readme::{ASSET_DIR, BADGES_BEGIN, BADGES_END, BEGIN, END, PHASES_BEGIN, PHASES_END, PROGRESS_DOC};
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -27,10 +27,11 @@ pub struct Region {
     pub end: &'static str,
 }
 
-/// The generated parts of the README and of the ADR index.
-pub const REGIONS: [Region; 3] = [
-    Region { file: "README.md", name: "the README's progress section", begin: BEGIN, end: END },
-    Region { file: "README.md", name: "the README's phase table", begin: PHASES_BEGIN, end: PHASES_END },
+/// The generated parts of the README, the progress page and the ADR index.
+pub const REGIONS: [Region; 4] = [
+    Region { file: "README.md", name: "the README's progress badges", begin: BADGES_BEGIN, end: BADGES_END },
+    Region { file: PROGRESS_DOC, name: "the progress section", begin: BEGIN, end: END },
+    Region { file: PROGRESS_DOC, name: "the phase table", begin: PHASES_BEGIN, end: PHASES_END },
     Region { file: ADR_INDEX, name: "the ADR index", begin: ADR_BEGIN, end: ADR_END },
 ];
 
@@ -70,7 +71,7 @@ pub fn explain(changed: &[String]) -> String {
         "this change rewrites generated files:\n  {}\nThey are regenerated on main after every merge \
          (`progress.yml`, ADR 0213), so a pull request must not change them: restore them from main \
          (`git checkout origin/main -- docs/progress`, and take main's text of the generated sections \
-         of README.md and docs/adr/README.md; the rest of those files stays editable). \
+         of README.md, docs/progress/README.md and docs/adr/README.md; the rest of those files stays editable). \
          `cargo xtask coverage readme` still previews them locally; do not commit its output.",
         changed.join("\n  ")
     )
@@ -126,9 +127,10 @@ pub fn adr_index(dir: &Path) -> Result<String, String> {
     Ok(out)
 }
 
-/// The generated files of `docs/progress/`, for the message.
+/// The generated graphics of `docs/progress/`, for the message.
+/// (`docs/progress/README.md` is checked region by region via [`REGIONS`].)
 pub fn is_progress_file(path: &str) -> bool {
-    path.starts_with(&format!("{ASSET_DIR}/"))
+    path.starts_with(&format!("{ASSET_DIR}/")) && path.ends_with(".svg")
 }
 
 #[cfg(test)]
@@ -136,7 +138,11 @@ mod tests {
     use super::*;
     use std::collections::BTreeMap;
 
-    fn readme(coverage: &str, phases: &str, mine: &str) -> String {
+    fn readme(badges: &str, mine: &str) -> String {
+        format!("top {mine}\n{BADGES_BEGIN}\n{badges}\n{BADGES_END}\nend\n")
+    }
+
+    fn progress_doc(coverage: &str, phases: &str, mine: &str) -> String {
         format!("top {mine}\n{BEGIN}\n{coverage}\n{END}\nmid\n{PHASES_BEGIN}\n{phases}\n{PHASES_END}\nend\n")
     }
 
@@ -147,15 +153,32 @@ mod tests {
 
     #[test]
     fn only_the_generated_parts_count() {
-        let base = lookup(&[("README.md", readme("a", "p", "x"))]);
-        // The rest of the README is editable.
-        assert!(changed(&base, &lookup(&[("README.md", readme("a", "p", "edited"))]), &[]).is_empty());
-        // Neither section may change.
-        let c = changed(&base, &lookup(&[("README.md", readme("b", "p", "x"))]), &[]);
-        assert_eq!(c, ["the README's progress section in README.md"]);
-        let c = changed(&base, &lookup(&[("README.md", readme("a", "q", "x"))]), &[]);
-        assert_eq!(c, ["the README's phase table in README.md"]);
+        let base = lookup(&[("README.md", readme("b", "x")), (PROGRESS_DOC, progress_doc("a", "p", "x"))]);
+        // The rest of both files is editable.
+        let edited = lookup(&[("README.md", readme("b", "edited")), (PROGRESS_DOC, progress_doc("a", "p", "edited"))]);
+        assert!(changed(&base, &edited, &[]).is_empty());
+        // None of the generated sections may change.
+        let c = changed(
+            &base,
+            &lookup(&[("README.md", readme("b2", "x")), (PROGRESS_DOC, progress_doc("a", "p", "x"))]),
+            &[],
+        );
+        assert_eq!(c, ["the README's progress badges in README.md"]);
+        let c = changed(
+            &base,
+            &lookup(&[("README.md", readme("b", "x")), (PROGRESS_DOC, progress_doc("a2", "p", "x"))]),
+            &[],
+        );
+        assert_eq!(c, [format!("the progress section in {PROGRESS_DOC}")]);
+        let c = changed(
+            &base,
+            &lookup(&[("README.md", readme("b", "x")), (PROGRESS_DOC, progress_doc("a", "q", "x"))]),
+            &[],
+        );
+        assert_eq!(c, [format!("the phase table in {PROGRESS_DOC}")]);
         // Nor the graphics.
+        assert!(is_progress_file("docs/progress/badge-linux.svg"));
+        assert!(!is_progress_file(PROGRESS_DOC));
         let c = changed(&base, &base, &["docs/progress/badge-linux.svg".to_string()]);
         assert_eq!(c, ["docs/progress/badge-linux.svg"]);
         assert!(explain(&c).contains("regenerated on main"));
