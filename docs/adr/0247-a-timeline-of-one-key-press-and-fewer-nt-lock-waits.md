@@ -120,3 +120,36 @@ it cannot report less than about 100 ms, for any browser. Its "105 ms" for the a
 suggestion box changing, measured that way; Linux Chromium measured the same way in the same week
 gives 107–123 ms. The guest's own key-to-frame time is the timeline's (or `--compositor-stats`'s
 `key_to_frame`).
+
+## Addendum (2026-11-20): the address bar's slow keys (`chrome-addressbar-tail`)
+
+Chrome for Windows' address bar, keys 400 ms apart, two sessions (10 rounds of 12 keys in each
+state, the order alternating): key to the next display frame median 24–30 ms, p90 38–80 ms; the
+slowest keys take 0.1–0.9 s. Over their windows (key to frame), summed over threads, they are:
+
+- **Chrome's bursts:** 2.7 s of running and 1.3 s of waiting for a CPU in an 870 ms window, with
+  the data decoder service busy and a utility process starting (`NtCreateNamedPipeFile`); in
+  others the browser's UI thread runs 150–200 ms in `chrome.dll` (the omnibox providers) and
+  presents nothing.
+- **The virtual machine paused.** Each CPU goes 3–30 ms without a timer tick several times a
+  second (about 3 % of the time on this host, ~18 of whose 32 cores ran other agents' builds);
+  two thirds of those gaps every CPU shares: the host stopped the whole VM. They account for the
+  NT state lock's long waits (blocks over 1 ms: half of the blocked time, p99 2–5 ms): the holder
+  stops with everyone else. `timeline.py --gaps` reports them.
+- **Not lock-holder preemption by Poly's scheduler.** Keeping the time slice from switching away
+  from a thread holding the NT state lock (tried, in-session A/B over both sessions) left the long
+  waits as they were (blocks over 1 ms: 4.9 → 7.5 s and 5.9 → 6.0 s); not kept.
+- **Writeback's dirty check walked the whole page cache.** `writeback_pass` asked
+  `CachedFs::page_counts()` every pass (every 5 s) only to know whether a page is dirty; that
+  counts every cached page of the file system with the page cache's index locked (one session: 0.8
+  s of CPU in it over 70 s, page-cache users waiting meanwhile). `CachedFs::has_dirty` looks at the
+  first dirty entry instead (disk and memfs writeback). Its effect on keys was not measurable in
+  the two A/B sessions, whose caches never made the walk show up.
+
+**Viz's software composite (about 7 ms a frame).** Its samples while typing: 44 % `chrome.dll`
+(Skia), 46 % kernel, 7 % Poly's `d3d11.dll`. The kernel part: page faults zero-filling fresh pages
+(28 %), `NtFreeVirtualMemory`/`NtAllocateVirtualMemory` (25 %: buffers freed and committed again
+every frame), `NtWriteFile` (24 %, mostly waking the reader). Poly's present path (the copy of the
+dirty rectangles, `PolyUserPresentBuffer`) is a few per cent: no cheap win there; the candidate is
+the memory churn (keeping pages of a recommitted range, a pool of zeroed frames), a change of its
+own.

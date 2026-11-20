@@ -1730,6 +1730,7 @@ timeline.grab(lambda name, **args: qmp.cmd(name, **args), serial_log_text, '/tmp
 | `--samples` | the user-mode samples by module (`chrome.dll`, `ntdll.dll`, ...): where the programs' own time went; and the kernel-mode samples by function and by the system call they were taken in (name them with `--kernel-syms FILE`, the output of `nm -C --defined-only` on the kernel ELF the guest booted, e.g. `kernel/target/x86_64-unknown-none/release/poly-kernel`; `--callers` adds each function's caller) |
 | `--lane NAME`, `--key N`, `--ms W`, `--min-bytes B` | one thread's events; another key press; the window; frames at least that big |
 | `--at MS` | a window that starts this many ms into the ring instead of at a key press (idle stretches, rings without keys) |
+| `--gaps` | per CPU, stretches of more than 3 ms without a timer tick, and how many of them every CPU shared: the virtual machine paused by its host (a loaded host does this several times a second; every thread, lock holders included, stops for that long, and no guest change removes it) |
 
 A `PolyUserCall` is named by its request (`PolyUserCall:Window`, `PolyUserCall:Desktop`): the
 kernel records the request's first byte (its tag) as the call's argument. Threads are named `role/thread` (`browser/CrBrowserMain`,

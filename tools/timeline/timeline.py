@@ -407,6 +407,33 @@ def calls(recs, names, match, t0, t1):
             print(f'  {name:<40} {n:>6} {ms(wall):>9} {ms(run):>9}')
 
 
+def gaps(recs, min_ms=3.0):
+    """Per CPU: stretches of more than `min_ms` without a timer sample (the tick fires every
+    millisecond, so the CPU was not running the guest, or ran it with interrupts off), and how many of
+    them happened while every other CPU was in such a stretch too: the whole virtual machine paused
+    by its host, which no guest change removes."""
+    last, spans = {}, collections.defaultdict(list)
+    for r in recs:
+        if r.kind != 'sample':
+            continue
+        if r.cpu in last and (r.t - last[r.cpu]) / 1e6 > min_ms:
+            spans[r.cpu].append((last[r.cpu], r.t))
+        last[r.cpu] = r.t
+    span_s = (recs[-1].t - recs[0].t) / 1e9
+    cpus = sorted(last)
+    print(f'tick gaps over {min_ms:g} ms ({span_s:.0f} s of ring):')
+    for c in cpus:
+        g = spans[c]
+        total = sum(b - a for a, b in g) / 1e6
+        everyone = sum(
+            1 for a, b in g
+            if all(any(x <= (a + b) // 2 <= y for x, y in spans[o]) for o in cpus if o != c)
+        )
+        longest = max(((b - a) / 1e6 for a, b in g), default=0)
+        print(f'  cpu{c}: {len(g)} gaps, {total:.0f} ms ({100 * total / 1000 / max(span_s, 1e-9):.1f}% of the time), '
+              f'longest {longest:.1f} ms; {everyone} while every other CPU was in one too (the VM paused)')
+
+
 class KernelSyms:
     """The kernel's functions from `nm -C --defined-only <kernel ELF>` output, by address."""
 
@@ -496,6 +523,8 @@ def main():
                     help='timer samples: user mode by module, kernel mode by function and system call')
     ap.add_argument('--kernel-syms', help="`nm -C --defined-only` of the kernel ELF, to name kernel samples")
     ap.add_argument('--callers', action='store_true', help='--samples: kernel functions with their callers')
+    ap.add_argument('--gaps', action='store_true',
+                    help='per CPU, stretches without timer ticks; those all CPUs share are the VM paused by its host')
     ap.add_argument('--calls', help='per system call, the time of the threads whose name has this in it')
     ap.add_argument('--lane', help='show the lanes of the threads whose name has this in it')
     ap.add_argument('--big', type=float, default=1.0, help='chain steps of this many ms or more get a line')
@@ -514,6 +543,9 @@ def main():
     span_ms = (recs[-1].t - recs[0].t) / 1e6
     print(f'ring: {len(recs)} records over {span_ms:.0f} ms, {"frozen" if frozen else "running"}, '
           f'{len(downs)} key presses, {len(frames)} frames')
+    if args.gaps:
+        gaps(recs)
+        return
     if args.at is not None:
         t0 = recs[0].t + int(args.at * 1e6)
         t1 = t0 + int(args.ms * 1e6)
