@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSArray+arrayWithObjects%3Acount%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSArray+arrayWithObjects%3Acount%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSArray+arrayWithObjects:count:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  +[NSArray arrayWithObjects:count:] makes an immutable array of the first count pointers in order
+  (the C array is copied; count 0 gives an empty array, also from a buffer with nothing valid),
+  retaining each object. A nil among them raises NSInvalidArgumentException (reason names the
+  position); an index past the end of any array raises NSRangeException; sending addObject: to an
+  immutable array raises NSInvalidArgumentException (unrecognized selector); a nil argument to
+  NSMutableArray addObject: raises NSInvalidArgumentException. count, objectAtIndex: and subscripts,
+  firstObject and lastObject (nil when empty), indexOfObject: (isEqual:, NSNotFound when absent),
+  containsObject:, componentsJoinedByString:, isEqualToArray: (same count, pairwise isEqual:), copy of
+  an immutable array is the same object, mutableCopy is an NSMutableArray that edits (addObject:,
+  insertObject:atIndex:, removeObjectAtIndex:, removeAllObjects) without touching the original.
+  Toll-free bridging: an NSArray is a CFArray (CFGetTypeID is CFArrayGetTypeID, CFArrayGetCount and
+  CFArrayGetValueAtIndex give the same count and the very element pointers, CFEqual agrees with
+  isEqualToArray:, [a hash] is CFHash); a CFArray made with CFArrayCreate (kCFTypeArrayCallBacks)
+  answers the NSArray methods and isKindOfClass:[NSArray class]; edits through NSMutableArray and
+  CFArrayAppendValue on one mutable array show in both; the description is '(\n    a\n)'.
+returns:
+  success: "an autoreleased immutable array"
+errors:
+  nil_element: "raises NSInvalidArgumentException"
+  index_out_of_range: "raises NSRangeException"
+  mutating_immutable: "raises NSInvalidArgumentException"
+side_effects: "allocates; retains the objects"
+threading: "immutable arrays are safe to read from any thread; mutable ones need external locking"
+ordering: []
+timing:
+  typical: "microseconds, linear in the count"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

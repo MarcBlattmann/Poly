@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_queue_create_with_target$V2.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_queue_create_with_target$V2.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_queue_create_with_target$V2
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_queue_create_with_target(label, attr, target) (the exported symbol is dispatch_queue_create_with_target$V2) makes a
+  queue whose blocks run through another queue. Its label is its own. Two serial queues aimed at one serial queue never overlap
+  (500 blocks) while each keeps the order of its own blocks. A concurrent queue aimed at a serial queue is serialised by it
+  (300 blocks, never two at once); a serial queue aimed at a concurrent one is still serial. A queue aimed at a global queue
+  runs its blocks on worker threads, with that queue's QoS (a utility global target: qos_class_self() 17 in the block);
+  a NULL target means the default global queue (worker threads); aimed at the main queue nothing runs while the main thread does
+  not drain it. dispatch_get_specific inside a block looks through the queue and then its target chain: a value set on the
+  target is seen by blocks of the child, the child's own value is seen by its blocks but not by a sibling's.
+returns:
+  "queue": "a new queue"
+errors:
+  "none": "no error result"
+side_effects: "makes a queue object that holds a reference to the target"
+threading: "see the summary"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

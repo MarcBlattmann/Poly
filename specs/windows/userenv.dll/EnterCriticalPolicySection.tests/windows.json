@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "cps_basic",
+      "exe_sha256": "4f6bb5b8ce1ef338f729c01354d9ee56fd4c82363691a2748da78148e59c022f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dXNlcjogZW50ZXIgcmV0dXJuZWQgYSBoYW5kbGUgMSAoZXJyb3IgMCkKdXNlcjogbGVhdmU6IDEKdXNlcjogbGVhdmUgb2YgdGhlIHNhbWUgaGFuZGxlIGFnYWluOiAwIChlcnJvciA2KQptYWNoaW5lOiBlbnRlciByZXR1cm5lZCBhIGhhbmRsZSAxIChlcnJvciAwKQptYWNoaW5lOiBsZWF2ZTogMQptYWNoaW5lOiBsZWF2ZSBvZiB0aGUgc2FtZSBoYW5kbGUgYWdhaW46IDAgKGVycm9yIDYpCnVzZXI6IHNlY29uZCB0aHJlYWQgZG9uZSB3aGlsZSB0aGUgZmlyc3QgaG9sZHMgdGhlIHNlY3Rpb24gMQp1c2VyOiBzZWNvbmQgdGhyZWFkIGZpbmlzaGVkIGFmdGVyIHRoZSBmaXJzdCBsZWZ0IDE7IGl0cyBwbGFjZSBpbiB0aGUgb3JkZXIgMTsgaXRzIGhhbmRsZSB3YXMgTlVMTCAwCm1hY2hpbmU6IHNlY29uZCB0aHJlYWQgZG9uZSB3aGlsZSB0aGUgZmlyc3QgaG9sZHMgdGhlIHNlY3Rpb24gMQptYWNoaW5lOiBzZWNvbmQgdGhyZWFkIGZpbmlzaGVkIGFmdGVyIHRoZSBmaXJzdCBsZWZ0IDE7IGl0cyBwbGFjZSBpbiB0aGUgb3JkZXIgMTsgaXRzIGhhbmRsZSB3YXMgTlVMTCAwCm1hY2hpbmUgc2VjdGlvbiBmcm9tIGFub3RoZXIgdGhyZWFkIHdoaWxlIHRoZSB1c2VyIHNlY3Rpb24gaXMgaGVsZDogZmluaXNoZWQgMQpsZWF2ZSB3aXRoIHRoZSBOVUxMIGhhbmRsZTogMCAoZXJyb3IgODcpCmxlYXZlIHdpdGggSU5WQUxJRF9IQU5ETEVfVkFMVUU6IDAgKGVycm9yIDYpCmxlYXZlIHdpdGggYSBoYW5kbGUgdmFsdWUgdGhhdCBpcyBub3Qgb3BlbjogMCAoZXJyb3IgNikKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "user: enter returned a handle 1 (error 0)\nuser: leave: 1\nuser: leave of the same handle again: 0 (error 6)\nmachine: enter returned a handle 1 (error 0)\nmachine: leave: 1\nmachine: leave of the same handle again: 0 (error 6)\nuser: second thread done while the first holds the section 1\nuser: second thread finished after the first left 1; its place in the order 1; its handle was NULL 0\nmachine: second thread done while the first holds the section 1\nmachine: second thread finished after the first left 1; its place in the order 1; its handle was NULL 0\nmachine section from another thread while the user section is held: finished 1\nleave with the NULL handle: 0 (error 87)\nleave with INVALID_HANDLE_VALUE: 0 (error 6)\nleave with a handle value that is not open: 0 (error 6)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 873
+    }
+  ]
+}

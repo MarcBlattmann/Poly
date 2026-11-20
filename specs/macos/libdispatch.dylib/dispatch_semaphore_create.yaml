@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_semaphore_create.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_semaphore_create.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_semaphore_create
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_semaphore_create(n) returns a counting semaphore with n tokens, or NULL for a negative n (-1 and -1000). 0 gives a semaphore with no token (a wait with DISPATCH_TIME_NOW fails); 3 gives exactly three successful waits; 100000 gives exactly 100000.
+  Semaphores are independent objects. A semaphore of 1 is a mutex between threads (8 threads x 5000 increments: exactly 40000, never two inside). A semaphore must be back at its initial count when it is released: releasing one with a lower count ends the process (SIGTRAP on
+  arm64, SIGILL on x86_64; not tested); balanced use (10 signal/wait pairs, then release) is fine; retain then release works.
+returns:
+  "semaphore": "new semaphore object"
+  "negative": "NULL"
+errors:
+  "negative_count": "NULL"
+side_effects: "makes a semaphore object"
+threading: "see the summary"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "releasing a semaphore below its initial count: SIGTRAP (arm64), SIGILL (x86_64)"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

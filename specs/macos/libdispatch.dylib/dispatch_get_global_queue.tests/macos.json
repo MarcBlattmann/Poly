@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_get_global_queue_labels",
+      "source_sha256": "9ea53c7f2baba153bfcf708ac36fa2033b4d521e72571fd92e476e2c5b6a5d97",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d6a448ae91bc2f776139dfee7da8dd8947878ed1c0a9820a802dbb18a07affdc",
+          "exit_code": 0,
+          "stdout": "ok QOS_CLASS_DEFAULT\nok QOS_CLASS_USER_INTERACTIVE\nok QOS_CLASS_USER_INITIATED\nok QOS_CLASS_UTILITY\nok QOS_CLASS_BACKGROUND\nok DISPATCH_QUEUE_PRIORITY_HIGH is the user-initiated queue\nok DISPATCH_QUEUE_PRIORITY_DEFAULT is the default queue\nok DISPATCH_QUEUE_PRIORITY_LOW is the utility queue\nok DISPATCH_QUEUE_PRIORITY_BACKGROUND is the background queue\nok 0 (QOS_CLASS_UNSPECIFIED) is the default queue\nok the same queue on every call\nok the queues of different classes differ\nok an unknown class (12345): NULL\nok nonzero flags: NULL\nvalue QOS_CLASS_USER_INTERACTIVE 33\nvalue QOS_CLASS_USER_INITIATED 25\nvalue QOS_CLASS_DEFAULT 21\nvalue QOS_CLASS_UTILITY 17\nvalue QOS_CLASS_BACKGROUND 9\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "546634fab95f5ec2935773a4425c75ea13abccf6c35cd1a087d432e1a9f48ebd",
+          "exit_code": 0,
+          "stdout": "ok QOS_CLASS_DEFAULT\nok QOS_CLASS_USER_INTERACTIVE\nok QOS_CLASS_USER_INITIATED\nok QOS_CLASS_UTILITY\nok QOS_CLASS_BACKGROUND\nok DISPATCH_QUEUE_PRIORITY_HIGH is the user-initiated queue\nok DISPATCH_QUEUE_PRIORITY_DEFAULT is the default queue\nok DISPATCH_QUEUE_PRIORITY_LOW is the utility queue\nok DISPATCH_QUEUE_PRIORITY_BACKGROUND is the background queue\nok 0 (QOS_CLASS_UNSPECIFIED) is the default queue\nok the same queue on every call\nok the queues of different classes differ\nok an unknown class (12345): NULL\nok nonzero flags: NULL\nvalue QOS_CLASS_USER_INTERACTIVE 33\nvalue QOS_CLASS_USER_INITIATED 25\nvalue QOS_CLASS_DEFAULT 21\nvalue QOS_CLASS_UTILITY 17\nvalue QOS_CLASS_BACKGROUND 9\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_get_global_queue_run",
+      "source_sha256": "634ac75e53c2a023657e25e763819153c5d4c763c880abaea760ffc7809098d6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "65945ed8df55d09f2feca4fb52be265743c1fe16c0f8c6a93513791a9a637e94",
+          "exit_code": 0,
+          "stdout": "ok the block ran\nok not on the main thread\nok on a thread of its own, not the main thread's\nok three blocks of one global queue were running at once\nok and all finished\nok a block on each of the other four global queues ran\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "949e2ea51aa27a9799672f258c9e0411037090a6bd780585f4614b9f44be7259",
+          "exit_code": 0,
+          "stdout": "ok the block ran\nok not on the main thread\nok on a thread of its own, not the main thread's\nok three blocks of one global queue were running at once\nok and all finished\nok a block on each of the other four global queues ran\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

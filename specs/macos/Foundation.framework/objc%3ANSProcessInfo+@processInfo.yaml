@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSProcessInfo+@processInfo.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSProcessInfo+@processInfo.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSProcessInfo+@processInfo"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  +[NSProcessInfo processInfo] is one object for the life of the process, the same from every call and
+  every thread. Its processName is the executable's file name ('t' for T.app/Contents/MacOS/t, not the
+  bundle name), processIdentifier the pid the kernel reports for getpid (positive), hostName not
+  empty, activeProcessorCount and processorCount at least 1, physicalMemory positive,
+  globallyUniqueString different on every call. The properties arguments, environment and
+  operatingSystemVersion have their own sheets.
+returns:
+  success: "the shared NSProcessInfo"
+errors: {}
+side_effects: "none"
+threading: "the object and its properties may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds, no system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
