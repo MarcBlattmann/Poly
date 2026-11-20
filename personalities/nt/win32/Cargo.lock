@@ -21,6 +21,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "audioses"
+version = "0.0.1"
+dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
 name = "b35test"
 version = "0.0.1"
 dependencies = [
@@ -300,6 +307,16 @@ dependencies = [
 name = "mfplat"
 version = "0.0.1"
 dependencies = [
+ "poly-win32-rt",
+]
+
+[[package]]
+name = "mmdevapi"
+version = "0.0.1"
+dependencies = [
+ "poly-audio",
+ "poly-com",
+ "poly-kernelbase",
  "poly-win32-rt",
 ]
 
