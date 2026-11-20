@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/NamedSecurityInfo.RegistryKey.yaml
+id: windows/api/advapi32.dll/NamedSecurityInfo.RegistryKey
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station: windows and messages work, nothing is visible, no input) as the local account \"server\" (an administrator, full token); each test is a 64-bit and a 32-bit program, and every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-regkey-security
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, as an administrator (the SSH logon, full token) in a 64-bit and a 32-bit build, on keys the programs make themselves below HKLM\SOFTWARE and HKCU\Software (the key PolyKeySec_B7 and its children; each program removes them at the start and the end, after giving them a NULL DACL so that a test that locked a key cannot leave it behind). A first look was also taken as LocalSystem (a one-shot scheduled task, removed again): what differs is listed under observed_once. Microsoft Learn: "GetSecurityInfo function (aclapi.h)", "SetSecurityInfo function (aclapi.h)", "GetNamedSecurityInfoW", "SetNamedSecurityInfoW", "SE_OBJECT_TYPE enumeration", "RegGetKeySecurity function", "RegSetKeySecurity function", "Registry Key Security and Access Rights", "Access-Control Entries", "ACE_HEADER", "SECURITY_INFORMATION", "Automatic Propagation of Inheritable ACEs"; aclapi.h, accctrl.h, winnt.h, winreg.h, winerror.h for constants and layouts. The finding behind this job (the Google updater service calls GetSecurityInfo and SetSecurityInfo with SE_REGISTRY_KEY on a key handle and Poly answered ERROR_INVALID_HANDLE) is the coordinator's (B7). The existing sheets of GetSecurityInfo and SetSecurityInfo observed the types on an event handle only. No Wine or ReactOS source was read and no Microsoft binary was decompiled or disassembled.
+summary: >
+  GetNamedSecurityInfoW and SetNamedSecurityInfoW with SE_REGISTRY_KEY (4) and names of the form MACHINE\SOFTWARE\..., CURRENT_USER\..., CLASSES_ROOT\..., USERS\...; the set call stores the DACL and propagates inheritable ACEs to the subkeys as SetSecurityInfo does.
+interface:
+  signature: "DWORD GetNamedSecurityInfoW(LPCWSTR pObjectName, SE_OBJECT_TYPE ObjectType, SECURITY_INFORMATION SecurityInfo, PSID* ppsidOwner, PSID* ppsidGroup, PACL* ppDacl, PACL* ppSacl, PSECURITY_DESCRIPTOR* ppSecurityDescriptor); DWORD SetNamedSecurityInfoW(LPWSTR pObjectName, SE_OBJECT_TYPE ObjectType, SECURITY_INFORMATION SecurityInfo, PSID psidOwner, PSID psidGroup, PACL pDacl, PACL pSacl)"
+rules:
+  names: "type 4 with \"MACHINE\\SOFTWARE\\<key>\", \"MACHINE\\SOFTWARE\\<key>\\<subkey>\" and the same names in other case: 0 (names are not case-sensitive); \"CURRENT_USER\\Software\\<key>\", \"CLASSES_ROOT\\CLSID\", \"USERS\\.DEFAULT\", \"MACHINE\", \"MACHINE\\\" and \"CURRENT_USER\": 0; a missing key: ERROR_FILE_NOT_FOUND (2); \"HKEY_LOCAL_MACHINE\\...\", \"HKLM\\...\", a name with no root (\"SOFTWARE\\<key>\") and the empty name: ERROR_INVALID_PARAMETER (87); a NULL name: 87"
+  view: "a plain MACHINE\\SOFTWARE\\<key> name is looked up in the process's own view: a 32-bit process finds the key it made (in the 32-bit view) by it and also by MACHINE\\SOFTWARE\\Wow6432Node\\<key> (a name that names Wow6432Node is not redirected): 0 for both; a 64-bit process finds its key by the plain name (0) and gets ERROR_FILE_NOT_FOUND (2) for the Wow6432Node name"
+  content: "the same descriptors as GetSecurityInfo on the opened keys: the test key below MACHINE\\SOFTWARE: control 0x8404, owner BA, 6 ACEs; CURRENT_USER\\Software\\<key>: 0x8004, owner BA, 4 ACEs; MACHINE: 0x8004, owner SY, 6 ACEs; CURRENT_USER: 0x9004, owner BA, 6 ACEs; USERS\\.DEFAULT: 0x9404, owner BA, 6 ACEs; CLASSES_ROOT\\CLSID: 0x9004, owner the user, 6 ACEs"
+  other_types: "type 9 (SE_REGISTRY_WOW64_32KEY) with every name tried: ERROR_DEV_NOT_EXIST (55); types 6 and 1 with a registry name: ERROR_PATH_NOT_FOUND (3) for MACHINE\\SOFTWARE\\<key>, ERROR_FILE_NOT_FOUND (2) for \"MACHINE\" and \"CURRENT_USER\", ERROR_INVALID_HANDLE (6) (type 6) or ERROR_INVALID_NAME (123) (type 1) for the empty name"
+  outputs: "a descriptor output alone with no part pointers: 0; no output pointer at all: ERROR_INVALID_PARAMETER (87)"
+  set: "SetNamedSecurityInfoW(MACHINE\\SOFTWARE\\<key>, 4, DACL, the DACL plus an allowed AU ACE with CONTAINER_INHERIT_ACE): 0; the key has 7 ACEs with the new one first (flags 0x02), control 0x8404; the child and the grandchild have it inherited (flags 0x12, control 0x8404)"
+  set_protection: "with PROTECTED_DACL_SECURITY_INFORMATION: the key's control is 0x9404 and its 8 ACEs are all explicit (the inherited ones converted); the child still has all 8 inherited. With UNPROTECTED_DACL_SECURITY_INFORMATION on it: control 0x8404, 15 ACEs of which 6 are inherited again (the explicit ones are kept, as with SetSecurityInfo); the child has the 8 of the earlier call"
+  set_other: "type 9: 55; type 6 with a registry name: 3; a missing key: 2; \"HKEY_LOCAL_MACHINE\\...\" and the empty name: 87; a NULL pDacl with DACL_SECURITY_INFORMATION: 0 (the key gets a NULL DACL; control 0x9404) and the child then has 0 ACEs (control 0x8404)"
+errors:
+  not_found: "ERROR_FILE_NOT_FOUND (2)"
+  invalid_parameter: "ERROR_INVALID_PARAMETER (87)"
+  other: "55 and 3 as above"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), each as a 64-bit and a 32-bit program (the 32-bit one marked as such, ADR 0259). They make the test keys with RegCreateKeyExW (KEY_ALL_ACCESS, the process's own view), read with GetSecurityInfo, RegGetKeySecurity and GetNamedSecurityInfoW and write with SetSecurityInfo, RegSetKeySecurity and SetNamedSecurityInfoW; the DACLs they write are built with InitializeAcl, AddAce and AddAccessAllowedAceEx from the DACL they read. They need an administrator token for HKLM. Output lines hold return values, control bits, SIDs in text form (a domain/machine SID is printed as S-1-5-21-<machine>-<RID>, an account's own SID as <account>), ACE types, flags and masks: no handle, address, time, count of a whole hive or machine path.
+not_covered: >
+  A caller that is a standard user (only the administrator and LocalSystem tokens were tried; the non-owner case is an administrator that does not own the key), the SACL and mandatory labels of keys (needs SeSecurityPrivilege; only the answer for an administrator is recorded), keys of other hives than HKLM and HKCU, object-specific ACEs, deny ACEs (only allowed ACEs are written), remote machine names in the named calls, and the SE_REGISTRY_WOW64_32KEY object type, which answered ERROR_DEV_NOT_EXIST (55) in every call tried.
