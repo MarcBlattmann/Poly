@@ -4,7 +4,7 @@
 <text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#59636e" text-anchor="end">one block per library or call table, sized by its number of entries</text>
 <text x="15.0" y="60.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">macOS</text>
 <text x="885.0" y="60.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">0.0%</text>
-<text x="15.0" y="75.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">15 / 881,074 entries</text>
+<text x="15.0" y="75.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">20 / 881,074 entries</text>
 <g><title>SwiftUICore: 0 / 57,219 done (0.0%)</title>
 <rect x="16.0" y="85.0" width="134.6" height="134.5" fill="#e6eaef"/>
 <rect x="15.0" y="84.0" width="136.6" height="136.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
@@ -37,6 +37,7 @@
 </g>
 <g><title>Foundation: 0 / 27,602 done (0.0%)</title>
 <rect x="152.6" y="318.8" width="91.5" height="94.2" fill="#e6eaef"/>
+<rect x="152.6" y="318.8" width="0.1" height="94.2" fill="#218bff"/>
 <rect x="151.6" y="317.8" width="93.5" height="96.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 <text x="157.6" y="332.8" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">Foundation</text>
 <text x="157.6" y="346.8" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
@@ -71,7 +72,7 @@
 <text x="339.3" y="99.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#1f2328" text-anchor="start">USDKit</text>
 <text x="339.3" y="113.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#59636e" text-anchor="start">0%</text>
 </g>
-<g><title>435 smaller libraries: 6 / 19,315 done (0.0%)</title>
+<g><title>435 smaller libraries: 10 / 19,315 done (0.1%)</title>
 <rect x="334.3" y="168.8" width="73.9" height="81.0" fill="#e6eaef"/>
 <rect x="334.3" y="168.8" width="0.0" height="81.0" fill="#2da44e"/>
 <rect x="334.4" y="168.8" width="0.1" height="81.0" fill="#218bff"/>
@@ -892,7 +893,7 @@
 <rect x="860.7" y="311.1" width="10.7" height="9.8" fill="#e6eaef"/>
 <rect x="859.7" y="310.1" width="12.7" height="11.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>BSD syscalls: 9 / 455 done (2.0%)</title>
+<g><title>BSD syscalls: 10 / 455 done (2.2%)</title>
 <rect x="873.4" y="311.1" width="10.6" height="9.8" fill="#e6eaef"/>
 <rect x="873.4" y="311.1" width="0.2" height="9.8" fill="#2da44e"/>
 <rect x="873.6" y="311.1" width="1.5" height="9.8" fill="#218bff"/>
@@ -964,6 +965,7 @@
 </g>
 <g><title>libdispatch: 0 / 394 done (0.0%)</title>
 <rect x="795.0" y="334.5" width="8.9" height="9.8" fill="#e6eaef"/>
+<rect x="795.0" y="334.5" width="0.7" height="9.8" fill="#218bff"/>
 <rect x="794.0" y="333.5" width="10.9" height="11.8" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>SecurityUI: 0 / 389 done (0.0%)</title>

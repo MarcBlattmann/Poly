@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_release_more",
+      "source_sha256": "c3a8686cd3763e0cf7862379b23f889a3a7eb483ab56711dd9c2638789d86e06",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "18e863e2e179c26ca439e0aed8b66bef8a82a6529383dc8442b78f87410ebbf8",
+          "exit_code": 0,
+          "stdout": "ok a finalizer without a context (NULL) is not called\nok a group's finalizer runs when it is released\nok so does a semaphore's\nok three objects: one finalizer call each, two seen here\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0739d7404f54280640bda7ed894a26c1cb908a94a7828666a0ba8dce356bcc71",
+          "exit_code": 0,
+          "stdout": "ok a finalizer without a context (NULL) is not called\nok a group's finalizer runs when it is released\nok so does a semaphore's\nok three objects: one finalizer call each, two seen here\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
