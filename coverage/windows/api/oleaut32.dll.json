@@ -5,6 +5,7 @@
 {"symbol":"BSTR_UserUnmarshal","src":["wine-spec"],"seeds":["wine:oleaut32/tests/usrmarshal.c:test_marshal_BSTR"]},
 {"symbol":"BstrFromVector","src":["wine-spec"]},
 {"symbol":"ClearCustData","src":["wine-spec"],"seeds":["wine:oleaut32/tests/vartype.c:test_ClearCustData"]},
+{"symbol":"ComDefaults.StdOleTypeLib","status":"claimed","claimed_by":"spec-win-wow64-defaults","src":["windows-registry-defaults"]},
 {"symbol":"CreateDispTypeInfo","src":["wine-spec"],"seeds":["wine:oleaut32/tests/typelib.c:test_CreateDispTypeInfo"]},
 {"symbol":"CreateErrorInfo","status":"claimed","claimed_by":"spec-win-apps-6","src":["wine-spec"]},
 {"symbol":"CreateStdDispatch","src":["wine-spec"],"seeds":["wine:oleaut32/tests/dispatch.c:test_CreateStdDispatch","wine:oleaut32/tests/tmarshal.c:Widget_Create"]},

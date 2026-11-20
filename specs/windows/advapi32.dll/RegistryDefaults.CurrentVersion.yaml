@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/RegistryDefaults.CurrentVersion.yaml
+id: windows/api/advapi32.dll/RegistryDefaults.CurrentVersion
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station: windows and messages work, nothing is visible, no input) as the local account \"server\" (an administrator, full token); each test is a 64-bit and a 32-bit program, and every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-wow64-defaults
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above: 64-bit programs that ask for each view in turn (the access bits KEY_WOW64_64KEY and KEY_WOW64_32KEY) and 32-bit programs (built for i686, run under WOW64) that ask for their own default view and for each explicit one; the marker keys the tests make are removed again (the programs end by checking that none is left). Every program reads names and values only. Microsoft Learn: "Registry Redirector", "Registry Keys Affected by WOW64", "Accessing an Alternate Registry View", "Registry Key Security and Access Rights", "Interface Key", "CLSID Key", "InprocServer32", "ProxyStubClsid32", "TypeLib Key", "Type Library Registration", "Windows NT CurrentVersion" (no page: names as found); oaidl.h, objidl.h, unknwn.h, oleauto.h for the interface names. The coordinator's finding for B7: the 32-bit updater creates and opens keys below Software\Classes and needs the standard COM registrations in the 32-bit view too. The oracle is a normal installed machine (it also has Google, Intel, Python, Git and other vendors' keys): only what Windows itself makes is listed as default, vendor keys are left out. The earlier sheets of this area (RegCreateKeyExW and its relatives, observed under the name spec-win-wow64-registry) say how a key made through a handle or a path lands in a view; these sheets say what is there before any program has made anything. No Wine or ReactOS source was read and no Microsoft binary was decompiled or disassembled.
+summary: >
+  HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion and \Windows NT\CurrentVersion in each view: the program-folder values differ between the views (a 32-bit program sees ProgramFilesDir = the (x86) folder), the version values are the same in both.
+interface:
+  signature: "behaviour of RegOpenKeyExW and RegQueryValueExW on HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion and ...\\Windows NT\\CurrentVersion"
+rules:
+  folders_64: "64-bit view, CurrentVersion: ProgramFilesDir = \"C:\\Program Files\", ProgramFilesDir (x86) = \"C:\\Program Files (x86)\", ProgramW6432Dir = \"C:\\Program Files\", CommonFilesDir = \"C:\\Program Files\\Common Files\", CommonFilesDir (x86) = \"C:\\Program Files (x86)\\Common Files\", CommonW6432Dir = \"C:\\Program Files\\Common Files\" (all REG_SZ), ProgramFilesPath = \"%ProgramFiles%\", DevicePath = \"%SystemRoot%\\inf\", MediaPathUnexpanded = \"%SystemRoot%\\Media\" (REG_EXPAND_SZ)"
+  folders_32: "32-bit view, CurrentVersion: ProgramFilesDir = \"C:\\Program Files (x86)\", ProgramFilesDir (x86) = \"C:\\Program Files (x86)\", ProgramW6432Dir = \"C:\\Program Files\", CommonFilesDir = \"C:\\Program Files (x86)\\Common Files\", CommonFilesDir (x86) = \"C:\\Program Files (x86)\\Common Files\", CommonW6432Dir = \"C:\\Program Files\\Common Files\"; ProgramFilesPath, DevicePath and MediaPathUnexpanded are as in the 64-bit view"
+  installer: "CurrentVersion\\Installer: 64-bit view InstallerLocation = \"C:\\Windows\\System32\\\", MsiExecCA32 = \"C:\\Windows\\syswow64\\msiexec.exe\", MsiExecCA64 = \"C:\\Windows\\System32\\msiexec.exe\"; 32-bit view InstallerLocation = \"C:\\Windows\\SysWOW64\\\" and no MsiExecCA32 or MsiExecCA64"
+  keys: "CurrentVersion has the keys Uninstall, Run, RunOnce, App Paths, Policies, Explorer, Installer, Setup and Internet Settings in both views (the two views hold different data below them: the 32-bit Uninstall list is the 32-bit programs)"
+  nt_values: "Windows NT\\CurrentVersion, both views: CurrentVersion = \"6.3\", CurrentMajorVersionNumber = 10 (REG_DWORD), CurrentMinorVersionNumber = 0, InstallationType = \"Client\", EditionID and CompositionEditionID = \"Core\" on the oracle (the edition is machine data); present: CurrentBuild and CurrentBuildNumber (equal), UBR, DisplayVersion, ProductName, SystemRoot and PathName (equal), BuildLab, BuildLabEx, InstallDate and ReleaseId; CurrentVersion, the major and minor numbers, CurrentBuild, CurrentBuildNumber, InstallationType, EditionID, ProductName, UBR and SystemRoot have the same value in the two views"
+errors:
+  missing_value: "ERROR_FILE_NOT_FOUND (2)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, in two builds of the same program: a 64-bit program (which asks for KEY_WOW64_64KEY and for KEY_WOW64_32KEY) and a 32-bit program (marked as such, ADR 0259; it asks for its own default view and for each explicit one). Programs read with RegOpenKeyExW, RegEnumKeyExW, RegEnumValueW, RegQueryInfoKeyW and RegQueryValueExW; the ones that make marker keys use RegCreateKeyExW and RegDeleteKeyExW and need an administrator token (the default token kind of the runner) for HKLM. Names of the markers are fixed and unique; each program removes its markers at the start and at the end. Output lines hold names, yes/no answers and text values only: no counts of a whole hive, no handle, no time, no path of the test.
+not_covered: >
+  Other hives (HKU, HKCC), keys below HKLM\SYSTEM, the registry on a machine that has ARM64 emulation, the values of keys that vendors' installers make, and the data (names and permissions) of the security descriptors of the keys. Counts of the children of the big keys (Interface has about twenty-four thousand children on the oracle) differ from machine to machine and are not part of the behaviour.
