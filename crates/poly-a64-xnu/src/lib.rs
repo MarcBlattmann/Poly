@@ -43,6 +43,7 @@ pub mod handoff;
 pub mod layout;
 pub mod load;
 pub mod run;
+pub mod signal;
 
 #[cfg(test)]
 mod tests;

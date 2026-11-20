@@ -106,6 +106,7 @@ pub fn guest_loop(mut cpu: Cpu) -> ! {
                     core::hint::spin_loop();
                 }
             }
+            stop if run::is_fault(stop, &s.bridge) && s.bridge.deliver_stop(stop, &mut cpu, &mut s.mem) => {}
             stop => {
                 if let Some(status) = s.bridge.exit {
                     if s.stats {
@@ -117,8 +118,8 @@ pub fn guest_loop(mut cpu: Cpu) -> ! {
                 // The process ends with the signal a native program would
                 // get (SIGSEGV, SIGBUS, SIGILL, SIGTRAP, SIGSYS).
                 s.bridge.kill_self(run::stop_signal(stop, &s.mem, s.bridge.bad_svc), &mut s.mem);
-                // The guest catches or ignores it: its handler cannot run
-                // in translated code yet, so the runtime faults on purpose.
+                // The guest ignores it or the signal was blocked: the
+                // runtime faults on purpose, so the process still ends.
                 // SAFETY: ud2 raises #UD, which ends this process.
                 unsafe { core::arch::asm!("ud2", options(noreturn)) }
             }

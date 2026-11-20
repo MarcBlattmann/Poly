@@ -150,7 +150,10 @@ core::arch::global_asm!(
 
 // arm64 (ADR 0257): x19 to x28, the frame pointer, the link register, the
 // stack pointer and d8 to d15 (the registers AAPCS64 says a call keeps),
-// 168 of the SDK's 192-byte `jmp_buf`.
+// 168 bytes, then at 176 whether the signal mask was saved and at 180 the
+// mask (the SDK's `jmp_buf` has 192 bytes, `sigjmp_buf` 196). `setjmp`
+// and `sigsetjmp(env, 1)` save the mask as BSD's do, `_setjmp` does not;
+// `longjmp` and `siglongjmp` put a saved mask back (sigprocmask, BSD 48).
 #[cfg(target_arch = "aarch64")]
 core::arch::global_asm!(
     ".globl _setjmp",
@@ -158,8 +161,21 @@ core::arch::global_asm!(
     ".globl _sigsetjmp",
     ".p2align 2",
     "_setjmp:",
-    "__setjmp:",
+    "    mov w1, #1",
     "_sigsetjmp:",
+    "    str w1, [x0, #176]",
+    "    cbz w1, 2f",
+    "    stp x0, x30, [sp, #-16]!",
+    "    add x2, x0, #180",
+    "    mov x1, #0",
+    "    mov x0, #1",
+    "    mov x16, #48",
+    "    svc #0x80",
+    "    ldp x0, x30, [sp], #16",
+    "    b 2f",
+    "__setjmp:",
+    "    str wzr, [x0, #176]",
+    "2:",
     "    stp x19, x20, [x0]",
     "    stp x21, x22, [x0, #16]",
     "    stp x23, x24, [x0, #32]",
@@ -179,8 +195,18 @@ core::arch::global_asm!(
     ".globl _siglongjmp",
     ".p2align 2",
     "_longjmp:",
-    "__longjmp:",
     "_siglongjmp:",
+    "    ldr w9, [x0, #176]",
+    "    cbz w9, 3f",
+    "    stp x0, x1, [sp, #-16]!",
+    "    add x1, x0, #180",
+    "    mov x2, #0",
+    "    mov x0, #3",
+    "    mov x16, #48",
+    "    svc #0x80",
+    "    ldp x0, x1, [sp], #16",
+    "__longjmp:",
+    "3:",
     "    ldp x19, x20, [x0]",
     "    ldp x21, x22, [x0, #16]",
     "    ldp x23, x24, [x0, #32]",

@@ -52,6 +52,7 @@ use poly_personality_xnu::Class;
 use poly_personality_xnu::arm64::{self, SVC_IMM};
 
 use crate::handoff::{EngineKind, Handoff, TlvImage};
+use crate::signal::{self, Action, Info, Signals};
 use alloc::vec::Vec;
 
 /// BSD call numbers (`sys/syscall.h`).
@@ -60,6 +61,9 @@ pub mod sys {
     pub const BSDTHREAD_CREATE: u64 = 360;
     pub const BSDTHREAD_TERMINATE: u64 = 361;
     pub const BSDTHREAD_REGISTER: u64 = 366;
+    pub const SIGACTION: u64 = 46;
+    pub const SIGPROCMASK: u64 = 48;
+    pub const SIGRETURN: u64 = 184;
     pub const GETPID: u64 = 20;
     pub const KILL: u64 = 37;
     pub const MUNMAP: u64 = 73;
@@ -167,6 +171,10 @@ pub struct Bridge<H> {
     thread_start: u64,
     /// The images with thread-local variables.
     tlv: Vec<TlvImage>,
+    /// The guest's signal actions and sets.
+    pub signals: Signals,
+    /// The process's id, once asked for.
+    pid: Option<u64>,
 }
 
 fn page_up(x: u64) -> Option<u64> {
@@ -189,7 +197,100 @@ impl<H: Host> Bridge<H> {
             terminated: None,
             thread_start: 0,
             tlv: h.tlv.clone(),
+            signals: Signals::default(),
+            pid: None,
         }
+    }
+
+    /// A BSD call straight to the host (one that never blocks).
+    fn direct(&mut self, number: u64, args: [u64; 6], mem: &mut GuestMem) -> Result<u64, u64> {
+        self.bsd(number, args, mem)
+    }
+
+    fn pid(&mut self, mem: &mut GuestMem) -> u64 {
+        if let Some(p) = self.pid {
+            return p;
+        }
+        let p = self.direct(sys::GETPID, [0; 6], mem).unwrap_or(0);
+        self.pid = Some(p);
+        p
+    }
+
+    /// `sigaction(sig, new, old)`: kept here (the runtime delivers) and
+    /// passed on, so the kernel knows ignored and default actions too.
+    fn sigaction(&mut self, a: &[u64; 31], mem: &mut GuestMem) -> Result<u64, u64> {
+        let (sig, new, old) = (a[0] as u32, a[1], a[2]);
+        let new_action = if new == 0 {
+            None
+        } else {
+            let mut b = [0u8; 24];
+            mem.peek(new, &mut b).map_err(|_| 14u64)?;
+            let w = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap_or([0; 8]));
+            Some(Action { handler: w(0), tramp: w(8), mask: w(16) as u32, flags: (w(16) >> 32) as u32 })
+        };
+        let prev = self.signals.sigaction(sig, new_action)?;
+        if old != 0 {
+            let mut b = [0u8; 16];
+            b[..8].copy_from_slice(&prev.handler.to_le_bytes());
+            b[8..12].copy_from_slice(&prev.mask.to_le_bytes());
+            b[12..16].copy_from_slice(&prev.flags.to_le_bytes());
+            mem.poke(old, &b).map_err(|_| 14u64)?;
+        }
+        if new != 0 {
+            let _ = self.direct(sys::SIGACTION, [u64::from(sig), new, 0, 0, 0, 0], mem);
+        }
+        Ok(0)
+    }
+
+    /// A `kill` the runtime delivers itself: to this process, of a signal
+    /// the guest catches.
+    fn kill_is_ours(&mut self, pid: u64, sig: u32, mem: &mut GuestMem) -> bool {
+        (1..32).contains(&sig) && self.signals.action(sig).catches() && (pid as i32 == 0 || pid == self.pid(mem))
+    }
+
+    /// `sigprocmask(how, set, old)`.
+    fn sigprocmask(&mut self, a: &[u64; 31], mem: &mut GuestMem) -> Result<u64, u64> {
+        let (how, set, old) = (a[0], a[1], a[2]);
+        let new = if set == 0 {
+            None
+        } else {
+            let mut b = [0u8; 4];
+            mem.peek(set, &mut b).map_err(|_| 14u64)?;
+            Some(u32::from_le_bytes(b))
+        };
+        let prev = self.signals.procmask(how, new)?;
+        if old != 0 {
+            mem.poke(old, &prev.to_le_bytes()).map_err(|_| 14u64)?;
+        }
+        Ok(0)
+    }
+
+    /// Run a pending, no longer blocked signal's handler on `cpu`.
+    fn deliver_pending(&mut self, cpu: &mut Cpu, mem: &mut GuestMem) {
+        if let Some(sig) = self.signals.take_deliverable() {
+            let pid = self.pid(mem) as i32;
+            let _ = signal::deliver(cpu, mem, &mut self.signals, sig, Info { code: 0, pid, addr: 0 });
+        }
+    }
+
+    /// A stopped guest thread (a fault, `brk`, an undefined instruction, a
+    /// bad `svc`): run its signal's handler if the guest has one and does
+    /// not block the signal. True if the thread can go on.
+    pub fn deliver_stop(&mut self, stop: Stop, cpu: &mut Cpu, mem: &mut GuestMem) -> bool {
+        let sig = stop_signal(stop, mem, self.bad_svc);
+        if !self.signals.action(sig).catches() || self.signals.is_blocked(sig) {
+            return false;
+        }
+        // si_code: SEGV_ACCERR (2), BUS_ADRALN (1), ILL_ILLTRP (2), 0 for a
+        // breakpoint (the sigaction sheet).
+        let (code, addr) = match stop {
+            Stop::Fault(f) => (if sig == sig::SIGSEGV { 2 } else { 1 }, f.addr),
+            Stop::Brk(_) => (0, cpu.pc),
+            _ => (2, cpu.pc),
+        };
+        self.bad_svc = None;
+        let pid = self.pid(mem) as i32;
+        signal::deliver(cpu, mem, &mut self.signals, sig, Info { code, pid, addr }).is_ok()
     }
 
     /// Hand the result of the kept call back to the guest thread `cpu`.
@@ -353,6 +454,42 @@ impl<H: Host> Kernel for Bridge<H> {
                 Ok(0)
             }),
             (Class::Bsd, sys::BSDTHREAD_CREATE) => Some(self.create_thread(&cpu.x, mem)),
+            (Class::Bsd, sys::SIGACTION) => Some(self.sigaction(&cpu.x, mem)),
+            (Class::Bsd, sys::SIGPROCMASK) => {
+                let r = self.sigprocmask(&cpu.x, mem);
+                let mut frame = arm64::to_frame(&cpu.x, cpu.sp);
+                match r {
+                    Ok(v) => frame.rax = v,
+                    Err(e) => {
+                        frame.rax = e;
+                        frame.rflags |= RFLAGS_CF;
+                    }
+                }
+                arm64::from_frame(&frame, x16, &mut cpu.x, &mut cpu.nzcv);
+                self.deliver_pending(cpu, mem);
+                return None;
+            }
+            (Class::Bsd, sys::SIGRETURN) => {
+                let uc = cpu.x[0];
+                if signal::sigreturn(cpu, mem, &mut self.signals, uc).is_err() {
+                    self.bad_svc = Some(0x80);
+                    return Some(-1);
+                }
+                self.deliver_pending(cpu, mem);
+                return None;
+            }
+            (Class::Bsd, sys::KILL) if self.kill_is_ours(cpu.x[0], cpu.x[1] as u32, mem) => {
+                let sig = cpu.x[1] as u32;
+                cpu.x[0] = 0;
+                cpu.nzcv &= !poly_personality_xnu::arm64::NZCV_C;
+                if self.signals.is_blocked(sig) {
+                    self.signals.set_pending(sig);
+                } else {
+                    let pid = self.pid(mem) as i32;
+                    let _ = signal::deliver(cpu, mem, &mut self.signals, sig, Info { code: 0, pid, addr: 0 });
+                }
+                return None;
+            }
             (Class::Bsd, sys::BSDTHREAD_TERMINATE) => {
                 self.terminated = Some((cpu.x[0], cpu.x[1]));
                 return Some(YIELD);
@@ -400,8 +537,19 @@ pub fn run<H: Host>(engine: &mut Engine, cpu: &mut Cpu, mem: &mut GuestMem, brid
     loop {
         match engine.run(cpu, mem, bridge, 1 << 20) {
             Stop::Budget => continue,
+            stop if is_fault(stop, bridge) && bridge.deliver_stop(stop, cpu, mem) => continue,
             stop => return stop,
         }
+    }
+}
+
+/// Whether `stop` is one a signal handler can take (not an `exit` or the
+/// runtime's [`YIELD`]).
+pub fn is_fault<H>(stop: Stop, bridge: &Bridge<H>) -> bool {
+    match stop {
+        Stop::Fault(_) | Stop::Brk(_) | Stop::Undefined(_) | Stop::Unsupported(_) => true,
+        Stop::Exit(_) => bridge.bad_svc.is_some(),
+        Stop::Budget => false,
     }
 }
 

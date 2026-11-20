@@ -138,10 +138,90 @@ static void test_mmap(void) {
     check("getpagesize is 16 KiB", page == 16384);
 }
 
+/* ------------------------------------------------------------ signals */
+
+static volatile sig_atomic_t usr1_runs, usr2_runs;
+static volatile int usr1_signo, usr1_pid;
+static void on_usr1(int sig, siginfo_t *info, void *uc) {
+    (void)uc;
+    usr1_runs++;
+    usr1_signo = sig == SIGUSR1 ? info->si_signo : -1;
+    usr1_pid = info->si_pid;
+}
+static void on_usr2(int sig) { usr2_runs += sig == SIGUSR2; }
+
+static sigjmp_buf recover;
+static volatile int fault_signo, fault_code;
+static volatile void *fault_addr;
+static void on_fault(int sig, siginfo_t *info, void *uc) {
+    (void)uc;
+    fault_signo = sig;
+    fault_code = info->si_code;
+    fault_addr = info->si_addr;
+    siglongjmp(recover, 1);
+}
+
+static void test_signals(void) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = on_usr1;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGUSR1, &sa, NULL);
+    /* Values live in registers across the handler. */
+    volatile long a = 6, b = 7;
+    long before = a * b;
+    raise(SIGUSR1);
+    check("raise runs a SA_SIGINFO handler before it returns",
+          usr1_runs == 1 && usr1_signo == SIGUSR1 && usr1_pid == getpid() && a * b == before);
+
+    signal(SIGUSR2, on_usr2);
+    sigset_t set, old;
+    sigemptyset(&set);
+    sigaddset(&set, SIGUSR2);
+    sigprocmask(SIG_BLOCK, &set, &old);
+    kill(getpid(), SIGUSR2);
+    int while_blocked = usr2_runs;
+    sigprocmask(SIG_SETMASK, &old, NULL);
+    check("a blocked signal waits until it is unblocked", while_blocked == 0 && usr2_runs == 1);
+
+    struct sigaction fa;
+    memset(&fa, 0, sizeof fa);
+    fa.sa_sigaction = on_fault;
+    fa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &fa, NULL);
+    sigaction(SIGBUS, &fa, NULL);
+    if (sigsetjmp(recover, 1) == 0) {
+        *(volatile int *)8 = 1;
+        check("a write to address 8 does not go on", 0);
+    }
+    check("a write to address 8 is SIGSEGV with SEGV_ACCERR and si_addr 8",
+          fault_signo == SIGSEGV && fault_code == SEGV_ACCERR && fault_addr == (void *)8);
+
+    size_t page = (size_t)getpagesize();
+    char *p = mmap(NULL, page, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    p[0] = 1;
+    mprotect(p, page, PROT_READ);
+    fault_signo = 0;
+    if (sigsetjmp(recover, 1) == 0) {
+        p[40] = 2;
+        check("a write to a read-only page does not go on", 0);
+    }
+    check("a write to a read-only page is SIGBUS at its address", fault_signo == SIGBUS && fault_addr == p + 40);
+    /* The handler left by siglongjmp: the mask is back, so a second fault
+     * runs it again. */
+    fault_signo = 0;
+    if (sigsetjmp(recover, 1) == 0) {
+        *(volatile int *)16 = 1;
+    }
+    check("siglongjmp restores the mask: a second fault is handled", fault_signo == SIGSEGV && fault_addr == (void *)16);
+    munmap(p, page);
+}
+
 int main(void) {
     printf("threads: arm64 threads, signals and mappings\n");
     test_threads();
     test_mmap();
+    test_signals();
     printf("threads: done, %d failed\n", failures);
     return failures;
 }
