@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/sigsuspend.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# sigsuspend.tests/macos.json.
+id: macos/syscall/bsd/sigsuspend
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-19
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 111,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 111, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. sigsuspend(mask),
+  the mask passed by value as a 32-bit set (signal n is bit n-1), replaces
+  the signal mask, waits for a signal that has a handler, runs the
+  handler, restores the old mask and fails with EINTR (4). A signal that
+  is pending and not blocked by the temporary mask is delivered at once;
+  several are delivered before it returns, the higher-numbered first
+  (SIGUSR2 31 before SIGUSR1 30). Inside the handler the mask is the
+  temporary mask plus the signal itself plus the action's mask. A signal
+  that arrives while waiting from another process wakes it. A signal that
+  arrives while the call is not waiting and is unblocked runs its handler
+  at once; blocked ones stay pending. It is interrupted whatever
+  SA_RESTART says. After it returns the old mask is back and nothing
+  delivered is pending.
+returns:
+  always: "fails with EINTR (4) after a handler ran"
+errors:
+  interrupted: "EINTR (4)"
+side_effects: "signal handlers run; the mask is restored on return"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

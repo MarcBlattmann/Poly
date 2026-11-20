@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "renameat_errors",
+      "source_sha256": "b3e2f3a385a1f650857ee9438ea76bc5149e06973701ec460a1d43e2015eb2df",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "962484ee90382aa01788516bb00571d1db8ddd63d93458eb52eaea79641d4570",
+          "exit_code": 0,
+          "stdout": "ok a directory into itself is EINVAL\nok into its own subdirectory is EINVAL\nok a directory over a non-empty one is ENOTEMPTY\nok a directory over a file is ENOTDIR\nok a file over a directory is EISDIR\nok a destination directory without write permission is EACCES\nok an unreadable source is EFAULT\nok an unreadable destination is EFAULT\nvalue a name inside a removed directory (source): errno 2\nvalue a destination inside a removed directory: errno 2\nok the file is untouched\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

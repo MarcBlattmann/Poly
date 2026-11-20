@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "wid_errors",
+      "source_sha256": "10f20477350ef6d4271de294a04b3f485975aad5edfa83f57899be2227c65fd5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5123ec2aa2024139119be79d8e8008b7414c72f86fe890e9e58fec82ca8bb309",
+          "exit_code": 0,
+          "stdout": "ok no option is EINVAL\nok an undefined option is EINVAL\nok WNOHANG alone: 0, nothing reported\nok an unwritable siginfo is EFAULT\nok a NULL siginfo is EFAULT\nok the child was not lost: it is reaped now\nok an unknown idtype: 0 and the child is reported like P_ALL\nok the child is reaped by it\nok a pid that is not a child is ECHILD\nok a process group that is not the children's is ECHILD\nok and the real child is still there\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "wid_states",
+      "source_sha256": "dc2ac568f7928903fabc4dcd1c3bf06475e263e4e5bf113f44265402a0b24e7b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e57885b60fdd009db74488ef40b34d01b212040ea742ca065dd50f8221fde58e",
+          "exit_code": 0,
+          "stdout": "ok WNOHANG with a running child: result 0\nok the siginfo is not touched\nok WSTOPPED reports the stop\nok CLD_STOPPED, si_status SIGSTOP, si_pid the child, si_signo SIGCHLD\nok the stop is reported once: then 0 and untouched\nok WCONTINUED reports the continue\nok CLD_CONTINUED, si_status SIGCONT\nok the continue is reported once\nok then it can be killed and reaped\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

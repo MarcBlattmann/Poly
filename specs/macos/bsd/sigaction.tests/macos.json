@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 20:07:17",
   "tests": [
     {
       "name": "sigaction_delivery",
@@ -51,6 +51,36 @@
           "executable_sha256": "92a6f01004ecc27859c83cb80f5b57e738481d3778739578e75bbf4cecd83d60",
           "exit_code": 0,
           "stdout": "ok the default: success\nok handler 0, mask 0, flags 0\nok setting an action returns the old one (default)\nok the handler reads back\nok the mask reads back\nok the flags read back (SA_SIGINFO|SA_RESTART)\nok replacing returns the previous handler\nok SIG_IGN reads back as 1\nok and SIG_DFL as 0\nvalue SIGUSR1 30\nvalue SIGUSR2 31\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "sigaction_siginfo",
+      "source_sha256": "f9844d1e7d4cc3eef2e6355055b5302ffd6816cdcfa414789c5345021c5bb915",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e59062c114d7a616aa233650698e77e591bd9cc6a389ca1fa6df1f2119630df7",
+          "exit_code": 0,
+          "stdout": "ok a signal sent by a child: the handler ran once\nok si_signo SIGUSR1, si_errno 0\nok si_pid is the sender, si_uid the user\nok SIGCHLD for an exit: si_code CLD_EXITED, si_pid the child, si_status 5\nok SIGCHLD for a kill: CLD_KILLED, si_status 9\nok unmapped address 8: SIGSEGV, SEGV_ACCERR, si_addr 8\nok write to a PROT_NONE page: SIGBUS, code 1, si_addr the address\nok write to a read-only page: SIGBUS, code 1, si_addr the address\nok an undefined instruction: SIGILL, code ILL_ILLTRP\nok a breakpoint instruction: SIGTRAP, code 0\nok a jump to an odd address: SIGBUS, code 1\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "sigpipe_sockets",
+      "source_sha256": "92e7f0330b25f74452cb3f2ed5d646e1698f209642d20f269e7c47012f9ee1af",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "acf568e3b9c0582cbaaf3f41ecaaf84b200eaf74b208d6c0803035c88262e633",
+          "exit_code": 0,
+          "stdout": "ok a write to a pipe without reader is EPIPE\nok and the handler ran once\nok with SIGPIPE ignored: still EPIPE\nok nothing ran\nok socketpair\nok a write with the peer open works\nok a write to a socket whose peer closed is EPIPE\nok and SIGPIPE ran the handler once\nok SO_NOSIGPIPE\nok reads back as 1\nok with SO_NOSIGPIPE the write is still EPIPE\nok but no signal is sent\nok the option on a pipe is ENOTSOCK\nok by default SIGPIPE kills the writer (status 13)\nsummary 14 passed, 0 failed\n",
           "stderr": "",
           "runs": 3,
           "stable": true

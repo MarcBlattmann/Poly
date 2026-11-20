@@ -1,0 +1,59 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/setxattr.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# setxattr.tests/macos.json.
+id: macos/syscall/bsd/setxattr
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-19
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 236,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 236, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. Extended
+  attributes: names are UTF-8 strings of up to 127 bytes (128 bytes is
+  ENAMETOOLONG 63, an empty name EINVAL 22, a name that is not valid UTF-8
+  EINVAL), case sensitive and normalisation sensitive (the precomposed and
+  decomposed forms of one letter are two names); values are byte strings
+  of any content including NUL, from 0 bytes up to at least 4 MiB. Options
+  (<sys/xattr.h>): XATTR_NOFOLLOW 1 (path forms only: use the link
+  itself), XATTR_CREATE 2, XATTR_REPLACE 4; bits nobody defined are
+  ignored in the path forms. Missing attribute is ENOATTR (93).
+  setxattr(path, name, value, size, position, options) creates or replaces
+  an attribute and returns 0. XATTR_CREATE on an existing attribute is
+  EEXIST (17) and leaves it unchanged; XATTR_REPLACE on a missing one is
+  ENOATTR; both together EINVAL; options 8 and 0x10 are EINVAL, 0x10000 is
+  ignored. A replaced value takes the new length. position must be 0
+  (EINVAL otherwise) except for the resource fork, where it is the offset
+  of the write: bytes in the middle change and the length stays, a write
+  beyond the end extends with zeros. A value of size 0 (value may be NULL)
+  stores an empty attribute. Fifty attributes on a file, and values of 64
+  KiB, 1 MiB and 4 MiB, were all accepted and read back whole.
+  com.apple.FinderInfo takes exactly 32 bytes (ERANGE 34 for 31 or 33).
+  Attributes stay with the file across rename, hard links, truncation and
+  the removal of another name. A file with mode 0 or 0444 is EACCES (13)
+  even for its owner; a missing file ENOENT; an unreadable value pointer
+  EFAULT (14). With XATTR_NOFOLLOW the attribute is set on a symbolic link
+  itself.
+returns:
+  success: "0"
+errors:
+  exists: "EEXIST (17) with XATTR_CREATE"
+  no_attribute: "ENOATTR (93) with XATTR_REPLACE"
+  bad_flags: "EINVAL (22)"
+  bad_name: "EINVAL (22), ENAMETOOLONG (63)"
+  ranges: "ERANGE (34) FinderInfo of other than 32 bytes"
+  access: "EACCES (13)"
+  path: "ENOENT (2), EFAULT (14)"
+side_effects: "an attribute is created, replaced or extended"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

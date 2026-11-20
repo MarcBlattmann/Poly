@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "fremovex_basic",
+      "source_sha256": "818199792ab705468cf70e506622f10d86c562db9da64522d3fd69579c7a79fa",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "cb9378a28e5d79afdf24f4ca02ad75a396855dc5957b0ed0bfe51c5eb1aa520c",
+          "exit_code": 0,
+          "stdout": "ok remove returns 0\nok the attribute is gone (by path)\nok the other stays\nok removing it again is ENOATTR\nok one never set is ENOATTR\nok a bad descriptor is EBADF\nok an empty name is EINVAL\nok option 1 is EINVAL for the descriptor form\nok an unreadable name is EFAULT\nok a read-only descriptor can remove\nok and it is gone\nok a removed name can be set again\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

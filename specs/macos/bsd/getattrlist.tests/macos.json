@@ -10,7 +10,7 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 20:07:17",
   "tests": [
     {
       "name": "getattrlist_basic",
@@ -36,6 +36,21 @@
           "executable_sha256": "d3b884dcebb68817243369f72a89b9a6e78dd4d3161d9b0cb2e5331d31ab0cfe",
           "exit_code": 0,
           "stdout": "ok a missing path: ENOENT\nok a file used as a directory: ENOTDIR\nok a bitmap count of 4: EINVAL\nvalue a bitmap count of 6: errno 22\nok the attrlist at address 8: EFAULT\nok the buffer at address 8: EFAULT\nok the path at address 8: EFAULT\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "getattrlist_values",
+      "source_sha256": "c490ba11669e8c38e588c79e45933e559a847113b34894ff107d3750b38e40ee",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b0c7c89a4fd74054f660e722a5a8cea8d3e5bfeb7c4a8387900b3e403a020417",
+          "exit_code": 0,
+          "stdout": "ok FILEID: length 12 and the inode\nok MODTIME equals stat's\nok CRTIME equals stat's birth time\nok ACCESSMASK is the mode with the type bits (0100640)\nok FLAGS equals st_flags\nok OWNERID is the owner\nok GRPID is the group\nok FILE LINKCOUNT is 1\nok and 2 after a hard link\nok DATALENGTH is the size 10\nok ALLOCSIZE is at least the size and a multiple of 4096\nok DIR ENTRYCOUNT (0x2) is 3 (a, b, c)\nok DIR LINKCOUNT (0x1) is 1 here (one subdirectory)\nok OBJTYPE with FSOPT_NOFOLLOW: VLNK\nok OBJTYPE following the link: VREG\nok OBJTYPE of a directory: VDIR\nok NAME through another case: the stored \"Data.bin\"\nok a missing file is ENOENT\nsummary 18 passed, 0 failed\n",
           "stderr": "",
           "runs": 3,
           "stable": true
