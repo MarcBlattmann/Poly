@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/RegCreateKeyW.yaml
+id: windows/api/advapi32.dll/RegCreateKeyW
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as an administrator with its elevated token (the programs write below HKEY_LOCAL_MACHINE); every test is a 32-bit (i686) program, which runs under WOW64 on the machine, ran twice with identical output, and removed every key it made"
+  observed_by: "spec-win-wow64-registry"
+  date: "2026-11-20"
+sources: "Observations of our own 32-bit test programs on the machine above (keys of a GUID and a vendor name of the programs' own, looked at in both physical places through the 64-bit view, which does no redirection). Microsoft Learn: \"Registry Redirector\", \"Registry Keys Affected by WOW64\", \"Accessing an Alternate Registry View\", \"Registry Key Security and Access Rights\", RegCreateKeyExW, RegCreateKeyExA, RegCreateKeyW, RegOpenKeyExW, RegOpenKeyW, RegDeleteKeyExW, RegDeleteKeyW, NtCreateKey, NtOpenKey, NtQueryKey, \"OBJECT_ATTRIBUTES\"; winreg.h, winnt.h, winerror.h, winternl.h for constants and layouts. Wine's and ReactOS's code and tests were not used, no Microsoft binary was decompiled or disassembled."
+summary: "Creates a registry key (and the keys on the way) or opens it when it exists. It has no access argument, so no view choice: in a 32-bit process the key is made in the view of the open key it is relative to (the 32-bit view below the predefined keys and below handles opened with no bit or with KEY_WOW64_32KEY, the native view below a handle opened with KEY_WOW64_64KEY)."
+interface:
+  signature: "LSTATUS RegCreateKeyW(HKEY hKey, LPCWSTR lpSubKey, PHKEY phkResult)"
+  result: "0 on success, otherwise a Win32 error code"
+rules:
+  views: "A 32-bit process on 64-bit Windows (WOW64) sees the 32-bit view of the registry unless the access of the call has KEY_WOW64_64KEY (0x100), which asks for the native (64-bit) view, whose keys are the physical ones; KEY_WOW64_32KEY (0x200) asks for the 32-bit view explicitly. The physical key of the 32-bit view of a redirected key lives below Wow6432Node (spelled WOW6432Node in the registry as stored). Below HKEY_LOCAL_MACHINE\\Software every key is redirected to Software\\Wow6432Node\\<key> except the shared ones; below Software\\Classes only CLSID, Interface, DirectShow, Media Type and MediaFoundation are redirected, to Software\\Classes\\Wow6432Node\\<key>. Shared (one key for both views): Software\\Classes itself and its other subkeys (TypeLib, AppID), Software\\Microsoft\\Windows\\CurrentVersion\\App Paths and \\Policies, Software\\Policies, Software\\RegisteredApplications. Redirected, observed: Software and the vendor keys below it, Software\\Microsoft, ...\\CurrentVersion, ...\\Run, ...\\Uninstall, Software\\Classes\\CLSID, \\Interface, \\DirectShow, \\Media Type, \\MediaFoundation."
+  inheritance: "A key made, opened or deleted below an open key without a view bit in the access is in the view of that open key: a key opened (or made) with KEY_WOW64_64KEY gives native keys below it; one opened with KEY_WOW64_32KEY or with no view bit gives keys of the 32-bit view; the predefined keys HKEY_LOCAL_MACHINE and HKEY_CLASSES_ROOT count as opened with no bit. A view bit in the call wins over the open key's view where the key asked for can lie in that view below the open key (the shared Software\\Classes opened with no bit: CLSID with KEY_WOW64_64KEY is the native CLSID, and with KEY_WOW64_64KEY opened, CLSID with KEY_WOW64_32KEY is the redirected one). The view is part of the open key's physical place: Software opened without KEY_WOW64_64KEY IS Software\\Wow6432Node (NtQueryKey says so), Software\\Classes\\CLSID opened without it is Software\\Classes\\Wow6432Node\\CLSID, so a key made below them lies below Wow6432Node whatever the bit of the call (below Software, a vendor key with KEY_WOW64_64KEY is still the 32-bit-view one); only a handle opened with KEY_WOW64_64KEY gives native keys. A path that names Wow6432Node itself is the physical key and is not redirected again, in every view."
+  from_the_root: "from HKEY_LOCAL_MACHINE: Software\\Classes\\CLSID\\{GUID} (one level at a time and in one call) and Software\\<vendor>\\Sub: the 32-bit view."
+  below_handles: "CLSID\\{GUID} one level at a time below Software\\Classes, {GUID} below Software\\Classes\\CLSID, <vendor>\\Sub one level at a time and in one call below Software: the 32-bit view when the handle was opened with no bit or with 32, native when it was opened with 64."
+errors:
+  invalid_handle: "ERROR_INVALID_HANDLE (6): an invented handle"
+  success: "0"
+side_effects: "creates keys below HKEY_LOCAL_MACHINE (the programs remove them again)"
+threading: "the registry is shared; the programs make keys under names of their own and nothing else touches them"
+ordering: []
+timing:
+  typical: "well under a millisecond per call"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+building_tests: "32-bit Rust tests (ADR 0075, ADR 0259: the line `// poly-arch: x86` makes the pipeline build them for i686-pc-windows-msvc), importing advapi32.dll and ntdll.dll by name, each carrying its own declarations (Learn prototypes, header constants). Each makes keys below HKEY_LOCAL_MACHINE under a GUID and a vendor name of its own, looks where they are by opening the physical places (Software\\Classes\\CLSID\\<GUID> and Software\\Classes\\Wow6432Node\\CLSID\\<GUID>, Software\\<vendor> and Software\\Wow6432Node\\<vendor>) through the 64-bit view, which does not redirect, prints `native`, `x86`, `both` or `none`, and removes its keys again (at the start and at the end). Observations are statuses, dispositions and those words, never handles or addresses; the programs need an administrator token. Compare the lines, not the order of the keys."
+not_covered: "the other cases of the RegCreateKeyExW sheet (the rules are the same without a view choice)."

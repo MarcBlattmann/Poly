@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wv_createw_views",
+      "exe_sha256": "a3ddcf6c395078de8065a6dc6ccb1a4d8eb6968ab699e9b12020d1190c4032b3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFjaGluZSBjbGFzcyBrZXkgW2hhbmRsZSBub25lXTogY3JlYXRlIDAgY3JlYXRlIDAgY3JlYXRlIDAgY3JlYXRlIDAgLT4geDg2Cm1hY2hpbmUgY2xhc3Mga2V5IG9uZSBjYWxsIFtoYW5kbGUgbm9uZV06IGNyZWF0ZSAwIC0+IHg4NgptYWNoaW5lIHZlbmRvciBrZXkgW2hhbmRsZSBub25lXTogY3JlYXRlIDAgY3JlYXRlIDAgY3JlYXRlIDAgLT4geDg2CmNsYXNzIGtleSBbaGFuZGxlIG5vbmVdOiBvcGVuIDAgY3JlYXRlIDAgY3JlYXRlIDAgLT4geDg2CmNsYXNzIGtleSBbaGFuZGxlIDMyXTogb3BlbiAwIGNyZWF0ZSAwIGNyZWF0ZSAwIC0+IHg4NgpjbGFzcyBrZXkgW2hhbmRsZSA2NF06IG9wZW4gMCBjcmVhdGUgMCBjcmVhdGUgMCAtPiBuYXRpdmUKY2xhc3Mga2V5IGJlbG93IENMU0lEIFtoYW5kbGUgbm9uZV06IG9wZW4gMCBjcmVhdGUgMCAtPiB4ODYKY2xhc3Mga2V5IGJlbG93IENMU0lEIFtoYW5kbGUgMzJdOiBvcGVuIDAgY3JlYXRlIDAgLT4geDg2CmNsYXNzIGtleSBiZWxvdyBDTFNJRCBbaGFuZGxlIDY0XTogb3BlbiAwIGNyZWF0ZSAwIC0+IG5hdGl2ZQp2ZW5kb3Iga2V5IFtoYW5kbGUgbm9uZV06IG9wZW4gMCBjcmVhdGUgMCBjcmVhdGUgMCAtPiB4ODYKdmVuZG9yIGtleSBbaGFuZGxlIDMyXTogb3BlbiAwIGNyZWF0ZSAwIGNyZWF0ZSAwIC0+IHg4Ngp2ZW5kb3Iga2V5IFtoYW5kbGUgNjRdOiBvcGVuIDAgY3JlYXRlIDAgY3JlYXRlIDAgLT4gbmF0aXZlCnZlbmRvciBrZXkgb25lIGNhbGwgW2hhbmRsZSBub25lXTogb3BlbiAwIGNyZWF0ZSAwIC0+IHg4Ngp2ZW5kb3Iga2V5IG9uZSBjYWxsIFtoYW5kbGUgMzJdOiBvcGVuIDAgY3JlYXRlIDAgLT4geDg2CnZlbmRvciBrZXkgb25lIGNhbGwgW2hhbmRsZSA2NF06IG9wZW4gMCBjcmVhdGUgMCAtPiBuYXRpdmUKaW52ZW50ZWQgaGFuZGxlOiA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "machine class key [handle none]: create 0 create 0 create 0 create 0 -> x86\nmachine class key one call [handle none]: create 0 -> x86\nmachine vendor key [handle none]: create 0 create 0 create 0 -> x86\nclass key [handle none]: open 0 create 0 create 0 -> x86\nclass key [handle 32]: open 0 create 0 create 0 -> x86\nclass key [handle 64]: open 0 create 0 create 0 -> native\nclass key below CLSID [handle none]: open 0 create 0 -> x86\nclass key below CLSID [handle 32]: open 0 create 0 -> x86\nclass key below CLSID [handle 64]: open 0 create 0 -> native\nvendor key [handle none]: open 0 create 0 create 0 -> x86\nvendor key [handle 32]: open 0 create 0 create 0 -> x86\nvendor key [handle 64]: open 0 create 0 create 0 -> native\nvendor key one call [handle none]: open 0 create 0 -> x86\nvendor key one call [handle 32]: open 0 create 0 -> x86\nvendor key one call [handle 64]: open 0 create 0 -> native\ninvented handle: 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 163
+    }
+  ]
+}

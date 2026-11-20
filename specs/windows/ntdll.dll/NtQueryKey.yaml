@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ntdll.dll/NtQueryKey.yaml
+id: windows/api/ntdll.dll/NtQueryKey
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as an administrator with its elevated token (the programs write below HKEY_LOCAL_MACHINE); every test is a 32-bit (i686) program, which runs under WOW64 on the machine, ran twice with identical output, and removed every key it made"
+  observed_by: "spec-win-wow64-registry"
+  date: "2026-11-20"
+sources: "Observations of our own 32-bit test programs on the machine above (keys of a GUID and a vendor name of the programs' own, looked at in both physical places through the 64-bit view, which does no redirection). Microsoft Learn: \"Registry Redirector\", \"Registry Keys Affected by WOW64\", \"Accessing an Alternate Registry View\", \"Registry Key Security and Access Rights\", RegCreateKeyExW, RegCreateKeyExA, RegCreateKeyW, RegOpenKeyExW, RegOpenKeyW, RegDeleteKeyExW, RegDeleteKeyW, NtCreateKey, NtOpenKey, NtQueryKey, \"OBJECT_ATTRIBUTES\"; winreg.h, winnt.h, winerror.h, winternl.h for constants and layouts. Wine's and ReactOS's code and tests were not used, no Microsoft binary was decompiled or disassembled."
+summary: "Returns information about an open registry key; for the names (KeyNameInformation: the full NT path; KeyBasicInformation: the last component) of keys opened by a 32-bit process, the name is the physical key, so a key of the 32-bit view has Wow6432Node in its path, and the key found through a handle opened with KEY_WOW64_64KEY has none."
+interface:
+  signature: "NTSTATUS NtQueryKey(HANDLE KeyHandle, KEY_INFORMATION_CLASS KeyInformationClass, PVOID KeyInformation, ULONG Length, PULONG ResultLength)"
+  classes: "KeyBasicInformation 0 (name after a 16-byte header: LastWriteTime 8, TitleIndex 4, NameLength 4), KeyNameInformation 3 (a 4-byte NameLength, then the name in UTF-16 without a terminator)"
+rules:
+  views: "A 32-bit process on 64-bit Windows (WOW64) sees the 32-bit view of the registry unless the access of the call has KEY_WOW64_64KEY (0x100), which asks for the native (64-bit) view, whose keys are the physical ones; KEY_WOW64_32KEY (0x200) asks for the 32-bit view explicitly. The physical key of the 32-bit view of a redirected key lives below Wow6432Node (spelled WOW6432Node in the registry as stored). Below HKEY_LOCAL_MACHINE\\Software every key is redirected to Software\\Wow6432Node\\<key> except the shared ones; below Software\\Classes only CLSID, Interface, DirectShow, Media Type and MediaFoundation are redirected, to Software\\Classes\\Wow6432Node\\<key>. Shared (one key for both views): Software\\Classes itself and its other subkeys (TypeLib, AppID), Software\\Microsoft\\Windows\\CurrentVersion\\App Paths and \\Policies, Software\\Policies, Software\\RegisteredApplications. Redirected, observed: Software and the vendor keys below it, Software\\Microsoft, ...\\CurrentVersion, ...\\Run, ...\\Uninstall, Software\\Classes\\CLSID, \\Interface, \\DirectShow, \\Media Type, \\MediaFoundation."
+  name_information: "the full name of a key opened with no bit or 32: HKEY_LOCAL_MACHINE\\Software is \\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node, Software\\Classes is \\REGISTRY\\MACHINE\\SOFTWARE\\Classes (shared: the same in every view), Software\\Classes\\CLSID is \\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\CLSID, a key {GUID} below it is \\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\CLSID\\{GUID}, a vendor key is \\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\<vendor>; with 64: \\REGISTRY\\MACHINE\\SOFTWARE, ...\\Classes\\CLSID, ...\\Classes\\CLSID\\{GUID}, \\REGISTRY\\MACHINE\\SOFTWARE\\<vendor>; with 32 as with no bit. The words are spelled as the keys are stored: \\REGISTRY\\MACHINE\\SOFTWARE in capitals and WOW6432Node (not Wow6432Node); the GUID and vendor name as the program made them."
+  opened_through_classes_root: "HKEY_CLASSES_ROOT\\CLSID\\{GUID} found in the 32-bit view has the name of the key below HKEY_LOCAL_MACHINE\\Software\\Classes (\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\CLSID\\{GUID}); with 64 \\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\CLSID\\{GUID}."
+  relative_handles: "a key opened below Software\\Classes opened with no bit or 32, and below Software\\Classes\\CLSID and Software, follows the open key as in RegOpenKeyExW: the names above for no bit and 32 (a vendor key below Software opened with no bit or 32 is below WOW6432Node for every bit); below a handle opened with 64 the native name with no bit and 64, the 32-bit name with 32. A key made with RegCreateKeyExW in the default view: \\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\CLSID\\{GUID}."
+  basic_name: "KeyBasicInformation's name is the last component only (CLSID, {GUID}, the vendor name, Classes), the same in every view."
+errors:
+  success: "STATUS_SUCCESS (0)"
+side_effects: "none"
+threading: "the registry is shared; the programs make keys under names of their own and nothing else touches them"
+ordering: []
+timing:
+  typical: "well under a millisecond per call"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 0  # count kept by the diff runner
+building_tests: "32-bit Rust tests (ADR 0075, ADR 0259: the line `// poly-arch: x86` makes the pipeline build them for i686-pc-windows-msvc), importing advapi32.dll and ntdll.dll by name, each carrying its own declarations (Learn prototypes, header constants). Each makes keys below HKEY_LOCAL_MACHINE under a GUID and a vendor name of its own, looks where they are by opening the physical places (Software\\Classes\\CLSID\\<GUID> and Software\\Classes\\Wow6432Node\\CLSID\\<GUID>, Software\\<vendor> and Software\\Wow6432Node\\<vendor>) through the 64-bit view, which does not redirect, prints `native`, `x86`, `both` or `none`, and removes its keys again (at the start and at the end). Observations are statuses, dispositions and those words, never handles or addresses; the programs need an administrator token. Compare the lines, not the order of the keys."
+not_covered: "the other information classes, the name of HKEY_CLASSES_ROOT itself (which depends on the user's SID), the name of a hive root opened with 64 (KeyBasicInformation says ROOT on Windows), buffer too small, 64-bit processes."

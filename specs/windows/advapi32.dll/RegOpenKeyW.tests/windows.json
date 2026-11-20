@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wv_openw_views",
+      "exe_sha256": "5a956f46898c7258bd39172d89c5ff60d5249fed6f5944b45691d67be9f8d97e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWFjaGluZSBjbGFzcyBrZXkgW2hhbmRsZSBub25lXTogMCB4ODYKbWFjaGluZSB2ZW5kb3Iga2V5IFtoYW5kbGUgbm9uZV06IDAgeDg2CmNsYXNzIGtleSBbaGFuZGxlIG5vbmVdOiAwIHg4NgpjbGFzcyBrZXkgW2hhbmRsZSAzMl06IDAgeDg2CmNsYXNzIGtleSBbaGFuZGxlIDY0XTogMCBuYXRpdmUKY2xhc3Mga2V5IGJlbG93IENMU0lEIFtoYW5kbGUgbm9uZV06IDAgeDg2CmNsYXNzIGtleSBiZWxvdyBDTFNJRCBbaGFuZGxlIDMyXTogMCB4ODYKY2xhc3Mga2V5IGJlbG93IENMU0lEIFtoYW5kbGUgNjRdOiAwIG5hdGl2ZQpzb2Z0d2FyZSBjbGFzcyBrZXkgW2hhbmRsZSBub25lXTogMCB4ODYKc29mdHdhcmUgY2xhc3Mga2V5IFtoYW5kbGUgMzJdOiAwIHg4Ngpzb2Z0d2FyZSBjbGFzcyBrZXkgW2hhbmRsZSA2NF06IDAgbmF0aXZlCnZlbmRvciBrZXkgW2hhbmRsZSBub25lXTogMCB4ODYKdmVuZG9yIGtleSBbaGFuZGxlIDMyXTogMCB4ODYKdmVuZG9yIGtleSBbaGFuZGxlIDY0XTogMCBuYXRpdmUKaW52ZW50ZWQgaGFuZGxlOiA2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "machine class key [handle none]: 0 x86\nmachine vendor key [handle none]: 0 x86\nclass key [handle none]: 0 x86\nclass key [handle 32]: 0 x86\nclass key [handle 64]: 0 native\nclass key below CLSID [handle none]: 0 x86\nclass key below CLSID [handle 32]: 0 x86\nclass key below CLSID [handle 64]: 0 native\nsoftware class key [handle none]: 0 x86\nsoftware class key [handle 32]: 0 x86\nsoftware class key [handle 64]: 0 native\nvendor key [handle none]: 0 x86\nvendor key [handle 32]: 0 x86\nvendor key [handle 64]: 0 native\ninvented handle: 6\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}
