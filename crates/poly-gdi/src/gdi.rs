@@ -3274,6 +3274,70 @@ impl Gdi {
         Some((tf.extent(text), fit, running))
     }
 
+    /// `GetFontData`: the bytes of `table` of the DC's font from `offset` to the table's end
+    /// (`crate::glyphs::table_range`). `None`: not a DC; `Some(None)`: `GDI_ERROR` (a bitmap face,
+    /// no such table, an offset past the table's end).
+    pub fn font_table(&self, dc: u64, table: u32, offset: u32) -> Option<Option<Vec<u8>>> {
+        self.dc(dc)?;
+        let sel = self.font_sel(dc);
+        let Some(file) = sel.data.as_deref().filter(|_| sel.outline.is_some()) else { return Some(None) };
+        let Some((start, end)) = crate::glyphs::table_range(file, table) else { return Some(None) };
+        let from = start.checked_add(offset as usize).filter(|&f| f <= end);
+        Some(from.map(|f| file[f..end].to_vec()))
+    }
+
+    /// `GetOutlineTextMetricsA/W` of the DC's font (`crate::otm`): `None`: not a DC;
+    /// `Some(None)`: not a TrueType font (or one without the tables the structure needs).
+    pub fn outline_text_metrics(&self, dc: u64) -> Option<Option<crate::otm::OutlineMetrics>> {
+        self.dc(dc)?;
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        let (Some(file), Some((o, _))) = (sel.data.as_deref(), tf.parts()) else { return Some(None) };
+        Some(crate::otm::OutlineMetrics::new(file, o.ex, o.ey, sel.metrics()))
+    }
+
+    /// `GetGlyphOutlineW` of the DC's font (`crate::glyphs::glyph_outline`); `None`: not a DC.
+    pub fn glyph_outline(
+        &self,
+        dc: u64,
+        c: u16,
+        format: u32,
+        mat: crate::glyphs::Mat2,
+    ) -> Option<Result<(crate::glyphs::GlyphMetrics, Vec<u8>), crate::glyphs::GlyphError>> {
+        self.dc(dc)?;
+        let sel = self.font_sel(dc);
+        Some(crate::glyphs::glyph_outline(&sel.typeface(), c, format, mat))
+    }
+
+    /// `GetCharABCWidthsFloatW`: `ABCFLOAT` of each character `first..=last`.
+    pub fn char_abc_float(&self, dc: u64, first: u32, last: u32) -> Option<Vec<[f32; 3]>> {
+        self.dc(dc)?;
+        if first > last || last > 0xFFFF {
+            return None;
+        }
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        Some((first..=last).map(|c| crate::glyphs::abc_float(&tf, c as u16)).collect())
+    }
+
+    /// `GetCharABCWidthsW` (characters) / `GetCharABCWidthsI` (glyph indices): the `ABC` of each
+    /// of `chars` (`crate::glyphs::abc_int`). `None`: not a DC; `Some(None)`: a bitmap face.
+    pub fn char_abc(&self, dc: u64, chars: &[u16], glyph_index: bool) -> Option<Option<Vec<(i32, u32, i32)>>> {
+        self.dc(dc)?;
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        Some(chars.iter().map(|&c| crate::glyphs::abc_int(&tf, c, glyph_index)).collect())
+    }
+
+    /// `GetCharWidthI`: the advance of each glyph index of `glyphs` in whole pixels. `None`: not
+    /// a DC; `Some(None)`: a bitmap face (it has no glyph indices).
+    pub fn glyph_widths(&self, dc: u64, glyphs: &[u16]) -> Option<Option<Vec<i32>>> {
+        self.dc(dc)?;
+        let sel = self.font_sel(dc);
+        let tf = sel.typeface();
+        Some(glyphs.iter().map(|&g| tf.glyph_advance(tf.glyph_of(g, true)?)).collect())
+    }
+
     /// `GetCharWidth32W`: the advance of each character `first..=last`.
     pub fn char_widths(&self, dc: u64, first: u32, last: u32) -> Option<Vec<i32>> {
         self.dc(dc)?;

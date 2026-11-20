@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_clsid_create",
+      "exe_sha256": "60252b132957164583913a11c85b0a5d707b89e73fd8fbb252f4ab16154871ca",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgQ09NIGluaXRpYWxpc2VzCkNvQ3JlYXRlSW5zdGFuY2UoSU1NRGV2aWNlRW51bWVyYXRvcikgPSBTX09LICgweDAwMDAwMDAwKQpvayBDb0NyZWF0ZUluc3RhbmNlKElNTURldmljZUVudW1lcmF0b3IpCm9rIG9iamVjdApRdWVyeUludGVyZmFjZShJVW5rbm93bikgPSBTX09LICgweDAwMDAwMDAwKQpvayBRdWVyeUludGVyZmFjZShJVW5rbm93bikKb2sgdGhlIHNhbWUgb2JqZWN0ClF1ZXJ5SW50ZXJmYWNlKElNTURldmljZUVudW1lcmF0b3IpID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgUXVlcnlJbnRlcmZhY2UoSU1NRGV2aWNlRW51bWVyYXRvcikKb2sgdGhlIHNhbWUgb2JqZWN0ClF1ZXJ5SW50ZXJmYWNlKElBdWRpb0NsaWVudCkgPSBFX05PSU5URVJGQUNFICgweDgwMDA0MDAyKQpvayBRdWVyeUludGVyZmFjZShJQXVkaW9DbGllbnQpCm9rIG91dCBwb2ludGVyIGlzIE5VTEwKUXVlcnlJbnRlcmZhY2UoSU1NRGV2aWNlKSA9IEVfTk9JTlRFUkZBQ0UgKDB4ODAwMDQwMDIpCm9rIFF1ZXJ5SW50ZXJmYWNlKElNTURldmljZSkKb2sgb3V0IHBvaW50ZXIgaXMgTlVMTApRdWVyeUludGVyZmFjZShhIG1hZGUtdXAgaW50ZXJmYWNlKSA9IEVfTk9JTlRFUkZBQ0UgKDB4ODAwMDQwMDIpCm9rIFF1ZXJ5SW50ZXJmYWNlKGEgbWFkZS11cCBpbnRlcmZhY2UpCm9rIG91dCBwb2ludGVyIGlzIE5VTEwKQ29DcmVhdGVJbnN0YW5jZSB3aXRoIGFuIG91dGVyIG9iamVjdCA9IENMQVNTX0VfTk9BR0dSRUdBVElPTiAoMHg4MDA0MDExMCkKb2sgQ29DcmVhdGVJbnN0YW5jZSB3aXRoIGFuIG91dGVyIG9iamVjdApDb0NyZWF0ZUluc3RhbmNlKG1hZGUtdXAgaW50ZXJmYWNlKSA9IEVfTk9JTlRFUkZBQ0UgKDB4ODAwMDQwMDIpCm9rIENvQ3JlYXRlSW5zdGFuY2UobWFkZS11cCBpbnRlcmZhY2UpCnNlY29uZCBDb0NyZWF0ZUluc3RhbmNlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgc2Vjb25kIENvQ3JlYXRlSW5zdGFuY2UKb2sgYW4gb2JqZWN0CnN1bW1hcnkgMTcgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok COM initialises\nCoCreateInstance(IMMDeviceEnumerator) = S_OK (0x00000000)\nok CoCreateInstance(IMMDeviceEnumerator)\nok object\nQueryInterface(IUnknown) = S_OK (0x00000000)\nok QueryInterface(IUnknown)\nok the same object\nQueryInterface(IMMDeviceEnumerator) = S_OK (0x00000000)\nok QueryInterface(IMMDeviceEnumerator)\nok the same object\nQueryInterface(IAudioClient) = E_NOINTERFACE (0x80004002)\nok QueryInterface(IAudioClient)\nok out pointer is NULL\nQueryInterface(IMMDevice) = E_NOINTERFACE (0x80004002)\nok QueryInterface(IMMDevice)\nok out pointer is NULL\nQueryInterface(a made-up interface) = E_NOINTERFACE (0x80004002)\nok QueryInterface(a made-up interface)\nok out pointer is NULL\nCoCreateInstance with an outer object = CLASS_E_NOAGGREGATION (0x80040110)\nok CoCreateInstance with an outer object\nCoCreateInstance(made-up interface) = E_NOINTERFACE (0x80004002)\nok CoCreateInstance(made-up interface)\nsecond CoCreateInstance = S_OK (0x00000000)\nok second CoCreateInstance\nok an object\nsummary 17 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "ws_clsid_uninit",
+      "exe_sha256": "32d1f454d590185524d5b9c517eccbb5ca1fb7373242770cb35e24672cc9877c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q29DcmVhdGVJbnN0YW5jZSB3aXRob3V0IENvSW5pdGlhbGl6ZUV4ID0gb3RoZXIgKDB4ODAwNDAxZjApCm9rIENvQ3JlYXRlSW5zdGFuY2Ugd2l0aG91dCBDb0luaXRpYWxpemVFeApvayBubyBvYmplY3QKU1RBIHRocmVhZDogQ29Jbml0aWFsaXplRXggPSBTX09LICgweDAwMDAwMDAwKQpvayBTVEEgdGhyZWFkOiBDb0luaXRpYWxpemVFeApTVEEgdGhyZWFkOiBDb0NyZWF0ZUluc3RhbmNlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU1RBIHRocmVhZDogQ29DcmVhdGVJbnN0YW5jZQpTVEEgdGhyZWFkOiBFbnVtQXVkaW9FbmRwb2ludHMgPSBTX09LICgweDAwMDAwMDAwKQpvayBTVEEgdGhyZWFkOiBFbnVtQXVkaW9FbmRwb2ludHMKb2sgTVRBIGluaXQKTVRBOiBDb0NyZWF0ZUluc3RhbmNlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgTVRBOiBDb0NyZWF0ZUluc3RhbmNlCnN1bW1hcnkgNyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CoCreateInstance without CoInitializeEx = other (0x800401f0)\nok CoCreateInstance without CoInitializeEx\nok no object\nSTA thread: CoInitializeEx = S_OK (0x00000000)\nok STA thread: CoInitializeEx\nSTA thread: CoCreateInstance = S_OK (0x00000000)\nok STA thread: CoCreateInstance\nSTA thread: EnumAudioEndpoints = S_OK (0x00000000)\nok STA thread: EnumAudioEndpoints\nok MTA init\nMTA: CoCreateInstance = S_OK (0x00000000)\nok MTA: CoCreateInstance\nsummary 7 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

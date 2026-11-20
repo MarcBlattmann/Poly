@@ -377,7 +377,7 @@ impl Outline {
 }
 
 /// The slant of a synthesised italic (the tangent of the angle).
-const SLANT: f32 = 0.2;
+pub(crate) const SLANT: f32 = 0.2;
 
 /// Sine and cosine of an angle in tenths of a degree: exact at the quarter
 /// turns, a Taylor series elsewhere.
@@ -420,7 +420,7 @@ fn round_f(x: f32) -> i32 {
 /// A glyph rendered through an affine map: `m` takes font units (x right,
 /// y up) to device pixels (y down): `x' = m[0] x + m[2] y`,
 /// `y' = m[1] x + m[3] y`. Grey coverage; the origin is the pen position.
-fn render_xf(font: &Font<'_>, gid: GlyphId, m: [f32; 4], lcd: bool) -> poly_font::Bitmap {
+pub(crate) fn render_xf(font: &Font<'_>, gid: GlyphId, m: [f32; 4], lcd: bool) -> poly_font::Bitmap {
     let mode = if lcd { RenderMode::Lcd } else { RenderMode::Gray };
     let empty = poly_font::Bitmap { mode, ..poly_font::Bitmap::default() };
     let Some(path) = font.outline(gid) else { return empty };
@@ -543,6 +543,23 @@ impl<'a> Typeface<'a> {
     /// The outline's description, if this is one.
     pub fn outline(&self) -> Option<&Outline> {
         self.outline.as_ref().map(|(o, _)| o)
+    }
+
+    /// The outline and its parsed font file, if this is one (`crate::glyphs`).
+    pub(crate) fn parts(&self) -> Option<(&Outline, &Font<'a>)> {
+        self.outline.as_ref().map(|(o, f)| (o, f))
+    }
+
+    /// Glyph `c` of the font (or glyph index `c` with `glyph_index`): `.notdef` where the font has none.
+    pub(crate) fn glyph_of(&self, c: u16, glyph_index: bool) -> Option<GlyphId> {
+        let (_, font) = self.outline.as_ref()?;
+        Some(if glyph_index { Self::clamp_glyph(font, c) } else { Self::glyph(font, c) })
+    }
+
+    /// The advance in whole pixels of glyph `g` (bold synthesis included).
+    pub(crate) fn glyph_advance(&self, g: GlyphId) -> Option<i32> {
+        let (o, font) = self.outline.as_ref()?;
+        Some(Self::advance_of(o, font, g))
     }
 
     pub fn metrics(&self) -> TextMetric {

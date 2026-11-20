@@ -2,17 +2,17 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "bfc1b5da2631",
+  "bundle": "0333caa90648",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-15T12:18:49Z",
+  "started": "2026-11-20T06:56:44Z",
   "tests": [
     {
       "name": "qij_basic",
-      "exe_sha256": "6d37fe6ced1d508ae888f4f9c1bea30b956fc8cf57884f98fcdea4069efb1b4b",
+      "exe_sha256": "811deb1153ea2f1a473b5f1afd7f16836ceda1060fa12a774f2d930d786d411d",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -22,7 +22,7 @@
       "output": "ok accounting_ok\nok accounting_length\nok empty_total_processes\nok empty_active_processes\nok assign_ok\nok total_processes_1\nok active_processes_1\nok terminated_processes_0\nok id_list_ok\nok id_list_assigned\nok id_list_in_list\nok id_list_has_child_pid\nok id_list_returned_length\nok id_list_header_only_fails\nok id_list_header_only_error\nok id_list_12_bytes_fails\nvalue id_list_12_bytes_error 24\nok id_list_too_small_fails\nvalue id_list_too_small_error 24\nok two_active\nok second_child_exit\nok total_2_after_exit\nok active_1_after_exit\nok terminated_0_after_normal_exit\nok active_0_after_kill\nvalue terminated_count_after_terminate 0\nok accounting_short_buffer_fails\nok accounting_short_buffer_error\nvalue accounting_long_buffer_ok 0\nvalue accounting_long_buffer_error 24\nvalue accounting_long_buffer_length 43690\nok basic_limit_ok\nok basic_limit_length\nok basic_limit_no_flags\nok extended_limit_ok\nok extended_limit_length\nok extended_limit_no_flags\nok extended_limit_short_fails\nok extended_limit_short_error\nok class_0_fails\nok class_0_error\nok class_99_fails\nok class_99_error\nok invalid_handle_fails\nok invalid_handle_error\nok event_handle_fails\nok event_handle_error\nsummary 41 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 62
+      "ms": 78
     },
     {
       "name": "qij_priority",
@@ -36,7 +36,7 @@
       "output": "fresh job read via kernel32: r=0x1 flags=0x0 active=0 prio=0x20 sched=5\nvalue set (kernel32) ok 1\njob after SetInformationJobObject(active limit 4) read via kernel32: r=0x1 flags=0x8 active=4 prio=0x20 sched=5\njob after SetInformationJobObject(active limit 4) read via ntdll: r=0x0 flags=0x8 active=4 prio=0x0 sched=5\nvalue set (ntdll) status 0x0\njob after NtSetInformationJobObject(active limit 4) read via kernel32: r=0x1 flags=0x8 active=4 prio=0x20 sched=5\njob after NtSetInformationJobObject(active limit 4) read via ntdll: r=0x0 flags=0x8 active=4 prio=0x0 sched=5\nfresh job, ntdll first read via ntdll: r=0x0 flags=0x0 active=0 prio=0x0 sched=5\nvalue set (kernel32) ok, third job 1\njob after SetInformationJobObject, ntdll read read via ntdll: r=0x0 flags=0x8 active=4 prio=0x0 sched=5\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 56
+      "ms": 42
     }
   ]
 }

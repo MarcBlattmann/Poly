@@ -10,6 +10,7 @@
 extern crate alloc;
 
 mod controls;
+mod icons;
 mod imagelist;
 mod subclass;
 

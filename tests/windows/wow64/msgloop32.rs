@@ -17,6 +17,9 @@
 //!   `InitializeSecurityDescriptor` and `SetSecurityDescriptorDacl` stay inside it, and a named
 //!   event made with that absolute descriptor in its `SECURITY_ATTRIBUTES` gets its DACL (read
 //!   back with `GetKernelObjectSecurity`): the kernel reads the descriptor in the caller's layout.
+//! - `TRUSTEE_W` (20 bytes on x86) and `EXPLICIT_ACCESS_W` (32): the `Build*` functions stay
+//!   inside them, `SetEntriesInAclW` reads an array of them with the 32-bit stride and
+//!   `GetExplicitEntriesFromAclW` writes one.
 //!
 //! One line per check on standard output; the exit code is the number of checks that failed.
 
@@ -139,12 +142,17 @@ unsafe extern "system" {
     fn AddAccessAllowedAce(acl: *mut u8, revision: u32, mask: u32, sid: *const u8) -> i32;
     fn GetKernelObjectSecurity(h: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> i32;
     fn GetSecurityDescriptorDacl(sd: *mut u8, present: *mut i32, acl: *mut *mut u8, defaulted: *mut i32) -> i32;
+    fn BuildTrusteeWithSidW(trustee: *mut u8, sid: *const u8);
+    fn BuildExplicitAccessWithNameW(ea: *mut u8, name: *const u16, access: u32, mode: u32, inherit: u32);
+    fn SetEntriesInAclW(count: u32, entries: *const u8, old: *const u8, new: *mut *mut u8) -> u32;
+    fn GetExplicitEntriesFromAclW(acl: *const u8, count: *mut u32, entries: *mut *mut u8) -> u32;
 }
 
 #[link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated")]
 unsafe extern "system" {
     fn CreateEventW(sa: *const u8, manual: i32, initial: i32, name: *const u16) -> Handle;
     fn CloseHandle(h: Handle) -> i32;
+    fn LocalFree(p: *mut u8) -> *mut u8;
     fn GetStdHandle(which: u32) -> Handle;
     fn WriteFile(file: Handle, buffer: *const u8, length: u32, written: *mut u32, overlapped: *mut u8) -> i32;
     fn GetModuleHandleW(name: *const u16) -> Handle;
@@ -427,6 +435,50 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         check(b"an event made with an absolute 32-bit descriptor has its DACL", ok, GUARD);
         if ev != 0 {
             CloseHandle(ev);
+        }
+
+        // TRUSTEE_W (x86 20 bytes: form at 8, name at 16) and EXPLICIT_ACCESS_W (32: trustee at 12).
+        let mut t = Guarded::<20>::new();
+        BuildTrusteeWithSidW(t.ptr(), everyone.as_ptr());
+        let form = u32::from_le_bytes([t.bytes[8], t.bytes[9], t.bytes[10], t.bytes[11]]);
+        let sid_at = u32::from_le_bytes([t.bytes[16], t.bytes[17], t.bytes[18], t.bytes[19]]);
+        check(b"TRUSTEE_W (20): BuildTrusteeWithSidW", form == 0 && sid_at == everyone.as_ptr() as u32, t.guard);
+        let me: [u16; 16] = wide("CURRENT_USER");
+        // Two entries: Everyone (read access) and Administrators (all access), by SID; the second is
+        // first built by name (`CURRENT_USER`) to check the builder.
+        #[repr(C)]
+        struct Entries {
+            ea: [u8; 64],
+            guard: u32,
+        }
+        let mut list = Entries { ea: [FILL; 64], guard: GUARD };
+        BuildExplicitAccessWithNameW(list.ea.as_mut_ptr().add(32), me.as_ptr(), 0x1F_0003, 2, 0);
+        let built_guard = list.guard;
+        list.ea[..12].copy_from_slice(&[0x01, 0, 0x12, 0, 2, 0, 0, 0, 0, 0, 0, 0]);
+        BuildTrusteeWithSidW(list.ea.as_mut_ptr().add(12), everyone.as_ptr());
+        let name_form = u32::from_le_bytes([list.ea[32 + 20], list.ea[32 + 21], list.ea[32 + 22], list.ea[32 + 23]]);
+        check(b"EXPLICIT_ACCESS_W (32): BuildExplicitAccessWithNameW", name_form == 1, built_guard);
+        // The second entry for the ACL: Administrators (S-1-5-32-544) by SID.
+        let admins: [u8; 16] = [1, 2, 0, 0, 0, 0, 0, 5, 0x20, 0, 0, 0, 0x20, 2, 0, 0];
+        BuildTrusteeWithSidW(list.ea.as_mut_ptr().add(32 + 12), admins.as_ptr());
+        let mut acl: *mut u8 = core::ptr::null_mut();
+        let rc = SetEntriesInAclW(2, list.ea.as_ptr(), core::ptr::null(), &mut acl);
+        let aces = if rc == 0 && !acl.is_null() { u16::from_le_bytes([*acl.add(4), *acl.add(5)]) } else { 0 };
+        check(b"SetEntriesInAclW reads 32-byte entries", rc == 0 && aces == 2, list.guard);
+        let (mut n, mut got) = (0u32, core::ptr::null_mut::<u8>());
+        let rc = if acl.is_null() { 1 } else { GetExplicitEntriesFromAclW(acl, &mut n, &mut got) };
+        // The second entry starts 32 bytes in; its trustee form (12 + 8) is a SID.
+        let second_form = if rc == 0 && n == 2 && !got.is_null() {
+            u32::from_le_bytes([*got.add(32 + 20), *got.add(32 + 21), *got.add(32 + 22), *got.add(32 + 23)])
+        } else {
+            9
+        };
+        check(b"GetExplicitEntriesFromAclW writes 32-byte entries", rc == 0 && n == 2 && second_form == 0, GUARD);
+        if !got.is_null() {
+            LocalFree(got);
+        }
+        if !acl.is_null() {
+            LocalFree(acl);
         }
         let failed = FAILED.load(Ordering::SeqCst);
         out(b"failed: ");

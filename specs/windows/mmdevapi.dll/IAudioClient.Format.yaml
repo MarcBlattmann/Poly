@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/mmdevapi.dll/IAudioClient.Format.yaml
+id: windows/api/mmdevapi.dll/IAudioClient.Format
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; the audio service runs and Core Audio reaches the card from there; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-wasapi
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only), and of Chrome for Testing 157.0.8103.38 playing a Web Audio page on it through a logging COM wrapper (docs/windows/wasapi-trace.md, specs/windows/apps/chrome/traces/s6-audio.trace.json). Microsoft Learn: "Core Audio APIs", "IMMDeviceEnumerator", "IMMDeviceCollection", "IMMDevice", "IMMNotificationClient", "IAudioClient", "IAudioClient2", "IAudioClient3", "IAudioRenderClient", "IAudioClock", "IAudioSessionControl", "IAudioSessionEvents", "WAVEFORMATEXTENSIBLE", "Rendering a Stream", "Audio Client Return Codes"; constants and layouts from mmdeviceapi.h, audioclient.h, audiopolicy.h, audiosessiontypes.h, mmreg.h, ksmedia.h, winerror.h. No Wine, ReactOS or Chromium source was read and no Microsoft or Google binary was disassembled or debugged.
+summary: >
+  What a shared-mode client says about formats before it is initialised: GetMixFormat, IsFormatSupported, GetDevicePeriod, and IAudioClient3's GetSharedModeEnginePeriod / GetCurrentSharedModeEnginePeriod.
+interface:
+  signature: "IAudioClient slots: 7 IsFormatSupported(AUDCLNT_SHAREMODE, const WAVEFORMATEX*, WAVEFORMATEX** closest), 8 GetMixFormat(WAVEFORMATEX**), 9 GetDevicePeriod(REFERENCE_TIME* default, REFERENCE_TIME* minimum); IAudioClient3 slots: 18 GetSharedModeEnginePeriod(const WAVEFORMATEX*, UINT32* default, UINT32* fundamental, UINT32* minimum, UINT32* maximum), 19 GetCurrentSharedModeEnginePeriod(WAVEFORMATEX**, UINT32*)"
+chrome: "Chrome for Windows' audio service makes these calls (the COM-level oracle trace): it creates the enumerator, opens a client on the default render device in shared mode with an event callback, and renders silence-or-tone in a loop of one 480-frame write per event."
+rules:
+  mix_format: "GetMixFormat returns a CoTaskMemAlloc block: WAVE_FORMAT_EXTENSIBLE (0xFFFE), cbSize 22, 2 channels, 32 bits per sample (32 valid), KSDATAFORMAT_SUBTYPE_IEEE_FLOAT, channel mask 3 (front left | front right), 48000 Hz, block align 8, 384000 bytes per second on the oracle's device; the same on every call (a separate block each time), the same for every client of the device; a NULL output is E_POINTER"
+  is_format_supported: "shared mode, with the mix rate of 48000 Hz and 2 channels: the mix format, float 32, integer 16, 24 and 32 bit stereo, as extensible or plain PCM, are S_OK with no closest match; any other rate (44100, 96000, 8000) or channel count (mono) is S_FALSE and the closest match is the mix format (a CoTaskMemAlloc block); a NULL format is E_POINTER; a format that is not supported as it is with a NULL closest-match pointer is E_POINTER; an extensible format with cbSize 0 is E_INVALIDARG; a share mode of 5 is AUDCLNT_E_UNSUPPORTED_FORMAT"
+  device_period: "GetDevicePeriod gives 100000 (10 ms) as the default and 30000 (3 ms) as the minimum, in 100 ns units, before and after Initialize; both NULL is E_POINTER; a NULL minimum alone is accepted"
+  client3: "QueryInterface from IAudioClient to IAudioClient2 and IAudioClient3 is S_OK; GetSharedModeEnginePeriod(mix format) gives default, fundamental, minimum and maximum of 480 frames (rate / 100); a NULL format is E_INVALIDARG and leaves the outputs alone; GetCurrentSharedModeEnginePeriod gives the mix format (a CoTaskMem block) and 480"
+errors:
+  null_pointer: "E_POINTER (0x80004003)"
+  invalid_argument: "E_INVALIDARG (0x80070057)"
+  unsupported_format: "AUDCLNT_E_UNSUPPORTED_FORMAT (0x88890008)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "GetMixFormat 0.4 to 2.5 ms; GetSharedModeEnginePeriod 1 to 6 ms"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing ole32.dll and kernel32.dll by name and calling the COM interfaces through their vtables (slot numbers from the interface headers). Every test but the two that exercise COM before it is initialised needs a sound device and COM initialised; audio data is silence only (the SILENT buffer flag, or zero bytes). Observations are result codes, counts, sizes in frames, flags and relations ("the position equals the bytes written", "about fifty events in 500 ms"), never pointers, handles, thread ids or times. The values that belong to the oracle's device are the mix format (48000 Hz, two channels, 32-bit float), the engine period (480 frames = 10 ms) and what follows from them; a device with another mix format would give other numbers by the same formulas. Waits are bounded (a second or less per condition).
+not_covered: >
+  Exclusive mode (the oracle's endpoint refuses it with AUDCLNT_E_UNSUPPORTED_FORMAT); capture endpoints and the capture client; other devices than the default render endpoint; a sandboxed audio process; device removal while a stream runs; ISimpleAudioVolume, IAudioStreamVolume and IAudioEndpointVolume; IAudioClient2's offload methods; ActivateAudioInterfaceAsync (mmdevapi ordinal 17, which chrome.dll delay-loads; Chrome activated through IMMDevice::Activate in every run).

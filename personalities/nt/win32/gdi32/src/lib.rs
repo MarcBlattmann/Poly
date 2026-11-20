@@ -1529,19 +1529,7 @@ pub unsafe extern "system" fn GetTextMetricsW(hdc: H, tm: *mut u8) -> i32 {
 pub unsafe extern "system" fn GetTextMetricsA(hdc: H, tm: *mut u8) -> i32 {
     match gdi(|g| g.text_metrics(hdc as u64)) {
         Some(m) => {
-            let w = m.to_bytes();
-            let mut a = [0u8; 56];
-            a[..44].copy_from_slice(&w[..44]);
-            let byte = |c: u16| if c > 0xFF { 0xFF } else { c as u8 };
-            a[44] = byte(m.first_char);
-            a[45] = byte(m.last_char);
-            a[46] = byte(m.default_char);
-            a[47] = byte(m.break_char);
-            a[48] = m.italic;
-            a[49] = m.underlined;
-            a[50] = m.struck_out;
-            a[51] = m.pitch_and_family;
-            a[52] = m.char_set;
+            let a = m.to_bytes_a();
             // SAFETY: the caller's TEXTMETRICA (56 bytes).
             unsafe { core::ptr::copy_nonoverlapping(a.as_ptr(), tm, a.len()) };
             1
@@ -1594,6 +1582,218 @@ pub unsafe extern "system" fn GetTextFaceA(hdc: H, count: i32, buf: *mut u8) -> 
         unsafe { *buf.add(n - 1) = 0 };
     }
     n as i32
+}
+
+/// `GDI_ERROR` (`wingdi.h`).
+const GDI_ERROR: u32 = 0xFFFF_FFFF;
+
+/// `GetFontData` (Learn): `cb` bytes of `table` of the selected font from `offset` copied to `buf`
+/// (all that is left when `cb` is larger); with `buf` NULL or `cb` 0 the size from `offset` to the
+/// table's end. `GDI_ERROR` for a bitmap font, a table the font lacks or an offset past its end
+/// (`poly_gdi::glyphs`, Windows apps survey batch W1; no sheet yet).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetFontData(hdc: H, table: u32, offset: u32, buf: *mut u8, cb: u32) -> u32 {
+    let Some(Some(bytes)) = gdi(|g| g.font_table(hdc as u64, table, offset)) else { return GDI_ERROR };
+    if buf.is_null() || cb == 0 {
+        return bytes.len() as u32;
+    }
+    let n = bytes.len().min(cb as usize);
+    // SAFETY: the caller's buffer of `cb` bytes; `n` is at most that.
+    unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), buf, n) };
+    n as u32
+}
+
+/// `GetGlyphOutlineW` (Learn): the `GLYPHMETRICS` of character (or glyph index) `c` of the
+/// selected font through `mat`, and the data of `format`: a bitmap (`GGO_BITMAP`,
+/// `GGO_GRAY2/4/8_BITMAP`) or the outline (`GGO_NATIVE`, `GGO_BEZIER`). With `buf` NULL or `cb`
+/// 0 the size of the data; a `cb` too small, a NULL `MAT2` or `GLYPHMETRICS`, or a bitmap font
+/// is `GDI_ERROR`. `GGO_METRICS` returns 1 when it succeeds (Learn says only that it is not
+/// `GDI_ERROR`; to be sharpened by a sheet). `poly_gdi::glyphs`, Windows apps survey batch W1.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetGlyphOutlineW(
+    hdc: H,
+    c: u32,
+    format: u32,
+    gm: *mut u8,
+    cb: u32,
+    buf: *mut u8,
+    mat: *const u8,
+) -> u32 {
+    if gm.is_null() || mat.is_null() {
+        return GDI_ERROR;
+    }
+    // SAFETY: the caller's MAT2 (16 bytes).
+    let m = poly_gdi::glyphs::Mat2::from_bytes(unsafe { &*(mat as *const [u8; 16]) });
+    let Some(Ok((metrics, data))) = gdi(|g| g.glyph_outline(hdc as u64, c as u16, format, m)) else {
+        return GDI_ERROR;
+    };
+    let kind = format & !(poly_gdi::glyphs::GGO_GLYPH_INDEX | poly_gdi::glyphs::GGO_UNHINTED);
+    if kind != poly_gdi::glyphs::GGO_METRICS && !buf.is_null() && cb != 0 && (cb as usize) < data.len() {
+        return GDI_ERROR;
+    }
+    let b = metrics.to_bytes();
+    // SAFETY: the caller's GLYPHMETRICS (20 bytes).
+    unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), gm, b.len()) };
+    if kind == poly_gdi::glyphs::GGO_METRICS {
+        return 1;
+    }
+    if !buf.is_null() && cb != 0 {
+        // SAFETY: the caller's buffer of `cb` bytes, at least `data.len()`.
+        unsafe { core::ptr::copy_nonoverlapping(data.as_ptr(), buf, data.len()) };
+    }
+    data.len() as u32
+}
+
+/// `GetOutlineTextMetricsA` / `W` (`GetOutlineTextMetricsA.yaml`; the W form is the A form with
+/// `TEXTMETRICW` and UTF-16 names, no sheet yet): a NULL buffer asks for the size needed; `cb` 0
+/// with a buffer is 0 and writes nothing; `cb` at least the size writes it all and returns the
+/// size; `cb` below the fixed part writes its first `cb` bytes and returns `cb`; `cb` from the
+/// fixed part to one short of the size writes the fixed part and is 0 with last error 1003 (what
+/// the oracle reported; `winerror.h`'s `ERROR_CAN_NOT_COMPLETE`); not a DC: 0 with
+/// `ERROR_INVALID_HANDLE`.
+unsafe fn outline_text_metrics(hdc: H, cb: u32, out: *mut u8, wide: bool) -> u32 {
+    const ERROR_CAN_NOT_COMPLETE: u32 = 1003;
+    let Some(m) = gdi(|g| g.outline_text_metrics(hdc as u64)) else {
+        set_last_error(ERROR_INVALID_HANDLE);
+        return 0;
+    };
+    let Some(m) = m else { return 0 };
+    let b = m.to_bytes(wide);
+    if out.is_null() {
+        return b.len() as u32;
+    }
+    let cb = cb as usize;
+    let fixed = poly_gdi::otm::OTM_SIZE;
+    let n = if cb < fixed {
+        cb
+    } else if cb < b.len() {
+        fixed
+    } else {
+        b.len()
+    };
+    // SAFETY: the caller's buffer of at least `cb` bytes; `n` is at most `cb`.
+    unsafe { core::ptr::copy_nonoverlapping(b.as_ptr(), out, n) };
+    if cb < fixed {
+        cb as u32
+    } else if cb < b.len() {
+        set_last_error(ERROR_CAN_NOT_COMPLETE);
+        0
+    } else {
+        b.len() as u32
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetOutlineTextMetricsA(hdc: H, cb: u32, out: *mut u8) -> u32 {
+    // SAFETY: the caller's arguments, passed on.
+    unsafe { outline_text_metrics(hdc, cb, out, false) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetOutlineTextMetricsW(hdc: H, cb: u32, out: *mut u8) -> u32 {
+    // SAFETY: the caller's arguments, passed on.
+    unsafe { outline_text_metrics(hdc, cb, out, true) }
+}
+
+/// The characters `first..=last`, or the glyph indices `first..first + count` or of `list`
+/// (`GetCharWidthI`, `GetCharABCWidthsI`: a NULL `list` means consecutive indices).
+unsafe fn glyph_list(first: u32, count: u32, list: *const u16) -> Vec<u16> {
+    if list.is_null() {
+        (first..first.saturating_add(count)).map(|g| g as u16).collect()
+    } else {
+        // SAFETY: the caller's array of `count` glyph indices.
+        unsafe { core::slice::from_raw_parts(list, count as usize) }.to_vec()
+    }
+}
+
+/// Writes `abc` as `ABC` structures (`int`, `UINT`, `int`) to `out`; FALSE for a NULL `out` or none.
+unsafe fn put_abc(abc: Option<Option<Vec<(i32, u32, i32)>>>, out: *mut i32) -> i32 {
+    let Some(Some(v)) = abc else { return 0 };
+    if out.is_null() {
+        return 0;
+    }
+    for (i, (a, b, c)) in v.into_iter().enumerate() {
+        // SAFETY: the caller's array of one ABC per character or glyph.
+        unsafe {
+            *out.add(3 * i) = a;
+            *out.add(3 * i + 1) = b as i32;
+            *out.add(3 * i + 2) = c;
+        }
+    }
+    1
+}
+
+/// `GetCharABCWidthsW` (Learn): the `ABC` of each character of `first..=last` of the selected
+/// TrueType font (`poly_gdi::glyphs::abc_int`); FALSE for a bitmap font. Windows apps survey batch W1.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCharABCWidthsW(hdc: H, first: u32, last: u32, abc: *mut i32) -> i32 {
+    if first > last || last > 0xFFFF {
+        return 0;
+    }
+    let chars: Vec<u16> = (first..=last).map(|c| c as u16).collect();
+    // SAFETY: the caller's array of `last - first + 1` ABCs.
+    unsafe { put_abc(gdi(|g| g.char_abc(hdc as u64, &chars, false)), abc) }
+}
+
+/// `GetCharABCWidthsI` (Learn): the `ABC` of glyph indices `first..first + count`, or of the
+/// `count` indices at `list`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCharABCWidthsI(
+    hdc: H,
+    first: u32,
+    count: u32,
+    list: *const u16,
+    abc: *mut i32,
+) -> i32 {
+    // SAFETY: the caller's arguments.
+    let glyphs = unsafe { glyph_list(first, count, list) };
+    // SAFETY: the caller's array of `count` ABCs.
+    unsafe { put_abc(gdi(|g| g.char_abc(hdc as u64, &glyphs, true)), abc) }
+}
+
+/// `GetCharWidthI` (Learn): the advance of glyph indices `first..first + count`, or of the `count`
+/// indices at `list`, in whole pixels; FALSE for a bitmap font. Windows apps survey batch W1.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCharWidthI(hdc: H, first: u32, count: u32, list: *const u16, widths: *mut i32) -> i32 {
+    // SAFETY: the caller's arguments.
+    let glyphs = unsafe { glyph_list(first, count, list) };
+    let Some(Some(w)) = gdi(|g| g.glyph_widths(hdc as u64, &glyphs)) else { return 0 };
+    if widths.is_null() {
+        return 0;
+    }
+    // SAFETY: the caller's array of `count` values.
+    unsafe { core::ptr::copy_nonoverlapping(w.as_ptr(), widths, w.len()) };
+    1
+}
+
+/// `GetCharWidthFloatW` (Learn): the advance of each character of `first..=last` in fractional
+/// pixels: the sum of its `ABCFLOAT`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCharWidthFloatW(hdc: H, first: u32, last: u32, out: *mut f32) -> i32 {
+    if out.is_null() {
+        return 0;
+    }
+    let Some(v) = gdi(|g| g.char_abc_float(hdc as u64, first, last)) else { return 0 };
+    for (i, w) in v.iter().enumerate() {
+        // SAFETY: the caller's array of `last - first + 1` FLOATs.
+        unsafe { *out.add(i) = w[0] + w[1] + w[2] };
+    }
+    1
+}
+
+/// `GetCharABCWidthsFloatW` (Learn): an `ABCFLOAT` (three `FLOAT`s) for each character of
+/// `first..=last` of the selected font (`poly_gdi::glyphs::abc_float`). Windows apps survey batch W1.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn GetCharABCWidthsFloatW(hdc: H, first: u32, last: u32, abc: *mut f32) -> i32 {
+    if abc.is_null() {
+        return 0;
+    }
+    let Some(v) = gdi(|g| g.char_abc_float(hdc as u64, first, last)) else { return 0 };
+    for (i, w) in v.iter().enumerate() {
+        // SAFETY: the caller's array of `last - first + 1` ABCFLOATs.
+        unsafe { core::ptr::copy_nonoverlapping(w.as_ptr(), abc.add(3 * i), 3) };
+    }
+    1
 }
 
 /// `GetCharWidth32W`: the advance of each character of `first..=last`.
