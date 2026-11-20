@@ -24,6 +24,11 @@ Chrome on Windows (in progress), then Chrome on macOS.
 - **66 system libraries, 2,751 symbols.** Six of the libraries are linked
   without any import and only have to load.
 
+- **Poly's own `libSystem.B.dylib`** (ADR 0258): `cargo xtask libsystem`
+  builds it and the six sub-libraries a C program needs from Rust
+  (`personalities/xnu/libsystem`, logic in `crates/poly-libsystem`) and
+  links them with `rust-lld`'s Mach-O flavour, so any host builds them.
+
 ## The order of work
 
 | Step | ADR | What it unlocks |
@@ -31,7 +36,7 @@ Chrome on Windows (in progress), then Chrome on macOS.
 | Import map | 0157 | this plan |
 | A static x86_64 Mach-O runs (loader, initial stack, first BSD calls) | 0237 | the XNU personality runs code (done) |
 | BSD system calls, first slice (Darwin errno, carry flag, `stat64`, `O_*`) | 0159 | a C "hello" and Chrome's early start-up |
-| Our `dyld` v0 (done, ADR 0237) and a Poly-built `libSystem.B.dylib` | 0160 | dynamically linked Mach-Os, the 66 libraries as Poly dylibs |
+| Our `dyld` v0 (done, ADR 0237) and a Poly-built `libSystem.B.dylib` (v0 done, ADR 0258: an SDK-linked C program runs) | 0160 | dynamically linked Mach-Os, the 66 libraries as Poly dylibs |
 | Mach IPC core (ports, rights, `mach_msg`, bootstrap) | 0161 | the 85 Mach / XPC imports, Chrome's process model |
 | arm64 hello through the interpreter and the JIT, static and through our `dyld` (done) | 0257 | arm64-only apps (not Chrome on x86) |
 
