@@ -227,11 +227,126 @@ pub unsafe extern "system" fn K32QueryWorkingSetEx(process: Handle, pv: *mut usi
     if !st.is_success() {
         return fail_status(st, FALSE);
     }
+    // This process's locked pages (`VirtualLock`) are marked locked when they are valid.
+    let own = process as isize == -1 || crate::spawn::GetProcessId(process) == crate::process::GetCurrentProcessId();
     for i in 0..n {
+        let mut a = buf[2 * i + 1];
+        if own && a & 1 != 0 && with_locked(|l| l.is_locked(buf[2 * i])) {
+            a |= workingset::WS_EX_LOCKED;
+        }
         // SAFETY: the caller's array of `n` entries.
-        unsafe { pv.add(2 * i + 1).write_unaligned(buf[2 * i + 1] as usize) };
+        unsafe { pv.add(2 * i + 1).write_unaligned(a as usize) };
     }
     TRUE
+}
+
+// ----- VirtualLock, VirtualUnlock -------------------------------------------------------------
+
+/// This process's locked pages, under [`LOCKED_LOCK`].
+struct LockedCell(core::cell::UnsafeCell<workingset::LockedPages>);
+// SAFETY: every access is under `LOCKED_LOCK`.
+unsafe impl Sync for LockedCell {}
+static LOCKED: LockedCell = LockedCell(core::cell::UnsafeCell::new(workingset::LockedPages::new()));
+/// An `SRWLOCK` (one pointer, zero when free).
+static LOCKED_LOCK: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+fn with_locked<R>(f: impl FnOnce(&mut workingset::LockedPages) -> R) -> R {
+    // SAFETY: a valid SRW lock word.
+    unsafe { nt::RtlAcquireSRWLockExclusive(LOCKED_LOCK.as_ptr()) };
+    // SAFETY: the lock is held, so this is the only reference.
+    let r = f(unsafe { &mut *LOCKED.0.get() });
+    // SAFETY: held by this thread.
+    unsafe { nt::RtlReleaseSRWLockExclusive(LOCKED_LOCK.as_ptr()) };
+    r
+}
+
+/// The released or decommitted range `[address, address + size)` (`VirtualFree`) is locked no more.
+pub fn forget_locked(address: usize, size: usize) {
+    with_locked(|l| l.forget(workingset::pages_of(address as u64, size as u64)));
+}
+
+/// `MEMORY_BASIC_INFORMATION` (`winnt.h`), as `VirtualQuery` fills it for this width.
+#[repr(C)]
+struct BasicInfo {
+    base: usize,
+    allocation_base: usize,
+    allocation_protect: u32,
+    region_size: usize,
+    state: u32,
+    protect: u32,
+    kind: u32,
+}
+
+/// `MEM_COMMIT`, `PAGE_NOACCESS`, `PAGE_GUARD` (`winnt.h`); `ERROR_NOT_LOCKED` (`winerror.h`).
+const MEM_COMMIT: u32 = 0x1000;
+const PAGE_NOACCESS: u32 = 0x01;
+const PAGE_GUARD: u32 = 0x100;
+const ERROR_NOT_LOCKED: u32 = 158;
+
+/// Whether every page of `pages` is committed and accessible (Learn, "VirtualLock": "All pages in
+/// the specified region must be committed. Memory protected with PAGE_NOACCESS cannot be locked").
+fn lockable(pages: core::ops::Range<u64>) -> bool {
+    let mut at = pages.start * 4096;
+    let end = pages.end * 4096;
+    while at < end {
+        let mut info = BasicInfo {
+            base: 0,
+            allocation_base: 0,
+            allocation_protect: 0,
+            region_size: 0,
+            state: 0,
+            protect: 0,
+            kind: 0,
+        };
+        // SAFETY: a buffer of the structure's size.
+        let n = unsafe {
+            crate::memory::VirtualQuery(
+                at as usize as *const u8,
+                (&mut info as *mut BasicInfo).cast(),
+                core::mem::size_of::<BasicInfo>(),
+            )
+        };
+        if n == 0
+            || info.state != MEM_COMMIT
+            || info.protect & (PAGE_NOACCESS | PAGE_GUARD) != 0
+            || info.region_size == 0
+        {
+            return false;
+        }
+        at = info.base as u64 + info.region_size as u64;
+    }
+    true
+}
+
+/// `VirtualLock(lpAddress, dwSize)`: the pages of the range are brought into the working set and
+/// stay there (Learn). Poly keeps every page of a process in memory; what locking adds is the
+/// `locked` attribute `K32QueryWorkingSetEx` reports
+/// (`specs/windows/kernel32.dll/K32QueryWorkingSetEx.yaml`, rule `lock`: VirtualLock succeeds; the
+/// page is valid, its protection unchanged, locked 1). A range with a page that is not committed
+/// or not accessible is `ERROR_NOACCESS` (Poly's choice: no sheet records the error).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn VirtualLock(address: *mut u8, size: usize) -> i32 {
+    let pages = workingset::pages_of(address as u64, size as u64);
+    if pages.is_empty() || !lockable(pages.clone()) {
+        return fail(ERROR_NOACCESS, FALSE);
+    }
+    for p in pages.clone() {
+        // SAFETY: a committed, accessible page: reading one byte brings it in.
+        let _ = unsafe { core::ptr::read_volatile((p * 4096) as usize as *const u8) };
+    }
+    with_locked(|l| l.lock(pages));
+    TRUE
+}
+
+/// `VirtualUnlock(lpAddress, dwSize)`: the pages are locked no more; a page of the range that was
+/// not locked makes the call fail with `ERROR_NOT_LOCKED` (Learn, "VirtualUnlock").
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn VirtualUnlock(address: *mut u8, size: usize) -> i32 {
+    let pages = workingset::pages_of(address as u64, size as u64);
+    if pages.is_empty() || !lockable(pages.clone()) {
+        return fail(ERROR_NOACCESS, FALSE);
+    }
+    if with_locked(|l| l.unlock(pages)) { TRUE } else { fail(ERROR_NOT_LOCKED, FALSE) }
 }
 
 // ----- GetVolumeInformationByHandleW ----------------------------------------------------------

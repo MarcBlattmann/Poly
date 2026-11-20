@@ -28,7 +28,13 @@ pub unsafe extern "system" fn VirtualFree(address: *mut u8, size: usize, kind: u
     let (mut base, mut sz) = (address, size);
     // SAFETY: valid in/out pointers.
     let st = unsafe { nt::NtFreeVirtualMemory(nt::CURRENT_PROCESS, &mut base, &mut sz, kind) };
-    if st.is_success() { TRUE } else { fail_status(st, FALSE) }
+    if st.is_success() {
+        // What was freed is locked no more (`VirtualLock`).
+        crate::b0::forget_locked(base as usize, sz);
+        TRUE
+    } else {
+        fail_status(st, FALSE)
+    }
 }
 
 /// `VirtualProtect`: Learn: `lpflOldProtect` must point at a variable.

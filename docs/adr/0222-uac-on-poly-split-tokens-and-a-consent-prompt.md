@@ -310,3 +310,38 @@ SSH logon (session 0) live on their logon's own window station (`Service-0x…$`
 session-0 program on `WinSta0`, so a child started without `lpDesktop` reports `WinSta0\Default`
 instead of another station's name. Changing the session-0 window-station model touches every
 session-0 test, so it is left for a change of its own.
+
+Still open (not this change):
+- `ShellDispatch.ShellExecute` `sde_start_ssh` needs a shell process in the `admin` logon (on Windows
+  the user's Explorer runs in session 1 whatever the SSH session does). Today only the standard and
+  elevated logons start the stand-in (ADR 0235).
+- `CreateProcessWithTokenW` `cpwt_ssh_session0` needs session-0 programs to live on their logon's
+  own window station (`Service-0x…$`), not on `WinSta0`. Then the child's desktop name is not
+  `WinSta0\Default`.
+
+## Addendum: B0's held-out fixes (2026-11-20)
+
+The re-green round left four B0 entries whose visible tests pass and whose held-out test fails.
+Re-reading their sheets against probes of my own on Poly (the held-out tests were not used):
+
+- **`VirtualLock` and `VirtualUnlock`** were fail-only exports, so the `lock` rule of
+  `K32QueryWorkingSetEx` could not hold. `kernelbase` now keeps the process's locked pages
+  (`poly_kernelbase::workingset::LockedPages`):
+  - `VirtualLock` touches each page, which makes it valid, and records it.
+  - `K32QueryWorkingSetEx` sets bit 22 for the caller's own valid locked pages.
+  - `VirtualUnlock` fails with `ERROR_NOT_LOCKED` for a page that was not locked (Learn).
+  - `VirtualFree` forgets freed pages.
+  - Poly keeps every page in memory anyway, so locking changes nothing else.
+- **`ProcessIdToSessionId`** answered every process id with the caller's own session. The previous
+  addendum's change fixed this on `main` at the same time (an unused id fails with
+  `ERROR_INVALID_PARAMETER`, `WTSGetActiveConsoleSessionId.yaml` `bad_pid`); this branch kept that
+  version.
+- **`ShellExecuteExW`** looks a bare program name that is not found up in
+  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\<name>`, never in the user's key
+  (`AssocQueryStringW.yaml`, `shellexecute_app_paths`).
+- **The 32-bit `cmd.exe`:** `cargo xtask wow64` builds `cmd.exe` for i686 too (`SYSTEM_PROGRAMS`),
+  and the layout installs it in `SysWOW64` with the 32-bit DLLs. The same rule starts
+  `C:\Windows\SysWOW64\cmd.exe` by its full path.
+- **`CreateProcessAsUserW`:** every rule the visible tests do not cover was probed and matches the
+  sheet: names, environment, errors, suspended, process information, inheritance and handle
+  lists, the job broker and breakaway. No change.
