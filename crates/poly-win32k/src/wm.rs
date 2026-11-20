@@ -19,6 +19,7 @@ use alloc::vec::Vec;
 pub mod dpi;
 pub mod input;
 pub mod paint;
+pub mod pointer;
 pub mod raw;
 
 // Win32 errors (`winerror.h`).
@@ -346,8 +347,10 @@ pub struct Wm {
     sync_keys: Vec<u8>,
     /// TrackMouseEvent's leave tracking: (window, flags) (`raw`).
     tracking: Vec<(u32, u32)>,
-    /// TrackMouseEvent's hover tracking: (window, ms, since).
-    hover: Option<(u32, u32, u64)>,
+    /// TrackMouseEvent's hover tracking: (window, ms, since, where it started).
+    hover: Option<(u32, u32, u64, (i32, i32))>,
+    /// What decides the window under a still pointer (`pointer`).
+    pointer: pointer::PointerState,
     /// The last button-down that may start a double click: (message,
     /// window, x, y, time) (`raw`).
     last_click: Option<(u32, u32, i32, i32, u64)>,
@@ -432,6 +435,7 @@ impl Wm {
             sync_keys: raw::blank_keys(),
             tracking: Vec::new(),
             hover: None,
+            pointer: pointer::PointerState::default(),
             last_click: None,
             now: 0,
             clip: crate::clip::Clipboard::new(),
@@ -1111,6 +1115,13 @@ impl Wm {
             c.windows = c.windows.saturating_sub(1);
         }
         self.forget_input(hwnd);
+        // A destroyed window gets no WM_MOUSELEAVE: its tracking is gone (WM_MOUSELEAVE.yaml
+        // `tracked_window_changes`, `covering_window_tracked`).
+        self.tracking.retain(|t| t.0 != hwnd);
+        if self.hover.is_some_and(|h| h.0 == hwnd) {
+            self.hover = None;
+        }
+        self.pointer.transparent.retain(|&t| t != hwnd);
         self.clip.window_gone(hwnd);
         for q in self.queues.values_mut() {
             q.caret.window_gone(hwnd);
@@ -2124,8 +2135,24 @@ impl Wm {
 
     // ----- the request dispatcher
 
-    /// Run one request of thread `ctx`, in physical pixels (`dpi::handle` converts).
+    /// Run one request of thread `ctx`, in physical pixels (`dpi::handle` converts). A thread
+    /// that looks at its queue after a request that may have changed the window structure first
+    /// lets the window under the pointer know (`pointer`).
     fn handle_raw(&mut self, ctx: Ctx, req: Request, fx: &mut Effects) -> Reply {
+        let structural = pointer::structural(&req);
+        if self.pointer.pending && matches!(req, Request::Peek { .. } | Request::QueueStatus { .. }) {
+            self.queue(ctx.key());
+            self.now = self.now.max(ctx.now);
+            self.pointer_recheck(ctx, fx);
+        }
+        let reply = self.handle_req(ctx, req, fx);
+        if structural {
+            self.pointer.pending = true;
+        }
+        reply
+    }
+
+    fn handle_req(&mut self, ctx: Ctx, req: Request, fx: &mut Effects) -> Reply {
         self.queue(ctx.key());
         self.now = self.now.max(ctx.now);
         match req {
@@ -2432,6 +2459,7 @@ impl Wm {
             }
             Request::Cursor { set, x, y } => {
                 if set {
+                    self.pointer.away = false;
                     self.cursor = (x.clamp(0, self.screen.0 - 1), y.clamp(0, self.screen.1 - 1));
                     // A move to the window under it, even to the same point
                     // (SetCursorPos.yaml).
@@ -2464,6 +2492,9 @@ impl Wm {
             Request::IdleState { pid } => Reply::Value { value: u64::from(self.input_idle.state(pid)) },
             Request::QueueStatus { flags, clear } => {
                 let key = ctx.key();
+                // A hover that is due is posted now, so that a wait for input ends with it
+                // (WM_MOUSEHOVER.yaml `timing`).
+                self.check_hover(ctx, fx);
                 self.refresh_timers(key, ctx.now);
                 let now = self.status_now(key, ctx.now);
                 let next_timer_ms = self
@@ -2472,6 +2503,10 @@ impl Wm {
                     .filter(|t| t.thread == key && !t.flagged)
                     .map(|t| t.due.saturating_sub(ctx.now))
                     .min();
+                let next_timer_ms = match (next_timer_ms, self.hover_due(ctx.now)) {
+                    (Some(a), Some(b)) => Some(a.min(b)),
+                    (a, b) => a.or(b),
+                };
                 let q = self.queue(key);
                 let changed = q.changed;
                 if clear {
@@ -2549,14 +2584,14 @@ fn read_le(b: &[u8], at: usize, size: usize) -> u64 {
 mod tests {
     use super::*;
 
-    const A: Ctx = Ctx { pid: 7, tid: 1, now: 0 };
+    pub(super) const A: Ctx = Ctx { pid: 7, tid: 1, now: 0 };
     const B: Ctx = Ctx { pid: 7, tid: 2, now: 0 };
 
     fn name(s: &str) -> Vec<u16> {
         s.encode_utf16().collect()
     }
 
-    fn reg(wm: &mut Wm, n: &str) -> u16 {
+    pub(super) fn reg(wm: &mut Wm, n: &str) -> u16 {
         let spec = ClassSpec { name: name(n), wndproc: 0x1000, unicode: true, ..ClassSpec::default() };
         match wm.handle(A, Request::RegisterClass { spec }, &mut Effects::default()) {
             Reply::Atom { atom } => atom,
@@ -2564,7 +2599,7 @@ mod tests {
         }
     }
 
-    fn create(wm: &mut Wm, ctx: Ctx, n: &str, style: u32, parent: u64, menu: u64) -> u32 {
+    pub(super) fn create(wm: &mut Wm, ctx: Ctx, n: &str, style: u32, parent: u64, menu: u64) -> u32 {
         let spec = CreateSpec {
             class: ClassRef::Name { name: name(n) },
             style,
@@ -2978,5 +3013,110 @@ mod tests {
         assert_eq!(wm.handle(B, Request::SendWait { id }, &mut fx), Reply::Done { result: 77 });
         wm.handle(A, Request::SendDone { id, result: 99 }, &mut fx);
         assert_eq!(wm.handle(A, Request::InSend {}, &mut fx), Reply::Bool { value: false });
+    }
+}
+
+/// The window under a still pointer (`wm::pointer`).
+#[cfg(test)]
+mod pointer_tests {
+    use super::tests::{A, create, reg};
+    use super::*;
+
+    const LEAVE: u32 = 0x02A3;
+
+    /// The mouse messages thread `ctx` can take now (WM_MOUSEMOVE to WM_MOUSELEAVE): (window, message).
+    fn drain(wm: &mut Wm, ctx: Ctx) -> Vec<(u32, u32)> {
+        let mut out = Vec::new();
+        let mut fx = Effects::default();
+        while let Reply::Message { msg } =
+            wm.handle(ctx, Request::Peek { filter: 0, min: 0x200, max: LEAVE, flags: PM_REMOVE }, &mut fx)
+        {
+            out.push((msg.hwnd, msg.msg));
+            assert!(out.len() < 20, "endless messages: {out:?}");
+        }
+        out
+    }
+
+    fn show(wm: &mut Wm, ctx: Ctx, hwnd: u32, visible: bool) {
+        let s = Request::SetState {
+            hwnd,
+            visible: Some(visible),
+            minimized: None,
+            maximized: None,
+            normal: None,
+            size_move_pending: None,
+        };
+        wm.handle(ctx, s, &mut Effects::default());
+    }
+
+    fn popup(wm: &mut Wm, ctx: Ctx, r: Rect) -> u32 {
+        let h = create(wm, ctx, "C", WS_POPUP, 0, 0);
+        wm.handle(
+            ctx,
+            Request::SetRects { hwnd: h, window_rel: Some(r), client_rel: Some(r) },
+            &mut Effects::default(),
+        );
+        h
+    }
+
+    /// WM_MOUSELEAVE.yaml `windows_that_cover`, WM_MOUSEMOVE.yaml `after_change`: a popup shown
+    /// over the still pointer gets the move, the tracked window under it its WM_MOUSELEAVE after
+    /// it; hidden again, the window below gets the move. Disabling a window gives nothing.
+    #[test]
+    fn a_window_shown_over_a_still_pointer_takes_it() {
+        let mut wm = Wm::new();
+        wm.set_display(Display::INTERACTIVE);
+        reg(&mut wm, "C");
+        let a = popup(&mut wm, A, Rect::new(100, 100, 400, 300));
+        show(&mut wm, A, a, true);
+        wm.handle(A, Request::Cursor { set: true, x: 200, y: 150 }, &mut Effects::default());
+        assert_eq!(drain(&mut wm, A), [(a, raw::WM_MOUSEMOVE)]);
+        wm.handle(A, Request::TrackMouse { hwnd: a, flags: 2, hover: 0 }, &mut Effects::default());
+        let b = popup(&mut wm, A, Rect::new(150, 120, 300, 250));
+        show(&mut wm, A, b, true);
+        assert_eq!(drain(&mut wm, A), [(b, raw::WM_MOUSEMOVE), (a, LEAVE)]);
+        show(&mut wm, A, b, false);
+        assert_eq!(drain(&mut wm, A), [(a, raw::WM_MOUSEMOVE)]);
+        // Disabled: no move.
+        let st = wm.get(u64::from(a)).unwrap().style | WS_DISABLED;
+        wm.handle(A, Request::SetStyle { hwnd: a, which: -16, value: st }, &mut Effects::default());
+        assert_eq!(drain(&mut wm, A), []);
+    }
+
+    /// `windows_that_do_not_cover`: a layered and transparent popup leaves the pointer to the
+    /// window below, which is told again.
+    #[test]
+    fn a_click_through_popup_does_not_take_the_pointer() {
+        let mut wm = Wm::new();
+        wm.set_display(Display::INTERACTIVE);
+        reg(&mut wm, "C");
+        let a = popup(&mut wm, A, Rect::new(100, 100, 400, 300));
+        show(&mut wm, A, a, true);
+        wm.handle(A, Request::Cursor { set: true, x: 200, y: 150 }, &mut Effects::default());
+        drain(&mut wm, A);
+        wm.handle(A, Request::TrackMouse { hwnd: a, flags: 2, hover: 0 }, &mut Effects::default());
+        let b = popup(&mut wm, A, Rect::new(150, 120, 300, 250));
+        wm.get_mut(u64::from(b)).unwrap().ex_style |= guic::WS_EX_LAYERED | 0x20;
+        show(&mut wm, A, b, true);
+        assert_eq!(drain(&mut wm, A), [(a, raw::WM_MOUSEMOVE)]);
+    }
+
+    /// The desktop's pointer left the Windows surfaces: the tracked window gets WM_MOUSELEAVE,
+    /// and changes do not synthesize moves until the pointer is back.
+    #[test]
+    fn the_pointer_leaving_the_desktop_link_ends_the_tracking() {
+        let mut wm = Wm::new();
+        wm.set_display(Display::INTERACTIVE);
+        reg(&mut wm, "C");
+        let a = popup(&mut wm, A, Rect::new(100, 100, 400, 300));
+        show(&mut wm, A, a, true);
+        wm.link_pointer(200, 150, &mut Effects::default());
+        drain(&mut wm, A);
+        wm.handle(A, Request::TrackMouse { hwnd: a, flags: 2, hover: 0 }, &mut Effects::default());
+        wm.link_leave(Some((900, 700)), &mut Effects::default());
+        assert_eq!(drain(&mut wm, A), [(a, LEAVE)]);
+        let b = popup(&mut wm, A, Rect::new(150, 120, 300, 250));
+        show(&mut wm, A, b, true);
+        assert_eq!(drain(&mut wm, A), []);
     }
 }

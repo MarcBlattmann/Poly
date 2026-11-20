@@ -7,7 +7,9 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
-use poly_comctl::{Column, ListView, Progress, StatusBar, Tab, Tabs, Trackbar, TreeView, UpDown, class, class::Size};
+use poly_comctl::{
+    Column, ListView, Progress, StatusBar, Tab, Tabs, Tooltip, Trackbar, TreeView, UpDown, class, class::Size,
+};
 use poly_win32_gui::SpinLock;
 
 #[cfg_attr(target_arch = "x86", link(name = "user32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -23,6 +25,7 @@ unsafe extern "system" {
     fn GetWindowRect(hwnd: usize, rect: *mut i32) -> i32;
     fn GetSystemMetrics(index: i32) -> i32;
     fn SetWindowPos(hwnd: usize, after: usize, x: i32, y: i32, cx: i32, cy: i32, flags: u32) -> i32;
+    fn ShowWindow(hwnd: usize, cmd: i32) -> i32;
     fn LoadCursorW(instance: usize, name: *const u16) -> usize;
     fn CreateWindowExW(
         ex: u32,
@@ -72,6 +75,8 @@ enum Model {
     Count(i32),
     /// The rebar's bands.
     Rebar(i32),
+    /// The tooltip's tools and tracking.
+    Tip(Tooltip),
 }
 
 static CTLS: SpinLock<BTreeMap<usize, Model>> = SpinLock::new(BTreeMap::new());
@@ -133,6 +138,7 @@ fn model_for(name: &str) -> Model {
         "systreeview32" => Model::Tree(TreeView::default()),
         "sysheader32" | "toolbarwindow32" => Model::Count(0),
         "rebarwindow32" => Model::Rebar(0),
+        "tooltips_class32" => Model::Tip(Tooltip::default()),
         _ => Model::Plain,
     }
 }
@@ -275,6 +281,13 @@ pub unsafe extern "system" fn control_proc(hwnd: usize, msg: u32, w: usize, l: i
                     if new != style {
                         SetWindowLongW(hwnd, GWL_STYLE, new as i32);
                     }
+                    // The tooltip window is a tool window (tooltips_class32.yaml `window_styles`).
+                    if name.eq_ignore_ascii_case("tooltips_class32") {
+                        const GWL_EXSTYLE: i32 = -20;
+                        const WS_EX_TOOLWINDOW: u32 = 0x80;
+                        let ex = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+                        SetWindowLongW(hwnd, GWL_EXSTYLE, (ex | WS_EX_TOOLWINDOW) as i32);
+                    }
                 }
             }
             // SAFETY: the default procedure keeps the text the window was made with.
@@ -312,6 +325,9 @@ pub unsafe extern "system" fn control_proc(hwnd: usize, msg: u32, w: usize, l: i
             unsafe { DefWindowProcW(hwnd, msg, w, l) }
         }
         _ => {
+            if let Some(r) = tooltip(hwnd, msg, w, l) {
+                return r;
+            }
             if let Some(r) = CTLS.with(|m| m.get_mut(&hwnd).and_then(|model| handle(model, msg, w, l))) {
                 return r;
             }
@@ -377,7 +393,7 @@ fn handle(model: &mut Model, msg: u32, w: usize, l: isize) -> Option<isize> {
             Model::Tree(t) => tree(t, msg, w, l),
             Model::Count(n) => count(n, msg, w, l),
             Model::Rebar(n) => rebar(n, msg, w),
-            Model::Plain => None,
+            Model::Tip(_) | Model::Plain => None,
         }
     }
 }
@@ -887,6 +903,108 @@ unsafe fn count(n: &mut i32, msg: u32, w: usize, l: isize) -> Option<isize> {
         }
         _ => return None,
     })
+}
+
+/// The tooltip's messages a tracking tooltip needs (tooltips_class32.yaml): the tools
+/// (`TTM_ADDTOOLW`, `TTM_DELTOOLW`, `TTM_GETTOOLCOUNT`), and with `TTF_TRACK | TTF_ABSOLUTE`
+/// the window placed at `TTM_TRACKPOSITION` and shown and hidden by `TTM_TRACKACTIVATE`. It is
+/// an ordinary popup for the pointer (the default hit test: `HTCLIENT` inside it). The window
+/// calls run outside the lock of the models.
+fn tooltip(hwnd: usize, msg: u32, w: usize, l: isize) -> Option<isize> {
+    const TTM_TRACKACTIVATE: u32 = 0x411;
+    const TTM_TRACKPOSITION: u32 = 0x412;
+    const TTM_ADDTOOLA: u32 = 0x404;
+    const TTM_DELTOOLA: u32 = 0x405;
+    const TTM_GETTOOLCOUNT: u32 = 0x40D;
+    const TTM_ADDTOOLW: u32 = 0x432;
+    const TTM_DELTOOLW: u32 = 0x433;
+    const HWND_TOPMOST: usize = usize::MAX;
+    const SWP_NOSIZE: u32 = 0x1;
+    const SWP_NOZORDER: u32 = 0x4;
+    const SWP_NOACTIVATE: u32 = 0x10;
+    const SWP_SHOWWINDOW: u32 = 0x40;
+    const SW_HIDE: i32 = 0;
+    if !matches!(
+        msg,
+        TTM_TRACKACTIVATE
+            | TTM_TRACKPOSITION
+            | TTM_ADDTOOLA
+            | TTM_DELTOOLA
+            | TTM_GETTOOLCOUNT
+            | TTM_ADDTOOLW
+            | TTM_DELTOOLW
+    ) {
+        return None;
+    }
+    // TTTOOLINFOW (commctrl.h): cbSize, uFlags, hwnd, uId, rect, hinst, lpszText, ...
+    let tool = |l: isize| -> (u32, u64, u64, usize) {
+        if l == 0 {
+            return (u32::MAX, 0, 0, 0);
+        }
+        // SAFETY: the caller's TTTOOLINFO.
+        unsafe {
+            let size = rd::<u32>(l as usize, 0);
+            (size, rd_handle(l as usize, 8), rd_handle(l as usize, 8 + P), rd::<usize>(l as usize, 24 + 3 * P))
+        }
+    };
+    enum Then {
+        Reply(isize),
+        Show(i32, i32, usize),
+        Hide,
+        Move(i32, i32),
+    }
+    let then = CTLS.with(|m| {
+        let Some(Model::Tip(t)) = m.get_mut(&hwnd) else { return None };
+        Some(match msg {
+            TTM_ADDTOOLW | TTM_ADDTOOLA => {
+                let (size, owner, id, _) = tool(l);
+                Then::Reply(isize::from(t.add(size, P as u32, owner, id)))
+            }
+            TTM_DELTOOLW | TTM_DELTOOLA => {
+                let (_, owner, id, _) = tool(l);
+                t.delete(owner, id);
+                Then::Reply(0)
+            }
+            TTM_GETTOOLCOUNT => Then::Reply(t.count() as isize),
+            TTM_TRACKPOSITION => {
+                t.track = (lo(l), hi(l));
+                if t.active { Then::Move(lo(l), hi(l)) } else { Then::Reply(0) }
+            }
+            _ => {
+                t.active = w != 0;
+                if t.active {
+                    let (_, _, _, text) = tool(l);
+                    // LPSTR_TEXTCALLBACK (-1) and resource ids have no characters here.
+                    let chars = if text > 0xFFFF && text != usize::MAX && msg == TTM_TRACKACTIVATE {
+                        // SAFETY: the tool's NUL-terminated text.
+                        unsafe { wide_at(text).len() }
+                    } else {
+                        0
+                    };
+                    Then::Show(t.track.0, t.track.1, chars)
+                } else {
+                    Then::Hide
+                }
+            }
+        })
+    })?;
+    // SAFETY: plain window calls on the tooltip window.
+    unsafe {
+        match then {
+            Then::Reply(r) => return Some(r),
+            Then::Show(x, y, chars) => {
+                let (cx, cy) = Tooltip::window_size(chars);
+                SetWindowPos(hwnd, HWND_TOPMOST, x, y, cx, cy, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            }
+            Then::Hide => {
+                ShowWindow(hwnd, SW_HIDE);
+            }
+            Then::Move(x, y) => {
+                SetWindowPos(hwnd, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+    Some(0)
 }
 
 unsafe fn rebar(n: &mut i32, msg: u32, w: usize) -> Option<isize> {

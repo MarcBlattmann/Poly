@@ -96,6 +96,58 @@ pub mod class {
     }
 }
 
+/// The tooltip control (`tooltips_class32`) as a program that draws a tracking tooltip uses it
+/// (`tooltips_class32.yaml`): its tools, the tracking position and whether the tracking tooltip is
+/// shown. The window (shown, hidden, placed at the position) is `comctl32.dll`'s.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Tooltip {
+    /// The tools: (window, id).
+    pub tools: Vec<(u64, u64)>,
+    /// `TTM_TRACKPOSITION`: the window's top-left corner, screen coordinates.
+    pub track: (i32, i32),
+    /// `TTM_TRACKACTIVATE` 1 and not 0 since.
+    pub active: bool,
+}
+
+impl Tooltip {
+    /// The largest `TTTOOLINFOW` that version 5.82 takes, in a process with pointers of `ptr`
+    /// bytes: the structure up to `lParam` (`tool_size`: 72, the size with `lpReserved`, is
+    /// refused; 64, 48, 40 and 0 are taken on x64).
+    pub fn max_tool_size(ptr: u32) -> u32 {
+        // cbSize, uFlags, hwnd, uId, rect, hinst, lpszText, lParam
+        8 + 2 * ptr + 16 + 3 * ptr
+    }
+
+    /// `TTM_ADDTOOLW`: whether the tool was added (`size` is its `cbSize`); one tool per call,
+    /// the same window and id twice too.
+    pub fn add(&mut self, size: u32, ptr: u32, hwnd: u64, id: u64) -> bool {
+        if size > Self::max_tool_size(ptr) {
+            return false;
+        }
+        self.tools.push((hwnd, id));
+        true
+    }
+
+    /// `TTM_DELTOOLW`: the tool of `hwnd` and `id` goes (the message returns 0 either way).
+    pub fn delete(&mut self, hwnd: u64, id: u64) {
+        if let Some(i) = self.tools.iter().position(|&t| t == (hwnd, id)) {
+            self.tools.remove(i);
+        }
+    }
+
+    /// `TTM_GETTOOLCOUNT`.
+    pub fn count(&self) -> usize {
+        self.tools.len()
+    }
+
+    /// The size of the tooltip window for `chars` characters of text: the system font's average
+    /// width and height with the control's margins (an estimate: the control measures its text).
+    pub fn window_size(chars: usize) -> (i32, i32) {
+        let w = (chars.min(80) as i32) * 7 + 10;
+        (w.max(20), 19)
+    }
+}
+
 /// The progress bar (`msctls_progress32`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Progress {
@@ -536,6 +588,30 @@ impl TreeView {
     /// The text of an item.
     pub fn text(&self, item: TreeItem) -> Option<&[u16]> {
         self.position(item).map(|i| self.nodes[i].text.as_slice())
+    }
+}
+
+#[cfg(test)]
+mod tooltip_tests {
+    use super::Tooltip;
+
+    /// tooltips_class32.yaml `tool_size`, `delete`.
+    #[test]
+    fn tools_are_taken_up_to_the_5_82_size() {
+        let mut t = Tooltip::default();
+        assert!(!t.add(72, 8, 1, 1));
+        assert_eq!(t.count(), 0);
+        for (n, size) in [64u32, 48, 40, 0].into_iter().enumerate() {
+            assert!(t.add(size, 8, 1, n as u64));
+            assert_eq!(t.count(), n + 1);
+        }
+        t.delete(1, 64);
+        assert_eq!(t.count(), 4, "no such tool");
+        t.delete(1, 2);
+        assert_eq!(t.count(), 3);
+        // A 32-bit process: the same structure is 44 bytes.
+        assert_eq!(Tooltip::max_tool_size(4), 44);
+        assert!(Tooltip::window_size(3).0 > 5 && Tooltip::window_size(3).1 > 5);
     }
 }
 

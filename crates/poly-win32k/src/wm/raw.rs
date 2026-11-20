@@ -67,6 +67,10 @@ const MK_RBUTTON: u64 = 0x0002;
 const MK_SHIFT: u64 = 0x0004;
 const MK_CONTROL: u64 = 0x0008;
 const MK_MBUTTON: u64 = 0x0010;
+/// `WM_MOUSELEAVE`, `WM_NCMOUSELEAVE` (winuser.h).
+const WM_MOUSELEAVE: u32 = 0x02A3;
+const WM_NCMOUSELEAVE: u32 = 0x02A2;
+
 /// `Msg::private` of a mouse move a capture release synthesized.
 pub const SYNTHETIC_MOVE: u32 = 0x4D4F_5645;
 
@@ -358,6 +362,8 @@ impl Wm {
         ];
         let mut msgs: Vec<(u32, u64)> = Vec::new();
         if e.flags & MOUSEEVENTF_MOVE != 0 && self.cursor != old {
+            // Windows that answered HTTRANSPARENT are asked again at the new place.
+            self.pointer.transparent.clear();
             msgs.push((WM_MOUSEMOVE, 0));
         }
         for (flag, vk, down, msg) in buttons {
@@ -383,19 +389,40 @@ impl Wm {
     }
 
     /// TrackMouseEvent (TrackMouseEvent.yaml): TME_LEAVE is kept until the
-    /// cursor leaves the window (WM_MOUSELEAVE, posted at once when it is
-    /// not over it); TME_QUERY answers flags | window << 32.
+    /// cursor leaves the window's client area (WM_MOUSELEAVE, posted at once
+    /// when it is not over it), TME_NONCLIENT | TME_LEAVE until it leaves the
+    /// non-client area (WM_NCMOUSELEAVE); TME_QUERY answers flags | hover
+    /// time << 16 | window << 32 of the calling thread's tracking (the request
+    /// is per thread: `tracking_is_per_thread`). The private bits of
+    /// `pointer::TRACK_PRIVATE` come from `user32` itself.
     pub(super) fn track_mouse(&mut self, ctx: Ctx, hwnd: u32, flags: u32, hover: u32, fx: &mut Effects) -> Reply {
-        const TME_LEAVE: u32 = 0x2;
+        use pointer::{TME_LEAVE, TME_NONCLIENT, TRACK_NC_END, TRACK_NC_IMPLICIT, TRACK_TRANSPARENT};
         const TME_QUERY: u32 = 0x4000_0000;
         const TME_CANCEL: u32 = 0x8000_0000;
         const TME_HOVER: u32 = 0x1;
+        if flags & TRACK_TRANSPARENT != 0 {
+            self.pointer_transparent(ctx, hwnd, fx);
+            return Reply::Ok {};
+        }
+        if flags & TRACK_NC_END != 0 {
+            // The pointer went from the non-client area into the client area of the same
+            // window: WM_NCMOUSELEAVE after the move (WM_NCMOUSELEAVE.yaml `between_areas`).
+            if let Some(i) = self.tracking.iter().position(|t| t.0 == hwnd && t.1 & TME_NONCLIENT != 0) {
+                self.tracking.remove(i);
+                self.post_leave(ctx, hwnd, WM_NCMOUSELEAVE, fx);
+            }
+            return Reply::Ok {};
+        }
+        let me = self.input_key(ctx.key());
+        let mine = |wm: &Wm, h: u32| wm.thread_of(h).is_some_and(|t| wm.input_key(t) == me);
         if flags & TME_QUERY != 0 {
-            let leave = self.tracking.first().copied();
-            let mut fl = leave.map_or(0, |t| t.1);
+            let leave = self.tracking.iter().find(|t| t.1 & TRACK_NC_IMPLICIT == 0 && mine(self, t.0)).copied();
+            let mut fl = leave.map_or(0, |t| t.1 & (TME_LEAVE | TME_NONCLIENT));
             let mut win = leave.map_or(0, |t| t.0);
             let mut ms = 0;
-            if let Some((hw, h, _)) = self.hover {
+            if let Some((hw, h, _, _)) = self.hover
+                && mine(self, hw)
+            {
                 fl |= TME_HOVER;
                 win = hw;
                 ms = h;
@@ -404,6 +431,7 @@ impl Wm {
                 value: u64::from(fl & 0xFFFF) | (u64::from(ms & 0xFFFF) << 16) | (u64::from(win) << 32),
             };
         }
+        let nonclient = flags & (TME_NONCLIENT | TRACK_NC_IMPLICIT) != 0;
         if flags & TME_CANCEL != 0 {
             // TME_CANCEL removes the kinds of tracking named with it
             // (TrackMouseEvent.yaml `cancel`; Learn: "the caller should also
@@ -412,33 +440,49 @@ impl Wm {
                 self.hover = None;
             }
             if flags & TME_LEAVE != 0 {
-                self.tracking.retain(|t| t.0 != hwnd);
+                self.tracking.retain(|t| !(t.0 == hwnd && (t.1 & TME_NONCLIENT != 0) == nonclient));
             }
             return Reply::Ok {};
         }
         if flags & TME_HOVER != 0 {
-            self.hover = Some((hwnd, if hover == u32::MAX { 400 } else { hover }, ctx.now));
+            self.hover = Some((hwnd, if hover == u32::MAX { 400 } else { hover }, ctx.now, self.cursor));
         }
-        if flags & TME_LEAVE != 0 {
+        if flags & (TME_LEAVE | TRACK_NC_IMPLICIT) != 0 {
+            // The window the pointer's messages would go to: a disabled child passes them to its
+            // parent (Learn, "WindowFromPoint": hidden and disabled windows are not retrieved), as
+            // the moves themselves do (`mouse_target`), so a window whose client area a disabled
+            // child covers is over the pointer, not left at once.
             let (x, y) = self.cursor;
-            let under = self.window_from_point(x, y, false);
-            if under != hwnd {
-                self.post_leave(ctx, hwnd, fx);
-            } else if !self.tracking.iter().any(|t| t.0 == hwnd) {
-                self.tracking.push((hwnd, TME_LEAVE));
+            let under = self.window_from_point(x, y, true);
+            let over = under == hwnd && self.in_client(hwnd, (x, y)) != nonclient;
+            let kind = if nonclient { TME_LEAVE | TME_NONCLIENT | (flags & TRACK_NC_IMPLICIT) } else { TME_LEAVE };
+            let have = self.tracking.iter().position(|t| t.0 == hwnd && (t.1 & TME_NONCLIENT != 0) == nonclient);
+            if !over {
+                // Not over that area of the window: the leave at once (`leave_not_over`,
+                // WM_NCMOUSELEAVE.yaml `asked_outside`); a tracking there ends with it.
+                if let Some(i) = have {
+                    self.tracking.remove(i);
+                }
+                self.post_leave(ctx, hwnd, if nonclient { WM_NCMOUSELEAVE } else { WM_MOUSELEAVE }, fx);
+            } else if let Some(i) = have {
+                // A program's request makes DefWindowProc's own tracking its own.
+                if flags & TRACK_NC_IMPLICIT == 0 {
+                    self.tracking[i].1 = kind;
+                }
+            } else {
+                self.tracking.push((hwnd, kind));
             }
         }
         Reply::Ok {}
     }
 
-    fn post_leave(&mut self, ctx: Ctx, hwnd: u32, fx: &mut Effects) {
-        const WM_MOUSELEAVE: u32 = 0x02A3;
+    fn post_leave(&mut self, ctx: Ctx, hwnd: u32, msg: u32, fx: &mut Effects) {
         if let Some(t) = self.thread_of(hwnd) {
             let cursor = self.cursor;
             let q = self.queue(t);
             q.posted.push_back(Msg {
                 hwnd,
-                msg: WM_MOUSELEAVE,
+                msg,
                 w: 0,
                 l: 0,
                 time: ctx.now as u32,
@@ -451,8 +495,27 @@ impl Wm {
         }
     }
 
+    /// The desktop link's pointer left the Windows surfaces for the desktop or a window of
+    /// another kind, to screen point `to` (when the compositor said): as a move onto no window
+    /// of the session, the tracked windows get their WM_MOUSELEAVE / WM_NCMOUSELEAVE and a hover
+    /// ends (TrackMouseEvent.yaml `leave`); the cursor is there (a program that checks the leave
+    /// with `GetCursorPos` and `WindowFromPoint` sees it outside); no move is synthesized until
+    /// the pointer is back (`pointer`).
+    pub fn link_leave(&mut self, to: Option<(i32, i32)>, fx: &mut Effects) {
+        let ctx = Ctx { pid: 0, tid: 0, now: self.now };
+        self.pointer.away = true;
+        self.pointer.transparent.clear();
+        if let Some((x, y)) = to {
+            self.cursor = (x.clamp(0, self.screen.0 - 1), y.clamp(0, self.screen.1 - 1));
+        }
+        let at = self.cursor;
+        self.end_tracking(ctx, 0, at, fx);
+        self.hover = None;
+    }
+
     /// The desktop link's pointer at screen point (x, y) (ADR 0131): a move.
     pub fn link_pointer(&mut self, x: i32, y: i32, fx: &mut Effects) {
+        self.pointer.away = false;
         let (w, h) = self.screen;
         let ctx = Ctx { pid: 0, tid: 0, now: self.now };
         let e = InputEvent {
@@ -553,6 +616,9 @@ impl Wm {
     }
 
     pub(super) fn queue_mouse(&mut self, ctx: Ctx, msg: u32, extra: u64, fx: &mut Effects) {
+        if msg == WM_MOUSEMOVE {
+            self.pointer_moved();
+        }
         let (x, y) = self.cursor;
         let target = self.mouse_target(x, y);
         if target == 0 {
@@ -601,6 +667,21 @@ impl Wm {
         // messages (TrackMouseEvent.yaml `leave`).
         if msg == WM_MOUSEMOVE {
             self.end_tracking(ctx, target, (x, y), fx);
+            self.hover_moved(ctx, target, (x, y));
+        }
+    }
+
+    /// A move over the hovered window out of the hover rectangle around where the hover
+    /// started restarts the hover time there; a move inside it does not
+    /// (WM_MOUSEHOVER.yaml `rectangle`: 1 pixel keeps the time, 8 pixels restart it).
+    fn hover_moved(&mut self, ctx: Ctx, target: u32, at: (i32, i32)) {
+        let (hw, half) = (target, (pointer::HOVER_RECT.0 / 2, pointer::HOVER_RECT.1 / 2));
+        if let Some((h, ms, since, from)) = self.hover
+            && h == hw
+            && ((at.0 - from.0).abs() > half.0 || (at.1 - from.1).abs() > half.1)
+        {
+            let _ = since;
+            self.hover = Some((h, ms, ctx.now, at));
         }
     }
 
@@ -609,16 +690,27 @@ impl Wm {
     /// messages (leaving for the window's own frame counts: the tracking is
     /// of the client area; TrackMouseEvent.yaml `leave`, `nonclient`), and a
     /// hover that was not over the new place ends.
+    ///
+    /// The non-client tracking of a window ends when the pointer is over
+    /// another window (WM_NCMOUSELEAVE.yaml `covered`, `window_changes`);
+    /// moving into the same window's client area ends it in `user32`, which
+    /// knows the hit (`pointer::TRACK_NC_END`).
     fn end_tracking(&mut self, ctx: Ctx, target: u32, at: (i32, i32), fx: &mut Effects) {
         let outside = |wm: &Wm, h: u32| h != target || !wm.in_client(h, at);
         if !self.tracking.is_empty() {
-            let left: Vec<u32> = self.tracking.iter().filter(|t| outside(self, t.0)).map(|t| t.0).collect();
-            self.tracking.retain(|t| !left.contains(&t.0));
-            for h in left {
-                self.queue_leave(ctx, h, fx);
+            let left: Vec<(u32, u32)> = self
+                .tracking
+                .iter()
+                .filter(|t| if t.1 & pointer::TME_NONCLIENT != 0 { t.0 != target } else { outside(self, t.0) })
+                .copied()
+                .collect();
+            self.tracking.retain(|t| !left.contains(t));
+            for (h, f) in left {
+                let msg = if f & pointer::TME_NONCLIENT != 0 { WM_NCMOUSELEAVE } else { WM_MOUSELEAVE };
+                self.queue_leave(ctx, h, msg, fx);
             }
         }
-        if let Some((hw, _, _)) = self.hover
+        if let Some((hw, _, _, _)) = self.hover
             && outside(self, hw)
         {
             self.hover = None;
@@ -626,7 +718,7 @@ impl Wm {
     }
 
     /// Whether screen point `at` is in window `h`'s client area.
-    fn in_client(&self, h: u32, at: (i32, i32)) -> bool {
+    pub(super) fn in_client(&self, h: u32, at: (i32, i32)) -> bool {
         let Some(w) = self.get(u64::from(h)) else { return false };
         let (ox, oy) = self.client_origin(h);
         let c = w.client_rel;
@@ -683,23 +775,13 @@ impl Wm {
         }
     }
 
-    /// WM_MOUSELEAVE as an input message, after what is queued.
-    fn queue_leave(&mut self, ctx: Ctx, hwnd: u32, fx: &mut Effects) {
-        const WM_MOUSELEAVE: u32 = 0x02A3;
+    /// WM_MOUSELEAVE or WM_NCMOUSELEAVE as an input message, after what is queued.
+    fn queue_leave(&mut self, ctx: Ctx, hwnd: u32, msg: u32, fx: &mut Effects) {
         let Some(t) = self.thread_of(hwnd) else { return };
         let key = self.input_key(t);
         let cursor = self.cursor;
         let q = self.queue(key);
-        q.raw.push_back(Msg {
-            hwnd,
-            msg: WM_MOUSELEAVE,
-            w: 0,
-            l: 0,
-            time: ctx.now as u32,
-            x: cursor.0,
-            y: cursor.1,
-            private: 0,
-        });
+        q.raw.push_back(Msg { hwnd, msg, w: 0, l: 0, time: ctx.now as u32, x: cursor.0, y: cursor.1, private: 0 });
         fx.wake.push(key);
     }
 
@@ -707,7 +789,7 @@ impl Wm {
     /// the hover time (keys, client coordinates); the hover tracking ends.
     pub(super) fn check_hover(&mut self, ctx: Ctx, fx: &mut Effects) {
         const WM_MOUSEHOVER: u32 = 0x02A1;
-        let Some((hwnd, ms, since)) = self.hover else { return };
+        let Some((hwnd, ms, since, _)) = self.hover else { return };
         if ctx.now < since + u64::from(ms) {
             return;
         }
@@ -720,22 +802,33 @@ impl Wm {
         let key = self.input_key(t);
         let q = self.queue(key);
         q.posted.push_back(Msg { hwnd, msg: WM_MOUSEHOVER, w: keys, l, time: ctx.now as u32, x, y, private: 0 });
+        q.changed |= QS_POSTMESSAGE;
         fx.wake.push(key);
     }
 
     /// When the next hover message is due (ms from now), for the waits.
     pub(super) fn hover_due(&self, now: u64) -> Option<u64> {
-        self.hover.map(|(_, ms, since)| (since + u64::from(ms)).saturating_sub(now))
+        self.hover.map(|(_, ms, since, _)| (since + u64::from(ms)).saturating_sub(now))
     }
 
     /// Where a mouse event at (x, y) goes: the capture window of the
     /// foreground thread, else the window under the point.
+    ///
+    /// When the foreground thread has no capture, a capture of another of
+    /// our threads takes the pointer all the same (WM_MOUSELEAVE.yaml
+    /// `capture`: a window that was never activated, with the runner's window
+    /// in the foreground, gets the captured moves).
     pub(super) fn mouse_target(&self, x: i32, y: i32) -> u32 {
         if let Some(t) = self.thread_of(self.foreground()) {
             let cap = self.input_of(t).capture;
             if cap != 0 && self.is_window(u64::from(cap)) {
                 return cap;
             }
+        }
+        if let Some(cap) =
+            self.queues.values().map(|q| q.input.capture).find(|&c| c != 0 && self.is_window(u64::from(c)))
+        {
+            return cap;
         }
         self.window_from_point(x, y, true)
     }
@@ -769,7 +862,7 @@ impl Wm {
         };
         for t in tops {
             let Some(w) = self.get(u64::from(t)) else { continue };
-            if w.style & WS_VISIBLE == 0 || !inside(w, 0, 0) {
+            if w.style & WS_VISIBLE == 0 || !inside(w, 0, 0) || self.click_through(t, w) {
                 continue;
             }
             // The children of a disabled window are not hit: the point is
@@ -787,10 +880,12 @@ impl Wm {
                 if x < ox || y < oy || x >= ox + c.width() || y >= oy + c.height() {
                     break;
                 }
-                let next =
-                    cw.children.iter().copied().find(|&c| {
-                        self.get(u64::from(c)).is_some_and(|k| k.style & WS_VISIBLE != 0 && inside(k, ox, oy))
-                    });
+                // A child that answered HTTRANSPARENT passes the point to its parent.
+                let next = cw.children.iter().copied().find(|&c| {
+                    self.get(u64::from(c)).is_some_and(|k| {
+                        k.style & WS_VISIBLE != 0 && inside(k, ox, oy) && !self.pointer.transparent.contains(&c)
+                    })
+                });
                 match next {
                     Some(c)
                         if !(skip_disabled && self.get(u64::from(c)).is_some_and(|k| k.style & WS_DISABLED != 0)) =>

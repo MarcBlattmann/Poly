@@ -255,8 +255,9 @@ pub enum FromCompositor {
     Button { surface: SurfaceId, button: u16, pressed: bool, time: u32 },
     /// The wheel, in `WHEEL_DELTA` (120, `winuser.h`) units per notch.
     Axis { surface: SurfaceId, vertical: i32, horizontal: i32, time: u32 },
-    /// The pointer left the surface (and its frame).
-    Leave { surface: SurfaceId },
+    /// The pointer left the surface (and its frame), for the place (x, y) relative to the
+    /// surface's top left (as `Pointer`): win32k's cursor follows it there.
+    Leave { surface: SurfaceId, x: i32, y: i32 },
     /// A key (evdev code), for the focused surface.
     Key { code: u16, pressed: bool, time: u32 },
     /// The compositor made this surface the active one (0: none of win32k's).
@@ -663,7 +664,7 @@ impl Record for FromCompositor {
             Axis { surface, vertical, horizontal, time } => {
                 Out::new(out, kind::AXIS).u32(*surface).i32(*vertical).i32(*horizontal).u32(*time).done()
             }
-            Leave { surface } => Out::new(out, kind::LEAVE).u32(*surface).done(),
+            Leave { surface, x, y } => Out::new(out, kind::LEAVE).u32(*surface).i32(*x).i32(*y).done(),
             Key { code, pressed, time } => Out::new(out, kind::KEY).u16(*code).bool(*pressed).u32(*time).done(),
             Focus { surface } => Out::new(out, kind::FOCUS).u32(*surface).done(),
             Configure { surface, x, y, width, height } => {
@@ -691,7 +692,7 @@ impl Record for FromCompositor {
             kind::POINTER => Pointer { surface: b.u32()?, x: b.i32()?, y: b.i32()?, time: b.u32()? },
             kind::BUTTON => Button { surface: b.u32()?, button: b.u16()?, pressed: b.bool()?, time: b.u32()? },
             kind::AXIS => Axis { surface: b.u32()?, vertical: b.i32()?, horizontal: b.i32()?, time: b.u32()? },
-            kind::LEAVE => Leave { surface: b.u32()? },
+            kind::LEAVE => Leave { surface: b.u32()?, x: b.i32()?, y: b.i32()? },
             kind::KEY => Key { code: b.u16()?, pressed: b.bool()?, time: b.u32()? },
             kind::FOCUS => Focus { surface: b.u32()? },
             kind::CONFIGURE => {
@@ -844,7 +845,7 @@ mod tests {
             Pointer { surface: 1, x: -3, y: -12, time: 77 },
             Button { surface: 1, button: 0x110, pressed: true, time: 78 },
             Axis { surface: 1, vertical: -120, horizontal: 0, time: 79 },
-            Leave { surface: 1 },
+            Leave { surface: 1, x: -40, y: 900 },
             Key { code: 30, pressed: false, time: 80 },
             Focus { surface: 0 },
             Configure { surface: 1, x: 0, y: 25, width: 800, height: 600 },

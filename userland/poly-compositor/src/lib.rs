@@ -1036,8 +1036,17 @@ fn run(args: &[String]) -> Result<u8, String> {
         if let (Some(l), Some(d)) = (&mut winlink, &mut desk) {
             // Windows apps type with the desktop's keyboard layout (ADR 0209).
             l.set_layout(d.layout.name);
+            // Where the pointer went when it left a Windows surface: win32k's cursor follows it.
+            let (px, py) = server.pointer();
             for ev in core::mem::take(&mut d.foreign) {
-                l.input(&ev);
+                let at = match ev {
+                    poly_wayland::server::InternalEvent::Leave(w) => server.scene().window(w).map_or((0, 0), |win| {
+                        let (wx, wy) = win.position();
+                        (px.floor() - wx, py.floor() - wy)
+                    }),
+                    _ => (0, 0),
+                };
+                l.input(&ev, at);
             }
         }
         // Consent prompts Windows programs asked for (ADR 0222): the desktop shows them; without
