@@ -266,8 +266,9 @@ fn translated_matches_interpreted() {
         cpu.sp = LO + 2 * PAGE_SIZE + 4096;
         cpu.nzcv = rng.below(16) << 28;
         for v in cpu.v.iter_mut() {
-            *v = (u128::from(rng.next()) << 64) | u128::from(rng.next());
+            *v = (u128::from(random_fp(&mut rng)) << 64) | u128::from(random_fp(&mut rng));
         }
+        cpu.fpcr = if rng.below(8) == 0 { 1 << 25 } else { 0 };
         cpu.pc = LO;
         let mut ca = cpu.clone();
         let mut cb = cpu;
@@ -283,7 +284,14 @@ fn translated_matches_interpreted() {
         let mut db = alloc::vec![0u8; 3 * PAGE_SIZE as usize];
         ma.peek(LO + PAGE_SIZE, &mut da).unwrap();
         mb.peek(LO + PAGE_SIZE, &mut db).unwrap();
-        let ctx = || format!("iteration {it}: words {words:08x?} ({:?})", words.iter().map(|w| decode(*w)).collect::<Vec<_>>());
+        if sa == Stop::Budget || sb == Stop::Budget {
+            // A loop: the budget counts blocks in one engine, instructions in the other.
+            engine.flush();
+            continue;
+        }
+        let ctx = || {
+            format!("iteration {it}: words {words:08x?} ({:?})", words.iter().map(|w| decode(*w)).collect::<Vec<_>>())
+        };
         assert_eq!(sa, sb, "stop: {}", ctx());
         assert_eq!(ca.x, cb.x, "x registers: {}", ctx());
         assert_eq!((ca.sp, ca.pc), (cb.sp, cb.pc), "sp, pc: {}", ctx());
@@ -299,7 +307,9 @@ fn translated_matches_interpreted() {
     assert!(translated_any > compared / 4, "the translator took part");
 }
 
+#[cfg(all(target_arch = "x86_64", unix))]
 pub(crate) struct Rng(pub u64);
+#[cfg(all(target_arch = "x86_64", unix))]
 impl Rng {
     pub fn next(&mut self) -> u64 {
         let mut x = self.0;
@@ -314,6 +324,37 @@ impl Rng {
     }
 }
 
+#[cfg(all(target_arch = "x86_64", unix))]
+fn random_fp(rng: &mut Rng) -> u64 {
+    const D: [u64; 10] = [
+        0,
+        0x8000_0000_0000_0000,
+        0x3FF0_0000_0000_0000,
+        0x7FF0_0000_0000_0000,
+        0x7FF8_0000_0000_0001,
+        0x7FF0_0000_0000_0001,
+        0x0000_0000_0000_0001,
+        0x7FEF_FFFF_FFFF_FFFF,
+        0x43E0_0000_0000_0000,
+        0xC1E0_0000_0020_0000,
+    ];
+    const S: [u32; 8] = [0, 0x8000_0000, 0x3F80_0000, 0x7F80_0000, 0x7FC0_0001, 0x7F80_0001, 0x0000_0001, 0x4F00_0000];
+    match rng.below(5) {
+        0 => D[rng.below(10) as usize],
+        1 => u64::from(S[rng.below(8) as usize]) | (u64::from(S[rng.below(8) as usize]) << 32),
+        2 => {
+            // An ordinary double in a moderate range.
+            (0x3F00u64 + u64::from(rng.below(0x200))) << 52 | (rng.next() >> 12) | (u64::from(rng.below(2)) << 63)
+        }
+        3 => {
+            (u64::from(0x3C00_0000 | (rng.next() as u32 & 0x07FF_FFFF)) << 32)
+                | u64::from(0x3C00_0000 | (rng.next() as u32 & 0x07FF_FFFF))
+        }
+        _ => rng.next(),
+    }
+}
+
+#[cfg(all(target_arch = "x86_64", unix))]
 fn random_value(rng: &mut Rng) -> u64 {
     const EDGE: [u64; 12] = [
         0,
@@ -339,9 +380,38 @@ fn random_value(rng: &mut Rng) -> u64 {
 /// A random word from the classes the translator handles, with loads and
 /// stores based on x5 or x6 (pointing into the data pages), and branches
 /// that stay near.
+#[cfg(all(target_arch = "x86_64", unix))]
 fn random_word(rng: &mut Rng) -> u32 {
     let r = rng.next() as u32;
-    match rng.below(10) {
+    let (rd, rn, rm, ra) = (rng.below(32), rng.below(32), rng.below(32), rng.below(32));
+    let ft = rng.below(2) << 22;
+    match rng.below(14) {
+        // Scalar floating point.
+        10 => match rng.below(6) {
+            0 => 0x1E20_0800 | ft | (rm << 16) | (rng.below(9) << 12) | (rn << 5) | rd,
+            1 => 0x1E20_4000 | ft | (rng.below(6) << 15) | (rn << 5) | rd,
+            2 => {
+                0x1F00_0000
+                    | ft
+                    | (rng.below(2) << 21)
+                    | (rm << 16)
+                    | (rng.below(2) << 15)
+                    | (ra << 10)
+                    | (rn << 5)
+                    | rd
+            }
+            3 => 0x1E20_2000 | ft | (rm << 16) | (rn << 5) | (rng.below(4) << 3),
+            4 => 0x1E20_0C00 | ft | (rm << 16) | (rng.below(16) << 12) | (rn << 5) | rd,
+            _ => {
+                let op = [0x1E22_0000u32, 0x1E23_0000, 0x1E38_0000, 0x1E39_0000][rng.below(4) as usize];
+                op | (rng.below(2) << 31) | ft | (rn << 5) | rd
+            }
+        },
+        // Advanced SIMD three same and two-register miscellaneous.
+        11 => (r & 0x40E0_F800) | 0x0E20_0400 | (rng.below(2) << 29) | (rm << 16) | (rn << 5) | rd,
+        12 => (r & 0x40C1_F000) | 0x0E20_0800 | (rng.below(2) << 29) | (rn << 5) | rd,
+        // Moves between the register files, DUP, MOVI.
+        13 => (r & 0x601F_7800) | 0x0E00_0400 | (rn << 5) | rd,
         // Data processing, immediate and register.
         0..=2 => r & !(0xF << 25) | [0b1000u32, 0b1001, 0b0101, 0b1101][rng.below(4) as usize] << 25,
         // Flag setters and readers, often: ADDS/SUBS/ANDS (imm), CCMP, CSEL/CSINC, ADC/SBC.
@@ -351,8 +421,24 @@ fn random_word(rng: &mut Rng) -> u32 {
             match rng.below(6) {
                 0 => 0x7100_0000 | (rng.below(2) << 31) | (rng.below(64) << 10) | (rn << 5) | 31, // cmp imm
                 1 => 0x6B00_0000 | (rng.below(2) << 31) | (rng.below(32) << 16) | (rn << 5) | 31, // cmp reg
-                2 => 0x7A40_0800 | (rng.below(2) << 31) | (rng.below(32) << 16) | (rng.below(16) << 12) | (rn << 5) | rng.below(16), // ccmp imm
-                3 => 0x1A80_0000 | (rng.below(2) << 31) | (rng.below(4) << 29 & 0x4000_0000) | (rng.below(32) << 16) | (rng.below(16) << 12) | (rng.below(2) << 10) | (rn << 5) | rd, // csel/csinc/csinv/csneg
+                2 => {
+                    0x7A40_0800
+                        | (rng.below(2) << 31)
+                        | (rng.below(32) << 16)
+                        | (rng.below(16) << 12)
+                        | (rn << 5)
+                        | rng.below(16)
+                } // ccmp imm
+                3 => {
+                    0x1A80_0000
+                        | (rng.below(2) << 31)
+                        | (rng.below(4) << 29 & 0x4000_0000)
+                        | (rng.below(32) << 16)
+                        | (rng.below(16) << 12)
+                        | (rng.below(2) << 10)
+                        | (rn << 5)
+                        | rd
+                } // csel/csinc/csinv/csneg
                 4 => 0x1A00_0000 | (rng.below(2) << 31) | (rng.below(4) << 29) | (rng.below(32) << 16) | (rn << 5) | rd, // adc/adcs/sbc/sbcs
                 _ => 0x7200_0000 | (rng.below(2) << 31) | (rng.below(64) << 10) | (rn << 5) | rd & 0x3FF_FFFF, // ands imm (may be undefined)
             }
@@ -363,7 +449,14 @@ fn random_word(rng: &mut Rng) -> u32 {
             match rng.below(3) {
                 0 => 0x5400_0000 | (off << 5) | rng.below(15),
                 1 => 0x3400_0000 | (rng.below(2) << 31) | (rng.below(2) << 24) | (off << 5) | rng.below(31),
-                _ => 0x3600_0000 | (rng.below(2) << 31) | (rng.below(2) << 24) | (rng.below(32) << 19) | ((off & 0x3FFF) << 5) | rng.below(31),
+                _ => {
+                    0x3600_0000
+                        | (rng.below(2) << 31)
+                        | (rng.below(2) << 24)
+                        | (rng.below(32) << 19)
+                        | ((off & 0x3FFF) << 5)
+                        | rng.below(31)
+                }
             }
         }
         5 => 0x1400_0000 | (rng.below(2) << 31) | (rng.below(12)), // b / bl forward
@@ -379,5 +472,54 @@ fn random_word(rng: &mut Rng) -> u32 {
             // No literal loads (they read the code page) half of the time.
             w
         }
+    }
+}
+
+/// Which instructions the test programs execute that the translator leaves
+/// to the interpreter, by kind and count (runs the interpreter, any host).
+#[test]
+#[ignore = "a report"]
+fn untranslated_profile() {
+    use std::collections::BTreeMap;
+    let mut hist: BTreeMap<String, u64> = BTreeMap::new();
+    let mut total = 0u64;
+    let mut untranslated = 0u64;
+    for (_, file, _) in corpus() {
+        let mut p = crate::process::load(&file, 256 << 20, &["prog"]).unwrap();
+        let mut k = TestKernel::default();
+        loop {
+            let w = poly_a64::Memory::fetch(&mut p.mem, p.cpu.pc).unwrap();
+            let i = poly_a64::decode(w);
+            total += 1;
+            if !crate::translate::translatable(&i) {
+                untranslated += 1;
+                let name = format!("{i:?}");
+                let key: String = name.split([' ', '(']).next().unwrap_or("").into();
+                let key = match i {
+                    poly_a64::Inst::Vec3Same { op, .. } => format!("Vec3Same {op:?}"),
+                    poly_a64::Inst::Vec2Misc { op, .. } => format!("Vec2Misc {op:?}"),
+                    poly_a64::Inst::FpBinary { op, ft, .. } => format!("FpBinary {op:?} {ft:?}"),
+                    poly_a64::Inst::FpUnary { op, ft, .. } => format!("FpUnary {op:?} {ft:?}"),
+                    poly_a64::Inst::VecFp3 { op, .. } => format!("VecFp3 {op:?}"),
+                    _ => key,
+                };
+                *hist.entry(key).or_default() += 1;
+            }
+            match p.cpu.step(&mut p.mem) {
+                poly_a64::Outcome::Continue => {}
+                poly_a64::Outcome::Svc(imm) => {
+                    if k.svc(imm, &mut p.cpu, &mut p.mem).is_some() {
+                        break;
+                    }
+                }
+                o => panic!("{o:?}"),
+            }
+        }
+    }
+    let mut v: Vec<_> = hist.into_iter().collect();
+    v.sort_by_key(|e| core::cmp::Reverse(e.1));
+    std::println!("{untranslated} of {total} executed instructions untranslated");
+    for (k, n) in v.iter().take(40) {
+        std::println!("{n:>10} {k}");
     }
 }

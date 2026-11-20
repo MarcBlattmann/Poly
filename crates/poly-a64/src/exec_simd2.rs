@@ -40,11 +40,7 @@ fn int(x: u64, bits: u32, signed: bool) -> i128 {
 
 /// `SatQ`: the value saturated to `bits`, and whether it saturated.
 fn sat(v: i128, bits: u32, signed: bool) -> (u64, bool) {
-    let (lo, hi) = if signed {
-        (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1)
-    } else {
-        (0, (1i128 << bits) - 1)
-    };
+    let (lo, hi) = if signed { (-(1i128 << (bits - 1)), (1i128 << (bits - 1)) - 1) } else { (0, (1i128 << bits) - 1) };
     if v < lo {
         (lo as u64 & mask(bits), true)
     } else if v > hi {
@@ -178,7 +174,7 @@ fn rsqrts(f: Fmt, a: u64, b: u64, env: &mut FpEnv) -> u64 {
 fn recip_estimate(a: u64) -> u64 {
     let a = a * 2 + 1;
     let b = (1u64 << 19) / a;
-    (b + 1) / 2
+    b.div_ceil(2)
 }
 
 /// `RecipSqrtEstimate`.
@@ -188,7 +184,7 @@ fn recip_sqrt_estimate(a: u64) -> u64 {
     while a * (b + 1) * (b + 1) < (1 << 28) {
         b += 1;
     }
-    (b + 1) / 2
+    b.div_ceil(2)
 }
 
 /// `FPRecipEstimate` (round to nearest, no flush to zero).
@@ -239,7 +235,7 @@ fn recpe(f: Fmt, a: u64, env: &mut FpEnv) -> u64 {
 
 /// `FPRSqrtEstimate`.
 fn rsqrte(f: Fmt, a: u64, env: &mut FpEnv) -> u64 {
-        let neg = sign_of(f, a);
+    let neg = sign_of(f, a);
     if f.is_nan(a) {
         return fp::add(f, a, a, env);
     }
@@ -381,9 +377,13 @@ impl Cpu {
             Inst::VecDiff { op, unsigned, round, q, size, rd, rn, rm } => {
                 self.diff(op, unsigned, round, q, size, rd, rn, rm, None);
             }
-            Inst::VecElem { op, q, size, scalar, rd, rn, rm, index } => self.elem(op, q, size, scalar, rd, rn, rm, index),
+            Inst::VecElem { op, q, size, scalar, rd, rn, rm, index } => {
+                self.elem(op, q, size, scalar, rd, rn, rm, index)
+            }
             Inst::VecMisc2 { op, q, size, scalar, rd, rn } => self.misc2(op, q, size, scalar, rd, rn),
-            Inst::VecShift2 { op, q, size, scalar, shift, rd, rn } => self.shift2(op, q, size, scalar, u32::from(shift), rd, rn),
+            Inst::VecShift2 { op, q, size, scalar, shift, rd, rn } => {
+                self.shift2(op, q, size, scalar, u32::from(shift), rd, rn)
+            }
             Inst::Sha3 { op, rd, rn, rm, ra, imm } => {
                 let (n, m, a) = (self.v[rn as usize], self.v[rm as usize], self.v[ra as usize]);
                 let lanes = |f: &dyn Fn(u64, u64) -> u64| {
@@ -538,10 +538,18 @@ impl Cpu {
                 VFp2Op::Recpe => recpe(f, a, &mut env),
                 VFp2Op::Rsqrte => rsqrte(f, a, &mut env),
                 VFp2Op::Urecpe => {
-                    if a >> 31 == 0 { 0xFFFF_FFFF } else { recip_estimate(a >> 23) << 23 }
+                    if a >> 31 == 0 {
+                        0xFFFF_FFFF
+                    } else {
+                        recip_estimate(a >> 23) << 23
+                    }
                 }
                 VFp2Op::Ursqrte => {
-                    if a >> 30 == 0 { 0xFFFF_FFFF } else { recip_sqrt_estimate(a >> 23) << 23 }
+                    if a >> 30 == 0 {
+                        0xFFFF_FFFF
+                    } else {
+                        recip_sqrt_estimate(a >> 23) << 23
+                    }
                 }
                 VFp2Op::Fcvtl | VFp2Op::Fcvtn => 0,
             };
@@ -558,7 +566,18 @@ impl Cpu {
     /// Long, wide and narrow operations; `elem` replaces `Vm`'s lanes with one
     /// value (the by-element long forms).
     #[allow(clippy::too_many_arguments)]
-    fn diff(&mut self, op: DiffOp, unsigned: bool, round: bool, q: bool, size: u8, rd: Reg, rn: Reg, rm: Reg, elem: Option<u64>) {
+    fn diff(
+        &mut self,
+        op: DiffOp,
+        unsigned: bool,
+        round: bool,
+        q: bool,
+        size: u8,
+        rd: Reg,
+        rn: Reg,
+        rm: Reg,
+        elem: Option<u64>,
+    ) {
         let b = 8u32 << size;
         let w = 2 * b;
         let (n, m, d) = (self.v[rn as usize], self.v[rm as usize], self.v[rd as usize]);

@@ -108,14 +108,7 @@ pub(crate) fn int_three_same(w: u32, q: bool, u: bool, size: u8, scalar: bool) -
     };
     let sat = matches!(
         op,
-        V3Op::Sqadd
-            | V3Op::Uqadd
-            | V3Op::Sqsub
-            | V3Op::Uqsub
-            | V3Op::Sqshl
-            | V3Op::Uqshl
-            | V3Op::Sqrshl
-            | V3Op::Uqrshl
+        V3Op::Sqadd | V3Op::Uqadd | V3Op::Sqsub | V3Op::Uqsub | V3Op::Sqshl | V3Op::Uqshl | V3Op::Sqrshl | V3Op::Uqrshl
     );
     let shifts = matches!(op, V3Op::Srshl | V3Op::Urshl);
     let dmulh = matches!(op, V3Op::Sqdmulh | V3Op::Sqrdmulh);
@@ -166,11 +159,7 @@ pub(crate) fn two_misc(w: u32, q: bool, u: bool, size: u8, scalar: bool) -> Inst
     let a = bit(w, 23);
     let ft = fsz(w);
     let fp = |op: VFp2Op| {
-        if !scalar && ft == FpType::D && !q {
-            Inst::Undefined(w)
-        } else {
-            Inst::VecFp2 { op, q, ft, scalar, rd, rn }
-        }
+        if !scalar && ft == FpType::D && !q { Inst::Undefined(w) } else { Inst::VecFp2 { op, q, ft, scalar, rd, rn } }
     };
     let misc = |op: Misc2Op| Inst::VecMisc2 { op, q, size, scalar, rd, rn };
     match (u, opcode) {
@@ -209,10 +198,18 @@ pub(crate) fn two_misc(w: u32, q: bool, u: bool, size: u8, scalar: bool) -> Inst
         }
         (false, 0b10111) if !scalar => {
             // FCVTL: sz 0 = half to single (not implemented), 1 = single to double.
-            if ft == FpType::D { Inst::VecFp2 { op: VFp2Op::Fcvtl, q, ft, scalar, rd, rn } } else { Inst::Unsupported(w) }
+            if ft == FpType::D {
+                Inst::VecFp2 { op: VFp2Op::Fcvtl, q, ft, scalar, rd, rn }
+            } else {
+                Inst::Unsupported(w)
+            }
         }
         (false, 0b10110) if !scalar => {
-            if ft == FpType::D { Inst::VecFp2 { op: VFp2Op::Fcvtn, q, ft, scalar, rd, rn } } else { Inst::Unsupported(w) }
+            if ft == FpType::D {
+                Inst::VecFp2 { op: VFp2Op::Fcvtn, q, ft, scalar, rd, rn }
+            } else {
+                Inst::Unsupported(w)
+            }
         }
         // Integer.
         (_, 0b00010) if !scalar => {
@@ -414,7 +411,16 @@ pub(crate) fn by_element(w: u32, scalar: bool) -> Inst {
             if size != 2 {
                 return Inst::Undefined(w);
             }
-            Inst::VecElem { op, q, size: 2, scalar: false, rd, rn, rm: bits(w, 20, 16) as Reg, index: ((h << 1) | l) as u8 }
+            Inst::VecElem {
+                op,
+                q,
+                size: 2,
+                scalar: false,
+                rd,
+                rn,
+                rm: bits(w, 20, 16) as Reg,
+                index: ((h << 1) | l) as u8,
+            }
         }
         ElemOp::Long(DiffOp::Sqdmlal | DiffOp::Sqdmlsl | DiffOp::Sqdmull, _) if scalar => {
             // The scalar forms of the doubling long multiplies: not yet.

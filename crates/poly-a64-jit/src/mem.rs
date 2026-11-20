@@ -85,7 +85,7 @@ impl GuestMem {
     /// A window of `size` bytes (a multiple of 16 KiB) at guest address `lo`,
     /// owned and zero-filled. Nothing is mapped yet.
     pub fn new(lo: u64, size: u64) -> GuestMem {
-        assert!(lo % PAGE_SIZE == 0 && size % PAGE_SIZE == 0, "16 KiB aligned");
+        assert!(lo.is_multiple_of(PAGE_SIZE) && size.is_multiple_of(PAGE_SIZE), "16 KiB aligned");
         let mut data = vec![0u8; size as usize];
         let host = data.as_mut_ptr();
         GuestMem {
@@ -107,7 +107,7 @@ impl GuestMem {
     /// commit on demand), zero-filled, used by nothing else and valid for
     /// the lifetime of the returned value.
     pub unsafe fn from_raw(lo: u64, size: u64, host: *mut u8) -> GuestMem {
-        assert!(lo % PAGE_SIZE == 0 && size % PAGE_SIZE == 0, "16 KiB aligned");
+        assert!(lo.is_multiple_of(PAGE_SIZE) && size.is_multiple_of(PAGE_SIZE), "16 KiB aligned");
         GuestMem {
             lo,
             size,
@@ -154,7 +154,7 @@ impl GuestMem {
     }
 
     fn pages(&self, addr: u64, len: u64) -> Result<core::ops::Range<usize>, MapError> {
-        if addr % PAGE_SIZE != 0 || len % PAGE_SIZE != 0 {
+        if !addr.is_multiple_of(PAGE_SIZE) || !len.is_multiple_of(PAGE_SIZE) {
             return Err(MapError::Unaligned);
         }
         let off = addr.checked_sub(self.lo).ok_or(MapError::OutOfRange)?;

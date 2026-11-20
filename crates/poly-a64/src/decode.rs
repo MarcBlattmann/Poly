@@ -270,9 +270,7 @@ fn decode_branch_reg(w: u32) -> Inst {
         let rm = bits(w, 4, 0) as Reg;
         return match opc {
             // BRAAZ/BRABZ, BLRAAZ/BLRABZ: op4 must be 11111.
-            0b0000 | 0b0001 if rm == 31 => {
-                Inst::BranchAuth { link: opc == 1, ret: false, key_b, rn, modifier: None }
-            }
+            0b0000 | 0b0001 if rm == 31 => Inst::BranchAuth { link: opc == 1, ret: false, key_b, rn, modifier: None },
             // RETAA/RETAB: Rn and op4 are 11111; the modifier is SP.
             0b0010 if rn == 31 && rm == 31 => {
                 Inst::BranchAuth { link: false, ret: true, key_b, rn: 30, modifier: Some(31) }

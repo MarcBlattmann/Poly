@@ -124,7 +124,8 @@ fn read_object(obj: &[u8]) -> Result<(Vec<u8>, BTreeMap<String, u64>), String> {
             }
         } else if cmd == 0x2 {
             // LC_SYMTAB.
-            let (symoff, nsyms, stroff) = (u32_at(off + 8) as usize, u32_at(off + 12) as usize, u32_at(off + 16) as usize);
+            let (symoff, nsyms, stroff) =
+                (u32_at(off + 8) as usize, u32_at(off + 12) as usize, u32_at(off + 16) as usize);
             for k in 0..nsyms {
                 let e = symoff + 16 * k;
                 let strx = u32_at(e) as usize;
@@ -428,7 +429,9 @@ mod host {
     impl Map {
         fn new(len: usize, prot: libc::c_int, flags: libc::c_int) -> Result<Map, String> {
             // SAFETY: an anonymous private mapping; the result is checked.
-            let p = unsafe { libc::mmap(core::ptr::null_mut(), len, prot, libc::MAP_PRIVATE | libc::MAP_ANON | flags, -1, 0) };
+            let p = unsafe {
+                libc::mmap(core::ptr::null_mut(), len, prot, libc::MAP_PRIVATE | libc::MAP_ANON | flags, -1, 0)
+            };
             if p == libc::MAP_FAILED {
                 return Err(format!("mmap of {len} bytes failed"));
             }
@@ -592,7 +595,11 @@ mod host {
                 }
                 let mut diffs = Vec::new();
                 if host_run.end != poly.end {
-                    diffs.push(format!("end  host={:?} poly={:?} (base {base:#x})", rel(host_run.end, base), rel(poly.end, base)));
+                    diffs.push(format!(
+                        "end  host={:?} poly={:?} (base {base:#x})",
+                        rel(host_run.end, base),
+                        rel(poly.end, base)
+                    ));
                 }
                 let mut d = crate::diff_record(&host_run.rec, &poly.rec);
                 d.retain(|l| !l.starts_with("x18 "));
@@ -605,7 +612,10 @@ mod host {
                 if host_run.data != poly.data {
                     let first = host_run.data.iter().zip(&poly.data).position(|(a, b)| a != b).unwrap_or(0);
                     if !(WIN_OFF..WIN_OFF + 512).contains(&first) {
-                        diffs.push(format!("data differs outside the window at x5{:+}", first as i64 - (DATA / 2) as i64));
+                        diffs.push(format!(
+                            "data differs outside the window at x5{:+}",
+                            first as i64 - (DATA / 2) as i64
+                        ));
                     }
                 }
                 if diffs.is_empty() {

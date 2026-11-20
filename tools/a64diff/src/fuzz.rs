@@ -1245,7 +1245,17 @@ fn unaligned_atomic(rng: &mut Rng) -> Case {
     let rs = rng.reg_not(&[5]);
     let w = match rng.below(6) {
         // LDAR/STLR (o0 = 1), LDLAR/STLLR (o0 = 0)
-        0 => size << 30 | 0b001000 << 24 | 1 << 23 | rng.flag() << 22 | 0x1F << 16 | rng.flag() << 15 | 0x1F << 10 | 5 << 5 | rt,
+        0 => {
+            size << 30
+                | 0b001000 << 24
+                | 1 << 23
+                | rng.flag() << 22
+                | 0x1F << 16
+                | rng.flag() << 15
+                | 0x1F << 10
+                | 5 << 5
+                | rt
+        }
         // LDAPUR/STLUR with a small offset
         1 => {
             let opc = if size == 3 { rng.below(2) } else { rng.below(3) };

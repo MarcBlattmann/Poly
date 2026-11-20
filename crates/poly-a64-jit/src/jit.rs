@@ -119,6 +119,7 @@ struct Code {
     len: usize,
     used: usize,
     exit_routine: usize,
+    #[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
     entry_routine: usize,
 }
 
@@ -137,6 +138,7 @@ pub struct Engine {
     /// Most instructions per translated block.
     pub max_block: usize,
     ctx_arg: u64,
+    features: translate::Features,
 }
 
 impl Default for Engine {
@@ -157,6 +159,7 @@ impl Engine {
             stats: Stats::default(),
             max_block: 64,
             ctx_arg: 0,
+            features: translate::Features::default(),
         }
     }
 
@@ -195,6 +198,7 @@ impl Engine {
         unsafe { core::ptr::copy_nonoverlapping(a.buf.as_ptr(), base, a.buf.len()) };
         let used = (a.buf.len() + 15) & !15;
         e.code = Some(Code { base, len, used, exit_routine, entry_routine });
+        e.features = translate::Features::host();
         e
     }
 
@@ -257,14 +261,14 @@ impl Engine {
         while a < page_end && insts.len() < self.max_block {
             let Ok(w) = mem.fetch(a) else { break };
             let i = decode(w);
-            let stop = !translate::translatable(&i);
+            let stop = !translate::translatable_with(&i, self.features);
             insts.push(i);
             if stop {
                 break;
             }
             a += 4;
         }
-        let mut block = translate::translate(pc, &insts, code.exit_routine)?;
+        let mut block = translate::translate(pc, &insts, code.exit_routine, self.features)?;
         // Place it.
         let need = block.asm.buf.len();
         if code.used + need + 64 > code.len {
@@ -407,8 +411,7 @@ impl Engine {
         // `with_code` and follows the System V calling convention; the code
         // it runs only touches the Cpu, the guest window and the flag table
         // (bounds-checked), the context and its own stack frame.
-        let f: extern "sysv64" fn(*mut Ctx) -> u32 =
-            unsafe { core::mem::transmute(code.base.add(code.entry_routine)) };
+        let f: extern "sysv64" fn(*mut Ctx) -> u32 = unsafe { core::mem::transmute(code.base.add(code.entry_routine)) };
         let r = f(&mut ctx);
         self.stats.entries += 1;
         *left = ctx.budget.min(*left - 1);

@@ -116,17 +116,35 @@ pub(crate) fn cases() -> Vec<Case> {
     for &sz in &SIZES {
         for &a in &REGS {
             for &b in &REGS {
-                v.push((format!("mov {}, {}", name(a, sz), name(b, sz)), Box::new(move |s: &mut Asm| s.mov_rr(sz, a, b))));
+                v.push((
+                    format!("mov {}, {}", name(a, sz), name(b, sz)),
+                    Box::new(move |s: &mut Asm| s.mov_rr(sz, a, b)),
+                ));
             }
             for &(op, n) in &alus {
                 let b = REGS[(a as usize * 5 + op as usize) % 16];
-                v.push((format!("{n} {}, {}", name(a, sz), name(b, sz)), Box::new(move |s: &mut Asm| s.alu_rr(sz, op, a, b))));
+                v.push((
+                    format!("{n} {}, {}", name(a, sz), name(b, sz)),
+                    Box::new(move |s: &mut Asm| s.alu_rr(sz, op, a, b)),
+                ));
                 for imm in [1i32, -1, 127, -128, 0x1234_5678] {
-                    let imm = if sz == Sz::B { imm as i8 as i32 } else if sz == Sz::H { imm as i16 as i32 } else { imm };
-                    v.push((format!("{n} {}, {imm}", name(a, sz)), Box::new(move |s: &mut Asm| s.alu_ri(sz, op, a, imm))));
+                    let imm = if sz == Sz::B {
+                        imm as i8 as i32
+                    } else if sz == Sz::H {
+                        imm as i16 as i32
+                    } else {
+                        imm
+                    };
+                    v.push((
+                        format!("{n} {}, {imm}", name(a, sz)),
+                        Box::new(move |s: &mut Asm| s.alu_ri(sz, op, a, imm)),
+                    ));
                 }
             }
-            v.push((format!("test {}, {}", name(a, sz), name(R::R9, sz)), Box::new(move |s: &mut Asm| s.test_rr(sz, a, R::R9))));
+            v.push((
+                format!("test {}, {}", name(a, sz), name(R::R9, sz)),
+                Box::new(move |s: &mut Asm| s.test_rr(sz, a, R::R9)),
+            ));
             v.push((format!("not {}", name(a, sz)), Box::new(move |s: &mut Asm| s.not(sz, a))));
             v.push((format!("neg {}", name(a, sz)), Box::new(move |s: &mut Asm| s.neg(sz, a))));
             if sz != Sz::B {
@@ -135,10 +153,16 @@ pub(crate) fn cases() -> Vec<Case> {
                 v.push((format!("div {}", name(a, sz)), Box::new(move |s: &mut Asm| s.div(sz, a))));
                 v.push((format!("idiv {}", name(a, sz)), Box::new(move |s: &mut Asm| s.idiv(sz, a))));
                 let b = REGS[(a as usize + 3) % 16];
-                v.push((format!("imul {}, {}", name(a, sz), name(b, sz)), Box::new(move |s: &mut Asm| s.imul(sz, a, b))));
+                v.push((
+                    format!("imul {}, {}", name(a, sz), name(b, sz)),
+                    Box::new(move |s: &mut Asm| s.imul(sz, a, b)),
+                ));
                 v.push((format!("bsr {}, {}", name(a, sz), name(b, sz)), Box::new(move |s: &mut Asm| s.bsr(sz, a, b))));
                 for (cc, n) in [(Cc::E, "e"), (Cc::B, "b"), (Cc::G, "g"), (Cc::Np, "np")] {
-                    v.push((format!("cmov{n} {}, {}", name(a, sz), name(b, sz)), Box::new(move |s: &mut Asm| s.cmov(sz, cc, a, b))));
+                    v.push((
+                        format!("cmov{n} {}, {}", name(a, sz), name(b, sz)),
+                        Box::new(move |s: &mut Asm| s.cmov(sz, cc, a, b)),
+                    ));
                 }
                 v.push((format!("bt {}, 5", name(a, sz)), Box::new(move |s: &mut Asm| s.bt_ri(sz, a, 5))));
             }
@@ -148,7 +172,10 @@ pub(crate) fn cases() -> Vec<Case> {
             for (op, n) in [(Sh::Rol, "rol"), (Sh::Ror, "ror"), (Sh::Shl, "shl"), (Sh::Shr, "shr"), (Sh::Sar, "sar")] {
                 v.push((format!("{n} {}, cl", name(a, sz)), Box::new(move |s: &mut Asm| s.shift_cl(sz, op, a))));
                 for k in [1u8, 7] {
-                    v.push((format!("{n} {}, {k}", name(a, sz)), Box::new(move |s: &mut Asm| s.shift_ri(sz, op, a, k))));
+                    v.push((
+                        format!("{n} {}, {k}", name(a, sz)),
+                        Box::new(move |s: &mut Asm| s.shift_ri(sz, op, a, k)),
+                    ));
                 }
             }
         }
@@ -163,17 +190,35 @@ pub(crate) fn cases() -> Vec<Case> {
                 _ => -5,
             };
             v.push((format!("mov {} {ms}, {imm}", ptr(sz)), Box::new(move |s: &mut Asm| s.store_imm(sz, m, imm))));
-            v.push((format!("add {}, {} {ms}", name(r, sz), ptr(sz)), Box::new(move |s: &mut Asm| s.alu_rm(sz, Alu::Add, r, m))));
-            v.push((format!("sub {} {ms}, {}", ptr(sz), name(r, sz)), Box::new(move |s: &mut Asm| s.alu_mr(sz, Alu::Sub, m, r))));
+            v.push((
+                format!("add {}, {} {ms}", name(r, sz), ptr(sz)),
+                Box::new(move |s: &mut Asm| s.alu_rm(sz, Alu::Add, r, m)),
+            ));
+            v.push((
+                format!("sub {} {ms}, {}", ptr(sz), name(r, sz)),
+                Box::new(move |s: &mut Asm| s.alu_mr(sz, Alu::Sub, m, r)),
+            ));
             v.push((format!("cmp {} {ms}, 3", ptr(sz)), Box::new(move |s: &mut Asm| s.alu_mi(sz, Alu::Cmp, m, 3))));
-            v.push((format!("xchg {} {ms}, {}", ptr(sz), name(r, sz)), Box::new(move |s: &mut Asm| s.xchg_mr(sz, m, r))));
-            v.push((format!("lock cmpxchg {} {ms}, {}", ptr(sz), name(r, sz)), Box::new(move |s: &mut Asm| s.lock_cmpxchg(sz, m, r))));
-            v.push((format!("lock xadd {} {ms}, {}", ptr(sz), name(r, sz)), Box::new(move |s: &mut Asm| s.lock_xadd(sz, m, r))));
+            v.push((
+                format!("xchg {} {ms}, {}", ptr(sz), name(r, sz)),
+                Box::new(move |s: &mut Asm| s.xchg_mr(sz, m, r)),
+            ));
+            v.push((
+                format!("lock cmpxchg {} {ms}, {}", ptr(sz), name(r, sz)),
+                Box::new(move |s: &mut Asm| s.lock_cmpxchg(sz, m, r)),
+            ));
+            v.push((
+                format!("lock xadd {} {ms}, {}", ptr(sz), name(r, sz)),
+                Box::new(move |s: &mut Asm| s.lock_xadd(sz, m, r)),
+            ));
             if sz == Sz::D || sz == Sz::Q {
                 v.push((format!("lea {}, {ms}", name(r, sz)), Box::new(move |s: &mut Asm| s.lea(sz, r, m))));
             }
             if sz == Sz::B || sz == Sz::H {
-                v.push((format!("movzx {}, {} {ms}", name(r, Sz::D), ptr(sz)), Box::new(move |s: &mut Asm| s.load_zx(sz, r, m))));
+                v.push((
+                    format!("movzx {}, {} {ms}", name(r, Sz::D), ptr(sz)),
+                    Box::new(move |s: &mut Asm| s.load_zx(sz, r, m)),
+                ));
             }
             if sz != Sz::Q {
                 for to in [Sz::D, Sz::Q] {
@@ -181,22 +226,42 @@ pub(crate) fn cases() -> Vec<Case> {
                         continue;
                     }
                     let mn = if sz == Sz::D { "movsxd" } else { "movsx" };
-                    v.push((format!("{mn} {}, {} {ms}", name(r, to), ptr(sz)), Box::new(move |s: &mut Asm| s.load_sx(sz, to, r, m))));
+                    v.push((
+                        format!("{mn} {}, {} {ms}", name(r, to), ptr(sz)),
+                        Box::new(move |s: &mut Asm| s.load_sx(sz, to, r, m)),
+                    ));
                 }
             }
         }
     }
     for &a in &REGS {
         for &b in &[R::Rax, R::Rsp, R::Rsi, R::R8, R::R15] {
-            v.push((format!("movzx {}, {}", name(a, Sz::D), name(b, Sz::B)), Box::new(move |s: &mut Asm| s.zx_rr(Sz::B, a, b))));
-            v.push((format!("movzx {}, {}", name(a, Sz::D), name(b, Sz::H)), Box::new(move |s: &mut Asm| s.zx_rr(Sz::H, a, b))));
+            v.push((
+                format!("movzx {}, {}", name(a, Sz::D), name(b, Sz::B)),
+                Box::new(move |s: &mut Asm| s.zx_rr(Sz::B, a, b)),
+            ));
+            v.push((
+                format!("movzx {}, {}", name(a, Sz::D), name(b, Sz::H)),
+                Box::new(move |s: &mut Asm| s.zx_rr(Sz::H, a, b)),
+            ));
             for to in [Sz::D, Sz::Q] {
-                v.push((format!("movsx {}, {}", name(a, to), name(b, Sz::B)), Box::new(move |s: &mut Asm| s.sx_rr(Sz::B, to, a, b))));
-                v.push((format!("movsx {}, {}", name(a, to), name(b, Sz::H)), Box::new(move |s: &mut Asm| s.sx_rr(Sz::H, to, a, b))));
+                v.push((
+                    format!("movsx {}, {}", name(a, to), name(b, Sz::B)),
+                    Box::new(move |s: &mut Asm| s.sx_rr(Sz::B, to, a, b)),
+                ));
+                v.push((
+                    format!("movsx {}, {}", name(a, to), name(b, Sz::H)),
+                    Box::new(move |s: &mut Asm| s.sx_rr(Sz::H, to, a, b)),
+                ));
             }
-            v.push((format!("movsxd {}, {}", name(a, Sz::Q), name(b, Sz::D)), Box::new(move |s: &mut Asm| s.sx_rr(Sz::D, Sz::Q, a, b))));
+            v.push((
+                format!("movsxd {}, {}", name(a, Sz::Q), name(b, Sz::D)),
+                Box::new(move |s: &mut Asm| s.sx_rr(Sz::D, Sz::Q, a, b)),
+            ));
         }
-        for imm in [0u64, 1, 0xFFFF_FFFF, 0xFFFF_FFFF_FFFF_FFF0, 0x1_0000_0000, 0x8000_0000_0000_0000, 0x1234_5678_9ABC_DEF0] {
+        for imm in
+            [0u64, 1, 0xFFFF_FFFF, 0xFFFF_FFFF_FFFF_FFF0, 0x1_0000_0000, 0x8000_0000_0000_0000, 0x1234_5678_9ABC_DEF0]
+        {
             let text = if imm == 0 {
                 format!("xor {}, {}", name(a, Sz::D), name(a, Sz::D))
             } else if imm <= 0xFFFF_FFFF {
@@ -215,7 +280,10 @@ pub(crate) fn cases() -> Vec<Case> {
         v.push((format!("pop {}", name(a, Sz::Q)), Box::new(move |s: &mut Asm| s.pop(a))));
         v.push((format!("jmp {}", name(a, Sz::Q)), Box::new(move |s: &mut Asm| s.jmp_r(a))));
         v.push((format!("call {}", name(a, Sz::Q)), Box::new(move |s: &mut Asm| s.call_r(a))));
-        v.push((format!("test {}, 1048576", name(a, Sz::D)), Box::new(move |s: &mut Asm| s.test_ri(Sz::D, a, 1 << 20))));
+        v.push((
+            format!("test {}, 1048576", name(a, Sz::D)),
+            Box::new(move |s: &mut Asm| s.test_ri(Sz::D, a, 1 << 20)),
+        ));
         v.push((format!("test {}, 3", name(a, Sz::B)), Box::new(move |s: &mut Asm| s.test_ri(Sz::B, a, 3))));
     }
     for m in mems() {
@@ -240,12 +308,27 @@ pub(crate) fn cases() -> Vec<Case> {
     }
     for (d, sx) in [(0u8, 1u8), (9, 2), (3, 12), (15, 15)] {
         for (op, n) in [(0x58u8, "add"), (0x59, "mul"), (0x5C, "sub"), (0x5E, "div"), (0x51, "sqrt")] {
-            v.push((format!("{n}sd xmm{d}, xmm{sx}"), Box::new(move |s: &mut Asm| s.sse_scalar(true, op, Xmm(d), Xmm(sx)))));
-            v.push((format!("{n}ss xmm{d}, xmm{sx}"), Box::new(move |s: &mut Asm| s.sse_scalar(false, op, Xmm(d), Xmm(sx)))));
+            v.push((
+                format!("{n}sd xmm{d}, xmm{sx}"),
+                Box::new(move |s: &mut Asm| s.sse_scalar(true, op, Xmm(d), Xmm(sx))),
+            ));
+            v.push((
+                format!("{n}ss xmm{d}, xmm{sx}"),
+                Box::new(move |s: &mut Asm| s.sse_scalar(false, op, Xmm(d), Xmm(sx))),
+            ));
         }
         v.push((format!("ucomisd xmm{d}, xmm{sx}"), Box::new(move |s: &mut Asm| s.ucomis(true, Xmm(d), Xmm(sx)))));
         v.push((format!("ucomiss xmm{d}, xmm{sx}"), Box::new(move |s: &mut Asm| s.ucomis(false, Xmm(d), Xmm(sx)))));
-        for (op, n) in [(0xFEu8, "paddd"), (0xD4, "paddq"), (0xFC, "paddb"), (0xFB, "psubq"), (0xDB, "pand"), (0xEB, "por"), (0xEF, "pxor"), (0x74, "pcmpeqb")] {
+        for (op, n) in [
+            (0xFEu8, "paddd"),
+            (0xD4, "paddq"),
+            (0xFC, "paddb"),
+            (0xFB, "psubq"),
+            (0xDB, "pand"),
+            (0xEB, "por"),
+            (0xEF, "pxor"),
+            (0x74, "pcmpeqb"),
+        ] {
             v.push((format!("{n} xmm{d}, xmm{sx}"), Box::new(move |s: &mut Asm| s.sse_packed(op, Xmm(d), Xmm(sx)))));
         }
     }
@@ -256,10 +339,58 @@ pub(crate) fn cases() -> Vec<Case> {
     for &r in &REGS {
         v.push((format!("mov {}, 0", name(r, Sz::D)), Box::new(move |s: &mut Asm| s.mov_r32_imm(r, 0))));
     }
+    for &r in &REGS {
+        for x in [0u8, 9] {
+            for (d, n) in [(true, "sd"), (false, "ss")] {
+                for (w64, rn) in [(false, name(r, Sz::D)), (true, name(r, Sz::Q))] {
+                    v.push((
+                        format!("cvtsi2{n} xmm{x}, {rn}"),
+                        Box::new(move |s: &mut Asm| s.cvtsi2(d, w64, Xmm(x), r)),
+                    ));
+                    v.push((
+                        format!("cvtt{n}2si {rn}, xmm{x}"),
+                        Box::new(move |s: &mut Asm| s.cvtt2si(d, w64, r, Xmm(x))),
+                    ));
+                }
+            }
+            v.push((format!("movd xmm{x}, {}", name(r, Sz::D)), Box::new(move |s: &mut Asm| s.movd_xr(Xmm(x), r))));
+            v.push((format!("movd {}, xmm{x}", name(r, Sz::D)), Box::new(move |s: &mut Asm| s.movd_rx(r, Xmm(x)))));
+        }
+        for (sz, n) in [(Sz::B, "byte"), (Sz::H, "word"), (Sz::D, "dword"), (Sz::Q, "qword")] {
+            let _ = n;
+            let dst = if sz == Sz::Q { name(R::R9, Sz::Q) } else { name(R::R9, Sz::D) };
+            v.push((format!("crc32 {dst}, {}", name(r, sz)), Box::new(move |s: &mut Asm| s.crc32(sz, R::R9, r))));
+        }
+    }
+    for (d, a, b) in [(0u8, 1u8, 2u8), (9, 3, 12), (15, 15, 15), (2, 8, 1)] {
+        v.push((format!("cvtsd2ss xmm{d}, xmm{b}"), Box::new(move |s: &mut Asm| s.cvt_fp(true, Xmm(d), Xmm(b)))));
+        v.push((format!("cvtss2sd xmm{d}, xmm{b}"), Box::new(move |s: &mut Asm| s.cvt_fp(false, Xmm(d), Xmm(b)))));
+        for (op, n) in [(0xB9u8, "vfmadd231"), (0xBB, "vfmsub231"), (0xBD, "vfnmadd231"), (0xBF, "vfnmsub231")] {
+            v.push((
+                format!("{n}sd xmm{d}, xmm{a}, xmm{b}"),
+                Box::new(move |s: &mut Asm| s.vfma231(true, op, Xmm(d), Xmm(a), Xmm(b))),
+            ));
+            v.push((
+                format!("{n}ss xmm{d}, xmm{a}, xmm{b}"),
+                Box::new(move |s: &mut Asm| s.vfma231(false, op, Xmm(d), Xmm(a), Xmm(b))),
+            ));
+        }
+        for (op, n) in [
+            (0xF8u8, "psubb"),
+            (0xF9, "psubw"),
+            (0xFA, "psubd"),
+            (0xFD, "paddw"),
+            (0xDF, "pandn"),
+            (0x75, "pcmpeqw"),
+            (0x76, "pcmpeqd"),
+        ] {
+            v.push((format!("{n} xmm{d}, xmm{b}"), Box::new(move |s: &mut Asm| s.sse_packed(op, Xmm(d), Xmm(b)))));
+        }
+    }
     v.push(("cmc".into(), Box::new(|s: &mut Asm| s.cmc())));
     v.push(("ret".into(), Box::new(|s: &mut Asm| s.ret())));
     v.push(("cqo".into(), Box::new(|s: &mut Asm| s.cqo(Sz::Q))));
-    v.push(("cdq".into(), Box::new(|s: &mut Asm| s.cdq_()))) ;
+    v.push(("cdq".into(), Box::new(|s: &mut Asm| s.cdq_())));
     v.push(("ud2".into(), Box::new(|s: &mut Asm| s.ud2())));
     v
 }
@@ -388,7 +519,8 @@ fn object_text_and_symbols(obj: &[u8]) -> (Vec<u8>, BTreeMap<String, u64>) {
         }
         for i in 0..shnum {
             if u32_at(sh(i) + 4) == 2 {
-                let (o, s, link) = (u64_at(sh(i) + 0x18) as usize, u64_at(sh(i) + 0x20) as usize, u32_at(sh(i) + 0x28) as usize);
+                let (o, s, link) =
+                    (u64_at(sh(i) + 0x18) as usize, u64_at(sh(i) + 0x20) as usize, u32_at(sh(i) + 0x28) as usize);
                 let strtab = u64_at(sh(link) + 0x18) as usize;
                 for e in (o..o + s).step_by(24) {
                     if u16_at(e + 6) as usize == text_index {

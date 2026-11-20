@@ -811,6 +811,56 @@ impl Asm {
         self.sse_rr(if double { Some(0x66) } else { None }, false, &[0x0F, 0x2E], a.0, b.0);
     }
 
+    /// `cvtsi2sd`/`cvtsi2ss xmm, r32/r64` (`w64`: a 64-bit source).
+    pub fn cvtsi2(&mut self, double: bool, w64: bool, x: Xmm, r: R) {
+        self.sse_rr(Some(if double { 0xF2 } else { 0xF3 }), w64, &[0x0F, 0x2A], x.0, r.n());
+    }
+
+    /// `cvttsd2si`/`cvttss2si r32/r64, xmm` (truncating).
+    pub fn cvtt2si(&mut self, double: bool, w64: bool, r: R, x: Xmm) {
+        self.sse_rr(Some(if double { 0xF2 } else { 0xF3 }), w64, &[0x0F, 0x2C], r.n(), x.0);
+    }
+
+    /// `cvtsd2ss` (`to_single`) or `cvtss2sd xmm_d, xmm_s`.
+    pub fn cvt_fp(&mut self, to_single: bool, d: Xmm, s: Xmm) {
+        self.sse_rr(Some(if to_single { 0xF2 } else { 0xF3 }), false, &[0x0F, 0x5A], d.0, s.0);
+    }
+
+    /// `movd xmm, r32`.
+    pub fn movd_xr(&mut self, x: Xmm, r: R) {
+        self.sse_rr(Some(0x66), false, &[0x0F, 0x6E], x.0, r.n());
+    }
+
+    /// `movd r32, xmm`.
+    pub fn movd_rx(&mut self, r: R, x: Xmm) {
+        self.sse_rr(Some(0x66), false, &[0x0F, 0x7E], x.0, r.n());
+    }
+
+    /// `crc32 r32, r/m` with an 8, 16, 32 or 64-bit source (CRC-32C).
+    pub fn crc32(&mut self, sz: Sz, dst: R, src: R) {
+        if sz == Sz::H {
+            self.b(0x66);
+        }
+        self.b(0xF2);
+        let force = sz == Sz::B && (4..8).contains(&src.n());
+        self.rex(sz == Sz::Q, dst.hi(), 0, src.hi(), force);
+        let op = if sz == Sz::B { 0xF0 } else { 0xF1 };
+        self.buf.extend_from_slice(&[0x0F, 0x38, op]);
+        self.modrm_rr(dst.n(), src.n());
+    }
+
+    /// A scalar FMA3 instruction `vf*231sd`/`ss xmm_d, xmm_a, xmm_b`
+    /// (`d = ±(a * b) ± d`): `op` 0xB9 fmadd, 0xBB fmsub, 0xBD fnmadd, 0xBF
+    /// fnmsub. Registers 0 to 15.
+    pub fn vfma231(&mut self, double: bool, op: u8, d: Xmm, a: Xmm, b: Xmm) {
+        // VEX three-byte form: C4, R̄X̄B̄ mmmmm (0F38), W v̄v̄v̄v̄ L pp (66).
+        self.b(0xC4);
+        self.b((((d.0 >> 3) ^ 1) << 7) | (1 << 6) | (((b.0 >> 3) ^ 1) << 5) | 0b00010);
+        self.b((u8::from(double) << 7) | ((!a.0 & 15) << 3) | 0b01);
+        self.b(op);
+        self.modrm_rr(d.0, b.0);
+    }
+
     /// Packed integer or logic op `op xmm_d, xmm_s` with the 0x66 prefix:
     /// `op` is the second opcode byte (0xFE paddd, 0xD4 paddq, 0xFC paddb,
     /// 0xFD paddw, 0xFA psubd, 0xFB psubq, 0xF8 psubb, 0xF9 psubw, 0xDB

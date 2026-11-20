@@ -45,12 +45,51 @@ use alloc::vec::Vec;
 use core::mem::offset_of;
 
 use poly_a64::{
-    Addr, AtomOp, BfOp, Bit1Op, CmpRhs, Cond, Cpu, CselOp, Extend, Inst, LogOp, MemKind, MovOp, PairKind, Reg, Shift,
-    Width,
+    Addr, AtomOp, BfOp, Bit1Op, CmpRhs, Cond, Cpu, CselOp, Extend, Fp1Op, Fp2Op, FpRound, FpType, Inst, LogOp, MemKind,
+    MovOp, PairKind, Reg, Shift, V2Op, V3Op, Width,
 };
 
 use crate::mem::{CODE, PAGE_SIZE, R as PR, W as PW};
-use crate::x64::{Alu, Asm, Cc, Label, M, R, Sh, Sz, mem, mem_idx};
+use crate::x64::{Alu, Asm, Cc, Label, M, R, Sh, Sz, Xmm, mem, mem_idx};
+
+/// What the host CPU offers beyond x86-64's baseline (SSE2).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Features {
+    /// FMA3 (and the AVX state the OS saves): fused multiply-add.
+    pub fma: bool,
+    /// SSE4.2: the `crc32` instruction (CRC-32C).
+    pub sse42: bool,
+}
+
+impl Features {
+    /// The running CPU's features (x86-64 only; nothing elsewhere).
+    pub fn host() -> Features {
+        #[cfg(target_arch = "x86_64")]
+        {
+            // SAFETY: CPUID is available on every x86-64 CPU; XGETBV only when
+            // CPUID says OSXSAVE is set.
+            unsafe {
+                let l1 = core::arch::x86_64::__cpuid(1);
+                let osxsave = l1.ecx & (1 << 27) != 0;
+                let avx_state = if osxsave {
+                    let xcr0: u64;
+                    core::arch::asm!("xgetbv", in("ecx") 0u32, out("eax") _, out("edx") _, lateout("rax") xcr0, options(nomem, nostack));
+                    xcr0 & 6 == 6
+                } else {
+                    false
+                };
+                Features {
+                    fma: l1.ecx & (1 << 12) != 0 && l1.ecx & (1 << 28) != 0 && avx_state,
+                    sse42: l1.ecx & (1 << 20) != 0,
+                }
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            Features::default()
+        }
+    }
+}
 
 /// Exit codes in `eax` when translated code returns to the run loop.
 pub mod exit {
@@ -134,9 +173,35 @@ pub struct Block {
     pub exits: Vec<ExitSite>,
 }
 
-/// Can the translator handle this instruction?
-pub fn translatable(inst: &Inst) -> bool {
+/// Can the translator handle this instruction (on a CPU with `f`)?
+pub fn translatable_with(inst: &Inst, f: Features) -> bool {
     match *inst {
+        Inst::FpFused { ft, .. } => f.fma && ft != FpType::H,
+        Inst::Crc32 { c, .. } => c && f.sse42,
+        _ => translatable(inst),
+    }
+}
+
+/// Can the translator handle this instruction on any x86-64 CPU?
+pub fn translatable(inst: &Inst) -> bool {
+    let fp = |ft: FpType| ft != FpType::H;
+    match *inst {
+        Inst::FpBinary { op, ft, .. } => {
+            fp(ft) && matches!(op, Fp2Op::Add | Fp2Op::Sub | Fp2Op::Mul | Fp2Op::Div | Fp2Op::Nmul)
+        }
+        Inst::FpUnary { op, ft, .. } => fp(ft) && matches!(op, Fp1Op::Mov | Fp1Op::Abs | Fp1Op::Neg | Fp1Op::Sqrt),
+        Inst::FpCmp { ft, .. } | Inst::FpCondSel { ft, .. } | Inst::FpMovImm { ft, .. } => fp(ft),
+        Inst::FpCvt { from, to, .. } => fp(from) && fp(to),
+        Inst::IntToFp { ft, w, unsigned, fbits, .. } => fp(ft) && fbits == 0 && !(unsigned && w == Width::X),
+        Inst::FpToInt { ft, unsigned, round, fbits, .. } => fp(ft) && fbits == 0 && !unsigned && round == FpRound::Zero,
+        Inst::Vec3Same { op, size, .. } => match op {
+            V3Op::And | V3Op::Orr | V3Op::Eor | V3Op::Bic | V3Op::Add | V3Op::Sub => true,
+            V3Op::Cmeq => size < 3,
+            _ => false,
+        },
+        Inst::Vec2Misc { op, size, scalar, .. } => !scalar && (op == V2Op::Not || (op == V2Op::CmeqZ && size < 3)),
+        Inst::Movi { .. } | Inst::DupGen { .. } | Inst::MovToGen { .. } | Inst::InsGen { .. } => true,
+        Inst::DupElem { scalar, .. } => !scalar,
         Inst::AddSubImm { .. }
         | Inst::AddSubShifted { .. }
         | Inst::AddSubExt { .. }
@@ -170,8 +235,8 @@ pub fn translatable(inst: &Inst) -> bool {
         Inst::Hint { crm_op2 } => crm_op2 != 7, // XPACLRI changes x30
         Inst::Barrier { kind, .. } => kind != poly_a64::Barrier::Clrex,
         Inst::LoadStore { kind, size, addr, .. } => {
-            kind != MemKind::Prefetch || matches!(addr, Addr::Imm { .. } | Addr::Reg { .. } | Addr::Literal { .. })
-                && size <= 4
+            kind != MemKind::Prefetch
+                || matches!(addr, Addr::Imm { .. } | Addr::Reg { .. } | Addr::Literal { .. }) && size <= 4
         }
         Inst::LoadStorePair { .. } => true,
         Inst::Atomic { op, .. } => matches!(op, AtomOp::Add | AtomOp::Swp),
@@ -208,7 +273,14 @@ fn flag_use(inst: &Inst) -> (bool, bool, bool) {
         | Inst::LoadStorePair { .. }
         | Inst::Atomic { .. }
         | Inst::Cas { .. }
-        | Inst::Svc(_) => (false, false, true),
+        | Inst::Svc(_)
+        | Inst::FpBinary { .. }
+        | Inst::FpUnary { .. }
+        | Inst::FpFused { .. }
+        | Inst::FpCvt { .. }
+        | Inst::FpToInt { .. } => (false, false, true),
+        Inst::FpCmp { .. } => (false, true, true),
+        Inst::FpCondSel { .. } => (true, false, false),
         _ => (false, false, false),
     }
 }
@@ -230,9 +302,9 @@ struct Tr {
 /// `exit_routine` is the code-area offset of the routine that returns to the
 /// run loop with `eax` as exit code. Returns `None` if the first instruction
 /// cannot be translated.
-pub fn translate(pc: u64, insts: &[Inst], exit_routine: usize) -> Option<Block> {
+pub fn translate(pc: u64, insts: &[Inst], exit_routine: usize, feat: Features) -> Option<Block> {
     let mut n = 0;
-    while n < insts.len() && translatable(&insts[n]) {
+    while n < insts.len() && translatable_with(&insts[n], feat) {
         n += 1;
         if ends_block(&insts[n - 1]) {
             break;
@@ -695,7 +767,9 @@ impl Tr {
                 self.a.mov_imm(R::Rax, base.wrapping_add(offset as u64));
                 self.wr(rd, R::Rax, Width::X);
             }
-            Inst::Bitfield { w, op, rd, rn, immr, imms, wmask, tmask } => self.bitfield(w, op, rd, rn, immr, imms, wmask, tmask),
+            Inst::Bitfield { w, op, rd, rn, immr, imms, wmask, tmask } => {
+                self.bitfield(w, op, rd, rn, immr, imms, wmask, tmask)
+            }
             Inst::Extr { w, rd, rn, rm, lsb } => {
                 self.rd(R::Rax, rm, w);
                 if lsb != 0 {
@@ -957,8 +1031,296 @@ impl Tr {
                 }
                 self.wr(rs, R::Rax, if size == 3 { Width::X } else { Width::W });
             }
-            _ => unreachable!("translatable() admitted {inst:?}"),
+            Inst::Crc32 { size, rd, rn, rm, .. } => {
+                self.rd(R::Rax, rn, Width::W);
+                self.rd(R::Rcx, rm, Width::X);
+                self.a.crc32(size_sz(size), R::Rax, R::Rcx);
+                self.wr(rd, R::Rax, Width::W);
+            }
+            _ => {
+                if !self.fp_simd(pc, inst) {
+                    unreachable!("translatable() admitted {inst:?}");
+                }
+            }
         }
+    }
+
+    // ---- floating point and SIMD ----
+
+    fn fp_load(&mut self, x: Xmm, r: Reg, ft: FpType) {
+        if ft == FpType::D {
+            self.a.movsd_load(x, mem(RCPU, ov(r)));
+        } else {
+            self.a.movss_load(x, mem(RCPU, ov(r)));
+        }
+    }
+
+    /// Write the scalar in `x` to `Vd` (zeroing the rest), unless it is an
+    /// infinity or a NaN: then interpret the instruction (A64's NaN rules
+    /// and exception flags).
+    fn fp_store_checked(&mut self, pc: u64, x: Xmm, rd: Reg, ft: FpType) {
+        let slow = self.slow_label(pc);
+        let a = &mut self.a;
+        if ft == FpType::D {
+            a.movq_rx(R::Rax, x);
+            a.mov_rr(Sz::Q, R::Rcx, R::Rax);
+            a.shift_ri(Sz::Q, Sh::Shl, R::Rcx, 1);
+            a.shift_ri(Sz::Q, Sh::Shr, R::Rcx, 53);
+            a.alu_ri(Sz::D, Alu::Cmp, R::Rcx, 0x7FF);
+        } else {
+            a.movd_rx(R::Rax, x);
+            a.mov_rr(Sz::D, R::Rcx, R::Rax);
+            a.shift_ri(Sz::D, Sh::Shr, R::Rcx, 23);
+            a.alu_ri(Sz::D, Alu::And, R::Rcx, 0xFF);
+            a.alu_ri(Sz::D, Alu::Cmp, R::Rcx, 0xFF);
+        }
+        a.jcc(Cc::E, slow);
+        self.v_write64(rd, R::Rax);
+    }
+
+    /// `Vd` = the 64-bit value in `r`, upper half zero.
+    fn v_write64(&mut self, rd: Reg, r: R) {
+        self.a.store(Sz::Q, mem(RCPU, ov(rd)), r);
+        self.a.store_imm(Sz::Q, mem(RCPU, ov(rd) + 8), 0);
+    }
+
+    /// The low 64 bits of `Vn` replicated from an element value in `rax`
+    /// (`size`: log2 bytes), in `rax`.
+    fn replicate(&mut self, size: u8) {
+        let m = match size {
+            0 => {
+                self.a.zx_rr(Sz::B, R::Rax, R::Rax);
+                0x0101_0101_0101_0101u64
+            }
+            1 => {
+                self.a.zx_rr(Sz::H, R::Rax, R::Rax);
+                0x0001_0001_0001_0001
+            }
+            2 => {
+                self.a.mov_rr(Sz::D, R::Rax, R::Rax);
+                0x0000_0001_0000_0001
+            }
+            _ => return,
+        };
+        self.a.mov_imm(R::Rcx, m);
+        self.a.imul(Sz::Q, R::Rax, R::Rcx);
+    }
+
+    /// Store a 64-bit pattern in `rax` to `Vd`'s low half and, with `q`, its
+    /// high half too (else zero).
+    fn v_write_rep(&mut self, rd: Reg, q: bool) {
+        self.a.store(Sz::Q, mem(RCPU, ov(rd)), R::Rax);
+        if q {
+            self.a.store(Sz::Q, mem(RCPU, ov(rd) + 8), R::Rax);
+        } else {
+            self.a.store_imm(Sz::Q, mem(RCPU, ov(rd) + 8), 0);
+        }
+    }
+
+    /// Store `xmm0` to `Vd`, all 128 bits or (`!q`) the low half and zeros.
+    fn v_store_xmm0(&mut self, rd: Reg, q: bool) {
+        if q {
+            self.a.movdqu_store(mem(RCPU, ov(rd)), Xmm(0));
+        } else {
+            self.a.movq_rx(R::Rax, Xmm(0));
+            self.v_write64(rd, R::Rax);
+        }
+    }
+
+    /// The floating-point and SIMD instructions; false if not handled.
+    fn fp_simd(&mut self, pc: u64, inst: &Inst) -> bool {
+        let (x0, x1, x2) = (Xmm(0), Xmm(1), Xmm(2));
+        match *inst {
+            Inst::FpBinary { op, ft, rd, rn, rm } => {
+                let d = ft == FpType::D;
+                self.fp_load(x0, rn, ft);
+                self.fp_load(x1, rm, ft);
+                let code = match op {
+                    Fp2Op::Add => 0x58,
+                    Fp2Op::Sub => 0x5C,
+                    Fp2Op::Mul | Fp2Op::Nmul => 0x59,
+                    _ => 0x5E,
+                };
+                self.a.sse_scalar(d, code, x0, x1);
+                if op == Fp2Op::Nmul {
+                    // Negate after the check: flip the sign bit in the result word.
+                    self.fp_store_checked(pc, x0, rd, ft);
+                    let bit = if d { 63 } else { 31 };
+                    self.a.mov_imm(R::Rcx, 1u64 << bit);
+                    self.a.alu_mr(Sz::Q, Alu::Xor, mem(RCPU, ov(rd)), R::Rcx);
+                } else {
+                    self.fp_store_checked(pc, x0, rd, ft);
+                }
+            }
+            Inst::FpUnary { op, ft, rd, rn } => {
+                let d = ft == FpType::D;
+                match op {
+                    Fp1Op::Sqrt => {
+                        self.fp_load(x0, rn, ft);
+                        self.a.sse_scalar(d, 0x51, x0, x0);
+                        self.fp_store_checked(pc, x0, rd, ft);
+                    }
+                    _ => {
+                        let s = if d { Sz::Q } else { Sz::D };
+                        self.a.load(s, R::Rax, mem(RCPU, ov(rn)));
+                        let sign = if d { 1u64 << 63 } else { 1 << 31 };
+                        match op {
+                            Fp1Op::Abs => {
+                                self.a.mov_imm(R::Rcx, !sign & if d { u64::MAX } else { 0xFFFF_FFFF });
+                                self.a.alu_rr(s, Alu::And, R::Rax, R::Rcx);
+                            }
+                            Fp1Op::Neg => {
+                                self.a.mov_imm(R::Rcx, sign);
+                                self.a.alu_rr(s, Alu::Xor, R::Rax, R::Rcx);
+                            }
+                            _ => {}
+                        }
+                        self.v_write64(rd, R::Rax);
+                    }
+                }
+            }
+            Inst::FpFused { ft, neg_p, neg_a, rd, rn, rm, ra } => {
+                let d = ft == FpType::D;
+                self.fp_load(x0, ra, ft);
+                self.fp_load(x1, rn, ft);
+                self.fp_load(x2, rm, ft);
+                let op = match (neg_a, neg_p) {
+                    (false, false) => 0xB9, // a + n*m
+                    (false, true) => 0xBD,  // a - n*m
+                    (true, true) => 0xBF,   // -a - n*m
+                    (true, false) => 0xBB,  // n*m - a
+                };
+                self.a.vfma231(d, op, x0, x1, x2);
+                self.fp_store_checked(pc, x0, rd, ft);
+            }
+            Inst::FpCmp { ft, zero, rn, rm, .. } => {
+                let d = ft == FpType::D;
+                let slow = self.slow_label(pc);
+                self.fp_load(x0, rn, ft);
+                if zero {
+                    self.a.sse_packed(0xEF, x1, x1); // pxor: +0.0
+                } else {
+                    self.fp_load(x1, rm, ft);
+                }
+                self.a.ucomis(d, x0, x1);
+                // Unordered: the interpreter (FPSR.IOC rules of FCMP and FCMPE).
+                self.a.jcc(Cc::P, slow);
+                // Greater: 0010, less: 1000, equal: 0110.
+                self.a.mov_r32_imm(R::Rax, 0x2000_0000);
+                self.a.mov_r32_imm(R::Rcx, 0x8000_0000);
+                self.a.cmov(Sz::D, Cc::B, R::Rax, R::Rcx);
+                self.a.mov_r32_imm(R::Rcx, 0x6000_0000);
+                self.a.cmov(Sz::D, Cc::E, R::Rax, R::Rcx);
+                self.a.store(Sz::D, mem(RCPU, onzcv()), R::Rax);
+            }
+            Inst::FpCondSel { ft, rd, rn, rm, cond } => {
+                let s = if ft == FpType::D { Sz::Q } else { Sz::D };
+                self.a.load(s, R::Rax, mem(RCPU, ov(rn)));
+                self.a.load(s, R::Rcx, mem(RCPU, ov(rm)));
+                if let Some(cc) = self.cond(cond, None) {
+                    self.a.cmov(Sz::Q, cc.not(), R::Rax, R::Rcx);
+                }
+                self.v_write64(rd, R::Rax);
+            }
+            Inst::FpMovImm { rd, bits, .. } => {
+                self.a.mov_imm(R::Rax, bits);
+                self.v_write64(rd, R::Rax);
+            }
+            Inst::FpCvt { from, to, rd, rn } => {
+                self.fp_load(x1, rn, from);
+                self.a.cvt_fp(to == FpType::S, x0, x1);
+                self.fp_store_checked(pc, x0, rd, to);
+            }
+            Inst::IntToFp { ft, w, unsigned, rd, rn, .. } => {
+                self.rd(R::Rax, rn, w);
+                if w == Width::W && !unsigned {
+                    self.a.sx_rr(Sz::D, Sz::Q, R::Rax, R::Rax);
+                }
+                // A W source is now a non-negative or sign-extended 64-bit value.
+                self.a.cvtsi2(ft == FpType::D, true, x0, R::Rax);
+                if ft == FpType::D {
+                    self.a.movq_rx(R::Rax, x0);
+                } else {
+                    self.a.movd_rx(R::Rax, x0);
+                }
+                self.v_write64(rd, R::Rax);
+            }
+            Inst::FpToInt { ft, w, rd, rn, .. } => {
+                let slow = self.slow_label(pc);
+                self.fp_load(x0, rn, ft);
+                let w64 = w == Width::X;
+                self.a.cvtt2si(ft == FpType::D, w64, R::Rax, x0);
+                // The "integer indefinite" value: NaN or out of range (A64
+                // saturates); also a real minimum, which the interpreter gives too.
+                if w64 {
+                    self.a.mov_imm(R::Rcx, 1 << 63);
+                    self.a.alu_rr(Sz::Q, Alu::Cmp, R::Rax, R::Rcx);
+                } else {
+                    self.a.alu_ri(Sz::D, Alu::Cmp, R::Rax, i32::MIN);
+                }
+                self.a.jcc(Cc::E, slow);
+                self.wr(rd, R::Rax, w);
+            }
+            Inst::Vec3Same { op, q, size, scalar, rd, rn, rm } => {
+                let q = q && !scalar;
+                let (a, b) = if op == V3Op::Bic { (rm, rn) } else { (rn, rm) };
+                self.a.movdqu_load(x0, mem(RCPU, ov(a)));
+                self.a.movdqu_load(x1, mem(RCPU, ov(b)));
+                let code = match op {
+                    V3Op::And => 0xDB,
+                    V3Op::Orr => 0xEB,
+                    V3Op::Eor => 0xEF,
+                    V3Op::Bic => 0xDF, // pandn: NOT xmm0 AND xmm1 = n AND NOT m
+                    V3Op::Add => [0xFC, 0xFD, 0xFE, 0xD4][size as usize],
+                    V3Op::Sub => [0xF8, 0xF9, 0xFA, 0xFB][size as usize],
+                    _ => [0x74, 0x75, 0x76][size as usize], // pcmpeq
+                };
+                self.a.sse_packed(code, x0, x1);
+                self.v_store_xmm0(rd, q);
+            }
+            Inst::Vec2Misc { op, q, size, rd, rn, .. } => {
+                self.a.movdqu_load(x0, mem(RCPU, ov(rn)));
+                if op == V2Op::Not {
+                    self.a.sse_packed(0x76, x1, x1); // all ones
+                    self.a.sse_packed(0xEF, x0, x1);
+                } else {
+                    self.a.sse_packed(0xEF, x1, x1); // zero
+                    self.a.sse_packed([0x74, 0x75, 0x76][size as usize], x0, x1);
+                }
+                self.v_store_xmm0(rd, q);
+            }
+            Inst::Movi { q, rd, imm } => {
+                self.a.mov_imm(R::Rax, imm);
+                self.v_write_rep(rd, q);
+            }
+            Inst::DupGen { q, size, rd, rn } => {
+                self.rd(R::Rax, rn, Width::X);
+                self.replicate(size);
+                self.v_write_rep(rd, q);
+            }
+            Inst::DupElem { q, size, rd, rn, index, .. } => {
+                let off = ov(rn) + (i32::from(index) << size);
+                self.load_zx(size, R::Rax, mem(RCPU, off));
+                self.replicate(size);
+                self.v_write_rep(rd, q);
+            }
+            Inst::MovToGen { signed, w, size, rd, rn, index } => {
+                let off = ov(rn) + (i32::from(index) << size);
+                if signed {
+                    self.a.load_sx(size_sz(size), sz(w), R::Rax, mem(RCPU, off));
+                } else {
+                    self.load_zx(size, R::Rax, mem(RCPU, off));
+                }
+                self.wr(rd, R::Rax, w);
+            }
+            Inst::InsGen { size, rd, rn, index } => {
+                self.rd(R::Rax, rn, Width::X);
+                let off = ov(rd) + (i32::from(index) << size);
+                self.a.store(size_sz(size), mem(RCPU, off), R::Rax);
+            }
+            _ => return false,
+        }
+        true
     }
 
     /// Alignment rule of atomics (FEAT_LSE2): within one 16-byte block, or
