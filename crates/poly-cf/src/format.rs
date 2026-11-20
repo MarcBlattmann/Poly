@@ -236,7 +236,10 @@ fn read_args<A: Args>(pieces: &[Piece], args: &mut A) -> Vec<Value> {
         .map(|k| match k.unwrap_or(Kind::Int) {
             Kind::Int => Value::Int(args.int()),
             Kind::Double => Value::Double(args.double()),
-            Kind::LongDouble => Value::Double(args.long_double()),
+            Kind::LongDouble => {
+                let (m, se) = args.long_double();
+                Value::Double(printf::x87_to_f64(m, se))
+            }
         })
         .collect()
 }
