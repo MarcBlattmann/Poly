@@ -266,6 +266,151 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     Ok(())
 }
 
+/// The visible spec tests of libobjc built for x86-64
+/// (`tests/macos/libobjc/spec`, built by its `generate.sh`).
+const SPEC: &str = "tests/macos/libobjc/spec";
+
+/// The arm64 output macOS recorded for test `name` of `specs/macos/libobjc.A.dylib`.
+fn recorded(name: &str) -> Option<String> {
+    let dir = root().join("specs/macos/libobjc.A.dylib");
+    for entry in std::fs::read_dir(&dir).ok()?.flatten() {
+        let p = entry.path().join(format!("{name}.c"));
+        if !p.is_file() {
+            continue;
+        }
+        let text = std::fs::read_to_string(entry.path().join("macos.json")).ok()?;
+        let json: serde_json::Value = serde_json::from_str(&text).ok()?;
+        return json["tests"]
+            .as_array()?
+            .iter()
+            .find(|t| t["name"] == name)?["results"]["arm64"]["stdout"]
+            .as_str()
+            .map(str::to_string);
+    }
+    None
+}
+
+/// The outcome of one spec test on Poly.
+#[derive(Debug)]
+pub struct SpecResult {
+    pub name: String,
+    /// The wait status word.
+    pub status: Option<u32>,
+    /// Its protocol lines equal macOS's (arm64) recording.
+    pub matches: bool,
+    pub not_ok: Vec<String>,
+}
+
+/// Run every built spec test on Poly in one boot (the runner as init
+/// starts each as a child) and compare each with the recording.
+pub fn run_spec(kernel: &Path, syms: &Arc<Symbols>) -> Result<Vec<SpecResult>> {
+    let dir = root().join(SPEC);
+    let list = std::fs::read_to_string(dir.join("tests.txt")).map_err(|e| format!("{SPEC}/tests.txt: {e}"))?;
+    let names: Vec<&str> = list.lines().filter(|l| !l.is_empty()).collect();
+    let runner = std::fs::read(dir.join("runner")).map_err(|e| format!("{SPEC}/runner: {e}"))?;
+    let programs: Vec<(&str, &[u8])> = vec![("objc-spec-runner", &runner)];
+    let mut tree = Tree::default();
+    for (path, bytes) in libsystem::tree_files()? {
+        tree.files.push((path, 0o755, bytes));
+    }
+    let (path, bytes) = tree_file()?;
+    tree.files.push((path, 0o755, bytes));
+    for n in &names {
+        let b = std::fs::read(dir.join("bin").join(n)).map_err(|e| format!("{SPEC}/bin/{n}: {e}"))?;
+        tree.files.push((format!("bin/objc/{n}"), 0o755, b));
+    }
+    tree.files.push(("etc/objc-tests.txt".into(), 0o644, list.as_bytes().to_vec()));
+    let image =
+        initramfs::write(&root(), "poly-objc-spec-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))?;
+    let b = run_as_init(kernel, syms, &image, "objc-spec-runner", "runner: done")?;
+    let mut results = Vec::new();
+    let lines: Vec<&str> = b.output.lines().map(|l| l.trim_end_matches('\r')).collect();
+    for n in names {
+        let start = lines.iter().position(|l| *l == format!("test {n}"));
+        let end = lines.iter().position(|l| l.starts_with(&format!("exit {n} ")));
+        let (Some(s), Some(e)) = (start, end) else {
+            results.push(SpecResult { name: n.into(), status: None, matches: false, not_ok: Vec::new() });
+            continue;
+        };
+        let status = lines[e].rsplit(' ').next().and_then(|v| v.parse().ok());
+        let got: Vec<&str> = lines[s + 1..e]
+            .iter()
+            .copied()
+            .filter(|l| ["ok ", "not ok ", "value ", "summary "].iter().any(|p| l.starts_with(p)))
+            .collect();
+        let want = recorded(n).unwrap_or_default();
+        let want: Vec<&str> = want.lines().collect();
+        let not_ok = got.iter().filter(|l| l.starts_with("not ok ")).map(|l| l.to_string()).collect();
+        results.push(SpecResult { name: n.into(), status, matches: got == want, not_ok });
+    }
+    Ok(results)
+}
+
+/// Spec tests that cannot pass on Poly yet, and why (they are run and
+/// reported, not failed on). None of the reasons is in libobjc's own
+/// behaviour except the unwinder: the others are libSystem pieces or the
+/// BSD layer's `fork`.
+const SPEC_NOT_YET: &[(&str, &str)] = &[
+    ("impblock_basic", "imp_implementationWithBlock and the Blocks runtime (libsystem_blocks)"),
+    ("impblock_shared", "imp_implementationWithBlock and the Blocks runtime (libsystem_blocks)"),
+    ("exc_begincatch_rc", "caught exceptions: an unwinder (_Unwind_Resume, libunwind)"),
+    ("exc_begincatch_rethrow", "caught exceptions: an unwinder (_Unwind_Resume, libunwind)"),
+    ("exc_endcatch_leave", "caught exceptions: an unwinder (_Unwind_Resume, libunwind)"),
+    ("exc_endcatch_sequence", "caught exceptions: an unwinder (_Unwind_Resume, libunwind)"),
+    ("exc_throw_catch", "caught exceptions: an unwinder (_Unwind_Resume, libunwind)"),
+    ("arc_storeweak_arcweak", "its cleanups name _Unwind_Resume (libunwind)"),
+    ("syncexit_exceptions", "caught exceptions: an unwinder (_Unwind_Resume, libunwind)"),
+    ("syncenter_threads", "threads: pthread_create in Poly's libSystem"),
+    ("syncexit_recursive", "threads: pthread_create in Poly's libSystem"),
+    ("exc_throw_uncaught", "it forks a child (fork in the BSD layer)"),
+    ("msgsend_unrecognized", "it forks a child (fork in the BSD layer)"),
+    ("arc_poolpop_null", "it forks a child (fork in the BSD layer)"),
+    ("msgsend_tagged", "tagged pointers come from Foundation (dlopen)"),
+    ("msgsend_stret_basic", "dlsym in Poly's libSystem"),
+];
+
+/// Spec tests whose x86-64 build checks other things than the arm64 one
+/// the recording is of (the arm64 struct-return parts, BOOL encoded `c` on
+/// x86-64, as the sheets say): their own checks must pass, the text need
+/// not equal the arm64 recording.
+const X86_64_PARTS: &[&str] =
+    &["methodenc_nsobject", "msgsend_nil", "msgsendsuper2_args", "msgsendsuper2_stret_basic", "msgsend_stret_nil"];
+
+/// The boot test group `objc-spec`: every visible libobjc test on Poly;
+/// each must print what macOS printed, except the ones in [`SPEC_NOT_YET`].
+pub fn spec_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    eprintln!("==> boot test: the libobjc visible spec tests (x86-64 builds) with Poly's libobjc");
+    let results = run_spec(kernel, syms)?;
+    let mut failed = Vec::new();
+    let mut passed = 0;
+    for r in &results {
+        let own = r.status == Some(0) && r.not_ok.is_empty();
+        let ok = own && (r.matches || X86_64_PARTS.contains(&r.name.as_str()));
+        if ok {
+            passed += 1;
+        }
+        let known = SPEC_NOT_YET.iter().any(|(n, _)| *n == r.name);
+        eprintln!(
+            "    {} {} (status {:?}){}",
+            if ok { "pass" } else { "FAIL" },
+            r.name,
+            r.status,
+            r.not_ok.first().map(|l| format!(": {l}")).unwrap_or_default()
+        );
+        if !ok && !known {
+            failed.push(r.name.clone());
+        }
+    }
+    eprintln!(
+        "==> {passed} of {} libobjc spec tests pass ({} of them x86-64 parts); {} wait for: {}",
+        results.len(),
+        X86_64_PARTS.len(),
+        SPEC_NOT_YET.len(),
+        "the unwinder, threads, blocks, fork, dlopen"
+    );
+    if failed.is_empty() { Ok(()) } else { Err(format!("libobjc spec tests failing: {failed:?}")) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

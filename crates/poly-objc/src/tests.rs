@@ -177,6 +177,7 @@ fn run_time_classes() {
     let n2 = m.alloc(b"Sub2\0");
     assert!(!rt.allocate_class_pair(&mut m, sub, n2, s2, s2m), "an unregistered superclass");
     rt.register_class_pair(&m, sub);
+    assert_eq!(rt.class(sub).unwrap().instance_size, 16, "padded to whole pointers at registration");
     assert!(!rt.add_ivar(sub, m.alloc(b"y\0"), 0, 4, 2), "no ivars after registration");
 
     // Methods: add, replace, lookup through the superclass, exchange.

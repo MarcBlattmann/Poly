@@ -171,6 +171,8 @@ pub(crate) struct State {
     /// The object an `objc_autoreleaseReturnValue` handed over unpooled,
     /// per thread (the return-value handshake).
     pub handoff: alloc::collections::BTreeMap<u64, u64>,
+    /// `Ivar` records made by `class_getInstanceVariable`: (class, name) -> record.
+    pub ivars: alloc::collections::BTreeMap<(u64, u64), u64>,
 }
 
 static LOCKED: AtomicBool = AtomicBool::new(false);
@@ -218,6 +220,7 @@ pub(crate) fn lock() -> Guard {
                 pools: alloc::collections::BTreeMap::new(),
                 sync: SyncLocks::default(),
                 handoff: alloc::collections::BTreeMap::new(),
+                ivars: alloc::collections::BTreeMap::new(),
             });
         }
     }

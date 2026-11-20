@@ -96,6 +96,9 @@ pub struct Runtime {
     images: Vec<Image>,
     load_done: BTreeSet<u64>,
     cats_done: BTreeSet<u64>,
+    /// Classes in the order they were registered (an image's in its class
+    /// list's order).
+    order: Vec<u64>,
     /// Categories whose class is not known yet: (class, category, image).
     pending: Vec<(u64, u64, usize)>,
     empty: u64,
@@ -212,6 +215,7 @@ impl Runtime {
             self.read_class(m, meta, image);
         }
         self.by_name.insert(name_bytes, cls);
+        self.order.push(cls);
         // Categories that waited for this class.
         let waiting: Vec<(u64, u64, usize)> = self.pending.iter().copied().filter(|p| p.0 == cls).collect();
         self.pending.retain(|p| p.0 != cls);
@@ -576,8 +580,32 @@ impl Runtime {
             return;
         }
         c.registered = true;
+        // The instance size is fixed at a whole number of pointers (the
+        // allocateClassPair visible test: 8 + 4 grew to 16).
+        c.instance_size = c.instance_size.next_multiple_of(8);
         let name = c.name;
         self.by_name.insert(m.cstr(name), cls);
+        self.order.push(cls);
+    }
+
+    /// The classes image `image` defines, in its class list's order.
+    pub fn classes_of_image(&self, image: usize) -> Vec<u64> {
+        self.order.iter().copied().filter(|c| self.classes.get(c).is_some_and(|k| k.image == Some(image))).collect()
+    }
+
+    /// The instance variable `name` of `cls` or a superclass.
+    pub fn find_ivar(&self, m: &dyn Mem, cls: u64, name: &[u8]) -> Option<Ivar> {
+        let mut c = cls;
+        let mut guard = 0;
+        while c != 0 && guard < 4096 {
+            let k = self.classes.get(&c)?;
+            if let Some(i) = k.ivars.iter().find(|i| m.cstr(i.name) == name) {
+                return Some(*i);
+            }
+            c = k.superclass;
+            guard += 1;
+        }
+        None
     }
 
     // ---- protocols ------------------------------------------------------
@@ -585,6 +613,25 @@ impl Runtime {
     /// The protocol named `name`.
     pub fn protocol_named(&self, name: &[u8]) -> Option<u64> {
         self.protocols.get(name).copied()
+    }
+
+    /// Whether protocol `p` is `other` or includes it (by name, through
+    /// the protocols it extends).
+    pub fn protocol_includes(&self, m: &dyn Mem, p: u64, other: u64) -> bool {
+        let want = m.cstr(m.u64(other + abi::PROTO_NAME));
+        let mut todo = alloc::vec![p];
+        let mut seen = 0;
+        while let Some(q) = todo.pop() {
+            seen += 1;
+            if seen > 4096 {
+                break;
+            }
+            if m.cstr(m.u64(q + abi::PROTO_NAME)) == want {
+                return true;
+            }
+            todo.extend(abi::protocol_list(m, m.u64(q + abi::PROTO_PROTOCOLS)));
+        }
+        false
     }
 
     /// Whether `cls` (or a superclass) adopts `proto` or a protocol that

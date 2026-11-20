@@ -435,6 +435,73 @@ pub extern "C" fn method_exchangeImplementations(a: u64, b: u64) {
     lock().rt.exchange(a, b);
 }
 
+// ---- instance variables ---------------------------------------------------------
+
+/// `class_getInstanceVariable`: an `Ivar` is a record of name, type and
+/// offset (three words) the runtime makes on the first query and keeps.
+#[unsafe(no_mangle)]
+pub extern "C" fn class_getInstanceVariable(cls: u64, name: *const c_char) -> u64 {
+    if cls == 0 || name.is_null() {
+        return 0;
+    }
+    let n = cstr(name);
+    let mut g = lock();
+    let Some(iv) = g.rt.find_ivar(&Raw, cls, &n) else { return 0 };
+    if let Some(&h) = g.ivars.get(&(cls, iv.name)) {
+        return h;
+    }
+    let mut rec = [0u8; 24];
+    rec[0..8].copy_from_slice(&iv.name.to_le_bytes());
+    rec[8..16].copy_from_slice(&iv.types.to_le_bytes());
+    rec[16..24].copy_from_slice(&iv.offset.to_le_bytes());
+    let h = Raw.alloc(&rec);
+    g.ivars.insert((cls, iv.name), h);
+    h
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ivar_getName(iv: u64) -> *const c_char {
+    if iv == 0 { core::ptr::null() } else { Raw.u64(iv) as *const c_char }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ivar_getTypeEncoding(iv: u64) -> *const c_char {
+    if iv == 0 { core::ptr::null() } else { Raw.u64(iv + 8) as *const c_char }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ivar_getOffset(iv: u64) -> isize {
+    if iv == 0 { 0 } else { Raw.u64(iv + 16) as isize }
+}
+
+// ---- images ------------------------------------------------------------------------
+
+/// `objc_copyClassNamesForImage`: the names of the classes the image at
+/// `path` defines, in its class list's order, in a malloc'ed array.
+#[unsafe(no_mangle)]
+pub extern "C" fn objc_copyClassNamesForImage(path: *const c_char, out_count: *mut u32) -> *mut u64 {
+    let want = cstr(path);
+    let names: Vec<u64> = {
+        let g = lock();
+        let image = g.rt.images().iter().position(|im| Raw.cstr(im.path) == want);
+        image.map(|i| g.rt.classes_of_image(i).iter().filter_map(|&c| g.rt.class(c).map(|k| k.name)).collect())
+            .unwrap_or_default()
+    };
+    if !out_count.is_null() {
+        // SAFETY: the caller's count variable.
+        unsafe { *out_count = names.len() as u32 };
+    }
+    if names.is_empty() {
+        return core::ptr::null_mut();
+    }
+    // SAFETY: room for the names and a terminating NULL.
+    unsafe {
+        let p: *mut u64 = sys::calloc(names.len() + 1, 8).cast();
+        core::ptr::copy_nonoverlapping(names.as_ptr(), p, names.len());
+        p
+    }
+}
+
 // ---- protocols --------------------------------------------------------------
 
 #[unsafe(no_mangle)]
@@ -443,6 +510,11 @@ pub extern "C" fn objc_getProtocol(name: *const c_char) -> u64 {
         return 0;
     }
     lock().rt.protocol_named(&cstr(name)).unwrap_or(0)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn protocol_conformsToProtocol(p: u64, other: u64) -> i8 {
+    i8::from(p != 0 && other != 0 && lock().rt.protocol_includes(&Raw, p, other))
 }
 
 #[unsafe(no_mangle)]

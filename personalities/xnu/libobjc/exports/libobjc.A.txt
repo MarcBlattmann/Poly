@@ -15,6 +15,7 @@ _class_getClassMethod
 _class_getImageName
 _class_getInstanceMethod
 _class_getInstanceSize
+_class_getInstanceVariable
 _class_getMethodImplementation
 _class_getMethodImplementation_stret
 _class_getName
@@ -22,6 +23,9 @@ _class_getSuperclass
 _class_isMetaClass
 _class_replaceMethod
 _class_respondsToSelector
+_ivar_getName
+_ivar_getOffset
+_ivar_getTypeEncoding
 _method_exchangeImplementations
 _method_getImplementation
 _method_getName
@@ -38,6 +42,7 @@ _objc_autoreleaseReturnValue
 _objc_begin_catch
 _objc_claimAutoreleasedReturnValue
 _objc_constructInstance
+_objc_copyClassNamesForImage
 _objc_copyWeak
 _objc_destroyWeak
 _objc_destructInstance
@@ -87,6 +92,7 @@ _object_getClass
 _object_getClassName
 _object_isClass
 _object_setClass
+_protocol_conformsToProtocol
 _protocol_getName
 _sel_getName
 _sel_getUid

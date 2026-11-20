@@ -1707,6 +1707,8 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // An Objective-C program with Poly's own libobjc.A.dylib (libobjc.rs,
     // ADR 0259).
     ("objc", libobjc::boot_test),
+    // The libobjc visible spec tests on Poly in one boot (libobjc.rs, ADR 0259).
+    ("objc-spec", libobjc::spec_boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
@@ -1871,6 +1873,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "macho-mach",
             "libsystem",
             "objc",
+            "objc-spec",
             "busybox",
             "rootdisk",
             "toolkits",
