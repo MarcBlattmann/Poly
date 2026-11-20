@@ -48,7 +48,6 @@ poly_win32_rt::fail_exports!(
     [
         ClosePackageInfo,
         FindPackagesByPackageFamily,
-        GetPackageFamilyName,
         GetPackageInfo,
         GetPackagePathByFullName,
         GetPackagesByPackageFamily,
@@ -68,14 +67,7 @@ poly_win32_rt::fail_exports!(
 poly_win32_rt::fail_exports!(
     "kernel32",
     value(15700),
-    [
-        GetCurrentApplicationUserModelId,
-        GetCurrentPackageFamilyName,
-        GetCurrentPackageFullName,
-        GetCurrentPackageId,
-        GetCurrentPackageInfo,
-        GetPackageFullName,
-    ]
+    [GetCurrentApplicationUserModelId, GetCurrentPackageInfo, GetPackageFullName,]
 );
 
 poly_win32_rt::fail_exports!(

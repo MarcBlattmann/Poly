@@ -112,11 +112,13 @@ What stops them are functions that **exist as fail-only stubs**. Their imports c
    - `comctl32` `LoadIconMetric` (ordinal 381) and `LoadIconWithScaleDown` (380): Notepad++'s icon error.
    - `TaskDialogIndirect`: not exported.
    - `CoCreateInstance` of the MMDevice enumerator: audio (the audio track, ADR 0244).
-9. **Tooling.**
-   - `win-app` boots QEMU's default CPU model (no SSE4.2, no AVX). Programs that check CPU features (Paint.NET, many
-     games, .NET's own checks) refuse to run; `POLY_QEMU_CPU=host` works.
-   - `win-app` cannot run the program an installer installed in the same boot: `--then` reruns the same executable.
-     An installer survey needs a `--then-exe <path>`.
+9. **Tooling** (both fixed in W3, ADR 0255).
+   - `win-app` booted QEMU's default CPU model (no SSE4.2, no AVX). Programs that check CPU features (Paint.NET, many
+     games, .NET's own checks) refused to run. Now `win-app`, the desktop and the other boots that run programs use
+     `-cpu host` on a hypervisor and `max` under TCG.
+   - `win-app` could not run the program an installer installed in the same boot: `--then` reruns the same
+     executable. Now `--then-exe "PATH|ARGS"` runs a program by its Windows path after the previous run (and
+     `launch:N` starts it on the desktop).
 
 ## 4. Recommended batches
 
@@ -149,15 +151,17 @@ Sizes as in `chrome-installer-plan.md`:
 
 ### Owner decisions this raises
 
-1. **.NET Framework** (W6). Squirrel-installed apps need it (Discord, Slack, many classic Electron installers). Options:
+1. **.NET Framework** (W6). **Open question, deferred until the owner is back** (coordinator, 2026-11-20).
+   Squirrel-installed apps need it (Discord, Slack, many classic Electron installers). Options:
    - build a CLR, which is very large;
    - support Squirrel apps by unpacking their `.nupkg` in Poly's installer (a Poly-specific route, like the
      Chrome-installer survey's "route B"; it breaks Squirrel's own update);
    - skip them.
-2. **Runtime DLLs** (W4). Poly writes its own `msvcp140_1/_2` and ICU subsets (clean room), rather than asking users to
-   install Microsoft's redistributable. Confirm.
-3. **The CPU model Poly's desktop boots with** (`cargo xtask desktop` and the release image). With QEMU's default model,
-   programs that need SSE4.2 or AVX refuse to run.
+2. **Runtime DLLs** (W4). **Decided (coordinator, 2026-11-20): yes.** Poly writes its own `msvcp140_1/_2` and ICU subset,
+   clean room from spec sheets, rather than asking users to install Microsoft's redistributable.
+3. **The CPU model Poly's desktop boots with.** **Decided (coordinator, 2026-11-20).** The desktop, the release image and the test
+   tools boot with `-cpu host` on a hypervisor (KVM, WHPX, HVF) and QEMU's `max` under TCG, so programs that need
+   SSE4.2 or AVX run (W3, ADR 0255). The kernel boot tests keep QEMU's default model.
 
 ## 5. Not covered
 

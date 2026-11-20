@@ -66,6 +66,7 @@ poly-ldr = { path = "../crates/poly-ldr" }
 poly-personality-nt = { path = "../personalities/nt" }
 # The desktop link's records and device numbers (/dev/win32k, ADR 0131).
 poly-win32k = { path = "../crates/poly-win32k" }
+poly-mach = { path = "../crates/poly-mach" }
 poly-personality-xnu = { path = "../personalities/xnu" }
 poly-dyld = { path = "../crates/poly-dyld" }
 poly-virtio = { path = "../crates/poly-virtio" }

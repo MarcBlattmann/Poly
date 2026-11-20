@@ -10,7 +10,10 @@ use super::{H, SYS, call, info};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use poly_win32_gui::{SpinLock, set_last_error, wide};
-use poly_win32k::menu::{self as mn, Info, InfoIn, Item, MENUINFO_SIZE, MII_SIZE, MII_SIZE_SHORT, Menus, Sel};
+use poly_win32k::menu::{
+    self as mn, Info, InfoIn, Item, MENUINFO_SIZE, MI_BACK, MI_DATA, MI_HELP, MII_CCH, MII_CHECKED, MII_DATA, MII_ITEM,
+    MII_SIZE, MII_SIZE_SHORT, MII_SUB, MII_TYPE_DATA, MII_UNCHECKED, Menus, Sel,
+};
 use poly_win32k::metrics;
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::user as u;
@@ -280,9 +283,10 @@ unsafe fn rd32(p: *const u8, o: usize) -> u32 {
     unsafe { (p.add(o) as *const u32).read_unaligned() }
 }
 
-unsafe fn rd64(p: *const u8, o: usize) -> u64 {
+/// A pointer-sized field (8 bytes on x64, 4 in a 32-bit process).
+unsafe fn rdp(p: *const u8, o: usize) -> usize {
     // SAFETY: inside the caller's structure.
-    unsafe { (p.add(o) as *const u64).read_unaligned() }
+    unsafe { (p.add(o) as *const usize).read_unaligned() }
 }
 
 unsafe fn wr32(p: *mut u8, o: usize, v: u32) {
@@ -290,14 +294,13 @@ unsafe fn wr32(p: *mut u8, o: usize, v: u32) {
     unsafe { (p.add(o) as *mut u32).write_unaligned(v) }
 }
 
-unsafe fn wr64(p: *mut u8, o: usize, v: u64) {
+unsafe fn wrp(p: *mut u8, o: usize, v: usize) {
     // SAFETY: inside the caller's structure.
-    unsafe { (p.add(o) as *mut u64).write_unaligned(v) }
+    unsafe { (p.add(o) as *mut usize).write_unaligned(v) }
 }
 
-/// A `MENUITEMINFOW` read (`winuser.h`: cbSize 0, fMask 4, fType 8, fState 12, wID 16,
-/// hSubMenu 24, hbmpChecked 32, hbmpUnchecked 40, dwItemData 48, dwTypeData 56, cch 64,
-/// hbmpItem 72).
+/// A `MENUITEMINFOW` read (`winuser.h`: cbSize 0, fMask 4, fType 8, fState 12, wID 16, then the
+/// pointer fields at `MII_SUB` ... `MII_ITEM`: 24..72 on x64, 20..44 in a 32-bit process).
 pub(crate) unsafe fn read_info(p: *const u8, ansi: bool) -> Result<InfoIn, u32> {
     if p.is_null() {
         return Err(ERROR_INVALID_PARAMETER);
@@ -315,7 +318,7 @@ pub(crate) unsafe fn read_info(p: *const u8, ansi: bool) -> Result<InfoIn, u32> 
             return Err(ERROR_INVALID_PARAMETER);
         }
         let ftype = rd32(p, 8);
-        let type_data = rd64(p, 56) as usize;
+        let type_data = rdp(p, MII_TYPE_DATA);
         let string_type = ftype & (mn::MFT_BITMAP | mn::MFT_OWNERDRAW | mn::MFT_SEPARATOR) == 0;
         let wants_text = mask & mn::MIIM_STRING != 0 || (mask & mn::MIIM_TYPE != 0 && string_type);
         Ok(InfoIn {
@@ -323,12 +326,12 @@ pub(crate) unsafe fn read_info(p: *const u8, ansi: bool) -> Result<InfoIn, u32> 
             ftype,
             state: rd32(p, 12),
             id: rd32(p, 16),
-            sub: rd64(p, 24) as u32,
-            hbm_checked: rd64(p, 32) as usize,
-            hbm_unchecked: rd64(p, 40) as usize,
-            data: rd64(p, 48) as usize,
+            sub: rdp(p, MII_SUB) as u32,
+            hbm_checked: rdp(p, MII_CHECKED),
+            hbm_unchecked: rdp(p, MII_UNCHECKED),
+            data: rdp(p, MII_DATA),
             text: if wants_text && type_data != 0 { Some(read_text(type_data, ansi)) } else { None },
-            hbm_item: if size == MII_SIZE { rd64(p, 72) as usize } else { 0 },
+            hbm_item: if size == MII_SIZE { rdp(p, MII_ITEM) } else { 0 },
         })
     }
 }
@@ -432,32 +435,32 @@ pub(crate) unsafe fn get_info_impl(menu: H, item: u32, by_pos: i32, p: *mut u8, 
             wr32(p, 16, it.id);
         }
         if mask & mn::MIIM_SUBMENU != 0 {
-            wr64(p, 24, u64::from(it.sub));
+            wrp(p, MII_SUB, it.sub as usize);
         }
         if mask & mn::MIIM_CHECKMARKS != 0 {
-            wr64(p, 32, it.hbm_checked as u64);
-            wr64(p, 40, it.hbm_unchecked as u64);
+            wrp(p, MII_CHECKED, it.hbm_checked);
+            wrp(p, MII_UNCHECKED, it.hbm_unchecked);
         }
         if mask & mn::MIIM_DATA != 0 {
-            wr64(p, 48, it.data as u64);
+            wrp(p, MII_DATA, it.data);
         }
         if mask & (mn::MIIM_FTYPE | mn::MIIM_TYPE) != 0 {
             wr32(p, 8, it.ftype);
         }
         if mask & mn::MIIM_BITMAP != 0 && size == MII_SIZE {
-            wr64(p, 72, it.hbm_item as u64);
+            wrp(p, MII_ITEM, it.hbm_item);
         }
         if mask & (mn::MIIM_STRING | mn::MIIM_TYPE) != 0 {
-            let buf = rd64(p, 56) as usize;
-            let cap = rd32(p, 64) as i32;
+            let buf = rdp(p, MII_TYPE_DATA);
+            let cap = rd32(p, MII_CCH) as i32;
             let text = it.string();
             if buf == 0 {
-                wr32(p, 64, text.len() as u32);
+                wr32(p, MII_CCH, text.len() as u32);
             } else {
                 // A buffer of 0 units gets nothing written; cch is the length then.
                 let n =
                     if ansi { copy_text_a(text, buf as *mut u8, cap) } else { copy_text(text, buf as *mut u16, cap) };
-                wr32(p, 64, n as u32);
+                wr32(p, MII_CCH, n as u32);
             }
         }
     }
@@ -477,7 +480,8 @@ pub unsafe extern "system" fn GetMenuInfo(menu: H, p: *mut u8) -> i32 {
         Ok(v) => v,
         Err(e) => return fail(e, 0),
     };
-    // SAFETY: a MENUINFO (cbSize 0, fMask 4, dwStyle 8, cyMax 12, hbrBack 16, dwContextHelpID 24, dwMenuData 32).
+    // SAFETY: a MENUINFO (cbSize 0, fMask 4, dwStyle 8, cyMax 12, hbrBack, dwContextHelpID, dwMenuData at
+    // MI_BACK, MI_HELP, MI_DATA: 16, 24, 32 on x64; 16, 20, 24 on x86).
     unsafe {
         let mask = rd32(p, 4);
         if mask & mn::MIM_STYLE != 0 {
@@ -487,13 +491,13 @@ pub unsafe extern "system" fn GetMenuInfo(menu: H, p: *mut u8) -> i32 {
             wr32(p, 12, v.cy_max);
         }
         if mask & mn::MIM_BACKGROUND != 0 {
-            wr64(p, 16, v.back as u64);
+            wrp(p, MI_BACK, v.back);
         }
         if mask & mn::MIM_HELPID != 0 {
-            wr32(p, 24, v.help_id);
+            wr32(p, MI_HELP, v.help_id);
         }
         if mask & mn::MIM_MENUDATA != 0 {
-            wr64(p, 32, v.data as u64);
+            wrp(p, MI_DATA, v.data);
         }
     }
     1
@@ -514,9 +518,9 @@ pub unsafe extern "system" fn SetMenuInfo(menu: H, p: *const u8) -> i32 {
             Info {
                 style: rd32(p, 8),
                 cy_max: rd32(p, 12),
-                back: rd64(p, 16) as usize,
-                help_id: rd32(p, 24),
-                data: rd64(p, 32) as usize,
+                back: rdp(p, MI_BACK),
+                help_id: rd32(p, MI_HELP),
+                data: rdp(p, MI_DATA),
             },
         )
     };

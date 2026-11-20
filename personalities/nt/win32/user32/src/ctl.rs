@@ -309,7 +309,7 @@ pub fn builtin(id: u64, h: H, msg: u32, w: usize, l: isize) -> isize {
         dlg::sysproc::LISTBOX | dlg::sysproc::COMBOLBOX => listbox(h, msg, w, l),
         dlg::sysproc::DIALOG => super::dlg::dialog_proc(h, msg, w, l),
         dlg::sysproc::COMBOBOX => combobox(h, msg, w, l),
-        dlg::sysproc::SCROLLBAR => other(h, msg, w, l),
+        dlg::sysproc::SCROLLBAR => super::scroll::control_message(h, msg, w, l).unwrap_or_else(|| other(h, msg, w, l)),
         dlg::sysproc::MENU => def(h, msg, w, l),
         _ => def(h, msg, w, l),
     }

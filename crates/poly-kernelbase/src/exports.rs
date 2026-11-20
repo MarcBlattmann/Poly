@@ -345,6 +345,13 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetUserDefaultLangID", "api-ms-win-core-localization-l1-2-0"),
     ("GetSystemDefaultLangID", "api-ms-win-core-localization-l1-2-0"),
     ("GetThreadLocale", "api-ms-win-core-localization-l1-2-0"),
+    // Package identity (`appmodel.h`; sheet `kernel32.dll/GetCurrentPackageId`).
+    ("GetCurrentPackageId", "api-ms-win-appmodel-runtime-l1-1-0"),
+    ("GetCurrentPackageFamilyName", "api-ms-win-appmodel-runtime-l1-1-0"),
+    ("GetCurrentPackageFullName", "api-ms-win-appmodel-runtime-l1-1-0"),
+    ("GetCurrentPackagePath", "api-ms-win-appmodel-runtime-l1-1-0"),
+    ("GetPackageFamilyName", "api-ms-win-appmodel-runtime-l1-1-0"),
+    ("GetApplicationUserModelId", "api-ms-win-appmodel-runtime-l1-1-1"),
     ("SetThreadLocale", "api-ms-win-core-localization-l1-2-0"),
     ("GetUserDefaultUILanguage", "api-ms-win-core-localization-l1-2-0"),
     ("GetSystemDefaultUILanguage", "api-ms-win-core-localization-l1-2-0"),

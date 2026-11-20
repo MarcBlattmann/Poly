@@ -220,9 +220,12 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0243](0243-a-page-flip-copies-nothing-in-the-guest-and-does-not-wait-for-the-device.md) | A page flip copies nothing in the guest and does not wait for the device | Accepted |
 | [0244](0244-the-windows-side-reaches-the-mixer-through-a-poly-audio-device.md) | The Windows side reaches the mixer through a Poly audio device | Accepted |
 | [0245](0245-input-idle-is-the-first-wait-for-messages.md) | Input idle is the first wait for messages | Accepted |
+| [0246](0246-the-xnu-bsd-layer-files-memory-sysctl-signals-and-posix-spawn.md) | The XNU BSD layer: files, memory, sysctl, signals and posix_spawn | Accepted |
 | [0247](0247-a-timeline-of-one-key-press-and-fewer-nt-lock-waits.md) | A timeline of one key press, and fewer NT lock waits | Accepted |
 | [0248](0248-threads-in-another-process.md) | Threads in another process | Accepted |
 | [0250](0250-out-of-memory-never-panics-the-kernel.md) | Out of memory never panics the kernel | Accepted |
+| [0252](0252-the-bibata-cursor-theme.md) | The Bibata cursor theme | Accepted |
+| [0255](0255-boots-that-run-programs-see-a-real-cpu.md) | Boots that run programs see a real CPU | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

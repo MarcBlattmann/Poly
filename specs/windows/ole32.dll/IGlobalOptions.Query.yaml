@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/IGlobalOptions.Query.yaml
+id: windows/api/ole32.dll/IGlobalOptions.Query
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave identical output."
+  observed_by: spec-win-com-globaloptions
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs (64-bit and 32-bit builds, a COM server and client in one image) on the machine above. Microsoft Learn: "IGlobalOptions interface (objidl.h)", "IGlobalOptions::Set", "IGlobalOptions::Query", "GLOBALOPT_PROPERTIES enumeration (objidl.h)" (COMGLB_EXCEPTION_HANDLING 1, COMGLB_APPID 2, COMGLB_RPC_THREADPOOL_SETTING 3, COMGLB_RO_SETTINGS 4, COMGLB_UNMARSHALING_POLICY 5, COMGLB_PROPERTIES_RESERVED1..3 6..8), "CoCreateInstance", "CoGetClassObject", "CLSCTX enumeration", "IClassFactory", "RaiseException", "SetUnhandledExceptionFilter", "AddVectoredExceptionHandler"; objidl.h, combaseapi.h, winerror.h for the interface and error constants (CLSID_GlobalOptions {0000034B-0000-0000-C000-000000000046}, the interface id {0000015B-0000-0000-C000-000000000046} was confirmed by creating the object with it). The numeric values of the values of each property (the GLOBALOPT_* value enumerations) are not in Learn's text: the sheet gives the numbers the oracle accepted and refused. Google's 32-bit updater: Poly's run of it stops right after it asks for this class (coordinator's report); what it sets is not known. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  IGlobalOptions::Query(dwProperty, ULONG_PTR *pdwValue) reads one process-wide option. The first reads in a new process give the defaults below; a property number outside 1..8 and COMGLB_APPID (2) while it is unset fail and leave the output alone.
+interface:
+  signature: "HRESULT IGlobalOptions::Query(GLOBALOPT_PROPERTIES dwProperty, ULONG_PTR *pdwValue); vtable order: QueryInterface, AddRef, Release, Set, Query"
+installer: "Google's updater.exe 157 (32-bit) asks COM for CLSID_GlobalOptions during its start-up and Poly's COM does not have the class (the point where a Poly run of it breaks). The updater's calls on the object are not known; this sheet therefore gives the behaviour of every documented property. Nothing was observed of what Google's programs pass to Set."
+rules:
+  defaults: "in a new process (multithreaded or single-threaded apartment alike): COMGLB_EXCEPTION_HANDLING (1) reads 0; COMGLB_RPC_THREADPOOL_SETTING (3) reads 1; COMGLB_RO_SETTINGS (4) reads 0; COMGLB_UNMARSHALING_POLICY (5) reads 2; reserved property 6 reads 0; reserved property 7 reads a pointer-sized value that looks like an address (not stable: do not compare it); reserved property 8 reads 0; each of these returns S_OK"
+  appid_unset: "COMGLB_APPID (2) in a new process fails with E_FAIL 0x80004005 and does not write the output"
+  bad_property: "property numbers 0, 9, 0x100 and 0xFFFFFFFF fail with E_INVALIDARG 0x80070057 and do not write the output"
+  null_output: "a NULL output pointer gives E_INVALIDARG 0x80070057"
+  failure_leaves_output: "on every failure the output value the caller set before the call is unchanged"
+  uninitialised_thread: "after the thread's last CoUninitialize, a call through an object that is still held fails with CO_E_NOTINITIALIZED 0x800401F0 and leaves the output alone"
+  reflects_set: "Query returns what the last successful Set left (see IGlobalOptions.Set for which values stay)"
+errors:
+  invalid_argument: "E_INVALIDARG 0x80070057 (property out of range, NULL output)"
+  fail: "E_FAIL 0x80004005 (COMGLB_APPID not set)"
+  not_initialised: "CO_E_NOTINITIALIZED 0x800401F0"
+side_effects: "none"
+threading: "the options are process-wide; any thread may query"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each; every query sequence runs in a child process of the same image (`--child gseq ...`, so each starts from the defaults) whose lines the parent prints. A pointer-sized value above 0xFFFFFF is printed as `large`.
+not_covered: >
+  remote or non-local contexts; the effects of COMGLB_RPC_THREADPOOL_SETTING, COMGLB_RO_SETTINGS (modal-loop and rundown behaviour) and COMGLB_UNMARSHALING_POLICY on marshalling (only what Set and Query report is specified); COMGLB_APPID (Set failed in every circumstance tried); Set of the reserved properties 6 and 7 (it raised an access violation in the process); custom marshalling.

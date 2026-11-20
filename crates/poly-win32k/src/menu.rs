@@ -72,12 +72,49 @@ pub const ERROR_INVALID_PARAMETER: u32 = 87;
 pub const ERROR_INVALID_MENU_HANDLE: u32 = 1401;
 pub const ERROR_MENU_ITEM_NOT_FOUND: u32 = 1456;
 
-/// `MENUITEMINFOW` sizes `user32` accepts: the structure without
-/// `hbmpItem` (`MENUITEMINFO_V3`... 72 bytes on x64) and with it (80).
-pub const MII_SIZE_SHORT: u32 = 72;
-pub const MII_SIZE: u32 = 80;
-/// `sizeof(MENUINFO)` on x64.
-pub const MENUINFO_SIZE: u32 = 40;
+/// The bytes of a pointer in the process `user32` runs in.
+const P: usize = core::mem::size_of::<usize>();
+/// `MENUITEMINFOW` (`winuser.h`) in the process's width: `cbSize`, `fMask`, `fType`, `fState`,
+/// `wID` (5 `UINT`s), then `hSubMenu`, `hbmpChecked`, `hbmpUnchecked`, `dwItemData`,
+/// `dwTypeData` (pointers, aligned), `cch`, `hbmpItem` (aligned). x64: 24, 32, 40, 48, 56, 64,
+/// 72, 80 bytes; x86: 20, 24, 28, 32, 36, 40, 44, 48 bytes.
+pub const MII_SUB: usize = 20usize.next_multiple_of(P);
+pub const MII_CHECKED: usize = MII_SUB + P;
+pub const MII_UNCHECKED: usize = MII_SUB + 2 * P;
+pub const MII_DATA: usize = MII_SUB + 3 * P;
+pub const MII_TYPE_DATA: usize = MII_SUB + 4 * P;
+pub const MII_CCH: usize = MII_SUB + 5 * P;
+pub const MII_ITEM: usize = (MII_CCH + 4).next_multiple_of(P);
+/// `MENUITEMINFOW` sizes `user32` accepts: the structure without `hbmpItem` (72 bytes on x64, 44
+/// on x86) and with it (80, 48). Only the x64 sizes are observed (GetMenuItemInfoW.yaml `cbsize`);
+/// the x86 ones are the same two structures in the 32-bit layout.
+pub const MII_SIZE_SHORT: u32 = MII_ITEM as u32;
+pub const MII_SIZE: u32 = (MII_ITEM + P) as u32;
+/// `MENUINFO` (`winuser.h`): `cbSize`, `fMask`, `dwStyle`, `cyMax`, `hbrBack` at 16,
+/// `dwContextHelpID`, `dwMenuData` (aligned): 40 bytes on x64 (help 24, data 32), 28 on x86 (20, 24).
+pub const MI_BACK: usize = 16;
+pub const MI_HELP: usize = 16 + P;
+pub const MI_DATA: usize = (MI_HELP + 4).next_multiple_of(P);
+pub const MENUINFO_SIZE: u32 = (MI_DATA + P) as u32;
+
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(
+    MII_SIZE == 80
+        && MII_SIZE_SHORT == 72
+        && MII_TYPE_DATA == 56
+        && MII_CCH == 64
+        && MENUINFO_SIZE == 40
+        && MI_DATA == 32
+);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(
+    MII_SIZE == 48
+        && MII_SIZE_SHORT == 44
+        && MII_TYPE_DATA == 36
+        && MII_CCH == 40
+        && MENUINFO_SIZE == 28
+        && MI_DATA == 24
+);
 
 /// Handles start here (a table of 32-bit values, never reused).
 const FIRST_HANDLE: u32 = 0x0001_0101;
