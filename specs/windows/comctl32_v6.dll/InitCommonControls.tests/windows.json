@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "c6_icc_plain",
+      "exe_sha256": "cb527cc87a90be05d2a2fbae9217bbdf9065c660d06702b81a2ad65954c35035",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYSBwYXJlbnQgd2luZG93CnByb2dyZXNzIGJhciBiZWZvcmU6IHRydWUgbGFzdCBlcnJvciBhZnRlciB0aGUgY2FsbDogdW5jaGFuZ2VkCm9rIHRoZSBjbGFzcyBleGlzdHMgYmVmb3JlIHRoZSBjYWxsICh2ZXJzaW9uIDYgcmVnaXN0ZXJzIHRoZW0gd2hlbiB0aGUgbGlicmFyeSBsb2FkcykKb2sgdGhlIGxhc3QgZXJyb3IgaXMgdW5jaGFuZ2VkCm1zY3Rsc19wcm9ncmVzczMyIGFmdGVyIEluaXRDb21tb25Db250cm9scyAtPiB0cnVlCm9rIG1zY3Rsc19wcm9ncmVzczMyIGFmdGVyIEluaXRDb21tb25Db250cm9scwpTeXNMaXN0VmlldzMyIGFmdGVyIEluaXRDb21tb25Db250cm9scyAtPiB0cnVlCm9rIFN5c0xpc3RWaWV3MzIgYWZ0ZXIgSW5pdENvbW1vbkNvbnRyb2xzClN5c1RyZWVWaWV3MzIgYWZ0ZXIgSW5pdENvbW1vbkNvbnRyb2xzIC0+IHRydWUKb2sgU3lzVHJlZVZpZXczMiBhZnRlciBJbml0Q29tbW9uQ29udHJvbHMKVG9vbGJhcldpbmRvdzMyIGFmdGVyIEluaXRDb21tb25Db250cm9scyAtPiB0cnVlCm9rIFRvb2xiYXJXaW5kb3czMiBhZnRlciBJbml0Q29tbW9uQ29udHJvbHMKbXNjdGxzX3N0YXR1c2JhcjMyIGFmdGVyIEluaXRDb21tb25Db250cm9scyAtPiB0cnVlCm9rIG1zY3Rsc19zdGF0dXNiYXIzMiBhZnRlciBJbml0Q29tbW9uQ29udHJvbHMKU3lzVGFiQ29udHJvbDMyIGFmdGVyIEluaXRDb21tb25Db250cm9scyAtPiB0cnVlCm9rIFN5c1RhYkNvbnRyb2wzMiBhZnRlciBJbml0Q29tbW9uQ29udHJvbHMKbXNjdGxzX3RyYWNrYmFyMzIgYWZ0ZXIgSW5pdENvbW1vbkNvbnRyb2xzIC0+IHRydWUKb2sgbXNjdGxzX3RyYWNrYmFyMzIgYWZ0ZXIgSW5pdENvbW1vbkNvbnRyb2xzCm1zY3Rsc191cGRvd24zMiBhZnRlciBJbml0Q29tbW9uQ29udHJvbHMgLT4gdHJ1ZQpvayBtc2N0bHNfdXBkb3duMzIgYWZ0ZXIgSW5pdENvbW1vbkNvbnRyb2xzClN5c0hlYWRlcjMyIGFmdGVyIEluaXRDb21tb25Db250cm9scyAtPiB0cnVlCm9rIFN5c0hlYWRlcjMyIGFmdGVyIEluaXRDb21tb25Db250cm9scwp0b29sdGlwc19jbGFzczMyIGFmdGVyIEluaXRDb21tb25Db250cm9scyAtPiB0cnVlCm9rIHRvb2x0aXBzX2NsYXNzMzIgYWZ0ZXIgSW5pdENvbW1vbkNvbnRyb2xzCm9rIHN0aWxsIHRoZXJlIGFmdGVyIG1vcmUgY2FsbHMKc3VtbWFyeSAxNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok a parent window\nprogress bar before: true last error after the call: unchanged\nok the class exists before the call (version 6 registers them when the library loads)\nok the last error is unchanged\nmsctls_progress32 after InitCommonControls -> true\nok msctls_progress32 after InitCommonControls\nSysListView32 after InitCommonControls -> true\nok SysListView32 after InitCommonControls\nSysTreeView32 after InitCommonControls -> true\nok SysTreeView32 after InitCommonControls\nToolbarWindow32 after InitCommonControls -> true\nok ToolbarWindow32 after InitCommonControls\nmsctls_statusbar32 after InitCommonControls -> true\nok msctls_statusbar32 after InitCommonControls\nSysTabControl32 after InitCommonControls -> true\nok SysTabControl32 after InitCommonControls\nmsctls_trackbar32 after InitCommonControls -> true\nok msctls_trackbar32 after InitCommonControls\nmsctls_updown32 after InitCommonControls -> true\nok msctls_updown32 after InitCommonControls\nSysHeader32 after InitCommonControls -> true\nok SysHeader32 after InitCommonControls\ntooltips_class32 after InitCommonControls -> true\nok tooltips_class32 after InitCommonControls\nok still there after more calls\nsummary 14 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 88
+    }
+  ]
+}
