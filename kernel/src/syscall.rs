@@ -48,7 +48,7 @@ fn route(process: &Process, regs: &mut SyscallRegs) -> Outcome {
         Personality::Linux => Linux::dispatch(regs),
         Personality::Nt if crate::nt::is_nt_process(process.pid) => crate::nt::syscall(process, regs),
         Personality::Nt => Nt::dispatch(regs),
-        Personality::Xnu if process.xnu => crate::xnu::syscall(process, regs),
+        Personality::Xnu if process.xnu.is_some() => crate::xnu::syscall(process, regs),
         Personality::Xnu => Xnu::dispatch(regs),
         Personality::Native => Native::dispatch(regs),
     };

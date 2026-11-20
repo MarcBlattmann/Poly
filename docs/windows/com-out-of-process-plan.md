@@ -128,3 +128,17 @@ otherwise), works once per process (`RPC_E_TOO_LATE` 0x80010119, also after any 
 **absolute** descriptor (self-relative: 0x80070551), and its DACL entries need the `EXECUTE` (1) bit. A standard (filtered) token is
 refused by a descriptor that only grants Administrators (`E_ACCESSDENIED`), and by a SYSTEM service whose `CoInitializeSecurity` does not
 admit it. Impersonation: direct calls at impersonation level IDENTIFY give an identification-level thread token, which cannot open files.
+
+## 7. CLSID_GlobalOptions and IGlobalOptions (spec-win-com-globaloptions, 2026-11-20)
+
+Google's 32-bit `updater.exe` 157 asks COM for `CLSID_GlobalOptions` `{0000034B-0000-0000-C000-000000000046}` and Poly's COM does not have it. The
+sheets `CLSID_GlobalOptions`, `IGlobalOptions.Set`, `IGlobalOptions.Query` and `GlobalOptions.ExceptionHandling` (all `ole32.dll`) say what the
+oracle does. The short version: the class is built into COM (no registry entry for the class or the interface), in-process for every
+apartment, and its state is per process; Query defaults are exception handling 0, RPC thread pool 1, RO settings 0, unmarshaling
+policy 2, reserved 6 and 8 zero; `COMGLB_APPID` Set failed in every attempt (Query E_FAIL); exception handling accepts 1 and 2 but never 0 again;
+the effect of exception handling is observable (an exception in a served call: RPC_E_SERVERFAULT and a surviving server by default, the server
+ending with `RPC_S_CALL_FAILED` for access violations at value 1 and for every exception at value 2).
+
+The tests were also built for 32-bit x86 and run on the oracle: the 15 tests gave the same bytes as the 64-bit builds. The pipeline builds 64-bit
+tests only, so the committed `windows.json` files are the 64-bit recordings; a 32-bit check is what the hand-back describes (the support crate is
+64-bit only and the kit uses a small stand-in on kernel32).

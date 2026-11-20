@@ -76,7 +76,11 @@ const WS_VISIBLE: u32 = 0x1000_0000;
 const WS_BORDER: u32 = 0x0080_0000;
 const WS_EX_CLIENTEDGE: u32 = 0x0000_0200;
 const DWLP_MSGRESULT: i32 = 0;
-const DWLP_DLGPROC: i32 = 8;
+/// `DWLP_DLGPROC` (`winuser.h`: `DWLP_MSGRESULT + sizeof(LRESULT)`): 8 in a 64-bit process, 4 in a
+/// 32-bit one, where `DWLP_USER` (`DWLP_DLGPROC + sizeof(DLGPROC)`) is 8.
+const DWLP_DLGPROC: i32 = DWLP_MSGRESULT + core::mem::size_of::<isize>() as i32;
+/// The size of a `LONG_PTR` in this process.
+const LONG_PTR: u8 = core::mem::size_of::<usize>() as u8;
 
 type DlgProc = unsafe extern "system" fn(H, u32, usize, isize) -> isize;
 
@@ -143,14 +147,17 @@ fn wstr(s: &str) -> Vec<u16> {
 }
 
 fn get_long(h: H, index: i32) -> Option<u64> {
-    match call(Request::GetLong { hwnd: h as u64, index, size: 8 }) {
+    match call(Request::GetLong { hwnd: h as u64, index, size: LONG_PTR }) {
         poly_win32k::proto::Reply::Value { value } => Some(value),
         _ => None,
     }
 }
 
 fn set_long(h: H, index: i32, value: u64) -> bool {
-    matches!(call(Request::SetLong { hwnd: h as u64, index, size: 8, value }), poly_win32k::proto::Reply::Value { .. })
+    matches!(
+        call(Request::SetLong { hwnd: h as u64, index, size: LONG_PTR, value }),
+        poly_win32k::proto::Reply::Value { .. }
+    )
 }
 
 fn dlgproc_of(h: H) -> usize {
