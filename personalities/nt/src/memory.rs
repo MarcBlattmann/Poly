@@ -13,7 +13,7 @@ use crate::consts::*;
 use crate::kernel::NtKernel;
 use crate::objects::{Result, return_handle};
 use crate::section::{self, CreateSection, MapView};
-use crate::system::{NtProcess, NtSystem};
+use crate::system::{CommitCharge, NtProcess, NtSystem};
 use alloc::vec::Vec;
 use poly_abi::SyscallRegs;
 use poly_ntobj::status::*;
@@ -85,15 +85,16 @@ const USER_SPACE_SIZE: u64 = 1 << 47;
 /// (Windows: RAM plus page files), so a request beyond it fails as `STATUS_COMMITMENT_LIMIT`.
 const SYSTEM_COMMIT_LIMIT: u64 = 1 << 40;
 
-/// `JOB_OBJECT_LIMIT_PROCESS_MEMORY`, `JOB_OBJECT_LIMIT_JOB_MEMORY` (`winnt.h`).
-const JOB_LIMIT_PROCESS_MEMORY: u32 = 0x100;
-const JOB_LIMIT_JOB_MEMORY: u32 = 0x200;
-
-/// Whether `charge` more committed bytes fit: the system's commit limit, and the memory limits of
-/// the jobs the process is in (`JOBOBJECT_EXTENDED_LIMIT_INFORMATION`'s `ProcessMemoryLimit` and
-/// `JobMemoryLimit`, which count the committed private bytes; a job's limit counts this process
-/// alone here).
-fn check_commit(sys: &NtSystem, proc: &NtProcess, charge: u64) -> Result<()> {
+/// Whether `charge` more committed bytes fit for `proc`: the system's commit limit (`commit`), and
+/// `job_limit`, the memory limits of the jobs the process is in ([`crate::job::Jobs::commit_limit_of`]:
+/// `JOBOBJECT_EXTENDED_LIMIT_INFORMATION`'s `ProcessMemoryLimit` and `JobMemoryLimit`, which count
+/// the committed private bytes; a job's limit counts this process alone here).
+///
+/// The check and the charge after the commit are two steps: processes that commit at the same
+/// time under their own locks (ADR 0262) can each pass it and together overshoot the limit by what
+/// one call commits each. The limit keeps commits well short of the frames that back them; the
+/// kernel's frame reserve (ADR 0250) is what never gives way.
+fn check_commit(proc: &NtProcess, commit: &CommitCharge, job_limit: u64, charge: u64) -> Result<()> {
     if charge == 0 {
         return Ok(());
     }
@@ -101,21 +102,58 @@ fn check_commit(sys: &NtSystem, proc: &NtProcess, charge: u64) -> Result<()> {
     let over = |limit: u64| charge > limit || used.saturating_add(charge) > limit;
     // The system's commit charge stays within its limit (ADR 0250): RAM less the kernel's, so a
     // commit fails before the frames for committed pages run out.
-    if over(SYSTEM_COMMIT_LIMIT) || sys.commit_total.saturating_add(charge) > sys.commit_limit {
+    if over(SYSTEM_COMMIT_LIMIT) || commit.total().saturating_add(charge) > commit.limit() || over(job_limit) {
         return Err(STATUS_COMMITMENT_LIMIT);
     }
-    for &cookie in sys.jobs.jobs_of(proc.pid) {
-        let Some(job) = sys.jobs.job(cookie) else { continue };
-        let tail = job.extended_tail;
-        let limit_at = |from: usize| u64::from_le_bytes(tail[from..from + 8].try_into().expect("8 bytes"));
-        let flags = job.limit_flags();
-        if (flags & JOB_LIMIT_PROCESS_MEMORY != 0 && over(limit_at(48)))
-            || (flags & JOB_LIMIT_JOB_MEMORY != 0 && over(limit_at(56)))
-        {
-            return Err(STATUS_COMMITMENT_LIMIT);
+    Ok(())
+}
+
+/// `MEM_RESET`, `MEM_RESET_UNDO` and the placeholder flags: allocation types the fast path leaves
+/// to the full one.
+const SPECIAL_ALLOCATION: u32 = MEM_RESET | MEM_RESET_UNDO | MEM_RESERVE_PLACEHOLDER | MEM_REPLACE_PLACEHOLDER;
+
+/// What the calls of a process on its own memory look like when only its own lock is held
+/// (ADR 0262): handle `NtCurrentProcess()`.
+pub(crate) fn is_current(process: u64) -> bool {
+    Handle(process) == Handle::CURRENT_PROCESS
+}
+
+/// The work of `NtAllocateVirtualMemory` in `proc`, charging `commit` and checking `job_limit`
+/// (`own`: the caller's own process, which the dynamic-code mitigation binds).
+#[allow(clippy::too_many_arguments)]
+fn allocate_in(
+    proc: &mut NtProcess,
+    b: &mut dyn crate::backend::Backend,
+    commit: &CommitCharge,
+    job_limit: u64,
+    own: bool,
+    base: u64,
+    size: u64,
+    zero_bits: u64,
+    at: u32,
+    protect: u32,
+) -> Result<(u64, u64)> {
+    if own && proc.dynamic_code_blocked && at & MEM_COMMIT != 0 && executable(protect) {
+        return Err(STATUS_DYNAMIC_CODE_BLOCKED);
+    }
+    if at & SPECIAL_ALLOCATION == 0 && at & (MEM_COMMIT | MEM_RESERVE) != 0 {
+        // No size, or one the address space can never hold (128 TiB and more).
+        if size == 0 || size >= USER_SPACE_SIZE {
+            return Err(STATUS_INVALID_PARAMETER);
+        }
+        if at & MEM_COMMIT != 0 {
+            check_commit(proc, commit, job_limit, proc.vm.commit_charge(base, size, at))?;
         }
     }
-    Ok(())
+    // What the call commits newly of private memory, for the system's charge.
+    let before = proc.vm.committed_in(base, size);
+    let r = proc.vm.allocate(b, base, size, zero_bits, at, protect)?;
+    if at & MEM_COMMIT != 0 {
+        let charged = proc.vm.committed_in(r.0, r.1).saturating_sub(before);
+        proc.commit_charged += charged;
+        commit.charge(charged);
+    }
+    Ok(r)
 }
 
 /// `NtAllocateVirtualMemory`: `*BaseAddress` and `*RegionSize` in and out.
@@ -123,36 +161,54 @@ pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> 
     let [process, base_ptr, zero_bits, size_ptr, alloc_type, protect] = abi::args::<K, 6>(k, regs)?;
     let base = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
-    let own = is_own(k, process);
-    let (base, size) = on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
-        if own && proc.dynamic_code_blocked && alloc_type as u32 & MEM_COMMIT != 0 && executable(protect as u32) {
-            return Err(STATUS_DYNAMIC_CODE_BLOCKED);
-        }
-        let at = alloc_type as u32;
-        const SPECIAL: u32 = MEM_RESET | MEM_RESET_UNDO | MEM_RESERVE_PLACEHOLDER | MEM_REPLACE_PLACEHOLDER;
-        if at & SPECIAL == 0 && at & (MEM_COMMIT | MEM_RESERVE) != 0 {
-            // No size, or one the address space can never hold (128 TiB and more).
-            if size == 0 || size >= USER_SPACE_SIZE {
-                return Err(STATUS_INVALID_PARAMETER);
+    let (at, protect) = (alloc_type as u32, protect as u32);
+    // The process's own private memory: under its lock alone (ADR 0262).
+    let fast = is_current(process).then(|| {
+        k.with_own_vm(|proc, b| {
+            if at & SPECIAL_ALLOCATION != 0 || (base != 0 && !proc.vm.only_private(base, size)) {
+                return None;
             }
-            if at & MEM_COMMIT != 0 {
-                check_commit(sys, proc, proc.vm.commit_charge(base, size, at))?;
-            }
+            let commit = alloc::sync::Arc::clone(&proc.commit);
+            let job_limit = proc.job_commit_limit.load(core::sync::atomic::Ordering::Relaxed);
+            Some(allocate_in(proc, b, &commit, job_limit, true, base, size, zero_bits, at, protect))
+        })
+    });
+    let (base, size) = match fast.flatten() {
+        Some(r) => r?,
+        None => {
+            let own = is_own(k, process);
+            on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
+                let job_limit = sys.jobs.commit_limit_of(proc.pid);
+                let commit = alloc::sync::Arc::clone(&sys.commit);
+                let r = allocate_in(proc, b, &commit, job_limit, own, base, size, zero_bits, at, protect)?;
+                if at & MEM_COMMIT != 0 {
+                    section::record_section_commit(sys, proc, r.0, r.1);
+                }
+                Ok(r)
+            })?
         }
-        // What the call commits newly of private memory, for the system's charge.
-        let before = proc.vm.committed_in(base, size);
-        let r = proc.vm.allocate(b, base, size, zero_bits, alloc_type as u32, protect as u32)?;
-        if alloc_type as u32 & MEM_COMMIT != 0 {
-            section::record_section_commit(sys, proc, r.0, r.1);
-            let charged = proc.vm.committed_in(r.0, r.1).saturating_sub(before);
-            proc.commit_charged += charged;
-            sys.commit_total += charged;
-        }
-        Ok(r)
-    })?;
+    };
     abi::write_u64(k, base_ptr, base)?;
     abi::write_u64(k, size_ptr, size)?;
     Ok(STATUS_SUCCESS)
+}
+
+/// The work of `NtFreeVirtualMemory` in `proc`: the committed pages it gives back leave `commit`
+/// (ADR 0250).
+fn free_in(
+    proc: &mut NtProcess,
+    b: &mut dyn crate::backend::Backend,
+    commit: &CommitCharge,
+    base: u64,
+    size: u64,
+    free_type: u32,
+) -> Result<(u64, u64)> {
+    let committed = proc.vm.committed_in(base, size);
+    let r = proc.vm.free(b, base, size, free_type)?;
+    let freed = committed.saturating_sub(proc.vm.committed_in(base, size)).min(proc.commit_charged);
+    proc.commit_charged -= freed;
+    commit.refund(freed);
+    Ok(r)
 }
 
 /// `NtFreeVirtualMemory`.
@@ -160,15 +216,22 @@ pub fn free<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, size_ptr, free_type] = abi::args::<K, 4>(k, regs)?;
     let base = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
-    let (base, size) = on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
-        let committed = proc.vm.committed_in(base, size);
-        let r = proc.vm.free(b, base, size, free_type as u32)?;
-        // The committed pages it gave back leave the system's charge (ADR 0250).
-        let freed = committed.saturating_sub(proc.vm.committed_in(base, size)).min(proc.commit_charged);
-        proc.commit_charged -= freed;
-        sys.commit_total = sys.commit_total.saturating_sub(freed);
-        Ok(r)
-    })?;
+    let fast = is_current(process).then(|| {
+        k.with_own_vm(|proc, b| {
+            if !proc.vm.only_private(base, size) {
+                return None;
+            }
+            let commit = alloc::sync::Arc::clone(&proc.commit);
+            Some(free_in(proc, b, &commit, base, size, free_type as u32))
+        })
+    });
+    let (base, size) = match fast.flatten() {
+        Some(r) => r?,
+        None => on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
+            let commit = alloc::sync::Arc::clone(&sys.commit);
+            free_in(proc, b, &commit, base, size, free_type as u32)
+        })?,
+    };
     abi::write_u64(k, base_ptr, base)?;
     abi::write_u64(k, size_ptr, size)?;
     Ok(STATUS_SUCCESS)
@@ -189,8 +252,7 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     // A protection that is no `PAGE_*` value (0, two at once) is refused before the memory is
     // looked at, and `*OldProtect` stays as it was (the sheet of `VirtualProtectEx`).
     crate::protect::Protection::new(new, false)?;
-    let own = is_own(k, process);
-    let changed = on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| {
+    let protect_in = |own: bool, proc: &mut NtProcess, b: &mut dyn crate::backend::Backend| {
         // What the mitigation lets be executable are the views of image sections (Learn,
         // "Process Mitigation Policies": modules are mapped, not made): the loader's own
         // modules, nothing a program makes out of private memory (ADR 0196).
@@ -198,7 +260,15 @@ pub fn protect<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
             return Err(STATUS_DYNAMIC_CODE_BLOCKED);
         }
         Ok(proc.vm.protect(b, base, size, new))
-    })?;
+    };
+    // The process's own memory, views too (a protection changes only its own pages): under its
+    // lock alone (ADR 0262).
+    let changed = if is_current(process) {
+        k.with_own_vm(|proc, b| protect_in(true, proc, b))?
+    } else {
+        let own = is_own(k, process);
+        on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| protect_in(own, proc, b))?
+    };
     let (base, size, old) = match changed {
         Ok(done) => done,
         Err(e) => {
@@ -235,9 +305,15 @@ pub fn query<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     if (length as usize) < MEMORY_BASIC_INFORMATION_SIZE {
         return Err(STATUS_INFO_LENGTH_MISMATCH);
     }
-    let info = on_process(k, process, PROCESS_QUERY_INFORMATION, |_, proc, b| {
+    let query_in = |proc: &mut NtProcess, b: &mut dyn crate::backend::Backend| {
         proc.vm.query(addr).map(|i| i.with_copied_pages(|page| b.page_written(page)))
-    })?;
+    };
+    // The process's own memory: under its lock alone (ADR 0262).
+    let info = if is_current(process) {
+        k.with_own_vm(query_in)?
+    } else {
+        on_process(k, process, PROCESS_QUERY_INFORMATION, |_, proc, b| query_in(proc, b))?
+    };
     abi::write(k, buf, &info.to_bytes())?;
     if ret != 0 {
         abi::write_u64(k, ret, MEMORY_BASIC_INFORMATION_SIZE as u64)?;

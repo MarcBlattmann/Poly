@@ -200,6 +200,38 @@ pub fn dispatch_unlocked<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Opti
     Some(Outcome::Handled)
 }
 
+/// A process's memory calls on its own memory (ADR 0262): `NtAllocateVirtualMemory`,
+/// `NtFreeVirtualMemory`, `NtProtectVirtualMemory` and `NtQueryVirtualMemory`
+/// (`MemoryBasicInformation`) on `NtCurrentProcess()`, run without [`dispatch_with`]'s end-of-call
+/// work and with none of the kernel's: they signal no object, queue no I/O and change no registry
+/// key, and that work took the NT state's lock twice for every one of them. `None` for every
+/// other call.
+///
+/// A registry notification completed for this process meanwhile is delivered at the end of its
+/// next other call, as before at the end of any call.
+pub fn dispatch_own_memory<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Option<Outcome> {
+    use Service::*;
+    let number = regs.rax as u32;
+    if decode(number).0 == Table::Win32k {
+        return None;
+    }
+    let service = Service::from_number(number)?;
+    let [process, _, class] = match service {
+        AllocateVirtualMemory | FreeVirtualMemory | ProtectVirtualMemory | QueryVirtualMemory => {
+            abi::args::<K, 3>(k, regs).ok()?
+        }
+        _ => return None,
+    };
+    if !memory::is_current(process)
+        || (service == QueryVirtualMemory && class as u32 != consts::MEMORY_BASIC_INFORMATION_CLASS)
+    {
+        return None;
+    }
+    let result = run(k, regs, service);
+    regs.rax = u64::from(result.unwrap_or_else(|e| e).0);
+    Some(Outcome::Handled)
+}
+
 /// `NtQueryPerformanceCounter`'s number (table and index), looked up once.
 fn query_performance_counter_number() -> u32 {
     use core::sync::atomic::{AtomicU32, Ordering};
