@@ -206,10 +206,12 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
     Ok(out)
 }
 
-/// What a list asks `CreateRemoteThreadEx` for: the group affinity's mask, if given.
+/// What a list asks `CreateRemoteThreadEx` for: the `GROUP_AFFINITY` and the
+/// `PROCESSOR_NUMBER` given, as their bytes.
 #[derive(Default)]
 pub struct ThreadParsed {
-    pub affinity: Option<usize>,
+    pub affinity: Option<[u8; core::mem::size_of::<usize>() + 8]>,
+    pub ideal: Option<[u8; 4]>,
 }
 
 /// The thread attributes of `list` (specs/windows/kernel32.dll/CreateRemoteThreadEx.yaml): an
@@ -234,7 +236,10 @@ pub unsafe fn parse_thread(list: *const u8) -> Result<ThreadParsed, u32> {
                 return Err(ERROR_INVALID_PARAMETER);
             }
             if attribute == GROUP_AFFINITY && value != 0 {
-                out.affinity = Some((value as *const usize).read_unaligned());
+                out.affinity = Some((value as *const [u8; core::mem::size_of::<usize>() + 8]).read_unaligned());
+            }
+            if attribute == IDEAL_PROCESSOR && value != 0 {
+                out.ideal = Some((value as *const [u8; 4]).read_unaligned());
             }
         }
     }

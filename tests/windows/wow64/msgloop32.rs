@@ -20,6 +20,11 @@
 //! - `TRUSTEE_W` (20 bytes on x86) and `EXPLICIT_ACCESS_W` (32): the `Build*` functions stay
 //!   inside them, `SetEntriesInAclW` reads an array of them with the 32-bit stride and
 //!   `GetExplicitEntriesFromAclW` writes one.
+//! - `MENUITEMINFOW` (48 bytes on x86, 44 without `hbmpItem`) and `MENUINFO` (28): items in and
+//!   out of a popup menu; `SECURITY_ATTRIBUTES` (12) in `CreateFileW` (descriptor at 4, inherit at
+//!   8); comctl32's `LVITEMW`, `LVCOLUMNW`, `TVINSERTSTRUCTW`, `TVITEMW`, `TCITEMW`, `IMAGEINFO`,
+//!   `IMAGELISTDRAWPARAMS` and the `ICONINFO` it trades with `user32` (all with pointers inside,
+//!   so the fields after the first pointer sit earlier than on x64).
 //!
 //! One line per check on standard output; the exit code is the number of checks that failed.
 
@@ -132,6 +137,27 @@ unsafe extern "system" {
     fn EnumDisplaySettingsW(device: *const u16, mode: u32, dm: *mut u8) -> i32;
     fn GetScrollInfo(hwnd: Handle, bar: i32, si: *mut u8) -> i32;
     fn SetScrollInfo(hwnd: Handle, bar: i32, si: *const u8, redraw: i32) -> i32;
+    fn CreatePopupMenu() -> Handle;
+    fn DestroyMenu(menu: Handle) -> i32;
+    fn InsertMenuItemW(menu: Handle, item: u32, by_position: i32, mii: *const u8) -> i32;
+    fn GetMenuItemInfoW(menu: Handle, item: u32, by_position: i32, mii: *mut u8) -> i32;
+    fn SetMenuItemInfoW(menu: Handle, item: u32, by_position: i32, mii: *const u8) -> i32;
+    fn GetMenuInfo(menu: Handle, mi: *mut u8) -> i32;
+    fn SetMenuInfo(menu: Handle, mi: *const u8) -> i32;
+    fn LoadIconW(instance: Handle, name: usize) -> Handle;
+    fn GetDC(hwnd: Handle) -> Handle;
+    fn ReleaseDC(hwnd: Handle, dc: Handle) -> i32;
+}
+
+#[link(name = "comctl32", kind = "raw-dylib", import_name_type = "undecorated")]
+unsafe extern "system" {
+    fn InitCommonControlsEx(init: *const u32) -> i32;
+    fn ImageList_Create(cx: i32, cy: i32, flags: u32, initial: i32, grow: i32) -> Handle;
+    fn ImageList_Destroy(list: Handle) -> i32;
+    fn ImageList_ReplaceIcon(list: Handle, index: i32, icon: Handle) -> i32;
+    fn ImageList_GetImageInfo(list: Handle, index: i32, info: *mut u8) -> i32;
+    fn ImageList_GetIcon(list: Handle, index: i32, flags: u32) -> Handle;
+    fn ImageList_DrawIndirect(params: *const u8) -> i32;
 }
 
 #[link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -148,6 +174,15 @@ unsafe extern "system" {
     fn GetExplicitEntriesFromAclW(acl: *const u8, count: *mut u32, entries: *mut *mut u8) -> u32;
 }
 
+#[link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated")]
+unsafe extern "system" {
+    fn CreateCompatibleDC(dc: Handle) -> Handle;
+    fn DeleteDC(dc: Handle) -> i32;
+    fn CreateDIBSection(dc: Handle, bmi: *const u8, usage: u32, bits: *mut *mut u8, section: Handle, offset: u32) -> Handle;
+    fn GetObjectW(h: Handle, size: i32, out: *mut u8) -> i32;
+    fn DeleteObject(h: Handle) -> i32;
+}
+
 #[link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated")]
 unsafe extern "system" {
     fn CreateEventW(sa: *const u8, manual: i32, initial: i32, name: *const u16) -> Handle;
@@ -161,6 +196,271 @@ unsafe extern "system" {
     fn GetExitCodeThread(h: Handle, code: *mut u32) -> i32;
     fn Sleep(ms: u32);
     fn ExitProcess(code: u32) -> !;
+    fn CreateFileW(name: *const u16, access: u32, share: u32, sa: *const u8, disposition: u32, flags: u32, template: Handle) -> Handle;
+    fn DeleteFileW(name: *const u16) -> i32;
+    fn GetHandleInformation(h: Handle, flags: *mut u32) -> i32;
+}
+
+/// `  name: v1 v2 ...` for a check that failed, so the log shows how far it got.
+fn detail(values: &[u32]) {
+    out(b"  values:");
+    for v in values {
+        out(b" ");
+        out(&hex(*v));
+    }
+    out(b"
+");
+}
+
+fn u32_at(b: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]])
+}
+
+fn put_u32(b: &mut [u8], at: usize, v: u32) {
+    b[at..at + 4].copy_from_slice(&v.to_le_bytes());
+}
+
+/// `MENUITEMINFOW` (x86: 48 bytes, 44 without `hbmpItem`: `wID` 16, `dwItemData` 32, `dwTypeData`
+/// 36, `cch` 40) and `MENUINFO` (x86: 28 bytes, `dwContextHelpID` 20, `dwMenuData` 24).
+unsafe fn menus() {
+    const MIIM_ID: u32 = 0x2;
+    const MIIM_DATA: u32 = 0x20;
+    const MIIM_STRING: u32 = 0x40;
+    // SAFETY: user32 calls on a menu of this program with buffers of the 32-bit sizes.
+    unsafe {
+        let menu = CreatePopupMenu();
+        let open: [u16; 8] = wide("Open");
+        let mut mii = [0u8; 48];
+        put_u32(&mut mii, 0, 48);
+        put_u32(&mut mii, 4, MIIM_ID | MIIM_DATA | MIIM_STRING);
+        put_u32(&mut mii, 16, 0x1234);
+        put_u32(&mut mii, 32, 0xBEEF_0001);
+        put_u32(&mut mii, 36, open.as_ptr() as u32);
+        check(b"MENUITEMINFOW (48): InsertMenuItemW", InsertMenuItemW(menu, 0, 1, mii.as_ptr()) != 0, GUARD);
+        for size in [48u32, 44] {
+            let mut text = Guarded::<16>::new();
+            let mut g = Guarded::<48>::sized(size);
+            put_u32(&mut g.bytes, 4, MIIM_ID | MIIM_DATA | MIIM_STRING);
+            put_u32(&mut g.bytes, 36, text.ptr() as u32);
+            put_u32(&mut g.bytes, 40, 8);
+            if size == 44 {
+                // The guard right after the 44-byte structure.
+                put_u32(&mut g.bytes, 44, GUARD);
+            }
+            let ok = GetMenuItemInfoW(menu, 0, 1, g.ptr()) != 0
+                && u32_at(&g.bytes, 16) == 0x1234
+                && u32_at(&g.bytes, 32) == 0xBEEF_0001
+                && u32_at(&g.bytes, 40) == 4
+                && text.bytes[..10] == [b'O', 0, b'p', 0, b'e', 0, b'n', 0, 0, 0];
+            let guard = if size == 44 { u32_at(&g.bytes, 44) } else { g.guard };
+            let name: &[u8] = if size == 48 { b"MENUITEMINFOW (48): GetMenuItemInfoW" } else { b"MENUITEMINFOW (44): GetMenuItemInfoW" };
+            check(name, ok, guard);
+            if text.guard != GUARD {
+                check(b"MENUITEMINFOW: the item's text", false, text.guard);
+            }
+        }
+        let mut set = [0u8; 48];
+        put_u32(&mut set, 0, 48);
+        put_u32(&mut set, 4, MIIM_DATA);
+        put_u32(&mut set, 32, 0xBEEF_0002);
+        let changed = SetMenuItemInfoW(menu, 0x1234, 0, set.as_ptr()) != 0;
+        let mut g = Guarded::<48>::sized(48);
+        put_u32(&mut g.bytes, 4, MIIM_DATA);
+        let ok = changed && GetMenuItemInfoW(menu, 0x1234, 0, g.ptr()) != 0 && u32_at(&g.bytes, 32) == 0xBEEF_0002;
+        check(b"MENUITEMINFOW (48): SetMenuItemInfoW", ok, g.guard);
+
+        // MIM_HELPID | MIM_MENUDATA.
+        let mut mi = [0u8; 28];
+        put_u32(&mut mi, 0, 28);
+        put_u32(&mut mi, 4, 0x4 | 0x8);
+        put_u32(&mut mi, 20, 77);
+        put_u32(&mut mi, 24, 0xCAFE);
+        let set = SetMenuInfo(menu, mi.as_ptr()) != 0;
+        let mut g = Guarded::<28>::sized(28);
+        put_u32(&mut g.bytes, 4, 0x4 | 0x8);
+        let ok = set && GetMenuInfo(menu, g.ptr()) != 0 && u32_at(&g.bytes, 20) == 77 && u32_at(&g.bytes, 24) == 0xCAFE;
+        check(b"MENUINFO (28): SetMenuInfo/GetMenuInfo", ok, g.guard);
+        DestroyMenu(menu);
+    }
+}
+
+/// `CreateFileW` with a 32-bit `SECURITY_ATTRIBUTES` (12 bytes: `lpSecurityDescriptor` at 4,
+/// `bInheritHandle` at 8): the descriptor is taken from 4 and the handle is inheritable.
+unsafe fn create_file(sd: *mut u8) {
+    const GENERIC_WRITE: u32 = 0x4000_0000;
+    const CREATE_ALWAYS: u32 = 2;
+    const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+    let name: [u16; 40] = wide("C:\\Windows\\Temp\\polysa32.tmp");
+    let sa: [u32; 3] = [12, sd as u32, 1];
+    // SAFETY: kernel32 calls with a NUL-terminated name and a 32-bit SECURITY_ATTRIBUTES.
+    unsafe {
+        let h = CreateFileW(name.as_ptr(), GENERIC_WRITE, 0, sa.as_ptr() as *const u8, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+        let mut flags = 0u32;
+        let ok = h != -1 && GetHandleInformation(h, &mut flags) != 0 && flags & 1 != 0;
+        check(b"SECURITY_ATTRIBUTES (12): CreateFileW", ok, GUARD);
+        if h != -1 {
+            CloseHandle(h);
+            DeleteFileW(name.as_ptr());
+        }
+    }
+}
+
+/// comctl32's item structures in their 32-bit layouts: `LVITEMW` (`pszText` 20, `cchTextMax` 24),
+/// `LVCOLUMNW` (`pszText` 12), `TVINSERTSTRUCTW` (handles at 0 and 4, the item at 8),
+/// `TVITEMW` (`hItem` 4, `pszText` 16, `cchTextMax` 20), `TCITEMW` (28 bytes: `pszText` 12,
+/// `cchTextMax` 16, `iImage` 20, `lParam` 24), `IMAGEINFO` (32 bytes: `rcImage` 16) and
+/// `IMAGELISTDRAWPARAMS` (56 bytes without the Windows XP fields).
+/// gdi32's `GetObjectW` on a DIB section, as Google's 32-bit installer does after
+/// `CreateDIBSection`: `DIBSECTION` (x86: 84 bytes; `BITMAP` 24 with `bmBits` at 20, the
+/// `BITMAPINFOHEADER` at 24, `dshSection` 76, `dsOffset` 80) and `BITMAP` alone (24).
+unsafe fn dib() {
+    // SAFETY: gdi32 calls on objects of this program with buffers of the 32-bit sizes.
+    unsafe {
+        let dc = CreateCompatibleDC(0);
+        // BITMAPINFOHEADER: 40 bytes, 32 x 16, one plane, 32 bits, BI_RGB.
+        let mut bmi = [0u8; 44];
+        put_u32(&mut bmi, 0, 40);
+        put_u32(&mut bmi, 4, 32);
+        put_u32(&mut bmi, 8, 16);
+        bmi[12] = 1;
+        bmi[14] = 32;
+        let mut bits: *mut u8 = core::ptr::null_mut();
+        let hbm = CreateDIBSection(dc, bmi.as_ptr(), 0, &mut bits, 0, 0);
+        let mut g = Guarded::<84>::new();
+        let n = GetObjectW(hbm, 84, g.ptr());
+        let ok = hbm != 0
+            && !bits.is_null()
+            && n == 84
+            && u32_at(&g.bytes, 4) == 32
+            && u32_at(&g.bytes, 8) == 16
+            && u32_at(&g.bytes, 20) == bits as u32
+            && u32_at(&g.bytes, 24) == 40
+            && u32_at(&g.bytes, 28) == 32;
+        check(b"DIBSECTION (84): GetObjectW", ok, g.guard);
+        if !ok {
+            detail(&[hbm as u32, n as u32, u32_at(&g.bytes, 20), bits as u32, u32_at(&g.bytes, 24)]);
+        }
+        let mut g = Guarded::<24>::new();
+        let n = GetObjectW(hbm, 24, g.ptr());
+        let ok = n == 24 && u32_at(&g.bytes, 4) == 32 && u32_at(&g.bytes, 20) == bits as u32;
+        check(b"BITMAP (24): GetObjectW", ok, g.guard);
+        if !ok {
+            detail(&[n as u32, u32_at(&g.bytes, 20)]);
+        }
+        DeleteObject(hbm);
+        DeleteDC(dc);
+    }
+}
+
+unsafe fn controls(parent: Handle) {
+    const WS_CHILD: u32 = 0x4000_0000;
+    // SAFETY: comctl32 controls of this program, with buffers of the 32-bit sizes.
+    unsafe {
+        let icc: [u32; 2] = [8, 0xFF];
+        InitCommonControlsEx(icc.as_ptr());
+        let inst = GetModuleHandleW(core::ptr::null());
+        let make = |class: &str| {
+            let c: [u16; 20] = wide(class);
+            CreateWindowExW(0, c.as_ptr(), core::ptr::null(), WS_CHILD | 1, 0, 0, 200, 100, parent, 0, inst, 0)
+        };
+
+        // List view: a column, an item by text, its text read back.
+        let list = make("SysListView32");
+        let head: [u16; 8] = wide("Name");
+        let mut col = [0u8; 44];
+        put_u32(&mut col, 0, 0x2 | 0x4);
+        put_u32(&mut col, 8, 80);
+        put_u32(&mut col, 12, head.as_ptr() as u32);
+        let col_ok = SendMessageW(list, 0x1061, 0, col.as_ptr() as isize) == 0;
+        let row: [u16; 8] = wide("Row0");
+        let mut item = [0u8; 60];
+        put_u32(&mut item, 0, 1);
+        put_u32(&mut item, 20, row.as_ptr() as u32);
+        let at = SendMessageW(list, 0x104D, 0, item.as_ptr() as isize);
+        let mut text = Guarded::<16>::new();
+        let mut get = [0u8; 60];
+        put_u32(&mut get, 20, text.ptr() as u32);
+        put_u32(&mut get, 24, 8);
+        let n = SendMessageW(list, 0x1073, 0, get.as_mut_ptr() as isize);
+        let ok = list != 0 && col_ok && at == 0 && n == 4 && text.bytes[..10] == [b'R', 0, b'o', 0, b'w', 0, b'0', 0, 0, 0];
+        check(b"LVITEMW/LVCOLUMNW: LVM_INSERTITEMW, LVM_GETITEMTEXTW", ok, text.guard);
+        if !ok {
+            detail(&[list as u32, u32::from(col_ok), at as u32, n as u32, u32_at(&text.bytes, 0)]);
+        }
+
+        // Tree view: an item under TVI_ROOT after TVI_LAST, its text read back by handle.
+        let tree = make("SysTreeView32");
+        let leaf: [u16; 8] = wide("Leaf");
+        let mut ins = [0u8; 48];
+        put_u32(&mut ins, 0, 0xFFFF_0000);
+        put_u32(&mut ins, 4, 0xFFFF_0002);
+        put_u32(&mut ins, 8, 1);
+        put_u32(&mut ins, 8 + 16, leaf.as_ptr() as u32);
+        let hitem = SendMessageW(tree, 0x1132, 0, ins.as_ptr() as isize);
+        let mut text = Guarded::<16>::new();
+        let mut tvi = [0u8; 40];
+        put_u32(&mut tvi, 0, 1);
+        put_u32(&mut tvi, 4, hitem as u32);
+        put_u32(&mut tvi, 16, text.ptr() as u32);
+        put_u32(&mut tvi, 20, 8);
+        let got = SendMessageW(tree, 0x113E, 0, tvi.as_mut_ptr() as isize) != 0;
+        let ok = tree != 0 && hitem != 0 && got && text.bytes[..10] == [b'L', 0, b'e', 0, b'a', 0, b'f', 0, 0, 0];
+        check(b"TVINSERTSTRUCTW/TVITEMW: TVM_INSERTITEMW, TVM_GETITEMW", ok, text.guard);
+        if !ok {
+            detail(&[tree as u32, hitem as u32, u32::from(got), u32_at(&text.bytes, 0)]);
+        }
+
+        // Tab control: a tab with text, image and lParam read back into a guarded TCITEMW.
+        let tabs = make("SysTabControl32");
+        let name: [u16; 8] = wide("Tab0");
+        let mut tci = [0u8; 28];
+        put_u32(&mut tci, 0, 0x1 | 0x2 | 0x8);
+        put_u32(&mut tci, 12, name.as_ptr() as u32);
+        put_u32(&mut tci, 20, 3);
+        put_u32(&mut tci, 24, 0x5151);
+        let at = SendMessageW(tabs, 0x133E, 0, tci.as_ptr() as isize);
+        let mut text = Guarded::<16>::new();
+        let mut g = Guarded::<28>::new();
+        put_u32(&mut g.bytes, 0, 0x1 | 0x2 | 0x8);
+        put_u32(&mut g.bytes, 12, text.ptr() as u32);
+        put_u32(&mut g.bytes, 16, 8);
+        let got = SendMessageW(tabs, 0x133C, 0, g.ptr() as isize) != 0;
+        let ok = tabs != 0
+            && at == 0
+            && got
+            && u32_at(&g.bytes, 20) == 3
+            && u32_at(&g.bytes, 24) == 0x5151
+            && text.bytes[..10] == [b'T', 0, b'a', 0, b'b', 0, b'0', 0, 0, 0];
+        check(b"TCITEMW (28): TCM_INSERTITEMW, TCM_GETITEMW", ok, g.guard);
+        if !ok {
+            detail(&[tabs as u32, at as u32, u32::from(got), u32_at(&g.bytes, 20), u32_at(&g.bytes, 24), u32_at(&text.bytes, 0)]);
+        }
+        if text.guard != GUARD {
+            check(b"TCITEMW: the tab's text", false, text.guard);
+        }
+
+        // Image list: an icon in (ICONINFO through user32), IMAGEINFO, an icon out, a draw.
+        let il = ImageList_Create(16, 16, 0x20 | 0x1, 1, 1);
+        let icon = LoadIconW(0, 32512);
+        let index = ImageList_ReplaceIcon(il, -1, icon);
+        check(b"ICONINFO (20): ImageList_ReplaceIcon", il != 0 && icon != 0 && index == 0, GUARD);
+        let mut g = Guarded::<32>::new();
+        let ok = ImageList_GetImageInfo(il, 0, g.ptr()) != 0 && u32_at(&g.bytes, 16 + 8) == 16 && u32_at(&g.bytes, 16 + 12) == 16;
+        check(b"IMAGEINFO (32): ImageList_GetImageInfo", ok, g.guard);
+        check(b"ICONINFO (20): ImageList_GetIcon", ImageList_GetIcon(il, 0, 0) != 0, GUARD);
+        let dc = GetDC(parent);
+        let mut p = [0u8; 56];
+        put_u32(&mut p, 0, 56);
+        put_u32(&mut p, 4, il as u32);
+        put_u32(&mut p, 12, dc as u32);
+        put_u32(&mut p, 24, 16);
+        put_u32(&mut p, 28, 16);
+        put_u32(&mut p, 40, 0xFFFF_FFFF);
+        put_u32(&mut p, 44, 0xFF00_0000);
+        check(b"IMAGELISTDRAWPARAMS (56): ImageList_DrawIndirect", ImageList_DrawIndirect(p.as_ptr()) != 0, GUARD);
+        ReleaseDC(parent, dc);
+        ImageList_Destroy(il);
+    }
 }
 
 const WM_DESTROY: u32 = 0x0002;
@@ -383,12 +683,17 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         si[1] = 0x17;
         si[3] = 100;
         si[4] = 10;
-        SetScrollInfo(h, 1, si.as_ptr() as *const u8, 0);
+        si[5] = 40;
+        let set = SetScrollInfo(h, 1, si.as_ptr() as *const u8, 0) == 40;
         let mut g = Guarded::<28>::sized(28);
         g.bytes[4..8].copy_from_slice(&0x17u32.to_le_bytes());
-        // A fail stub on 32-bit today: only the guard counts.
-        GetScrollInfo(h, 1, g.ptr());
-        check(b"SCROLLINFO (28)", true, g.guard);
+        let ok = set
+            && GetScrollInfo(h, 1, g.ptr()) != 0
+            && u32_at(&g.bytes, 12) == 100
+            && u32_at(&g.bytes, 16) == 10
+            && u32_at(&g.bytes, 20) == 40
+            && u32_at(&g.bytes, 24) == 40;
+        check(b"SCROLLINFO (28): SetScrollInfo/GetScrollInfo", ok, g.guard);
 
         // A posted message through this thread's own loop, into a guarded MSG.
         #[repr(C)]
@@ -403,6 +708,9 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         PostMessageW(h, WM_USER + 5, 3, 4);
         let got = GetMessageW(&mut f.msg, h, WM_USER + 5, WM_USER + 5) > 0;
         check(b"GetMessageW MSG (28)", got && f.msg.lparam == 4, f.guard);
+        menus();
+        controls(h);
+        dib();
         DestroyWindow(h);
 
         // SECURITY_DESCRIPTOR (x86: 20 bytes) and the kernel's reading of it.
@@ -436,6 +744,7 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         if ev != 0 {
             CloseHandle(ev);
         }
+        create_file(sd.ptr());
 
         // TRUSTEE_W (x86 20 bytes: form at 8, name at 16) and EXPLICIT_ACCESS_W (32: trustee at 12).
         let mut t = Guarded::<20>::new();
@@ -476,6 +785,24 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         check(b"GetExplicitEntriesFromAclW writes 32-byte entries", rc == 0 && n == 2 && second_form == 0, GUARD);
         if !got.is_null() {
             LocalFree(got);
+        }
+        if !acl.is_null() {
+            LocalFree(acl);
+        }
+        // The special trustee name CURRENT_USER (Learn, `TRUSTEE`): the process token's user, an
+        // S-1-5-... SID in the ACE (ACL header 8, ACE header 4, mask 4, then the SID).
+        let mut one = Guarded::<32>::new();
+        BuildExplicitAccessWithNameW(one.ptr(), me.as_ptr(), 0x1F_0003, 2, 0);
+        let mut acl: *mut u8 = core::ptr::null_mut();
+        let rc = SetEntriesInAclW(1, one.ptr(), core::ptr::null(), &mut acl);
+        let ok = rc == 0
+            && !acl.is_null()
+            && u16::from_le_bytes([*acl.add(4), *acl.add(5)]) == 1
+            && *acl.add(16) == 1
+            && *acl.add(16 + 7) == 5;
+        check(b"SetEntriesInAclW resolves CURRENT_USER", ok, one.guard);
+        if !ok {
+            detail(&[rc]);
         }
         if !acl.is_null() {
             LocalFree(acl);

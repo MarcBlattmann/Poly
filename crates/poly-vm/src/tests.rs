@@ -1373,3 +1373,23 @@ fn map_32bit_places_below_2_gib() {
     // A mapping too long for the area never lands above it.
     assert_eq!(map_with(Layout::default()).map_below(low(LOW_2G, 0), LOW_2G), Err(Error::NoMemory));
 }
+
+#[test]
+fn max_prot_lowers_and_clamps() {
+    let mut m = map_with(small());
+    fixed(&mut m, MIN, 4, Prot::RW);
+    m.limit_max_prot(MIN + P, P, Prot::READ).unwrap();
+    assert_eq!(
+        spans(&m),
+        vec![(MIN, MIN + P, Prot::RW), (MIN + P, MIN + 2 * P, Prot::READ), (MIN + 2 * P, MIN + 4 * P, Prot::RW)]
+    );
+    assert_eq!(m.find(MIN + P).unwrap().max_prot, Prot::READ);
+    // Above the maximum now: mprotect refuses.
+    assert_eq!(m.protect(MIN + P, P, Prot::RW), Err(Error::Access));
+    // Raising the maximum again does not happen.
+    m.limit_max_prot(MIN + P, P, Prot::ALL).unwrap();
+    assert_eq!(m.find(MIN + P).unwrap().max_prot, Prot::READ);
+    assert_eq!(m.limit_max_prot(MIN + 3 * P, 2 * P, Prot::READ), Err(Error::NoMemory));
+    assert_eq!(m.find(MIN + 3 * P).unwrap().max_prot, Prot::ALL, "nothing changed on error");
+    assert_eq!(m.limit_max_prot(MIN + 1, P, Prot::READ), Err(Error::Invalid));
+}

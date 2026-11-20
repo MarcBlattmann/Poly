@@ -493,6 +493,8 @@ jobs:
           key: fonts-dejavu-2.37
       - name: Fetch the fonts
         run: target/debug/xtask fonts fetch
+      - name: Fetch the cursor theme (ADR 0252)
+        run: target/debug/xtask cursors fetch || echo "::warning::could not fetch the cursor theme; the desktop draws Poly's own pointer"
       # Only the archive is cached (210 MB): xtask checks it against the pinned
       # SHA-256 on every run and unpacks it, so a bad cache entry is not used.
       # `main` saves it; a pull request restores main's, or downloads it once.

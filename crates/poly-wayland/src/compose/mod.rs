@@ -22,6 +22,7 @@ mod render;
 mod scale;
 mod scene;
 mod text;
+pub mod xcursor;
 
 pub use cursors::NamedCursor;
 pub use frame::{BORDER, BUTTON_GAP, CLOSE_SIZE, CORNER_RADIUS, RESIZE_REACH, TITLE_HEIGHT, Theme};
@@ -31,6 +32,7 @@ pub use scene::{
     buffer_point, surface_point,
 };
 pub use text::{BitmapFont, TextRenderer};
+pub use xcursor::{CursorTheme, XCursor, XImage};
 
 use alloc::vec;
 use alloc::vec::Vec;

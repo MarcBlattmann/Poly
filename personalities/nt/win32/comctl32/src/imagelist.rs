@@ -99,6 +99,17 @@ fn make_bitmap(w: i32, h: i32, bgra: &[u8], mono: bool) -> H {
     unsafe { CreateBitmap(w, h, 1, 1, bits.as_ptr()) }
 }
 
+/// The bytes of a pointer in this process.
+const PTR: usize = core::mem::size_of::<usize>();
+/// `ICONINFO` (`winuser.h`): `fIcon`, `xHotspot`, `yHotspot`, then `hbmMask` and `hbmColor`
+/// aligned: 16 and 24 on x64 (32 bytes), 12 and 16 in a 32-bit process (20 bytes).
+const II_MASK: usize = 12usize.next_multiple_of(PTR);
+const II_COLOR: usize = II_MASK + PTR;
+const II_SIZE: usize = II_COLOR + PTR;
+/// `IMAGEINFO` (`commctrl.h`): `hbmImage`, `hbmMask`, two unused ints, `rcImage`: the rectangle
+/// at 24 on x64 (40 bytes), 16 in a 32-bit process (32 bytes).
+const IMI_RECT: usize = 2 * PTR + 8;
+
 fn rd<T: Copy>(p: *const u8, off: usize) -> T {
     // SAFETY: the caller's structure (ICONINFO, IMAGEINFO ...) of at least `off + size_of::<T>()` bytes.
     unsafe { core::ptr::read_unaligned(p.add(off) as *const T) }
@@ -202,12 +213,12 @@ pub extern "system" fn ImageList_Replace(himl: H, index: i32, image: H, mask: H)
 
 /// The colour and mask bitmaps of an icon, read; the GDI copies are freed.
 fn icon_pixels(icon: H) -> Option<((i32, i32, Vec<u8>), (i32, i32, Vec<u8>))> {
-    let mut info = [0u8; 32];
-    // SAFETY: an ICONINFO of 32 bytes.
+    let mut info = [0u8; II_SIZE];
+    // SAFETY: an ICONINFO of this process's size.
     if icon == 0 || unsafe { GetIconInfo(icon, info.as_mut_ptr()) } == 0 {
         return None;
     }
-    let (mask, color): (H, H) = (rd(info.as_ptr(), 16), rd(info.as_ptr(), 24));
+    let (mask, color): (H, H) = (rd(info.as_ptr(), II_MASK), rd(info.as_ptr(), II_COLOR));
     let m = read_bitmap(mask);
     let c = read_bitmap(color);
     for b in [mask, color] {
@@ -249,11 +260,11 @@ pub extern "system" fn ImageList_GetIcon(himl: H, index: i32, flags: u32) -> H {
     let Some((color, mask)) = parts else { return 0 };
     let cbm = make_bitmap(cx, cy, &color, false);
     let mbm = make_bitmap(cx, cy, &mask, true);
-    let mut info = [0u8; 32];
+    let mut info = [0u8; II_SIZE];
     wr(info.as_mut_ptr(), 0, 1u32);
-    wr(info.as_mut_ptr(), 16, mbm);
-    wr(info.as_mut_ptr(), 24, cbm);
-    // SAFETY: an ICONINFO of 32 bytes with two bitmaps; the icon keeps copies.
+    wr(info.as_mut_ptr(), II_MASK, mbm);
+    wr(info.as_mut_ptr(), II_COLOR, cbm);
+    // SAFETY: an ICONINFO of this process's size with two bitmaps; the icon keeps copies.
     let icon = unsafe { CreateIconIndirect(info.as_ptr()) };
     // SAFETY: bitmaps made above.
     unsafe {
@@ -263,7 +274,8 @@ pub extern "system" fn ImageList_GetIcon(himl: H, index: i32, flags: u32) -> H {
     icon
 }
 
-/// `IMAGEINFO` (`commctrl.h`, 40 bytes on x64): `hbmImage`, `hbmMask`, two unused ints, `rcImage`.
+/// `IMAGEINFO` (`commctrl.h`, 40 bytes on x64, 32 on x86): `hbmImage`, `hbmMask`, two unused
+/// ints, `rcImage` (at `IMI_RECT`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ImageList_GetImageInfo(himl: H, index: i32, info: *mut u8) -> i32 {
     if info.is_null() {
@@ -283,11 +295,11 @@ pub unsafe extern "system" fn ImageList_GetImageInfo(himl: H, index: i32, info: 
     let hbm = make_bitmap(strip.0, strip.1, &strip.2, false);
     let hmask = make_bitmap(strip.0, strip.1, &mask, true);
     wr(info, 0, hbm);
-    wr(info, 8, hmask);
-    wr(info, 16, 0i32);
-    wr(info, 20, 0i32);
+    wr(info, PTR, hmask);
+    wr(info, 2 * PTR, 0i32);
+    wr(info, 2 * PTR + 4, 0i32);
     for (i, v) in rect.iter().enumerate() {
-        wr(info, 24 + 4 * i, *v);
+        wr(info, IMI_RECT + 4 * i, *v);
     }
     1
 }
@@ -403,14 +415,30 @@ pub extern "system" fn ImageList_DrawEx(
     draw(himl, index, hdc, x, y, dx, dy, bk, fg, style)
 }
 
-/// `IMAGELISTDRAWPARAMS` (x64): `cbSize` 0, `himl` 8, `i` 16, `hdcDst` 24, `x` 32, `y` 36,
-/// `cx` 40, `cy` 44, `xBitmap` 48, `yBitmap` 52, `rgbBk` 56, `rgbFg` 60, `fStyle` 64.
+/// `IMAGELISTDRAWPARAMS` in the process's width: `cbSize` 0, `himl` P, `i` 2P, `hdcDst` 3P,
+/// then `x`, `y`, `cx`, `cy`, `xBitmap`, `yBitmap`, `rgbBk`, `rgbFg`, `fStyle` (4 bytes each from
+/// 4P). x64: `himl` 8, `i` 16, `hdcDst` 24, `x` 32 ... `fStyle` 64; x86: 4, 8, 12, 16 ... 48. The
+/// structure must reach past `fStyle` (68 bytes on x64, 52 on x86).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn ImageList_DrawIndirect(p: *const u8) -> i32 {
-    if p.is_null() || rd::<u32>(p, 0) < 68 {
+    const P: usize = PTR;
+    const X: usize = 4 * P;
+    const STYLE: usize = X + 32;
+    if p.is_null() || (rd::<u32>(p, 0) as usize) < STYLE + 4 {
         return 0;
     }
-    draw(rd(p, 8), rd(p, 16), rd(p, 24), rd(p, 32), rd(p, 36), rd(p, 40), rd(p, 44), rd(p, 56), rd(p, 60), rd(p, 64))
+    draw(
+        rd(p, P),
+        rd::<i32>(p, 2 * P),
+        rd(p, 3 * P),
+        rd(p, X),
+        rd(p, X + 4),
+        rd(p, X + 8),
+        rd(p, X + 12),
+        rd(p, X + 24),
+        rd(p, X + 28),
+        rd(p, STYLE),
+    )
 }
 
 /// `ImageList_LoadImageW(hi, lpbmp, cx, cGrow, crMask, uType, uFlags)`: a list from a bitmap

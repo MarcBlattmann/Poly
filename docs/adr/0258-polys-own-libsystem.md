@@ -114,11 +114,10 @@ canary has a zero low byte; the messages of `__stack_chk_fail`, the `__*_chk` ch
 
 ## Waiting for other work
 
-- The kernel side of the BSD layer (PR #390, ADR 0246): `mmap` (malloc uses its own area until
-  then), `getentropy` (the canary is mixed from the time stamp counter until then), `getpid` and
-  `kill` (`abort` exits with 134 until then), `read` (stdin), `sigaction` and the rest of the
-  wrappers. The wrappers are there; they return `ENOSYS` through `errno` until the kernel answers.
-- Mach traps in the kernel (PR #420, ADR 0238): `mach_task_self_` is whatever `task_self_trap`
-  answers (an error code on main today).
+- The BSD layer in the kernel (ADR 0246) has landed: `mmap`, `getentropy`, `getpid`, `kill`,
+  `read` and the other wrapped calls reach the kernel. Until then malloc used its own 8 MiB area,
+  the canary was mixed from the time stamp counter and `abort` ended with status 134; those
+  fallbacks stay for a kernel that answers `ENOSYS`.
 - Threads (`bsdthread_create`): locks, per-thread `errno` blocks and keys.
+- `sigaction` with its trampoline and `sigreturn`, `fork`, `posix_spawn`'s attribute objects.
 - The libc, pthread and malloc sheets (spec-macos-5) for the choices above.
