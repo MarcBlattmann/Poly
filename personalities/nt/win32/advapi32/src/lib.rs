@@ -436,6 +436,54 @@ unsafe extern "system" {
     fn NtOpenKey(out: *mut Handle, access: u32, attributes: *const u8) -> u32;
 }
 
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn NtFsControlFile(
+        handle: Handle,
+        event: Handle,
+        apc: usize,
+        apc_context: usize,
+        iosb: *mut [usize; 2],
+        code: u32,
+        input: *const u8,
+        input_length: u32,
+        output: *mut u8,
+        output_length: u32,
+    ) -> u32;
+}
+
+/// `FSCTL_PIPE_IMPERSONATE` (`ntifs.h`).
+const FSCTL_PIPE_IMPERSONATE: u32 = 0x0011_001C;
+
+/// `ImpersonateNamedPipeClient(hNamedPipe)`: the calling thread impersonates the client of the
+/// server end `hNamedPipe` (Learn; the named-pipe file system's `FSCTL_PIPE_IMPERSONATE`), at the
+/// impersonation level the client allowed when it opened the pipe. `RevertToSelf` ends it.
+#[unsafe(no_mangle)]
+pub extern "system" fn ImpersonateNamedPipeClient(pipe: Handle) -> i32 {
+    let mut iosb = [0usize; 2];
+    // SAFETY: no buffers; the status block is a local.
+    let status = unsafe {
+        NtFsControlFile(
+            pipe,
+            0 as Handle,
+            0,
+            0,
+            &mut iosb,
+            FSCTL_PIPE_IMPERSONATE,
+            core::ptr::null(),
+            0,
+            core::ptr::null_mut(),
+            0,
+        )
+    };
+    if status >= 0x8000_0000 {
+        // SAFETY: plain calls.
+        return fail(unsafe { RtlNtStatusToDosError(status) });
+    }
+    1
+}
+
 /// `SE_OBJECT_TYPE` (`accctrl.h`): the kinds `GetSecurityInfo` and
 /// `SetSecurityInfo` work on through a handle here. `SE_FILE_OBJECT` and
 /// `SE_KERNEL_OBJECT` are handles to kernel objects; the service, printer
@@ -840,5 +888,4 @@ pub extern "system" fn advapi32_main(_module: *mut u8, _reason: u32, _reserved: 
 mod delayed;
 mod services;
 
-#[cfg(target_arch = "x86_64")]
 mod apps;

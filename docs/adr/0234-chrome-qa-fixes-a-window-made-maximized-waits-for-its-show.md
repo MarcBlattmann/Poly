@@ -68,3 +68,145 @@ rule: a command for the state a window is already in changes nothing.
 - Open: the maximized window leaves a 5-pixel strip at the right edge at 200 %, as before this
   change. Chrome's `WM_NCCALCSIZE` answer for a maximized window is not the whole hidden frame
   there. That is not addressed here.
+
+## Addendum: opening a downloaded file
+
+QA bug 7. "Open" in Chrome's download bubble reaches Poly as `ShellExecuteExW` → the desktop's
+shell open (ADR 0223) → `Files --open PATH`. Files had no app for text. It ran `vi` in a Terminal
+and then showed its own window over it. Chrome's second start for the file also failed, as
+described below.
+
+1. **The browser is the viewer of what it can show.** Chrome for Windows' launcher entry lists
+   text, HTML, PDF and the common pictures in `MimeType=`, and its `Exec` ends in `%U` (the
+   launcher drops it, Files fills in the files). Linux Chromium's entry lists the same types. They
+   are not defaults in `mimeapps.list`: an app installed for one of these types is not overruled.
+   `.exe` and `.deb` keep going to Poly's installers (ADR 0173, ADR 0230).
+2. **A path argument naming a file reaches a Windows program as its DOS path.** This applies to
+   a Windows program started from Poly's side (a launcher entry, Files, `xdg-open`): an argument
+   that is an absolute path of an existing file or folder becomes its DOS path.
+   `/nt/c/Users/poly/Downloads/a.txt` is `C:\Users\poly\Downloads\a.txt`, other paths are on
+   `Z:`. A switch such as `/S` names no file and stays as it is (`layout::dos_argument`).
+3. **`WM_COPYDATA` sent to another thread carries its bytes.** Learn (`WM_COPYDATA`) says the
+   data is copied to the receiving process. `SendMessage` of `WM_COPYDATA` sends `dwData` and
+   the bytes (`Request::SendCopy`). The receiver's `user32` gives its procedure a
+   `COPYDATASTRUCT` of its own, valid while the procedure runs. Before, the receiver got the
+   sender's pointer. Chrome's second start hands its command line to the running Chrome this way,
+   so the running Chrome read memory that was not there, exited, and the second start opened a
+   new browser ("Restore pages?"). Now the running Chrome opens the file in a new tab, in front.
+4. **Files leaves the front to the app that opened the file**, also to the terminal's editor
+   for a text that no app claims. It shows its own window only when nothing opened the file.
+
+Open: Files starts the app, so the compositor's launch feedback cannot see the second
+`chrome.exe` exit after its hand-over. The busy pointer then waits for its 30 s timeout over the
+desktop.
+
+## Addendum: pointer shapes
+
+QA bug 5. The pointer was always the arrow, in Chrome for Windows and in Linux Chromium: no hand
+over links, no I-beam over text, no resize arrows at window edges. Two things were missing:
+
+- The compositor drew only its arrow. It showed every `wp_cursor_shape_device_v1` shape as the
+  arrow.
+- win32k already sent a `Cursor` record for a Windows program's `SetCursor` of a standard cursor
+  (ADR 0172), but the compositor dropped it ("cursors come with a later slice").
+
+Decisions:
+
+1. **Named looks of Poly's own** (`compose::NamedCursor`): hand, I-beam, hourglass, crosshair,
+   move, not-allowed, and the four resize arrows. Each is a picture of black, white and clear
+   cells in logical pixels with a hot spot, drawn like the arrow: each cell is as large as the
+   output's scale makes a logical pixel, so it is sharp at 200 %. The hand and the hourglass are
+   drawn cell by cell. The arrows, the I-beam, the crosshair and the not-allowed sign come from
+   their geometry, so they are symmetric. "Progress" is the existing busy arrow.
+2. **Names to pictures.**
+   - `wp_cursor_shape_device_v1`'s names map to these pictures (cursor-shape-v1.xml). Names
+     without a picture show the arrow.
+   - Windows' standard `IDC_*` cursors (winuser.h) map the same way.
+   - xdg's resize edges map to the resize arrows.
+3. **The server's own look wins over the client's.** It is the resize arrows over a frame's
+   border and during a resize, and an internal window's cursor while the pointer is over it.
+   The compositor sets a Windows window's cursor from win32k's `Cursor` record
+   (`Server::set_internal_cursor`).
+4. **user32 / win32k.**
+   - DefWindowProc's class cursor (`WM_SETCURSOR`, `HTCLIENT`) is told to the compositor like a
+     program's own `SetCursor`.
+   - On a window's own sizing border, DefWindowProc sets the sizing cursor of that direction
+     (Learn, "About Cursors"; hit codes from winuser.h).
+   - user32 tells the compositor a cursor only when the window or the cursor changed, since
+     programs set the cursor at every mouse move.
+5. **Not Alpine Shell's cursor theme (yet).** Alpine Shell bundles the Bibata cursors, which are
+   GPL-3.0. Shipping them as separate data files would be "mere aggregation", as Alpine Shell
+   argues, but it is a licence decision for the owner. Until then Poly draws its own pictures.
+   A Windows program's own cursor pictures (`CreateIconIndirect`, resources) show the arrow.
+
+Checks: unit tests for the pictures, the names, the drawing at scale 2, the server's choice
+(shape requests, frame borders, internal windows, resize grabs), and DefWindowProc's sizing
+cursors. Live at 200 %: the hand over a link, the I-beam over text and an input field, and the
+left-right arrows at the window's edge, both in Chrome for Windows and in Linux Chromium.
+
+## Addendum: the open items
+
+1. **The strip at the right edge of a maximized Chrome at 200 %** (6 pixels of desktop). There
+   were two causes:
+   - win32k fitted a maximized window with the frame it hides at 96 DPI (8), while
+     `WM_NCCALCSIZE` at the window's DPI (ADR 0231; Chrome's too) takes 13 off each side at 192.
+     `WM_GETMINMAXINFO`'s defaults and the maximized rectangle now use the window's frame DPI
+     (`metrics::minmax_dpi`, `maximized_rect_dpi`): −13,35–2573,1613 on the 2560x1600 screen.
+   - The largest tracking size stayed the 96-DPI "screen + 20" (2580), below the 2586-wide
+     maximized window. Chrome sets its maximized size again with `SetWindowPos`, which cut it
+     to the tracking size. At 96 DPI the sheets' "+ 20" is both hidden frames and 4 more. Above
+     96 DPI the tracking size is the screen plus `2 × frame + 4` (at least 20): 2590 at 192 DPI.
+     The 96-DPI values are unchanged.
+
+   With both changes the maximized Chrome covers the screen from edge to edge.
+2. **The busy pointer after a hand-over.** Files starts the apps it opens files with. The
+   compositor knows their pids (Files says them on the control pipe) but cannot reap them, so a
+   second `chrome.exe` that handed the file to the running Chrome and exited kept the busy
+   pointer for the whole 30 s timeout. The launch tracker now asks whether a launch's processes
+   still exist (`Launches::set_alive_lookup`, the compositor's `os::alive`). Once none does, the
+   launch counts as one whose process ended well: the 3 s grace for a hand-over, then it ends.
+   Measured: busy pointer off 3.3 s after the click.
+3. **"Restore pages?" after a clean Ctrl+Shift+W: Chrome's own rule, not an unclean exit.**
+   - After a clean close the profile says `exit_type: "Normal"` (`Preferences`) and
+     `exited_cleanly: true` (`Local State`). Chrome writes both through temporary files that it
+     flushes and renames over the old ones, and every call succeeds. The next start shows no
+     bubble.
+   - The bubble came back only when the start before had itself shown it, after a real crash
+     (QEMU stopped with Chrome running), and nobody answered it. Chrome then keeps
+     `exit_type: "Crashed"` through a clean close, so the crashed session can still be
+     restored.
+   - So the bubble's cause is an unclean end before (a boot stopped with Chrome open, QA bug 2),
+     not Poly's file writes. Nothing changed here.
+
+## Addendum: CJK text, and the two tooltips
+
+1. **Empty boxes on example.com: no font for Chinese.** example.com's script adds a Chinese
+   paragraph (`<p lang=zh>`). Poly's only fonts were DejaVu, which has no CJK glyphs, so
+   DirectWrite's system fallback (its family list) had nothing to fall back to.
+   - Poly now carries **Droid Sans Fallback**: Chinese, Japanese and Korean, TrueType, about
+     4 MB, **Apache 2.0**.
+   - It comes from Debian's `fonts-droid-fallback`, a seed of the Chromium disk, pinned in
+     `chromium.lock` like every package there. The Linux Chromium disk installs the package.
+   - The Chrome for Windows disk carries the file in `/usr/share/fonts/truetype/droid/`, with the
+     package's copyright and the Apache text, linked into `C:\Windows\Fonts`
+     (`fonts::add_cjk_to_root`).
+   - The spec tests' disks keep the DejaVu-only set their sheets were recorded with.
+   - `poly_dwrite::system::fallback_families` tries the CJK family first for CJK, kana and
+     Hangul code points, and last for everything else. The Windows CJK family names (Microsoft
+     YaHei, SimSun, …) stay aliases of DejaVu, as recorded.
+   - `THIRD_PARTY.md` records the font.
+   - The Chrome disk is made again by itself (the font stamp changed). A Chromium disk made
+     before needs `--fresh-disk` once, as for every package added to it.
+2. **Two tooltips at once ("Downloads" and "Close"): not Poly's window management. No code
+   change.**
+   - The compositor's records show Poly hiding and destroying each tooltip window as Chrome asks.
+   - Both tooltips are new windows Chrome shows after the bubble opens:
+     - The browser window's tooltip for the hovered download button comes back because its
+       text changes ("New download available" → "Downloads") while the pointer stays on it.
+       With only mouse input and no new download it does not come back.
+     - "Close" belongs to the bubble's close button, which Chrome focuses when the bubble opens,
+       with a focus ring.
+   - Linux Chromium on Poly shows the same two, also with mouse input only. Reporting a mouse in
+     `GetSystemMetrics` (`SM_MOUSEPRESENT`, the oracle reports none) changed nothing.
+   - Whether Chrome on Windows shows the "Close" tooltip in this case needs an observation on
+     the oracle (a spec agent's job). Until then it is taken as Chrome's own behaviour.

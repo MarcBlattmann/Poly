@@ -44,6 +44,24 @@ pub unsafe extern "system" fn CreateFileW(
     if let Some(h) = crate::console::create_file_console(name, access) {
         return h;
     }
+    // SECURITY_SQOS_PRESENT (`winbase.h`): the bits 16..20 are the client's quality of service
+    // for the server of a named pipe (Learn, `CreateFileW`, "dwFlagsAndAttributes"), not file
+    // flags: a SECURITY_QUALITY_OF_SERVICE (`winnt.h`: Length 12, ImpersonationLevel,
+    // ContextTrackingMode, EffectiveOnly).
+    const SECURITY_SQOS_PRESENT: u32 = 0x0010_0000;
+    const SECURITY_VALID_SQOS_FLAGS: u32 = 0x001F_0000;
+    let mut qos = [0u8; 12];
+    let has_qos = flags & SECURITY_SQOS_PRESENT != 0;
+    let flags = if has_qos {
+        qos[0..4].copy_from_slice(&12u32.to_le_bytes());
+        qos[4..8].copy_from_slice(&((flags >> 16) & 3).to_le_bytes());
+        // SECURITY_CONTEXT_TRACKING (0x40000), SECURITY_EFFECTIVE_ONLY (0x80000).
+        qos[8] = u8::from(flags & 0x0004_0000 != 0);
+        qos[9] = u8::from(flags & 0x0008_0000 != 0);
+        flags & !SECURITY_VALID_SQOS_FLAGS
+    } else {
+        flags
+    };
     let c = match file::create(access, disposition, flags) {
         Ok(c) => c,
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
@@ -53,6 +71,9 @@ pub unsafe extern "system" fn CreateFileW(
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
     };
     let mut oa = nt_name.attributes();
+    if has_qos {
+        oa.security_qos = qos.as_ptr();
+    }
     // SAFETY: the caller's SECURITY_ATTRIBUTES or null.
     if unsafe { crate::base::sa_inherits(security) } {
         oa.attributes |= nt::OBJ_INHERIT;

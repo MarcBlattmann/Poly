@@ -207,7 +207,13 @@ pub fn zombie(pid: u32) -> Option<Arc<Process>> {
 /// The current parent of `process` (its creator's pid until that ended,
 /// then init's or 0).
 pub fn parent_of(process: &Process) -> u32 {
-    TREE.lock().parent(process.pid as i32).map_or(process.ppid, |p| p as u32)
+    TREE.lock().parent(process.pid as i32).map_or_else(
+        || match process.adopted.load(core::sync::atomic::Ordering::Relaxed) {
+            0 => process.ppid,
+            adopted => adopted,
+        },
+        |p| p as u32,
+    )
 }
 
 /// The process group and session of `pid` (its own pid if the tree does

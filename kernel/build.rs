@@ -120,8 +120,14 @@ fn embed_win32() {
         "services.exe",
         // ADR 0222.
         "explorer.exe",
+        // ADR 0240.
+        "cmd.exe",
+        // ADR 0230.
+        "polyopen.exe",
         // The Windows Firewall's COM objects.
         "hnetcfg.dll",
+        // AlphaBlend (it was a generated stub DLL).
+        "msimg32.dll",
     ] {
         match &dir {
             Some(d) => {
@@ -196,6 +202,7 @@ fn embed_wow64() {
         "sys32.exe",
         "safeseh32.exe",
         "ansi32.exe",
+        "msgloop32.exe",
     ]
     .iter()
     .map(|n| n.to_string())

@@ -222,3 +222,24 @@ of the token of the session's shell (`explorer.exe`, found through the process l
   creates its directory under `\Sessions\BNOLINKS\1` (its own error message on Poly: the path was
   not found). Both names are now links to `\BaseNamedObjects` (`poly_ntobj::WELL_KNOWN_LINKS`):
   Poly keeps one namespace for named objects, as it already does for `Local\`.
+
+## Addendum (2026-11-19): the generated fail-only lists on i686 too
+
+The generated fail-only exports of each DLL (`src/apps.rs`, ADR 0155) were compiled for x86_64 only
+(`#[cfg(target_arch = "x86_64")] mod apps;`). A 64-bit program that imports a function Poly lacks
+loads, and fails when it calls it. A 32-bit program did not start at all: the loader reported the
+name as not found (`0xc0000139`).
+
+Batch B7 (the Chrome installer end to end) met this twice. Google's 32-bit `ChromeSetup.exe` stopped
+at `kernel32!QueryFullProcessImageNameW`, and its 32-bit `updater.exe` at `gdi32!FrameRgn`.
+
+**Now the lists are compiled for i686 as well, in all 41 crates**, through the 32-bit stubs above:
+- **In the table:** a function `x86_signatures.txt` knows pops its arguments and fails like its
+  64-bit form (145 of the 1,036 names today).
+- **Not in the table:** any other name logs and ends the process when it is called.
+
+The C runtimes' exports (`msvcrt`, `ucrtbase`) are `cdecl`, and none is in the table, so their stubs end the process
+rather than pop anything.
+
+So a 32-bit program loads like a 64-bit one, and the serial log names the first function it
+really needs. A name gets its slots in the table when a program reaches it.

@@ -11,6 +11,7 @@ an entry here.
 |---|---|---|---|---|
 | [Spleen](https://github.com/fcambus/spleen) bitmap fonts by Frederic Cambus: `spleen-8x16.bdf`, `spleen-12x24.bdf` | 2.1.0 | BSD 2-Clause ([text](third_party/spleen/LICENSE)) | `third_party/spleen/` | the kernel's display fonts: `cargo xtask font` converts them to `crates/poly-gfx/src/font/spleen_8x16.rs` and `spleen_12x24.rs`, which are compiled into the kernel; `poly-gdi` also draws the GUI and fixed stock fonts and the non-ASCII characters of Windows text (`gdi32.dll`) from the 8x16 table (ADR 0142) |
 | [DejaVu](https://dejavu-fonts.github.io/) fonts: Sans, Serif and Sans Mono in regular, bold, oblique/italic and bold oblique/italic (12 `.ttf` files) | 2.37 | Bitstream Vera Fonts licence (the Vera glyphs), public domain (the DejaVu changes), Arev Fonts licence (the glyphs from Arev); all permissive ([text](third_party/dejavu/LICENSE)) | **not committed**: `cargo xtask fonts fetch` downloads the pinned release into `target/fonts/`; only the licence is in `third_party/dejavu/` | the font store: `/usr/share/fonts/truetype/dejavu/` (and `C:\Windows\Fonts`) on the root disk, `poly-font`'s tests on real fonts ([ADR 0105](docs/adr/0105-fonts-poly-font-font-store-and-fontconfig-discovery.md)) |
+| [Droid Sans Fallback](https://android.googlesource.com/platform/frameworks/base/) font by Google: `DroidSansFallbackFull.ttf` (Chinese, Japanese and Korean), from Debian's `fonts-droid-fallback` package | 8.1.0r7 (Debian `1:8.1.0r7-1~1.gbp36536b`) | Apache License 2.0 ([copyright](third_party/droid-sans-fallback/copyright), [text](third_party/droid-sans-fallback/LICENSE-Apache-2.0)) | **not committed**: `tools/xtask/chromium.lock` pins the package by size and SHA-256 (`cargo xtask fonts fetch` / `chromium fetch` download it); only the copyright and licence are in `third_party/droid-sans-fallback/` | CJK text ([ADR 0234](docs/adr/0234-chrome-qa-fixes-a-window-made-maximized-waits-for-its-show.md)): the Chromium disk installs the package; the Chrome for Windows disk carries the file in `/usr/share/fonts/truetype/droid/`, linked into `C:\Windows\Fonts`, where DirectWrite's system fallback finds it |
 | [Geist and Geist Mono](https://github.com/vercel/geist-font) fonts by Vercel: `Geist-Regular.ttf`, `Geist-Medium.ttf`, `Geist-SemiBold.ttf`, `GeistMono-Regular.ttf` | 1.7.2 | SIL Open Font License 1.1 ([text](third_party/geist/OFL.txt)) | **not committed**: `cargo xtask fonts fetch` takes them from the pinned release archive (`geist-font-v1.7.2.zip`) into `target/fonts/`; only the licence is in `third_party/geist/` | the shell's text, as Alpine Shell's ([ADR 0127](docs/adr/0127-the-alpine-shell-look.md)): `/usr/share/poly/fonts/` on the desktop's images |
 | [Averia Serif Libre](https://github.com/google/fonts/tree/main/ofl/averiaseriflibre) font by Dan Sayers: `AveriaSerifLibre-Regular.ttf`, `AveriaSerifLibre-Bold.ttf` | Google Fonts commit `6f3c56c7` | SIL Open Font License 1.1, Reserved Font Names "Averia" and "Averia Libre" ([text](third_party/averia-serif-libre/OFL.txt)) | **not committed**: fetched like Geist; only the licence is in `third_party/averia-serif-libre/` | the settings window's titles, as Alpine Shell's (ADR 0127) |
 | Alpine Shell's wallpapers: `Grainy Valley.jpeg`, `Quiet Moment In Nature.jpg` (as `grainy-valley.jpeg`, `quiet-moment-in-nature.jpg`) | Alpine Shell `3557227` | the owner's: he owns Alpine Shell and grants Poly their use (they are his or free to use, ADR 0124, ADR 0127) | `third_party/alpine-shell/wallpapers/` | Poly's desktop wallpapers, Grainy Valley the default: `cargo xtask` decodes them into `/usr/share/poly/wallpapers/` on the desktop's images |
@@ -33,6 +34,20 @@ each file and each licence by size and SHA-256. The Lucide icons' path
 data is copied into `crates/poly-shell/src/icons.rs` with the ISC notice
 in `third_party/lucide/LICENSE`; the owner, who owns Alpine Shell, allows
 Poly to reuse its choice of icons, tokens and measurements (ADR 0124).
+
+## Droid Sans Fallback
+
+Copyright 2006-2010 Google Corp. (Droid is a trademark of Google Corp.),
+under the Apache License 2.0. The font file is an unmodified copy from
+Debian's `fonts-droid-fallback` package, never committed: the package is
+pinned by size and SHA-256 in `tools/xtask/chromium.lock` like the rest of
+the Chromium disk, and its TrueType file
+(`DroidSansFallbackFull.ttf`, SHA-256
+`acb6440a713d880a13a21b468ba7cd43f5a2b2934972e51be791c880730777b8`) is
+taken out of it in pure Rust. The licence asks that a copy of it goes with
+every copy, so the disks install the package's `copyright` and the
+Apache 2.0 text (from Debian's `base-files`) beside the font; the same
+texts are in `third_party/droid-sans-fallback/`.
 
 ## DejaVu
 

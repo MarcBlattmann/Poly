@@ -172,17 +172,13 @@ with their thread (`DLL_THREAD_DETACH`).
   Windows serves the caller inside that time. Both pipes always have a listening instance (the next one is made
   before a connected one is handed on, the exporter's first one before its name is published): a client takes
   "no pipe" for "no server".
-- **The spy cookie on a refusal (2026-11-20).** `CoRegisterInitializeSpy` with an object whose `QueryInterface`
-  does not give `IInitializeSpy` (`S_OK` and a pointer) returns `E_NOINTERFACE` and writes 0 to the cookie. The
-  sheet's prose says "not written"; Poly left it untouched (checked with a probe of its own) and failed the recorded
-  held-out run every time, as `CoRegisterClassObject` did before its recorded run showed the 0. A NULL spy leaves
-  the cookie alone. The held-out run confirms or refutes this.
-- **What `CoReleaseServerProcess` cannot order.** In `release_server_quit` the line "last object gone" comes from the
-  test server's own polling thread, which reads a counter the object's last `Release` lowers *before* it calls
-  `CoReleaseServerProcess` and logs the result on the RPC thread. No implementation can order two threads of the
-  test's own code; Poly keeps the call short (it neither waits nor wakes another thread), and under load it still
-  loses the race about once in 20 runs (the oracle's own runs were unstable once too). The test needs to change
-  (spec agent), not the DLL.
+- **The spy cookie on a refusal (observed, spec PR #344).** `CoRegisterInitializeSpy` with an object whose
+  `QueryInterface` does not give `IInitializeSpy` (`S_OK` and a pointer) returns the query's own error
+  (`E_NOINTERFACE`, `E_FAIL`, `E_OUTOFMEMORY` as they came) and writes all ones (`0xffffffffffffffff`) to the
+  cookie, keeping no reference; a NULL spy is `E_INVALIDARG` with the cookie untouched. (A first guess wrote 0.)
+- **What `CoReleaseServerProcess` cannot order.** In `release_server_quit` both compared lines came from two threads
+  of the test's own code, so no implementation could order them; the spec agent made the test deterministic
+  (spec PR #344). Poly keeps the call at 0 short all the same: it neither waits nor wakes another thread.
 - **Spies and `OleInitialize`.** The spies see the result of `OleInitialize`'s COM part (`S_FALSE` on a thread that
   already has its STA), while `OleInitialize` keeps returning its own result.
 

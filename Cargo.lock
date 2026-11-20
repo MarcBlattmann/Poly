@@ -115,6 +115,10 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-cmd"
+version = "0.0.1"
+
+[[package]]
 name = "poly-com"
 version = "0.0.1"
 
@@ -465,6 +469,7 @@ name = "poly-personality-nt"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-audio",
  "poly-console",
  "poly-iphlp",
  "poly-kernelbase",
@@ -514,6 +519,7 @@ dependencies = [
  "poly-registry",
  "poly-squashfs",
  "poly-vfs",
+ "poly-x509",
 ]
 
 [[package]]
@@ -592,6 +598,7 @@ dependencies = [
  "poly-input",
  "poly-png",
  "poly-wayland",
+ "poly-x509",
 ]
 
 [[package]]

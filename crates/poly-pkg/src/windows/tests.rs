@@ -105,7 +105,12 @@ fn the_version_resource_names_the_program() {
     assert_eq!(p.version, "157.0.8103.38");
     assert_eq!((p.bits, p.gui, p.installer, p.signed), (32, true, true, true));
     assert_eq!(p.kind(), "Windows installer (32-bit)");
+    // A signature without a signer Poly can read.
+    assert_eq!(p.publisher, None);
     assert_eq!(p.publisher_text(), "Unknown publisher (signed)");
+    // With one: the name, as the consent prompt says it (poly_x509::authenticode).
+    let named = program::Program { publisher: Some("Google LLC".into()), ..p.clone() };
+    assert_eq!(named.publisher_text(), "Google LLC (signature not verified)");
     // The largest image of the first group (0 is 256).
     assert_eq!(p.icon, Some(fake_png(2)));
 }

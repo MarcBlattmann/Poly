@@ -17,6 +17,8 @@
 //!   recording [`server::Sink`]. Clients that cannot keep up are mixed
 //!   with what they have; the rest of their share is silence.
 //! - [`gain_of`]: a volume control's value as a gain.
+//! - [`nt`]: Poly's protocol for `\Device\PolyAudio`, the Windows side's
+//!   way to the server (ADR 0244), and the accounting of its streams.
 //!
 //! Nothing here knows about ALSA or a device; the kernel's sound module
 //! puts client ring buffers behind the traits. Nothing allocates.
@@ -24,6 +26,7 @@
 #![no_std]
 
 pub mod convert;
+pub mod nt;
 pub mod sample;
 pub mod server;
 

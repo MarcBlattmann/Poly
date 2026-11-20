@@ -304,3 +304,84 @@ fn a_scale_outside_the_displays_steps_is_refused() {
         assert_eq!(scale, 250);
     });
 }
+
+fn default_window(e: &TestEnv) -> (i32, i32) {
+    let h = window(e, OVERLAPPED, (CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT), 0);
+    let Reply::Window { info } = e.call(Request::Window { hwnd: h }) else { panic!() };
+    (info.window.width(), info.window.height())
+}
+
+const CW_USEDEFAULT: i32 = i32::MIN;
+
+#[test]
+fn a_default_window_size_follows_the_callers_screen_and_work_area() {
+    // GetWindowRect.yaml `at_200_units`: 960x543 for an unaware caller, 1920x1107 for an aware
+    // one; CreateWindowExW.yaml `cw_usedefault`: 768x555 on the 1024x768 screen.
+    with_env(|e| {
+        session(e, None);
+        assert_eq!(default_window(e), (960, 543));
+        e.call(Request::Dpi { set: true, process: false, awareness: guic::AWARE_PER_MONITOR_V2 });
+        assert_eq!(default_window(e), (1920, 1107));
+        e.call(Request::Dpi { set: true, process: false, awareness: guic::AWARE_SYSTEM });
+        assert_eq!(default_window(e), (1920, 1107));
+    });
+    with_env(|e| {
+        let spec = ClassSpec {
+            name: "PolyDpiWindow".encode_utf16().collect(),
+            wndproc: dpi_proc as *const () as u64,
+            unicode: true,
+            ..ClassSpec::default()
+        };
+        assert!(matches!(e.call(Request::RegisterClass { spec }), Reply::Atom { .. }));
+        assert_eq!(default_window(e), (768, 555));
+    });
+}
+
+#[test]
+fn a_search_finds_the_window_of_another_process_by_its_class() {
+    with_env(|e| {
+        session(e, None);
+        // Process 9 registers a class of its own and shows a per-monitor-v2 popup.
+        let other = Ctx { pid: 9, tid: 1, now: 0 };
+        let mut wm = e.wm.borrow_mut();
+        let fx = &mut Effects::default();
+        wm.handle(other, Request::Dpi { set: true, process: true, awareness: guic::AWARE_PER_MONITOR_V2 }, fx);
+        let name: Vec<u16> = "PolyXprocWin".encode_utf16().collect();
+        let spec = ClassSpec { name: name.clone(), wndproc: 0x1000, unicode: true, ..ClassSpec::default() };
+        assert!(matches!(wm.handle(other, Request::RegisterClass { spec }, fx), Reply::Atom { .. }));
+        let spec = CreateSpec {
+            class: ClassRef::Name { name: name.clone() },
+            style: 0x8000_0000 | WS_VISIBLE,
+            x: 50,
+            y: 50,
+            cx: 300,
+            cy: 200,
+            ..CreateSpec::default()
+        };
+        let Reply::Created { created } = wm.handle(other, Request::CreateWindow { spec }, fx) else { panic!() };
+        wm.handle(
+            other,
+            Request::SetRects {
+                hwnd: created.hwnd,
+                window_rel: Some(Rect::new(50, 50, 350, 250)),
+                client_rel: Some(Rect::new(50, 50, 350, 250)),
+            },
+            fx,
+        );
+        wm.handle(other, Request::FinishCreate { hwnd: created.hwnd }, fx);
+        drop(wm);
+        // This process (7, unaware) never registered the class.
+        let found =
+            e.call(Request::FindWindow { class: Some(ClassRef::Name { name }), title: None, parent: 0, after: 0 });
+        assert_eq!(found, Reply::Handle { hwnd: created.hwnd });
+        let none = e.call(Request::FindWindow {
+            class: Some(ClassRef::Name { name: "NoSuchClass".encode_utf16().collect() }),
+            title: None,
+            parent: 0,
+            after: 0,
+        });
+        assert_eq!(none, Reply::Handle { hwnd: 0 });
+        // GetWindowRect.yaml `at_200_other_process`: half of it for an unaware caller.
+        assert_eq!(rects(e, &[u64::from(created.hwnd)]), ["192 25,25,175,125 client 150x100"]);
+    });
+}

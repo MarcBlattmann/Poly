@@ -45,6 +45,18 @@ pub fn c_roots() -> Vec<String> {
     v
 }
 
+/// An argument of a Windows program started from Poly's side, as the program is given it
+/// ([`layout::dos_argument`], ADR 0234): an absolute path naming a file or folder is its DOS path.
+pub fn dos_argument(arg: String) -> String {
+    let roots = c_roots();
+    let roots: Vec<&[u8]> = roots.iter().map(|r| r.as_bytes()).collect();
+    let exists = |p: &str| {
+        let vfs = fs::vfs();
+        vfs.root_context().is_ok_and(|ctx| vfs.lookup(&ctx, &Cred::root(), At::Cwd, p.as_bytes(), true).is_ok())
+    };
+    layout::dos_argument(&arg, &roots, exists).unwrap_or(arg)
+}
+
 fn mkdir_all(path: &str) -> Result<(), Errno> {
     let vfs = fs::vfs();
     let ctx = vfs.root_context()?;
@@ -193,6 +205,11 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         // ADR 0221.
         ("services.exe", super::SERVICES_EXE),
         ("hnetcfg.dll", super::HNETCFG),
+        ("msimg32.dll", super::MSIMG32),
+        // ADR 0240.
+        ("cmd.exe", super::CMD_EXE),
+        // ADR 0230.
+        ("polyopen.exe", super::POLYOPEN_EXE),
     ] {
         if bytes.is_empty() {
             continue;
@@ -212,6 +229,16 @@ pub(super) fn prepare(sys: &mut NtSystem) {
             Ok(_) => {}
             Err(e) => crate::kprintln!("nt: layout: cannot install stdole2.tlb ({:#x})", e.0),
         }
+    }
+    /// Poly's `win.ini`: its own comment and the sections, CR LF ends of lines.
+    const WIN_INI: &[u8] = b"; Poly\r\n[fonts]\r\n[extensions]\r\n[files]\r\n";
+    // `C:\Windows\win.ini`: every Windows has one (programs open it as a file any user may read,
+    // the ImpersonateNamedPipeClient sheet's tests among them). Poly's own, with the sections of
+    // the profile functions' documentation (Learn, "GetProfileStringW") and nothing in them.
+    match create::install_file(&vr, &root, "Windows", "win.ini", WIN_INI) {
+        Ok(create::Installed::Written) => crate::kprintln!("nt: layout: win.ini written to Windows"),
+        Ok(_) => {}
+        Err(e) => crate::kprintln!("nt: layout: cannot install win.ini ({:#x})", e.0),
     }
     // The session shell's stand-in (ADR 0222), where Windows keeps its shell.
     if !super::EXPLORER_EXE.is_empty() {

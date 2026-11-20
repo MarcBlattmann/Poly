@@ -30,6 +30,7 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+pub mod alphablend;
 mod bitfont;
 pub mod bitmap;
 pub mod builtin;
@@ -41,6 +42,7 @@ pub mod gdi;
 pub mod outline;
 pub mod region;
 mod rgnshape;
+pub mod shapes;
 mod sysfont;
 pub mod text;
 pub mod xform;

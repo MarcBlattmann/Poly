@@ -19,6 +19,8 @@ struct TestEnv {
     err: Cell<u32>,
     /// The cursor shape DefWindowProc's WM_SETCURSOR set last.
     cursor: Cell<u64>,
+    /// The standard cursor DefWindowProc set last (`Env::set_system_cursor`).
+    system_cursor: Cell<u16>,
     /// GDI regions the tests made: handle and rectangles.
     regions: RefCell<Vec<(u64, Vec<Rect>)>>,
     /// Give each thread its default IME window with its first window, as
@@ -88,6 +90,9 @@ impl Env for TestEnv {
     fn set_cursor(&self, cursor: u64) {
         self.cursor.set(cursor);
     }
+    fn set_system_cursor(&self, idc: u16) {
+        self.system_cursor.set(idc);
+    }
     fn window_created(&self, hwnd: u32) {
         if self.ime.get() {
             replay::make_ime_window(self, hwnd);
@@ -114,6 +119,7 @@ fn with_env(f: impl FnOnce(&TestEnv)) {
         tid: Cell::new(1),
         err: Cell::new(0),
         cursor: Cell::new(0),
+        system_cursor: Cell::new(0),
         regions: RefCell::new(Vec::new()),
         ime: Cell::new(false),
         moves: RefCell::new(Vec::new()),
@@ -960,6 +966,13 @@ fn def_window_proc_sets_the_class_cursor_for_a_client_hit_only_for_itself() {
         e.cursor.set(0x60001);
         assert_eq!(def_window_proc(e, a, input::WM_SETCURSOR, a, hit(2)), 0);
         assert_eq!(e.cursor.get(), 0x60001);
+        assert_eq!(e.system_cursor.get(), 0, "no sizing cursor on the caption");
+        // On a sizing border: the sizing cursor of its direction (ADR 0234).
+        for (code, idc) in [(10, 32644), (15, 32645), (13, 32642), (17, 32642), (14, 32643), (16, 32643)] {
+            assert_eq!(def_window_proc(e, a, input::WM_SETCURSOR, a, hit(code)), 0);
+            assert_eq!(e.system_cursor.get(), idc, "hit {code}");
+        }
+        e.system_cursor.set(0);
         // The child's class has none: its DefWindowProc asks the parent first
         // (on the child's behalf: the parent changes nothing), then FALSE.
         take_log();
@@ -1503,4 +1516,30 @@ fn a_window_made_hidden_and_maximized_waits_for_its_show_at_the_maximized_size()
         let Reply::Window { info } = e.call(Request::Window { hwnd: n }) else { panic!() };
         assert!(info.visible && info.maximized);
     });
+}
+
+/// A caller's `MSG` gets `MSG_BYTES` bytes and not one more (`wow64-gui-overrun`: 28 on x86, where
+/// a whole `CMsg` overran a message loop's stack cookie; 48 on x64, `private` in the padding).
+#[test]
+fn a_callers_msg_gets_exactly_its_own_size() {
+    #[repr(C)]
+    struct Guarded {
+        msg: [u8; 48],
+        guard: u32,
+    }
+    let mut g = Guarded { msg: [0xAB; 48], guard: 0xC0C0_C0C0 };
+    let m = CMsg { hwnd: 7, message: 0x12, w: 3, l: 4, time: 5, pt: CPoint { x: 6, y: 8 }, private: 9 };
+    // SAFETY: a buffer of at least MSG_BYTES bytes.
+    unsafe { put_msg(g.msg.as_mut_ptr() as *mut CMsg, &m) };
+    assert_eq!(g.guard, 0xC0C0_C0C0);
+    assert!(g.msg[MSG_BYTES..].iter().all(|&b| b == 0xAB), "nothing after the structure");
+    // SAFETY: as above.
+    let back = unsafe { get_msg(g.msg.as_ptr() as *const CMsg) };
+    assert_eq!(
+        (back.hwnd, back.message, back.w, back.l, back.time, back.pt),
+        (7, 0x12, 3, 4, 5, CPoint { x: 6, y: 8 })
+    );
+    // On x64 the unit of a VK_PACKET travels in the padding.
+    assert_eq!(back.private, if MSG_BYTES == 48 { 9 } else { 0 });
+    assert_eq!(MSG_BYTES, 48);
 }

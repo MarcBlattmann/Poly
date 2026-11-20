@@ -113,3 +113,49 @@ kernel_test! {
 fn alsa_node(p: &PcmDesc) -> String {
     alloc::format!("pcmC{CARD}D{}{}", p.device, if p.dir == Dir::Playback { 'p' } else { 'c' })
 }
+
+kernel_test! {
+    /// A `\Device\PolyAudio` stream (ADR 0244): there is none without a
+    /// card; with one, the server takes a started stream's frames, the
+    /// stream plays silence (one underrun) once they ran out, and the card
+    /// lets it go when its last reference does.
+    fn the_server_mixes_a_started_nt_stream(_env: &TestEnv) -> TestResult {
+        use poly_personality_nt::audio::NtAudioStream;
+        let format = Format::new(Sample::S16, 2, 44100);
+        let Some(_) = card() else {
+            return match ntstream::open(format, 1024) {
+                Err(_) => Ok(()),
+                Ok(_) => Err("a stream without a card"),
+            };
+        };
+        let s = ntstream::open(format, 1764).map_err(|_| "no stream on the card")?;
+        if s.write(&vec![0u8; 1000 * 4]) != 1000 || s.write(&vec![0u8; 1000 * 4]) != 764 {
+            return Err("the stream took other than its room");
+        }
+        s.start();
+        let deadline = time::now_ns() + 3 * time::NANOS_PER_SEC;
+        let mut result = Ok(());
+        loop {
+            let i = s.info();
+            if i.played == 1764 && i.underruns == 1 && i.silence > 0 {
+                break;
+            }
+            if i.played > 1764 || i.underruns > 1 {
+                result = Err("the stream's counts went wrong");
+                break;
+            }
+            if time::now_ns() > deadline {
+                result = Err("the server did not play the stream out in 3 s");
+                break;
+            }
+            thread::yield_now();
+        }
+        s.stop();
+        drop(s);
+        let g = card().map(|c| c.inner.lock().nt.iter().filter(|w| w.strong_count() > 0).count());
+        if g != Some(0) {
+            return Err("the card kept the stream");
+        }
+        result
+    }
+}

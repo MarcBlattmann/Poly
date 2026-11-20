@@ -156,11 +156,18 @@ impl ObjectSecurity {
     /// access checks of its requests: its integrity level is higher than the process token's and
     /// the process token holds no `SeImpersonatePrivilege` (Learn: "Impersonation Levels" and
     /// "Mandatory Integrity Control"; the `LoadLibraryExW` sheet: an Untrusted process whose
-    /// main thread got a Low token ends with `STATUS_BAD_IMPERSONATION_LEVEL`). Opening
-    /// anything under such a token fails with that status.
+    /// main thread got a Low token ends with `STATUS_BAD_IMPERSONATION_LEVEL`). An impersonation
+    /// token of the anonymous or identification level is one too (Learn, "Impersonation Levels":
+    /// the server "cannot impersonate the client"; the ImpersonateNamedPipeClient sheet's `levels`:
+    /// opening a file then fails with 1346). Opening anything under such a token fails with that
+    /// status.
     pub fn impersonation_downgraded(&self, process: ProcessId, thread: ThreadRef) -> bool {
-        let (Some(t), Some(p)) = (self.thread_token(thread), self.process_token(process)) else { return false };
-        let (Some(t), Some(p)) = (self.token(t), self.token(p)) else { return false };
+        let Some(t) = self.thread_token(thread).and_then(|t| self.token(t)) else { return false };
+        if t.kind == poly_security::token::TOKEN_IMPERSONATION && t.level < poly_security::token::SECURITY_IMPERSONATION
+        {
+            return true;
+        }
+        let Some(p) = self.process_token(process).and_then(|p| self.token(p)) else { return false };
         const SE_IMPERSONATE_PRIVILEGE: u32 = 29;
         t.integrity_rid() > p.integrity_rid() && !p.privileges.iter().any(|&(l, _)| l == SE_IMPERSONATE_PRIVILEGE)
     }
@@ -631,6 +638,16 @@ mod tests {
         let (mut om, c) = setup(token(0, false), token(0x1000, false));
         om.set_thread_token(c.thread, None).unwrap();
         assert!(!om.security.impersonation_downgraded(c.process, c.thread));
+        // Impersonation tokens of the anonymous and identification levels identify only.
+        let level = |l: u32| {
+            let t = token(0x1000, false).duplicate(poly_security::token::TOKEN_IMPERSONATION, l, 77);
+            let (om, c) = setup(token(0x2000, false), t);
+            om.security.impersonation_downgraded(c.process, c.thread)
+        };
+        assert!(level(poly_security::token::SECURITY_ANONYMOUS));
+        assert!(level(poly_security::token::SECURITY_IDENTIFICATION));
+        assert!(!level(poly_security::token::SECURITY_IMPERSONATION));
+        assert!(!level(poly_security::token::SECURITY_DELEGATION));
     }
 
     #[test]

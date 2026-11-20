@@ -48,6 +48,11 @@ pub struct Process {
     /// the kernel started. A Linux process's current parent (after its
     /// parent ended) is in the personality's process tree (`linux::task`).
     pub ppid: u32,
+    /// The parent it was given when its own ended (an NT process's children
+    /// go to the nearest living ancestor, as Linux reparents orphans; ADR
+    /// 0230: a Windows installer's process tree stays whole in `/proc` while
+    /// the processes in between end); 0 while its parent lives.
+    pub adopted: AtomicU32,
     pub personality: Personality,
     pub format: binfmt::Format,
     /// Open files, root and working directory, umask, credentials
@@ -283,6 +288,7 @@ impl Process {
         Process {
             pid,
             ppid,
+            adopted: AtomicU32::new(0),
             personality,
             format,
             files,

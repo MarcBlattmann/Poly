@@ -76,6 +76,15 @@ pub fn device_io_control_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
     if let Some(file) = socket {
         return crate::afd::services::control(k, file, n, code, &input, out, outlen);
     }
+    // A sound stream: `\Device\PolyAudio`'s requests (ADR 0244).
+    let audio = k.with_state(|sys, _, _| -> Result<Option<((ObjectId, u64), bool)>> {
+        let file = file_handle(sys, &caller, Handle(h), 0)?;
+        let sync = sys.io.file(file.1).is_some_and(|f| f.is_sync());
+        Ok(crate::audio::is_audio(sys, file.1).then_some((file, sync)))
+    })?;
+    if let Some((file, sync)) = audio {
+        return crate::audio::control(k, file, n, sync, code, &input, out, outlen);
+    }
     let (file, reply) = k.with_state(|sys, _, _| -> Result<((ObjectId, u64), Reply)> {
         let file = file_handle(sys, &caller, Handle(h), 0)?;
         n.check_event(sys, &caller)?;

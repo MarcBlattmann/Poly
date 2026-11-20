@@ -25,11 +25,15 @@ pub(super) fn draw(
     shadows: &mut ShadowCache,
 ) {
     let s = scene.output().2;
-    match below {
-        Some(layer) => layer.draw(fb, clip, s),
-        None => fill(fb, clip, clip, scene.theme().background),
+    // The topmost window that hides all of `clip`: nothing below it is drawn there (ADR 0232).
+    let hidden = scene.windows().iter().rposition(|w| hides(w, clip, s));
+    if hidden.is_none() {
+        match below {
+            Some(layer) => layer.draw(fb, clip, s),
+            None => fill(fb, clip, clip, scene.theme().background),
+        }
     }
-    for w in scene.windows().iter().filter(|w| w.is_visible()) {
+    for w in scene.windows()[hidden.unwrap_or(0)..].iter().filter(|w| w.is_visible()) {
         if scene.physical_extent(scene.drawn_extent(w)).intersect(&clip).is_empty() {
             continue;
         }
@@ -60,7 +64,61 @@ pub(super) fn draw(
                 let dark = scene.theme().title_active & 0xff < 0x80;
                 busy::draw(fb, clip, x, y, s, *phase, dark);
             }
+            CursorLook::Named(n) => draw_named(fb, clip, x, y, s, *n),
             CursorLook::Hidden => {}
+        }
+    }
+}
+
+/// Whether content `c` shown over the physical rectangle `dest` is drawn pixel for pixel: one
+/// buffer pixel per output pixel, in place. Its buffer scale the output's without a view, or a
+/// viewport that only scales by exactly the output's scale over its buffer scale: no transform,
+/// no source, a destination the buffer's size in output pixels (a client drawing for a 2x output
+/// with `wp_viewporter`: a 2100x1560 buffer of scale 1 shown 1050x780 at 200%).
+pub(super) fn pixel_for_pixel(c: &Content, dest: Rect, s: Scale) -> bool {
+    if c.view.is_identity() {
+        return s.as_120ths() == c.scale.max(1) * SCALE_UNIT;
+    }
+    c.view.transform == 0
+        && c.view.source.is_none()
+        && dest.width >= 0
+        && dest.height >= 0
+        && (dest.width as u32, dest.height as u32) == (c.width, c.height)
+}
+
+/// Whether window `w` hides all of `clip`: shown, its content opaque and drawn pixel for pixel,
+/// and `clip` inside the part of it that is drawn.
+fn hides(w: &Window, clip: Rect, s: Scale) -> bool {
+    let c = w.content();
+    if !w.is_visible() || !c.opaque {
+        return false;
+    }
+    let placed = w.placed(s);
+    if !pixel_for_pixel(c, placed.surface, s) {
+        return false;
+    }
+    let shown = if w.is_decorated() { placed.bounds } else { placed.surface };
+    let drawn = shown.intersect(&placed.surface);
+    drawn.intersect(&clip) == clip
+}
+
+/// A named look ([`super::NamedCursor`]) with its hot spot at logical (`x`, `y`), its cells as
+/// large as the scale makes a logical pixel; only the physical pixels of the rectangle the scene
+/// damages for it (`Scene::cursor_rect`), as [`draw_cursor`].
+fn draw_named(fb: &mut dyn Framebuffer, clip: Rect, x: i32, y: i32, s: Scale, n: super::NamedCursor) {
+    let ((w, h), (hx, hy)) = (n.size(), n.hotspot());
+    let (lx, ly) = (x - hx, y - hy);
+    let (ox, oy) = (s.px(lx), s.px(ly));
+    let area = s.rect(Rect::new(lx, ly, w, h)).intersect(&clip);
+    for py in area.y..area.bottom() {
+        let cy = s.to_logical(py - oy).min(h - 1);
+        let row = fb.row_mut(py as u32);
+        for px in area.x..area.right() {
+            match n.cell(s.to_logical(px - ox).min(w - 1), cy) {
+                super::cursors::BLACK => row[px as usize] = OPAQUE,
+                super::cursors::WHITE => row[px as usize] = OPAQUE | 0x00ff_ffff,
+                _ => {}
+            }
         }
     }
 }
@@ -228,6 +286,19 @@ fn draw_image(fb: &mut dyn Framebuffer, clip: Rect, c: &Content, dest: Rect, sho
     if area.is_empty() {
         return;
     }
+    if pixel_for_pixel(c, dest, s) {
+        // One buffer pixel per output pixel: rows copied (opaque runs whole), as a buffer of the
+        // output's scale is, whether or not a viewport says so.
+        let width = c.width as usize;
+        for y in area.y..area.bottom() {
+            let sy = (y - dest.y) as usize;
+            let x0 = (area.x - dest.x) as usize;
+            let src = &c.pixels[sy * width + x0..sy * width + x0 + area.width as usize];
+            let row = fb.row_mut(y as u32);
+            over_row(&mut row[area.x as usize..area.right() as usize], src);
+        }
+        return;
+    }
     if !c.view.is_identity() {
         for y in area.y..area.bottom() {
             let row = fb.row_mut(y as u32);
@@ -247,9 +318,7 @@ fn draw_image(fb: &mut dyn Framebuffer, clip: Rect, c: &Content, dest: Rect, sho
             let x0 = (area.x - dest.x) as usize;
             let src = &c.pixels[sy * width + x0..sy * width + x0 + area.width as usize];
             let row = fb.row_mut(y as u32);
-            for (dst, &p) in row[area.x as usize..area.right() as usize].iter_mut().zip(src) {
-                *dst = over(p, *dst) | OPAQUE;
-            }
+            over_row(&mut row[area.x as usize..area.right() as usize], src);
         }
     } else if c.smooth && bs == 1 && s.as_120ths() == 2 * SCALE_UNIT {
         draw_double(fb, c, dest, area);
@@ -302,6 +371,28 @@ fn draw_image(fb: &mut dyn Framebuffer, clip: Rect, c: &Content, dest: Rect, sho
         }
     } else {
         draw_smooth(fb, c, dest, area, bs, s);
+    }
+}
+
+/// `src` over `dst`, pixel for pixel, made opaque: runs of opaque source pixels are copied whole
+/// (one `memcpy` each, ADR 0232), the others blended. A window whose buffer has alpha (a
+/// premultiplied DirectComposition swap chain, a Wayland `argb8888` buffer) is mostly opaque, and
+/// blending every pixel of it cost most of a whole-window frame.
+pub(super) fn over_row(dst: &mut [u32], src: &[u32]) {
+    let n = dst.len().min(src.len());
+    let mut i = 0;
+    while i < n {
+        let start = i;
+        while i < n && src[i] >= 0xff00_0000 {
+            i += 1;
+        }
+        if i > start {
+            dst[start..i].copy_from_slice(&src[start..i]);
+        }
+        while i < n && src[i] < 0xff00_0000 {
+            dst[i] = over(src[i], dst[i]) | OPAQUE;
+            i += 1;
+        }
     }
 }
 
@@ -423,4 +514,25 @@ fn blend4(p00: u32, p10: u32, p01: u32, p11: u32, wx: u32, wy: u32) -> u32 {
         lerp(top, bottom, wy) << shift
     };
     channel(24) | channel(16) | channel(8) | channel(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::vec;
+
+    /// ADR 0232: copying opaque runs gives what blending every pixel gave.
+    #[test]
+    fn a_row_over_copies_opaque_runs_and_blends_the_rest() {
+        let src = [0xff11_2233, 0xff44_5566, 0x8040_4040, 0x0000_0000, 0xff77_8899, 0x2010_1010, 0xffaa_bbcc];
+        let below = [0x0010_2030, 0x00ff_ffff, 0x0080_8080, 0x0012_3456, 0x0000_0000, 0x00ff_0000, 0x0001_0101];
+        let mut fast = below;
+        over_row(&mut fast, &src);
+        let slow: Vec<u32> = src.iter().zip(below).map(|(&p, d)| over(p, d) | OPAQUE).collect();
+        assert_eq!(fast.to_vec(), slow);
+        // A shorter source leaves the rest of the row.
+        let mut row = vec![7u32; 4];
+        over_row(&mut row, &[0xff00_0001]);
+        assert_eq!(row, vec![0xff00_0001, 7, 7, 7]);
+    }
 }

@@ -441,6 +441,22 @@ pub fn runs_as_user(files: &dyn AppFiles, user_dir: &str, app: &App) -> bool {
         && !own(user_dir)
 }
 
+/// The environment variable the desktop sets to the program that runs an app as the desktop's
+/// user (the compositor's `--app-user`): Files starts the apps it opens files with through it.
+pub const APP_USER_VAR: &str = "POLY_APP_USER";
+
+/// The argv an app that opens a file starts with (Files' "open", ADR 0218): through `wrapper`
+/// (the program of [`APP_USER_VAR`]) as the desktop's user, as the launcher starts the system's
+/// apps, unless it is one of Poly's own programs (Terminal, the installer, Files), which run as
+/// the desktop itself.
+pub fn opener_argv(wrapper: Option<&str>, argv: &[String]) -> Vec<String> {
+    let poly_program = argv.first().is_some_and(|p| [TERMINAL, INSTALLER, FILES].contains(&p.as_str()));
+    match wrapper.filter(|w| !w.is_empty()) {
+        Some(w) if !poly_program && !argv.is_empty() => through(w, argv),
+        _ => argv.to_vec(),
+    }
+}
+
 /// `argv` started through `wrapper`, the program that runs another as the
 /// desktop's user (`poly-as-user PROGRAM [ARGUMENT...]`).
 pub fn through(wrapper: &str, argv: &[String]) -> Vec<String> {
@@ -644,6 +660,24 @@ Exec=mine
         // The installer's window runs dpkg: it stays the desktop's own.
         let disk = Disk(vec![("/usr/share/applications/poly-installer.desktop", APP)]);
         assert!(!runs_as_user(&disk, user, &installer_entry("/home/poly/Downloads/a.deb")));
+    }
+
+    #[test]
+    fn files_opens_with_the_system_s_apps_as_the_desktop_s_user() {
+        let v = |a: &[&str]| a.iter().map(|s| String::from(*s)).collect::<Vec<_>>();
+        let viewer = v(&["/usr/bin/eog", "/home/poly/Downloads/a.png"]);
+        assert_eq!(
+            opener_argv(Some("/usr/local/bin/poly-as-user"), &viewer),
+            v(&["/usr/local/bin/poly-as-user", "/usr/bin/eog", "/home/poly/Downloads/a.png"])
+        );
+        // No wrapper (a desktop without the app user): as it is.
+        assert_eq!(opener_argv(None, &viewer), viewer);
+        assert_eq!(opener_argv(Some(""), &viewer), viewer);
+        // Poly's own programs stay the desktop's: the installer runs dpkg.
+        let installer = v(&[INSTALLER, "/home/poly/Downloads/a.deb"]);
+        assert_eq!(opener_argv(Some("/usr/local/bin/poly-as-user"), &installer), installer);
+        let terminal = v(&[TERMINAL, "-e", "vi", "/home/poly/a.txt"]);
+        assert_eq!(opener_argv(Some("/usr/local/bin/poly-as-user"), &terminal), terminal);
     }
 
     #[test]

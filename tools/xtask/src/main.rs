@@ -146,6 +146,7 @@ mod ext4disk;
 mod font;
 mod fonts;
 mod gitwin;
+mod hostaudio;
 mod hostfs;
 mod hostscreen;
 mod initramfs;
@@ -573,8 +574,20 @@ fn qemu_with(kernel: &Path, memory: &str, cpus: u32, append: &str, devices: Devi
     cmd.arg("-drive")
         .arg(format!("if=none,id=ext4,format=raw,file={}", ext4.display()))
         .args(["-device", &format!("virtio-blk-pci,drive=ext4,disable-legacy=on{vectors}")]);
+    // A slow device: QEMU's null device answering every request, flushes
+    // too, after `SLOW_DISK_LATENCY` (a host whose `fdatasync` takes its
+    // time): the fifth, `virtio4`, which the watchdog test drives
+    // (`virtio_blk::a_slow_device_is_nudged_...`).
+    cmd.args([
+        "-blockdev",
+        &format!("driver=null-co,node-name=slow,size=1048576,read-zeroes=on,latency-ns={SLOW_DISK_LATENCY}"),
+    ])
+    .args(["-device", &format!("virtio-blk-pci,drive=slow,disable-legacy=on{vectors}")]);
     cmd
 }
+
+/// How long the slow test device takes for every request, in nanoseconds.
+const SLOW_DISK_LATENCY: u64 = 300_000_000;
 
 /// Whether QEMU can open a window: on macOS (Cocoa) and Windows always,
 /// elsewhere when an X11 or Wayland display is set. Without one, QEMU's

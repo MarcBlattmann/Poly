@@ -9,6 +9,8 @@ rust-version.workspace = true
 
 [dependencies]
 poly-abi.workspace = true
+# `\Device\PolyAudio`'s protocol and stream accounting (ADR 0244).
+poly-audio.workspace = true
 # The console host's logic (ADR 0080).
 poly-console.workspace = true
 # Socket types of the kernel's TCP/IP stack, and Winsock's protocol for

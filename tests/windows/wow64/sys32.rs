@@ -20,7 +20,15 @@
 //! - `winsock`: `WSAStartup` (the 400-byte 32-bit `WSADATA`), a TCP connection over the loopback
 //!   interface (`bind`, `getsockname`, `listen`, `connect`, `accept`, `send`, `recv`);
 //! - `bcrypt`: `BCryptGenRandom` and SHA-256 of `abc` through `BCryptHash`;
-//! - `secur32`: `GetUserNameExW`.
+//! - `secur32`: `GetUserNameExW`;
+//! - `updater`: what Google's 32-bit `updater.exe` and `ChromeSetup.exe` import that Poly's 32-bit
+//!   set lacked: `QueryFullProcessImageNameW` (the Win32 form equals `GetModuleFileNameW(NULL)`,
+//!   the device form starts with `\Device\`, a buffer without room for the NUL is
+//!   `ERROR_INSUFFICIENT_BUFFER`) and `msimg32.dll`'s `AlphaBlend` (bound, and a call with no
+//!   device contexts returns FALSE with the stack as it was: eleven 4-byte arguments), and gdi32's
+//!   `FrameRgn`, `RoundRect` and `OffsetWindowOrgEx` on a memory device context, and
+//!   comctl32's subclass functions by their ordinals 410 to 413, and advapi32's
+//!   `ImpersonateNamedPipeClient` on the ends of an anonymous pipe.
 //!
 //! Not part of the x64 test corpus (the oracle pipeline builds `tests/windows/*.rs` for x64 only).
 
@@ -38,6 +46,40 @@ unsafe extern "system" {
     fn GetCurrentProcess() -> Handle;
     fn LocalFree(memory: *mut u8) -> *mut u8;
     fn ExitProcess(code: u32) -> !;
+    fn GetModuleFileNameW(module: Handle, buffer: *mut u16, size: u32) -> u32;
+    fn QueryFullProcessImageNameW(process: Handle, flags: u32, name: *mut u16, size: *mut u32) -> i32;
+    fn GetLastError() -> u32;
+    fn CreatePipe(read: *mut Handle, write: *mut Handle, security: *const u8, size: u32) -> i32;
+    fn CloseHandle(handle: Handle) -> i32;
+}
+
+#[link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated")]
+unsafe extern "system" {
+    fn CreateCompatibleDC(dc: Handle) -> Handle;
+    fn DeleteDC(dc: Handle) -> i32;
+    fn CreateRectRgn(l: i32, t: i32, r: i32, b: i32) -> Handle;
+    fn DeleteObject(object: Handle) -> i32;
+    fn GetStockObject(index: i32) -> Handle;
+    fn FrameRgn(dc: Handle, rgn: Handle, brush: Handle, w: i32, h: i32) -> i32;
+    fn RoundRect(dc: Handle, l: i32, t: i32, r: i32, b: i32, w: i32, h: i32) -> i32;
+    fn OffsetWindowOrgEx(dc: Handle, x: i32, y: i32, old: *mut i32) -> i32;
+}
+
+#[link(name = "msimg32", kind = "raw-dylib", import_name_type = "undecorated")]
+unsafe extern "system" {
+    fn AlphaBlend(
+        dest: Handle,
+        x_dest: i32,
+        y_dest: i32,
+        w_dest: i32,
+        h_dest: i32,
+        src: Handle,
+        x_src: i32,
+        y_src: i32,
+        w_src: i32,
+        h_src: i32,
+        blend: u32,
+    ) -> i32;
 }
 
 #[link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -69,6 +111,7 @@ unsafe extern "system" {
     fn GetTokenInformation(token: Handle, class: u32, info: *mut u8, length: u32, needed: *mut u32) -> i32;
     fn ConvertSidToStringSidW(sid: *const u8, string: *mut *mut u16) -> i32;
     fn GetUserNameW(buffer: *mut u16, size: *mut u32) -> i32;
+    fn ImpersonateNamedPipeClient(pipe: Handle) -> i32;
 }
 
 #[link(name = "ole32", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -124,6 +167,14 @@ unsafe extern "system" {
 #[link(name = "comctl32", kind = "raw-dylib", import_name_type = "undecorated")]
 unsafe extern "system" {
     fn InitCommonControlsEx(init: *const u32) -> i32;
+    #[link_ordinal(410)]
+    fn SetWindowSubclass(hwnd: Handle, proc_: usize, id: usize, data: usize) -> i32;
+    #[link_ordinal(411)]
+    fn GetWindowSubclass(hwnd: Handle, proc_: usize, id: usize, data: *mut usize) -> i32;
+    #[link_ordinal(412)]
+    fn RemoveWindowSubclass(hwnd: Handle, proc_: usize, id: usize) -> i32;
+    #[link_ordinal(413)]
+    fn DefSubclassProc(hwnd: Handle, msg: u32, w: usize, l: isize) -> isize;
 }
 
 #[link(name = "ws2_32", kind = "raw-dylib", import_name_type = "undecorated")]
@@ -540,9 +591,103 @@ fn secur() -> bool {
     unsafe { GetUserNameExW(2, name.as_mut_ptr(), &mut n) != 0 && n > 0 && name[0] != 0 }
 }
 
+fn updater() -> bool {
+    let mut own = [0u16; 300];
+    let mut name = [0u16; 300];
+    // SAFETY: documented kernel32 and msimg32 calls with valid buffers.
+    unsafe {
+        at(1);
+        let n = GetModuleFileNameW(0, own.as_mut_ptr(), 300) as usize;
+        let mut size = 300u32;
+        if n == 0 || QueryFullProcessImageNameW(GetCurrentProcess(), 0, name.as_mut_ptr(), &mut size) == 0 {
+            return false;
+        }
+        at(2);
+        if size as usize != n || name[..n] != own[..n] || name[n] != 0 {
+            return false;
+        }
+        at(3);
+        let mut size = 300u32;
+        let device: [u16; 8] = [92, 68, 101, 118, 105, 99, 101, 92]; // \Device\
+        if QueryFullProcessImageNameW(GetCurrentProcess(), 1, name.as_mut_ptr(), &mut size) == 0
+            || size < 8
+            || name[..8] != device
+        {
+            return false;
+        }
+        at(4);
+        let mut size = n as u32;
+        if QueryFullProcessImageNameW(GetCurrentProcess(), 0, name.as_mut_ptr(), &mut size) != 0
+            || GetLastError() != 122
+            || size != n as u32
+        {
+            return false;
+        }
+        at(5);
+        // AC_SRC_OVER, no flags, a constant alpha of 255, AC_SRC_ALPHA; no device contexts.
+        let probe = core::hint::black_box(0x5EED_u32);
+        let r = AlphaBlend(0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0x01FF_0000);
+        if r != 0 || core::hint::black_box(probe) != 0x5EED {
+            return false;
+        }
+        at(6);
+        // gdi32's FrameRgn, RoundRect and OffsetWindowOrgEx on a memory DC (BLACK_BRUSH = 4).
+        let dc = CreateCompatibleDC(0);
+        let rgn = CreateRectRgn(0, 0, 10, 10);
+        let mut old = [7i32; 2];
+        let ok = dc != 0
+            && FrameRgn(dc, rgn, GetStockObject(4), 1, 1) == 1
+            && FrameRgn(dc, rgn, GetStockObject(4), 0, 1) == 0
+            && RoundRect(dc, 0, 0, 10, 10, 3, 3) == 1
+            && OffsetWindowOrgEx(dc, 2, 3, old.as_mut_ptr()) == 1
+            && OffsetWindowOrgEx(dc, 1, 1, old.as_mut_ptr()) == 1
+            && old == [2, 3]
+            && core::hint::black_box(probe) == 0x5EED;
+        DeleteObject(rgn);
+        DeleteDC(dc);
+        if !ok {
+            return false;
+        }
+        at(7);
+        // comctl32's subclass functions by ordinal (410..413), on no window: all fail, the
+        // reference data reads 0, and the stack is as it was.
+        let mut data = 77usize;
+        SetWindowSubclass(0, 0x1234, 1, 2) == 0
+            && GetWindowSubclass(0, 0x1234, 1, &mut data) == 0
+            && data == 0
+            && RemoveWindowSubclass(0, 0x1234, 1) == 0
+            && DefSubclassProc(0, 0x400, 1, 2) == 0
+            && core::hint::black_box(probe) == 0x5EED
+            && impersonate_errors()
+    }
+}
+
+/// advapi32's `ImpersonateNamedPipeClient` through the 32-bit `NtFsControlFile`: NULL is
+/// `ERROR_INVALID_HANDLE`, an anonymous pipe's read end `ERROR_CANNOT_IMPERSONATE` (1368), its
+/// write end `ERROR_INVALID_FUNCTION`.
+fn impersonate_errors() -> bool {
+    at(8);
+    let (mut r, mut w) = (0 as Handle, 0 as Handle);
+    // SAFETY: documented calls; the pipe's handles are closed at the end.
+    unsafe {
+        if CreatePipe(&mut r, &mut w, core::ptr::null(), 0) == 0 {
+            return false;
+        }
+        let ok = ImpersonateNamedPipeClient(0) == 0
+            && GetLastError() == 6
+            && ImpersonateNamedPipeClient(r) == 0
+            && GetLastError() == 1368
+            && ImpersonateNamedPipeClient(w) == 0
+            && GetLastError() == 1;
+        CloseHandle(r);
+        CloseHandle(w);
+        ok
+    }
+}
+
 #[unsafe(no_mangle)]
 pub extern "C" fn mainCRTStartup() -> u32 {
-    let checks: [(&[u8], fn() -> bool); 11] = [
+    let checks: [(&[u8], fn() -> bool); 12] = [
         (b"registry\n", registry),
         (b"token\n", token),
         (b"com\n", com),
@@ -554,6 +699,7 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         (b"winsock\n", winsock),
         (b"bcrypt\n", bcrypt),
         (b"secur32\n", secur),
+        (b"updater imports\n", updater),
     ];
     if !out(b"sys32\n") {
         // SAFETY: ends the process.

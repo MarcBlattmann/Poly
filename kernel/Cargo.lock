@@ -300,6 +300,7 @@ name = "poly-personality-nt"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-audio",
  "poly-console",
  "poly-iphlp",
  "poly-kernelbase",
