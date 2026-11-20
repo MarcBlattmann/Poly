@@ -296,6 +296,9 @@ struct Tr {
     hflags: Option<HostFlags>,
     /// Out-of-line stubs to emit after the body: (label, guest pc).
     slow: Vec<(Label, u64)>,
+    /// Set when `cond` evaluated a condition from memory (and so changed the
+    /// host flags).
+    cond_clobbered: bool,
 }
 
 /// Translate the block of decoded instructions `insts` (at most up to the
@@ -335,7 +338,8 @@ pub fn translate(pc: u64, insts: &[Inst], exit_routine: usize, feat: Features) -
         }
     }
 
-    let mut t = Tr { a: Asm::new(), exits: Vec::new(), exit_routine, hflags: None, slow: Vec::new() };
+    let mut t =
+        Tr { a: Asm::new(), exits: Vec::new(), exit_routine, hflags: None, slow: Vec::new(), cond_clobbered: false };
     // Budget check at entry: leave with PC at the block when it runs out.
     {
         let a = &mut t.a;
@@ -473,7 +477,8 @@ impl Tr {
                 return Some(cc);
             }
         }
-        // From the Cpu's NZCV.
+        // From the Cpu's NZCV (this changes the host flags).
+        self.cond_clobbered = true;
         let a = &mut self.a;
         a.load(Sz::D, R::R10, mem(RCPU, onzcv()));
         Some(match cond {
@@ -813,11 +818,15 @@ impl Tr {
                         self.a.lea(sz(w), R::Rcx, mem(R::Rcx, 1));
                     }
                 }
+                self.cond_clobbered = false;
                 if let Some(cc) = self.cond(cond, hf) {
                     self.a.cmov(Sz::Q, cc.not(), R::Rax, R::Rcx);
                 }
                 self.wr(rd, R::Rax, w);
-                self.hflags = hf;
+                // The host flags still hold NZCV only if the condition used them.
+                if !self.cond_clobbered {
+                    self.hflags = hf;
+                }
             }
             Inst::Madd { w, sub, rd, rn, rm, ra } => {
                 self.rd(R::Rax, rn, w);
