@@ -1,5 +1,8 @@
-//! CreateRemoteThread with ExitProcess as the start routine: the target ends with the parameter as its exit
-//! code. (The way a process can be made to end itself from outside.)
+//! A thread created with CreateRemoteThread is a full thread of the target for the loader: the image's TLS callback
+//! in the target is called with DLL_THREAD_ATTACH in the new thread BEFORE its start routine runs, and with
+//! DLL_THREAD_DETACH when the thread ends (by ExitThread or by returning). A thread created suspended is not
+//! attached until it is resumed. The start routine here is a routine of the image itself, found in the target by the
+//! image's offset from its base (the same image is the target).
 #![no_std]
 #![no_main]
 #![allow(
@@ -399,7 +402,7 @@ fn spawn(kind: &str, flags: u32) -> Child {
 /// Wait until the target has signalled that it is running its own code.
 fn wait_ready(c: &Child) -> bool {
     // SAFETY: valid handle.
-    unsafe { WaitForSingleObject(c.ev, 15000) == 0 }
+    unsafe { WaitForSingleObject(c.ev, 5000) == 0 }
 }
 
 /// A ready target of kind "sleep".
@@ -760,9 +763,14 @@ fn child_main(args: &str) -> u32 {
     let mut it = args.split(' ');
     let kind = it.next().unwrap_or("");
     let name = it.next().unwrap_or("");
-    let w = wide(name);
-    // SAFETY: valid name.
-    let ev = unsafe { OpenEventW(2, 0, w.as_ptr()) };
+    // `h<hex>`: an inherited handle to the event; otherwise the name of an event
+    let ev = if let Some(hex) = name.strip_prefix('h') {
+        usize::from_str_radix(hex, 16).unwrap_or(0) as HANDLE
+    } else {
+        let w = wide(name);
+        // SAFETY: valid name.
+        unsafe { OpenEventW(2, 0, w.as_ptr()) }
+    };
     if !ev.is_null() {
         // SAFETY: valid handle.
         unsafe { SetEvent(ev) };
@@ -794,19 +802,211 @@ macro_rules! main_rt {
     };
 }
 
+// ---------------------------------------------------------------- a TLS callback in the image
+//
+// The image has a TLS directory with one callback. In the target process the loader calls it with DLL_PROCESS_ATTACH
+// (1) at start, DLL_THREAD_ATTACH (2) for each new thread before the thread's start routine, DLL_THREAD_DETACH (3) when a
+// thread ends. Events are numbered in one sequence per process, and kept in this image's globals, which the creator reads
+// through the target's copy of the image (the image base is the first module of the target).
+
+use core::sync::atomic::AtomicUsize;
+
+/// events[i] = (reason, thread id, sequence number); a plain log, 16 entries.
+static SEQ: AtomicU32 = AtomicU32::new(0);
+static LOG_N: AtomicU32 = AtomicU32::new(0);
+static LOG: [AtomicU64; 16] = [const { AtomicU64::new(0) }; 16];
+static START_SEEN: AtomicU32 = AtomicU32::new(0);
+static START_SEQ: AtomicU32 = AtomicU32::new(0);
+static START_ARG: AtomicUsize = AtomicUsize::new(0);
+
+use core::sync::atomic::AtomicU64;
+
+type TlsCallback = unsafe extern "system" fn(*mut c_void, u32, *mut c_void);
+
+unsafe extern "system" fn tls_callback(_module: *mut c_void, reason: u32, _reserved: *mut c_void) {
+    // SAFETY: plain call.
+    let tid = unsafe { GetCurrentThreadId() };
+    let seq = SEQ.fetch_add(1, Ordering::SeqCst) + 1;
+    let i = LOG_N.fetch_add(1, Ordering::SeqCst) as usize;
+    if i < LOG.len() {
+        LOG[i].store(u64::from(reason) | (u64::from(tid) << 8) | (u64::from(seq) << 40), Ordering::SeqCst);
+    }
+}
+
+/// The routine remote threads run in the target: records that it ran (and in which sequence position).
+unsafe extern "system" fn marked_start(arg: usize) -> u32 {
+    START_SEQ.store(SEQ.fetch_add(1, Ordering::SeqCst) + 1, Ordering::SeqCst);
+    START_ARG.store(arg, Ordering::SeqCst);
+    START_SEEN.fetch_add(1, Ordering::SeqCst);
+    0x2A
+}
+
+#[repr(C)]
+struct TlsDirectory {
+    start: *const u8,
+    end: *const u8,
+    index: *const u32,
+    callbacks: *const TlsCallback,
+    zero_fill: u32,
+    characteristics: u32,
+}
+
+// SAFETY: read-only data used by the loader.
+unsafe impl Sync for TlsDirectory {}
+unsafe impl Sync for TlsCb {}
+
+#[repr(C)]
+struct TlsCb(TlsCallback, usize);
+
+#[used]
+#[unsafe(link_section = ".tls")]
+static TLS_TEMPLATE: [u8; 8] = [0; 8];
+static TLS_INDEX: AtomicU32 = AtomicU32::new(0);
+#[used]
+#[unsafe(link_section = ".CRT$XLB")]
+static CALLBACKS: TlsCb = TlsCb(tls_callback, 0);
+
+#[used]
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".rdata$T")]
+static _tls_used: TlsDirectory = TlsDirectory {
+    start: TLS_TEMPLATE.as_ptr(),
+    end: TLS_TEMPLATE.as_ptr().wrapping_add(8),
+    index: &TLS_INDEX as *const AtomicU32 as *const u32,
+    callbacks: &CALLBACKS as *const TlsCb as *const TlsCallback,
+    zero_fill: 0,
+    characteristics: 0,
+};
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn K32EnumProcessModules(p: HANDLE, modules: *mut usize, cb: u32, needed: *mut u32) -> BOOL;
+}
+
+/// The offset of a global of this image from the image base.
+fn offset_of_static<T>(r: &T) -> usize {
+    // SAFETY: plain call.
+    r as *const T as usize - unsafe { GetModuleHandleW(core::ptr::null()) } as usize
+}
+
+fn image_base_of(p: HANDLE) -> usize {
+    let mut m = [0usize; 4];
+    let mut n = 0u32;
+    // SAFETY: valid buffers.
+    let ok = unsafe { K32EnumProcessModules(p, m.as_mut_ptr(), 32, &mut n) };
+    if ok == 0 { 0 } else { m[0] }
+}
+
+/// What the callback logged in the target process `p` (image base `base`): (reason, thread id, sequence) entries.
+fn read_log(p: HANDLE, base: usize, out: &mut [(u32, u32, u32); 16]) -> usize {
+    let n = read_u32(p, base + offset_of_static(&LOG_N)).unwrap_or(0) as usize;
+    let n = n.min(16);
+    for i in 0..n {
+        let v = read_usize(p, base + offset_of_static(&LOG[i])).unwrap_or(0) as u64;
+        out[i] = ((v & 0xFF) as u32, ((v >> 8) & 0xFFFF_FFFF) as u32, (v >> 40) as u32);
+    }
+    n
+}
+
+fn read_start(p: HANDLE, base: usize) -> (u32, u32, usize) {
+    (
+        read_u32(p, base + offset_of_static(&START_SEEN)).unwrap_or(99),
+        read_u32(p, base + offset_of_static(&START_SEQ)).unwrap_or(0),
+        read_usize(p, base + offset_of_static(&START_ARG)).unwrap_or(0),
+    )
+}
+
+/// The address of `marked_start` in the target (the same image, at the target's base).
+fn start_in_target(base: usize) -> usize {
+    // SAFETY: plain call.
+    marked_start as *const () as usize - unsafe { GetModuleHandleW(core::ptr::null()) } as usize + base
+}
+
+/// Describe the log as text: reasons in order, whether each belongs to thread `tid`.
+fn log_text(log: &[(u32, u32, u32)], n: usize, tid: u32) -> Buf<200> {
+    let mut b = Buf::<200>::new();
+    for i in 0..n {
+        let name = match log[i].0 {
+            0 => "process-detach",
+            1 => "process-attach",
+            2 => "thread-attach",
+            3 => "thread-detach",
+            _ => "other",
+        };
+        let _ = write!(
+            b,
+            "{}{}{}",
+            if i > 0 { ", " } else { "" },
+            name,
+            if log[i].1 == tid { " (new thread)" } else { "" }
+        );
+    }
+    b
+}
 main_rt!(test);
+
+fn sequence_of(log: &[(u32, u32, u32)], n: usize, reason: u32, tid: u32) -> u32 {
+    for i in 0..n {
+        if log[i].0 == reason && log[i].1 == tid {
+            return log[i].2;
+        }
+    }
+    0
+}
 
 fn test(t: &mut Test) {
     let c = target();
-    let m = crt(c.process, 0, k32("ExitProcess"), 0x55, 0);
+    let base = image_base_of(c.process);
+    say!(t, "image base of the target found: {}", yn(base != 0));
+    let mut log = [(0u32, 0u32, 0u32); 16];
+    let n = read_log(c.process, base, &mut log);
+    say!(t, "events before: {}", log_text(&log, n, 0).as_str());
+    // running thread: start routine of the image
+    let m = crt(c.process, 0, start_in_target(base), 0x77, 0);
     say!(t, "create: {}", m.text().as_str());
     if m.ok() {
-        say!(t, "wait for the target process: {:#x}", wait(c.process, 10000));
-        say!(t, "target exit code: {:#x}", exit_code_of_process(c.process));
-        say!(t, "wait for the remote thread: {:#x}", wait(m.h, 10000));
-        say!(t, "remote thread exit code: {:#x}", exit_code_of_thread(m.h));
-        // SAFETY: valid handle.
-        unsafe { say!(t, "GetProcessIdOfThread == target pid: {}", yn(GetProcessIdOfThread(m.h) == c.pid)) };
+        let (w, code) = run_out(m.h);
+        say!(t, "wait {:#x}, exit code {:#x}", w, code);
+        let n = read_log(c.process, base, &mut log);
+        say!(t, "events after: {}", log_text(&log, n, m.tid).as_str());
+        let (seen, start_seq, arg) = read_start(c.process, base);
+        say!(t, "start routine ran {} time(s) with argument {:#x}", seen, arg);
+        let a = sequence_of(&log, n, 2, m.tid);
+        let d = sequence_of(&log, n, 3, m.tid);
+        say!(t, "attach before start routine before detach: {}", yn(a != 0 && a < start_seq && start_seq < d));
+        close(m.h);
+    }
+    // suspended: no attach before the resume
+    let m = crt(c.process, 0, start_in_target(base), 0x78, CREATE_SUSPENDED);
+    say!(t, "create suspended: {}", m.text().as_str());
+    if m.ok() {
+        let n0 = read_log(c.process, base, &mut log);
+        let before = sequence_of(&log, n0, 2, m.tid);
+        say!(t, "wait 300 ms: {:#x}; attach delivered while suspended: {}", wait(m.h, 300), yn(before != 0));
+        let (w, code) = run_out(m.h);
+        let n1 = read_log(c.process, base, &mut log);
+        say!(
+            t,
+            "after resume: wait {:#x}, exit code {:#x}, events: {}",
+            w,
+            code,
+            log_text(&log[n0..], n1 - n0, m.tid).as_str()
+        );
+        close(m.h);
+    }
+    // kernel32's ExitThread as the start routine: attach and detach as well
+    let n0 = read_log(c.process, base, &mut log);
+    let m = crt(c.process, 0, k32("ExitThread"), 5, 0);
+    if m.ok() {
+        let (w, code) = run_out(m.h);
+        let n1 = read_log(c.process, base, &mut log);
+        say!(
+            t,
+            "ExitThread routine: wait {:#x}, exit code {:#x}, events: {}",
+            w,
+            code,
+            log_text(&log[n0..], n1 - n0, m.tid).as_str()
+        );
         close(m.h);
     }
     kill(c);

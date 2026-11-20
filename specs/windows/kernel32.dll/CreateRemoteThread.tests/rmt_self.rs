@@ -399,7 +399,7 @@ fn spawn(kind: &str, flags: u32) -> Child {
 /// Wait until the target has signalled that it is running its own code.
 fn wait_ready(c: &Child) -> bool {
     // SAFETY: valid handle.
-    unsafe { WaitForSingleObject(c.ev, 15000) == 0 }
+    unsafe { WaitForSingleObject(c.ev, 5000) == 0 }
 }
 
 /// A ready target of kind "sleep".
@@ -760,9 +760,14 @@ fn child_main(args: &str) -> u32 {
     let mut it = args.split(' ');
     let kind = it.next().unwrap_or("");
     let name = it.next().unwrap_or("");
-    let w = wide(name);
-    // SAFETY: valid name.
-    let ev = unsafe { OpenEventW(2, 0, w.as_ptr()) };
+    // `h<hex>`: an inherited handle to the event; otherwise the name of an event
+    let ev = if let Some(hex) = name.strip_prefix('h') {
+        usize::from_str_radix(hex, 16).unwrap_or(0) as HANDLE
+    } else {
+        let w = wide(name);
+        // SAFETY: valid name.
+        unsafe { OpenEventW(2, 0, w.as_ptr()) }
+    };
     if !ev.is_null() {
         // SAFETY: valid handle.
         unsafe { SetEvent(ev) };
@@ -811,7 +816,7 @@ main_rt!(test);
 fn run(t: &mut Test, label: &str, h: HANDLE, flags: u32) {
     SEEN.store(0, Ordering::SeqCst);
     SEEN_PID.store(0, Ordering::SeqCst);
-    let m = crt(h, 0, routine as usize, 0x5150, flags);
+    let m = crt(h, 0, routine as *const () as usize, 0x5150, flags);
     say!(t, "{label}: create {}", m.text().as_str());
     if m.ok() {
         // SAFETY: plain calls.

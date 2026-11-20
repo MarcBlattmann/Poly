@@ -6,13 +6,13 @@
     "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "4c5d26b4f117",
-  "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-20T01:31:29Z",
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
   "tests": [
     {
       "name": "nct_basic",
-      "exe_sha256": "d13e027fa0ea613882b8a7ddccecd03f354969e9e78cdcc8be576ee3484ded73",
+      "exe_sha256": "abb5e05f7bc7c99656910f79d2e1175e67630322b707df86e1986253b9ffb57e",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -22,11 +22,11 @@
       "output": "create: status 0x0, handle yes\nGetProcessIdOfThread == target pid: yes\nGetThreadId non-zero: yes\nwait for the thread: 0x0\nGetExitCodeThread: 0x1234\ngranted access: 0x1fffff\ncreate with code in the target: status 0x0\nwait for the thread: 0x0\nGetExitCodeThread: 0x77\nmarker written into the target: 0xc0de5eed\nthread saw the target's process id: yes\nthread saw its own id == GetThreadId: yes\ncreate in the current process with the pseudo handle: status 0x0\nGetProcessIdOfThread == own pid: yes\nwait for the thread: 0x0\nGetExitCodeThread: 0x77\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 288
+      "ms": 286
     },
     {
       "name": "nct_errors",
-      "exe_sha256": "8e9a668337252ac03ab76b1dc71fe55682e6e905f51c887aaf76263418fffaa6",
+      "exe_sha256": "48b5100ae56678c26201f2d46a115c5766aeec9da27970b193a0f42807d1f849",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -36,11 +36,11 @@
       "output": "NULL handle output: status 0xc0000005\nafter NULL handle output: target process alive: yes\nattribute list of length 8 (no attributes): status 0xc000000d\nattribute list of length 4: status 0xc000000d\nOBJECT_ATTRIBUTES length 0: status 0xc000000d\nOBJECT_ATTRIBUTES length 48: status 0x0\nOBJ_INHERIT: status 0x0, handle inheritable yes\nafter OBJ_INHERIT: target process alive: yes\nNULL start routine, suspended: status 0x0, handle yes\nafter NULL start routine: target process alive: yes\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 285
+      "ms": 282
     },
     {
       "name": "nct_flags",
-      "exe_sha256": "7a469adcb5b4b1ce9d0c9dbcbad16846f41a44f514ab1d8bc78e30320de9dd2d",
+      "exe_sha256": "05148f363ee460816c5286213a87516c00b9463b26ddd3441fb8f11b0265acfc",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -50,11 +50,11 @@
       "output": "flags 0x0: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x1: status 0x0, hidden from debugger 0, wait before resume 0x102, wait 0x0, exit code 0x66\nflags 0x2: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x3: status 0x0, hidden from debugger 0, wait before resume 0x102, wait 0x0, exit code 0x66\nflags 0x4: status 0x0, hidden from debugger 1, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x5: status 0x0, hidden from debugger 1, wait before resume 0x102, wait 0x0, exit code 0x66\nflags 0x8: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x10: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x20: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x40: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x100: status 0xc00000f5\nflags 0x1000: status 0xc00000f5\nflags 0x10000: status 0xc00000f5\nflags 0x80000000: status 0xc00000f5\nflags 0x80: status 0xc00000f5\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 1209
+      "ms": 1201
     },
     {
       "name": "nct_stack",
-      "exe_sha256": "89685ba06ff748df7d731decd5247963cd1138b8362ae88b1b099f65e29b6f3c",
+      "exe_sha256": "eeb122b03a594962121edda2dbcdf978844a285c6bfee8c87e56b393149c3648",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -65,6 +65,20 @@
       "error": null,
       "stable": true,
       "ms": 283
+    },
+    {
+      "name": "nct_tls",
+      "exe_sha256": "b3a3348b456290588c72b08658ff40387228b5b66f9a0b220c168ecdc6f8dbb7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW1hZ2UgYmFzZSBvZiB0aGUgdGFyZ2V0IGZvdW5kOiB5ZXMKZmxhZ3MgMDogd2FpdCAweDAsIGV4aXQgY29kZSAweDJhLCBldmVudHM6IFt0aHJlYWQtYXR0YWNoIChuZXcgdGhyZWFkKSwgdGhyZWFkLWRldGFjaCAobmV3IHRocmVhZCldLCBzdGFydCByb3V0aW5lIHJhbiAxIHRpbWUocykgaW4gdG90YWwsIGxhc3QgYXJndW1lbnQgMHgzMwpmbGFncyAxIChzdXNwZW5kZWQpOiB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4MmEsIGV2ZW50czogW3RocmVhZC1hdHRhY2ggKG5ldyB0aHJlYWQpLCB0aHJlYWQtZGV0YWNoIChuZXcgdGhyZWFkKV0sIHN0YXJ0IHJvdXRpbmUgcmFuIDIgdGltZShzKSBpbiB0b3RhbCwgbGFzdCBhcmd1bWVudCAweDMzCmZsYWdzIDIgKHNraXAgdGhyZWFkIGF0dGFjaCk6IHdhaXQgMHgwLCBleGl0IGNvZGUgMHgyYSwgZXZlbnRzOiBbXSwgc3RhcnQgcm91dGluZSByYW4gMyB0aW1lKHMpIGluIHRvdGFsLCBsYXN0IGFyZ3VtZW50IDB4MzMKZmxhZ3MgMyAoc3VzcGVuZGVkLCBza2lwIHRocmVhZCBhdHRhY2gpOiB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4MmEsIGV2ZW50czogW10sIHN0YXJ0IHJvdXRpbmUgcmFuIDQgdGltZShzKSBpbiB0b3RhbCwgbGFzdCBhcmd1bWVudCAweDMzCmZsYWdzIDAgYWdhaW46IHdhaXQgMHgwLCBleGl0IGNvZGUgMHgyYSwgZXZlbnRzOiBbdGhyZWFkLWF0dGFjaCAobmV3IHRocmVhZCksIHRocmVhZC1kZXRhY2ggKG5ldyB0aHJlYWQpXSwgc3RhcnQgcm91dGluZSByYW4gNSB0aW1lKHMpIGluIHRvdGFsLCBsYXN0IGFyZ3VtZW50IDB4MzMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "image base of the target found: yes\nflags 0: wait 0x0, exit code 0x2a, events: [thread-attach (new thread), thread-detach (new thread)], start routine ran 1 time(s) in total, last argument 0x33\nflags 1 (suspended): wait 0x0, exit code 0x2a, events: [thread-attach (new thread), thread-detach (new thread)], start routine ran 2 time(s) in total, last argument 0x33\nflags 2 (skip thread attach): wait 0x0, exit code 0x2a, events: [], start routine ran 3 time(s) in total, last argument 0x33\nflags 3 (suspended, skip thread attach): wait 0x0, exit code 0x2a, events: [], start routine ran 4 time(s) in total, last argument 0x33\nflags 0 again: wait 0x0, exit code 0x2a, events: [thread-attach (new thread), thread-detach (new thread)], start routine ran 5 time(s) in total, last argument 0x33\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 302
     }
   ]
 }

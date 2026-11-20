@@ -33,6 +33,7 @@ rules:
   ideal_processor: "attribute PROC_THREAD_ATTRIBUTE_IDEAL_PROCESSOR (0x30005) with a PROCESSOR_NUMBER of group 0, number 0: the thread is created, and GetThreadIdealProcessorEx on the returned handle reports group 0, number 0"
   group_affinity: "attribute PROC_THREAD_ATTRIBUTE_GROUP_AFFINITY (0x30003) with a GROUP_AFFINITY of group 0, mask 1: the thread is created, and GetThreadGroupAffinity on the returned handle reports group 0, mask 1"
   process_attribute_refused: "a list holding the process-creation attribute PROC_THREAD_ATTRIBUTE_PARENT_PROCESS (0x20000, a process handle): NULL, ERROR_INVALID_PARAMETER (87), STATUS_INVALID_PARAMETER 0xC000000D. (UpdateProcThreadAttribute itself accepts that attribute into the list)"
+  sandboxed_targets: "against targets under a restricted token, at low integrity, in a job or in an AppContainer, from a medium-integrity caller, with the handle CreateProcessAsUser returned, the call (NULL attribute list) creates the thread as for an ordinary target: ExitThread with parameter 0x2468 ends with exit code 0x2468 and the thread is in the target. See the CreateRemoteThread sheet for all the cases and for the handle-rights rules, which are the same"
   rights: "the process handle's rights matter exactly as for CreateRemoteThread (a handle with no rights, with PROCESS_CREATE_THREAD only, with PROCESS_QUERY_LIMITED_INFORMATION only each worked, because the caller owns the target; the pseudo handle GetCurrentProcess() created a thread in the caller's own process)"
 errors:
   invalid_handle: "NULL, or a number that is no handle: NULL, ERROR_INVALID_HANDLE (6), STATUS_INVALID_HANDLE 0xC0000008"
@@ -56,5 +57,5 @@ building_tests: >
   addresses; the ideal processor of a thread created without the attribute is not printed (it varies from run to run).
 not_covered: >
   Other thread attributes (PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, PROC_THREAD_ATTRIBUTE_PREFERRED_NODE,
-  attribute values of the wrong size); an attribute list with more than one attribute; targets under restricted
-  tokens, at low integrity or in an AppContainer (second batch of this track).
+  attribute values of the wrong size); an attribute list with more than one attribute; sandboxed targets with an
+  attribute list (the call with a NULL list was observed: see sandboxed_targets).

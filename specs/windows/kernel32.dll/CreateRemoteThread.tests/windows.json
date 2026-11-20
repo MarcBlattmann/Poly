@@ -6,13 +6,13 @@
     "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "4c5d26b4f117",
-  "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-20T01:31:29Z",
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
   "tests": [
     {
       "name": "rmt_attrs",
-      "exe_sha256": "1d3bfcf54db5880f7f36edebe19e6e660ab99c81017846c4020de9cd96569441",
+      "exe_sha256": "8a9fe5b9f6e72d955f6ec01682aa662139e7948d508779f3c2cf2ecb76312dd8",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -22,11 +22,11 @@
       "output": "attributes NULL: handle, inheritable no\nattributes inherit true, nLength 24: handle, inheritable yes\nattributes inherit false, nLength 24: handle, inheritable no\nattributes inherit true, nLength 0: handle, inheritable yes\nattributes inherit true, nLength 99: handle, inheritable yes\nNULL thread id pointer: handle\nNULL thread id pointer: wait 0x0 exit code 0x7\nstart NULL, suspended: handle\nstart 0x10 (unmapped), suspended: handle\nstart in a read-write page, suspended: handle\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 281
+      "ms": 295
     },
     {
       "name": "rmt_badhandle",
-      "exe_sha256": "f4267118633c1176de1921ff61486d2991cc0cd1bea8585513d12d96e9aa99e2",
+      "exe_sha256": "1ddcf5e0c23351782ffbf78d9f14cc66e128462d5ebc284a896cfb8edc9a7be7",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -36,11 +36,11 @@
       "output": "NULL: CreateRemoteThread NULL gle=6 status=0xc0000008\nNULL: NtCreateThreadEx status 0xc0000008\nsmall number that is no handle: CreateRemoteThread NULL gle=6 status=0xc0000008\nsmall number that is no handle: NtCreateThreadEx status 0xc0000008\nhuge number that is no handle: CreateRemoteThread NULL gle=6 status=0xc0000008\nhuge number that is no handle: NtCreateThreadEx status 0xc0000008\nclosed handle: CreateRemoteThread NULL gle=6 status=0xc0000008\nclosed handle: NtCreateThreadEx status 0xc0000008\nevent handle: CreateRemoteThread NULL gle=6 status=0xc0000024\nevent handle: NtCreateThreadEx status 0xc0000024\nthread handle of the target's first thread: CreateRemoteThread NULL gle=6 status=0xc0000024\nthread handle of the target's first thread: NtCreateThreadEx status 0xc0000024\npseudo handle of the current thread: CreateRemoteThread NULL gle=6 status=0xc0000024\npseudo handle of the current thread: NtCreateThreadEx status 0xc0000024\nhandle of the calling thread: CreateRemoteThread NULL gle=6 status=0xc0000024\nhandle of the calling thread: NtCreateThreadEx status 0xc0000024\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 284
+      "ms": 285
     },
     {
       "name": "rmt_basic",
-      "exe_sha256": "61ef1ac8f64acc0edfcc062652cf648266d157e10b8c5eed487ed9c3b6ad4119",
+      "exe_sha256": "25be5a4c9ae65f1ca0ff24262d17ab1c6667adee730a6432412d4f28b33c734d",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -50,11 +50,11 @@
       "output": "target started: yes\ntarget is another process: yes\ncreate: handle\nthread id returned non-zero: yes\nthread id differs from the caller's thread and from the target's first thread: yes\nGetThreadId == returned id: yes\nGetProcessIdOfThread == target pid: yes\nGetProcessIdOfThread != caller pid: yes\nwait for the thread: 0x0\nGetExitCodeThread: 0x1234\ngranted access of the thread handle: 0x1fffff\ntarget process still running: yes\ntarget's first thread still running: yes\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 294
+      "ms": 290
     },
     {
       "name": "rmt_dead",
-      "exe_sha256": "42d5436f1ad208a7b09fd3f04f6184a2775f91789be61a0c856df24d6aa8d591",
+      "exe_sha256": "2ff85da43f789d85b5960afd914339357d9b0cbf540977a25418ccd4cfd7cad1",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -64,11 +64,11 @@
       "output": "target ready: yes\nwait for the target to end: 0x0\nexit code: 7\nended by itself: CreateRemoteThread NULL gle=5 status=0xc000010a\nended by itself: NtCreateThreadEx status 0xc000010a\nended by itself: suspended CreateRemoteThread NULL gle=5 status=0xc000010a\nwait for the terminated target: 0x0\nterminated: CreateRemoteThread NULL gle=5 status=0xc000010a\nterminated: NtCreateThreadEx status 0xc000010a\nterminated: suspended CreateRemoteThread NULL gle=5 status=0xc000010a\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 67
+      "ms": 65
     },
     {
-      "name": "rmt_exitprocess",
-      "exe_sha256": "731d04aac22a8e31709dc0b3085aa88c9412676a8700719425032f0f084aa367",
+      "name": "rmt_endproc",
+      "exe_sha256": "65a009465fe6dd1b3398e86e8932f38fef8888b242a529197f2d188b3b9ba662",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -78,11 +78,11 @@
       "output": "create: handle\nwait for the target process: 0x0\ntarget exit code: 0x55\nwait for the remote thread: 0x0\nremote thread exit code: 0x55\nGetProcessIdOfThread == target pid: yes\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 287
+      "ms": 307
     },
     {
       "name": "rmt_flags",
-      "exe_sha256": "d553afecda0bbf17a0f9d27d817113f6edfb13d83c1256d6c8d118d206531410",
+      "exe_sha256": "45275b1bf397f42c76cc7f51fb48ab386b49c6e862b2f93c7a179e95e97c97df",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -92,11 +92,11 @@
       "output": "flags 0x0: handle, wait 0x0 exit code 0x99\nflags 0x1: handle, wait 0x0 exit code 0x99\nflags 0x2: handle, wait 0x0 exit code 0x99\nflags 0x4: handle, wait 0x0 exit code 0x99\nflags 0x5: handle, wait 0x0 exit code 0x99\nflags 0x8: handle, wait 0x0 exit code 0x99\nflags 0x10: handle, wait 0x0 exit code 0x99\nflags 0x20: handle, wait 0x0 exit code 0x99\nflags 0x100: handle, wait 0x0 exit code 0x99\nflags 0x8000: handle, wait 0x0 exit code 0x99\nflags 0x10000: handle, wait 0x0 exit code 0x99\nflags 0x10004: handle, wait 0x0 exit code 0x99\nflags 0x20000: handle, wait 0x0 exit code 0x99\nflags 0x100000: handle, wait 0x0 exit code 0x99\nflags 0x80000000: handle, wait 0x0 exit code 0x99\nflags 0xfffffffb: handle, wait 0x0 exit code 0x99\nflags 0xffffffff: handle, wait 0x0 exit code 0x99\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 289
+      "ms": 280
     },
     {
       "name": "rmt_notstarted",
-      "exe_sha256": "27afdbd6f6544db708eb0bd8bfab908a6872028a1b42489df6807970eb6d216a",
+      "exe_sha256": "1e8bd63395835aa61fc225744d49ec1027d31633c337704883534b37ae410a46",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -106,11 +106,11 @@
       "output": "target created: yes\ncreate (running): handle\nwait for the thread: 0x0\nexit code: 0x2222\ntarget still alive: yes\ncreate (suspended): handle\nwait 300 ms: 0x102\nresume: previous count 1\nwait for the thread: 0x0\nexit code: 0x3333\nresume the first thread: previous count 1\ntarget signals ready once its first thread runs: yes\ntarget still alive: yes\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 575
+      "ms": 585
     },
     {
       "name": "rmt_rights",
-      "exe_sha256": "0adc0953ed65c97a2c58a4e3795e52826c206a3413e62d322efe1eb6d8006ab2",
+      "exe_sha256": "49d3028dbbff965854034baf558da65f815dfa8a98ee0bea5e1b7412e0a1c0ee",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -120,11 +120,59 @@
       "output": "rights none: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights C: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights Q: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CQ: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights O: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CO: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights QO: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CQO: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights W: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CW: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights QW: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CQW: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights OW: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights COW: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights QOW: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CQOW: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights R: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights QR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CQR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights OR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights COR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights QOR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CQOR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights WR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CWR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights QWR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CQWR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights OWR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights COWR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights QOWR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights CQOWR: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights query-limited only: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights create-thread + query-limited: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights synchronize only: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nrights terminate+dup+synchronize: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nall access except create-thread: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nall access: handle, wait 0x0 exit code 0x4321 access 0x1fffff\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 290
+      "ms": 291
+    },
+    {
+      "name": "rmt_sb_appcontainer",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "45ba830605a5c7d36e83db168403574f601c770c2845038531681608ceb36aed",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FsbGVyIHRva2VuOiByZXN0cmljdGVkIG5vLCBpbnRlZ3JpdHkgbGV2ZWwgMHgyMDAwCmltYWdlIG1hZGUgcmVhZGFibGUgZm9yIEFwcENvbnRhaW5lcnM6IHllcwpBcHBDb250YWluZXIgU0lEIGF2YWlsYWJsZTogeWVzCnRhcmdldCBzdGFydGVkOiB5ZXMKdGFyZ2V0IHJlYWR5OiB5ZXMKdGFyZ2V0IHRva2VuOiByZXN0cmljdGVkIG5vLCBpbnRlZ3JpdHkgbGV2ZWwgMHgxMDAwCkNyZWF0ZVJlbW90ZVRocmVhZCB3aXRoIHRoZSBjcmVhdG9yJ3MgaGFuZGxlOiBoYW5kbGUKICB0aHJlYWQgaXMgaW4gdGhlIHRhcmdldDogeWVzLCBub3QgaW4gdGhlIGNhbGxlcjogeWVzCiAgd2FpdCAweDAsIGV4aXQgY29kZSAweDEyMzQKTnRDcmVhdGVUaHJlYWRFeCB3aXRoIHRoZSBjcmVhdG9yJ3MgaGFuZGxlOiBzdGF0dXMgMHgwCiAgd2FpdCAweDAsIGV4aXQgY29kZSAweDQzMjEKQ3JlYXRlUmVtb3RlVGhyZWFkRXggd2l0aCB0aGUgY3JlYXRvcidzIGhhbmRsZTogaGFuZGxlCiAgd2FpdCAweDAsIGV4aXQgY29kZSAweDI0NjgKY29kZSBpbiB0aGUgdGFyZ2V0LCBzdXNwZW5kZWQ6IGhhbmRsZQogIHdhaXQgMzAwIG1zOiAweDEwMiwgbWFya2VyIDB4MAogIGFmdGVyIHJlc3VtZTogd2FpdCAweDAsIGV4aXQgY29kZSAweDc3LCBtYXJrZXIgMHhjMGRlNWVlZAogIHRocmVhZCBzYXcgdGhlIHRhcmdldCdzIHByb2Nlc3MgaWQ6IHllcwogIHRocmVhZCBzYXcgaXRzIG93biBpZCA9PSByZXR1cm5lZCBpZDogeWVzCk9wZW5Qcm9jZXNzIHdpdGggdGhlIGZpdmUgcmlnaHRzIG9mIExlYXJuJ3MgbGlzdDogaGFuZGxlOyBDcmVhdGVSZW1vdGVUaHJlYWQ6IGhhbmRsZSwgd2FpdCAweDAgZXhpdCBjb2RlIDB4MTM1NwogIE50Q3JlYXRlVGhyZWFkRXggd2l0aCBpdDogc3RhdHVzIDB4MApPcGVuUHJvY2VzcyB3aXRoIFBST0NFU1NfQ1JFQVRFX1RIUkVBRCBvbmx5OiBoYW5kbGU7IENyZWF0ZVJlbW90ZVRocmVhZDogaGFuZGxlLCB3YWl0IDB4MCBleGl0IGNvZGUgMHgxMzU3CiAgTnRDcmVhdGVUaHJlYWRFeCB3aXRoIGl0OiBzdGF0dXMgMHgwCk9wZW5Qcm9jZXNzIHdpdGggUFJPQ0VTU19RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OIG9ubHk6IGhhbmRsZTsgQ3JlYXRlUmVtb3RlVGhyZWFkOiBoYW5kbGUsIHdhaXQgMHgwIGV4aXQgY29kZSAweDEzNTcKICBOdENyZWF0ZVRocmVhZEV4IHdpdGggaXQ6IHN0YXR1cyAweGMwMDAwMDIyCkNyZWF0ZVJlbW90ZVRocmVhZCB3aXRoIGEgY29weSBvZiB0aGUgaGFuZGxlIHdpdGhvdXQgcmlnaHRzOiBoYW5kbGUKdGhyZWFkIHJ1bm5pbmcgRXhpdFByb2Nlc3MoMHg1NSk6IGhhbmRsZQogIHRhcmdldCBwcm9jZXNzIGVuZGVkOiB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4NTUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caller token: restricted no, integrity level 0x2000\nimage made readable for AppContainers: yes\nAppContainer SID available: yes\ntarget started: yes\ntarget ready: yes\ntarget token: restricted no, integrity level 0x1000\nCreateRemoteThread with the creator's handle: handle\n  thread is in the target: yes, not in the caller: yes\n  wait 0x0, exit code 0x1234\nNtCreateThreadEx with the creator's handle: status 0x0\n  wait 0x0, exit code 0x4321\nCreateRemoteThreadEx with the creator's handle: handle\n  wait 0x0, exit code 0x2468\ncode in the target, suspended: handle\n  wait 300 ms: 0x102, marker 0x0\n  after resume: wait 0x0, exit code 0x77, marker 0xc0de5eed\n  thread saw the target's process id: yes\n  thread saw its own id == returned id: yes\nOpenProcess with the five rights of Learn's list: handle; CreateRemoteThread: handle, wait 0x0 exit code 0x1357\n  NtCreateThreadEx with it: status 0x0\nOpenProcess with PROCESS_CREATE_THREAD only: handle; CreateRemoteThread: handle, wait 0x0 exit code 0x1357\n  NtCreateThreadEx with it: status 0x0\nOpenProcess with PROCESS_QUERY_LIMITED_INFORMATION only: handle; CreateRemoteThread: handle, wait 0x0 exit code 0x1357\n  NtCreateThreadEx with it: status 0xc0000022\nCreateRemoteThread with a copy of the handle without rights: handle\nthread running ExitProcess(0x55): handle\n  target process ended: wait 0x0, exit code 0x55\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 418
+    },
+    {
+      "name": "rmt_sb_job",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "d32e663bc73d65cc7f9b328ef433f208bb4768b14b6c493e610f218db2d430a5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FsbGVyIHRva2VuOiByZXN0cmljdGVkIG5vLCBpbnRlZ3JpdHkgbGV2ZWwgMHgyMDAwCnJlc3RyaWN0ZWQgbG93LWludGVncml0eSB0b2tlbiBtYWRlOiB5ZXMKam9iIG1hZGU6IHllcwp0YXJnZXQgc3RhcnRlZDogeWVzCnRhcmdldCByZWFkeTogeWVzCnRhcmdldCB0b2tlbjogcmVzdHJpY3RlZCB5ZXMsIGludGVncml0eSBsZXZlbCAweDEwMDAKQ3JlYXRlUmVtb3RlVGhyZWFkIHdpdGggdGhlIGNyZWF0b3IncyBoYW5kbGU6IGhhbmRsZQogIHRocmVhZCBpcyBpbiB0aGUgdGFyZ2V0OiB5ZXMsIG5vdCBpbiB0aGUgY2FsbGVyOiB5ZXMKICB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4MTIzNApOdENyZWF0ZVRocmVhZEV4IHdpdGggdGhlIGNyZWF0b3IncyBoYW5kbGU6IHN0YXR1cyAweDAKICB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4NDMyMQpDcmVhdGVSZW1vdGVUaHJlYWRFeCB3aXRoIHRoZSBjcmVhdG9yJ3MgaGFuZGxlOiBoYW5kbGUKICB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4MjQ2OApjb2RlIGluIHRoZSB0YXJnZXQsIHN1c3BlbmRlZDogaGFuZGxlCiAgd2FpdCAzMDAgbXM6IDB4MTAyLCBtYXJrZXIgMHgwCiAgYWZ0ZXIgcmVzdW1lOiB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4NzcsIG1hcmtlciAweGMwZGU1ZWVkCiAgdGhyZWFkIHNhdyB0aGUgdGFyZ2V0J3MgcHJvY2VzcyBpZDogeWVzCiAgdGhyZWFkIHNhdyBpdHMgb3duIGlkID09IHJldHVybmVkIGlkOiB5ZXMKT3BlblByb2Nlc3Mgd2l0aCB0aGUgZml2ZSByaWdodHMgb2YgTGVhcm4ncyBsaXN0OiBoYW5kbGU7IENyZWF0ZVJlbW90ZVRocmVhZDogaGFuZGxlLCB3YWl0IDB4MCBleGl0IGNvZGUgMHgxMzU3CiAgTnRDcmVhdGVUaHJlYWRFeCB3aXRoIGl0OiBzdGF0dXMgMHgwCk9wZW5Qcm9jZXNzIHdpdGggUFJPQ0VTU19DUkVBVEVfVEhSRUFEIG9ubHk6IGhhbmRsZTsgQ3JlYXRlUmVtb3RlVGhyZWFkOiBoYW5kbGUsIHdhaXQgMHgwIGV4aXQgY29kZSAweDEzNTcKICBOdENyZWF0ZVRocmVhZEV4IHdpdGggaXQ6IHN0YXR1cyAweDAKT3BlblByb2Nlc3Mgd2l0aCBQUk9DRVNTX1FVRVJZX0xJTUlURURfSU5GT1JNQVRJT04gb25seTogaGFuZGxlOyBDcmVhdGVSZW1vdGVUaHJlYWQ6IGhhbmRsZSwgd2FpdCAweDAgZXhpdCBjb2RlIDB4MTM1NwogIE50Q3JlYXRlVGhyZWFkRXggd2l0aCBpdDogc3RhdHVzIDB4YzAwMDAwMjIKQ3JlYXRlUmVtb3RlVGhyZWFkIHdpdGggYSBjb3B5IG9mIHRoZSBoYW5kbGUgd2l0aG91dCByaWdodHM6IGhhbmRsZQp0aHJlYWQgcnVubmluZyBFeGl0UHJvY2VzcygweDU1KTogaGFuZGxlCiAgdGFyZ2V0IHByb2Nlc3MgZW5kZWQ6IHdhaXQgMHgwLCBleGl0IGNvZGUgMHg1NQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caller token: restricted no, integrity level 0x2000\nrestricted low-integrity token made: yes\njob made: yes\ntarget started: yes\ntarget ready: yes\ntarget token: restricted yes, integrity level 0x1000\nCreateRemoteThread with the creator's handle: handle\n  thread is in the target: yes, not in the caller: yes\n  wait 0x0, exit code 0x1234\nNtCreateThreadEx with the creator's handle: status 0x0\n  wait 0x0, exit code 0x4321\nCreateRemoteThreadEx with the creator's handle: handle\n  wait 0x0, exit code 0x2468\ncode in the target, suspended: handle\n  wait 300 ms: 0x102, marker 0x0\n  after resume: wait 0x0, exit code 0x77, marker 0xc0de5eed\n  thread saw the target's process id: yes\n  thread saw its own id == returned id: yes\nOpenProcess with the five rights of Learn's list: handle; CreateRemoteThread: handle, wait 0x0 exit code 0x1357\n  NtCreateThreadEx with it: status 0x0\nOpenProcess with PROCESS_CREATE_THREAD only: handle; CreateRemoteThread: handle, wait 0x0 exit code 0x1357\n  NtCreateThreadEx with it: status 0x0\nOpenProcess with PROCESS_QUERY_LIMITED_INFORMATION only: handle; CreateRemoteThread: handle, wait 0x0 exit code 0x1357\n  NtCreateThreadEx with it: status 0xc0000022\nCreateRemoteThread with a copy of the handle without rights: handle\nthread running ExitProcess(0x55): handle\n  target process ended: wait 0x0, exit code 0x55\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 381
+    },
+    {
+      "name": "rmt_sb_restricted",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "f1b6b431ea8ee866d4ec84d4ffb1771051c1f8711de7889b4a5db0a7efe39e34",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2FsbGVyIHRva2VuOiByZXN0cmljdGVkIG5vLCBpbnRlZ3JpdHkgbGV2ZWwgMHgyMDAwCnJlc3RyaWN0ZWQgdG9rZW4gbWFkZTogeWVzCnRhcmdldCBzdGFydGVkOiB5ZXMKdGFyZ2V0IHJlYWR5OiB5ZXMKdGFyZ2V0IHRva2VuOiByZXN0cmljdGVkIHllcywgaW50ZWdyaXR5IGxldmVsIDB4MjAwMApDcmVhdGVSZW1vdGVUaHJlYWQgd2l0aCB0aGUgY3JlYXRvcidzIGhhbmRsZTogaGFuZGxlCiAgdGhyZWFkIGlzIGluIHRoZSB0YXJnZXQ6IHllcywgbm90IGluIHRoZSBjYWxsZXI6IHllcwogIHdhaXQgMHgwLCBleGl0IGNvZGUgMHgxMjM0Ck50Q3JlYXRlVGhyZWFkRXggd2l0aCB0aGUgY3JlYXRvcidzIGhhbmRsZTogc3RhdHVzIDB4MAogIHdhaXQgMHgwLCBleGl0IGNvZGUgMHg0MzIxCkNyZWF0ZVJlbW90ZVRocmVhZEV4IHdpdGggdGhlIGNyZWF0b3IncyBoYW5kbGU6IGhhbmRsZQogIHdhaXQgMHgwLCBleGl0IGNvZGUgMHgyNDY4CmNvZGUgaW4gdGhlIHRhcmdldCwgc3VzcGVuZGVkOiBoYW5kbGUKICB3YWl0IDMwMCBtczogMHgxMDIsIG1hcmtlciAweDAKICBhZnRlciByZXN1bWU6IHdhaXQgMHgwLCBleGl0IGNvZGUgMHg3NywgbWFya2VyIDB4YzBkZTVlZWQKICB0aHJlYWQgc2F3IHRoZSB0YXJnZXQncyBwcm9jZXNzIGlkOiB5ZXMKICB0aHJlYWQgc2F3IGl0cyBvd24gaWQgPT0gcmV0dXJuZWQgaWQ6IHllcwpPcGVuUHJvY2VzcyB3aXRoIHRoZSBmaXZlIHJpZ2h0cyBvZiBMZWFybidzIGxpc3Q6IGhhbmRsZTsgQ3JlYXRlUmVtb3RlVGhyZWFkOiBoYW5kbGUsIHdhaXQgMHgwIGV4aXQgY29kZSAweDEzNTcKICBOdENyZWF0ZVRocmVhZEV4IHdpdGggaXQ6IHN0YXR1cyAweDAKT3BlblByb2Nlc3Mgd2l0aCBQUk9DRVNTX0NSRUFURV9USFJFQUQgb25seTogaGFuZGxlOyBDcmVhdGVSZW1vdGVUaHJlYWQ6IGhhbmRsZSwgd2FpdCAweDAgZXhpdCBjb2RlIDB4MTM1NwogIE50Q3JlYXRlVGhyZWFkRXggd2l0aCBpdDogc3RhdHVzIDB4MApPcGVuUHJvY2VzcyB3aXRoIFBST0NFU1NfUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTiBvbmx5OiBoYW5kbGU7IENyZWF0ZVJlbW90ZVRocmVhZDogaGFuZGxlLCB3YWl0IDB4MCBleGl0IGNvZGUgMHgxMzU3CiAgTnRDcmVhdGVUaHJlYWRFeCB3aXRoIGl0OiBzdGF0dXMgMHhjMDAwMDAyMgpDcmVhdGVSZW1vdGVUaHJlYWQgd2l0aCBhIGNvcHkgb2YgdGhlIGhhbmRsZSB3aXRob3V0IHJpZ2h0czogaGFuZGxlCnRocmVhZCBydW5uaW5nIEV4aXRQcm9jZXNzKDB4NTUpOiBoYW5kbGUKICB0YXJnZXQgcHJvY2VzcyBlbmRlZDogd2FpdCAweDAsIGV4aXQgY29kZSAweDU1CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "caller token: restricted no, integrity level 0x2000\nrestricted token made: yes\ntarget started: yes\ntarget ready: yes\ntarget token: restricted yes, integrity level 0x2000\nCreateRemoteThread with the creator's handle: handle\n  thread is in the target: yes, not in the caller: yes\n  wait 0x0, exit code 0x1234\nNtCreateThreadEx with the creator's handle: status 0x0\n  wait 0x0, exit code 0x4321\nCreateRemoteThreadEx with the creator's handle: handle\n  wait 0x0, exit code 0x2468\ncode in the target, suspended: handle\n  wait 300 ms: 0x102, marker 0x0\n  after resume: wait 0x0, exit code 0x77, marker 0xc0de5eed\n  thread saw the target's process id: yes\n  thread saw its own id == returned id: yes\nOpenProcess with the five rights of Learn's list: handle; CreateRemoteThread: handle, wait 0x0 exit code 0x1357\n  NtCreateThreadEx with it: status 0x0\nOpenProcess with PROCESS_CREATE_THREAD only: handle; CreateRemoteThread: handle, wait 0x0 exit code 0x1357\n  NtCreateThreadEx with it: status 0x0\nOpenProcess with PROCESS_QUERY_LIMITED_INFORMATION only: handle; CreateRemoteThread: handle, wait 0x0 exit code 0x1357\n  NtCreateThreadEx with it: status 0xc0000022\nCreateRemoteThread with a copy of the handle without rights: handle\nthread running ExitProcess(0x55): handle\n  target process ended: wait 0x0, exit code 0x55\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 379
     },
     {
       "name": "rmt_self",
-      "exe_sha256": "c4877c1dd4170cf73cabd04693e9c123fce45646f7fe0a817f8d3a005a9a752d",
+      "exe_sha256": "d2df76209ac037e11e87a9e554f9b9dddfff1e18585ba5bc067901606eb2fd04",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -134,11 +182,11 @@
       "output": "pseudo handle: create handle\npseudo handle: GetProcessIdOfThread == own pid: yes\npseudo handle: thread id differs from the caller's: yes\npseudo handle: wait 0x0 exit code 0x5151\npseudo handle: routine saw the parameter 0x5150\npseudo handle: routine ran in this process: yes\npseudo handle, suspended: create handle\npseudo handle, suspended: GetProcessIdOfThread == own pid: yes\npseudo handle, suspended: thread id differs from the caller's: yes\npseudo handle, suspended: wait 300 ms: 0x102, routine ran: no\npseudo handle, suspended: wait 0x0 exit code 0x5151\npseudo handle, suspended: routine saw the parameter 0x5150\npseudo handle, suspended: routine ran in this process: yes\nreal handle: create handle\nreal handle: GetProcessIdOfThread == own pid: yes\nreal handle: thread id differs from the caller's: yes\nreal handle: wait 0x0 exit code 0x5151\nreal handle: routine saw the parameter 0x5150\nreal handle: routine ran in this process: yes\nreal handle with create-thread only: create handle\nreal handle with create-thread only: GetProcessIdOfThread == own pid: yes\nreal handle with create-thread only: thread id differs from the caller's: yes\nreal handle with create-thread only: wait 0x0 exit code 0x5151\nreal handle with create-thread only: routine saw the parameter 0x5150\nreal handle with create-thread only: routine ran in this process: yes\nreal handle with query-limited only: create handle\nreal handle with query-limited only: GetProcessIdOfThread == own pid: yes\nreal handle with query-limited only: thread id differs from the caller's: yes\nreal handle with query-limited only: wait 0x0 exit code 0x5151\nreal handle with query-limited only: routine saw the parameter 0x5150\nreal handle with query-limited only: routine ran in this process: yes\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 366
+      "ms": 358
     },
     {
       "name": "rmt_suspended",
-      "exe_sha256": "bc50e1989deac3b111652ad65f8656ed678b322e7c96768e2116d94c0bc06541",
+      "exe_sha256": "79d4e1c8ebaedea0e0d78aa9c3c5e40937291e0cb4ae0010abf9ebdf7d11c58b",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -148,7 +196,21 @@
       "output": "create suspended: handle\nthread id returned non-zero: yes\nGetProcessIdOfThread == target pid: yes\nexit code before it has run: 259\nwait 300 ms: 0x102\nmarker before resume: 0x0\nSuspendThread: previous count 1\nResumeThread: previous count 2\nwait 300 ms after one resume of two: 0x102\nmarker after one resume of two: 0x0\nResumeThread: previous count 1\nwait: 0x0\nmarker after the last resume: 0xc0de5eed\nexit code: 0x77\nResumeThread of the finished thread: 0x0 gle=-2\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 904
+      "ms": 898
+    },
+    {
+      "name": "rmt_tls",
+      "exe_sha256": "67264cd122804ded89a3b15975a7a53991b7552cb2c9aea388bfd104783bc7be",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW1hZ2UgYmFzZSBvZiB0aGUgdGFyZ2V0IGZvdW5kOiB5ZXMKZXZlbnRzIGJlZm9yZTogcHJvY2Vzcy1hdHRhY2gKY3JlYXRlOiBoYW5kbGUKd2FpdCAweDAsIGV4aXQgY29kZSAweDJhCmV2ZW50cyBhZnRlcjogcHJvY2Vzcy1hdHRhY2gsIHRocmVhZC1hdHRhY2ggKG5ldyB0aHJlYWQpLCB0aHJlYWQtZGV0YWNoIChuZXcgdGhyZWFkKQpzdGFydCByb3V0aW5lIHJhbiAxIHRpbWUocykgd2l0aCBhcmd1bWVudCAweDc3CmF0dGFjaCBiZWZvcmUgc3RhcnQgcm91dGluZSBiZWZvcmUgZGV0YWNoOiB5ZXMKY3JlYXRlIHN1c3BlbmRlZDogaGFuZGxlCndhaXQgMzAwIG1zOiAweDEwMjsgYXR0YWNoIGRlbGl2ZXJlZCB3aGlsZSBzdXNwZW5kZWQ6IG5vCmFmdGVyIHJlc3VtZTogd2FpdCAweDAsIGV4aXQgY29kZSAweDJhLCBldmVudHM6IHRocmVhZC1hdHRhY2ggKG5ldyB0aHJlYWQpLCB0aHJlYWQtZGV0YWNoIChuZXcgdGhyZWFkKQpFeGl0VGhyZWFkIHJvdXRpbmU6IHdhaXQgMHgwLCBleGl0IGNvZGUgMHg1LCBldmVudHM6IHRocmVhZC1hdHRhY2ggKG5ldyB0aHJlYWQpLCB0aHJlYWQtZGV0YWNoIChuZXcgdGhyZWFkKQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "image base of the target found: yes\nevents before: process-attach\ncreate: handle\nwait 0x0, exit code 0x2a\nevents after: process-attach, thread-attach (new thread), thread-detach (new thread)\nstart routine ran 1 time(s) with argument 0x77\nattach before start routine before detach: yes\ncreate suspended: handle\nwait 300 ms: 0x102; attach delivered while suspended: no\nafter resume: wait 0x0, exit code 0x2a, events: thread-attach (new thread), thread-detach (new thread)\nExitThread routine: wait 0x0, exit code 0x5, events: thread-attach (new thread), thread-detach (new thread)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 601
     }
   ]
 }

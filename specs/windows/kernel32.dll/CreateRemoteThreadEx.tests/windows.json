@@ -6,13 +6,13 @@
     "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "4c5d26b4f117",
-  "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-20T01:31:29Z",
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
   "tests": [
     {
       "name": "rmte_basic",
-      "exe_sha256": "32d596879e1fc1cb4e2a1a02ac41b16efaf7c0c77b1d9e0152c031c50ac0b816",
+      "exe_sha256": "51a5e733dfd497618825d045c8190791b629d70757dccf399c70a50864949ae2",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -22,11 +22,11 @@
       "output": "create: handle\nthread id returned non-zero: yes\nthread id differs from the caller's thread and from the target's first thread: yes\nGetThreadId == returned id: yes\nGetProcessIdOfThread == target pid: yes\nGetProcessIdOfThread != caller pid: yes\nwait for the thread: 0x0\nGetExitCodeThread: 0x1234\ngranted access of the thread handle: 0x1fffff\ncreate suspended with code in the target: handle\nwait 300 ms: 0x102\nmarker before resume: 0x0\nResumeThread: previous count 1\nwait: 0x0\nexit code: 0x77\nmarker after: 0xc0de5eed\nthread saw the target's process id: yes\nthread saw its own thread id == returned id: yes\nNULL thread id pointer: handle\nNULL thread id pointer: wait 0x0 exit code 0x7\ncommit 256K: reserve=1024K, committed at least one page: yes\nreserve 2M: reserve=2048K, committed at least one page: yes\nreserve 100000 bytes: reserve=128K, committed at least one page: yes\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 608
+      "ms": 612
     },
     {
       "name": "rmte_errors",
-      "exe_sha256": "babc74f54e5dda48ccc42ea3e6534657ab3267ab05ebc6679e9545d01a69c5d5",
+      "exe_sha256": "ff039e312004c34a23dc93de457bdcefc22e26638d188a6391014fd9c9634857",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -36,7 +36,7 @@
       "output": "NULL: NULL gle=6 status=0xc0000008\nnumber that is no handle: NULL gle=6 status=0xc0000008\nevent handle: NULL gle=6 status=0xc0000024\nthread handle: NULL gle=6 status=0xc0000024\npseudo handle of the current process: handle, wait 0x0 exit code 0x4242\nprocess handle with no rights: handle, wait 0x0 exit code 0x4242\nprocess handle with query-limited only: handle, wait 0x0 exit code 0x4242\nprocess handle with create-thread only: handle, wait 0x0 exit code 0x4242\nprocess that has ended: NULL gle=5 status=0xc000010a\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 292
+      "ms": 282
     }
   ]
 }

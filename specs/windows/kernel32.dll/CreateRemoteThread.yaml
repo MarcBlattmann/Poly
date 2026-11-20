@@ -3,7 +3,7 @@
 id: windows/api/kernel32.dll/CreateRemoteThread
 oracle:
   os: "Windows 11 Home 26H2 (build 26300.9974), x64"
-  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account \"server\" (member of Administrators) with its elevated administrator token; the target processes are started by the test itself, as its children, with the same token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account \"server\" (member of Administrators) with its elevated administrator token; the target processes are started by the test itself, as its children, with the same token; every test ran at least twice with identical output, each run in a fresh scratch directory. The tests about sandboxed targets ran with poly-oracle.ps1 -Token standard (a one-time scheduled task in the interactive desktop session 1 of the same account: medium integrity, Administrators deny-only, the filtered standard token), as the caller of a browser-like broker"
   observed_by: spec-win-remote-thread
   date: 2026-11-20
 sources: >
@@ -43,6 +43,9 @@ rules:
   attributes: "lpThreadAttributes NULL: the handle is not inheritable. With bInheritHandle TRUE the handle is inheritable (GetHandleInformation HANDLE_FLAG_INHERIT set); nLength is not checked (0, 24 and 99 all gave an inheritable handle); with bInheritHandle FALSE not inheritable"
   thread_id_pointer: "lpThreadId may be NULL: the call works and the thread runs"
   start_not_checked: "the start address is not validated by the call: NULL, an unmapped address (0x10), and an address in a read-write page of the target each returned a thread handle when created suspended (never resumed here: resuming those would crash the target)"
+  loader_notifications: "a remote thread is a full thread of the target for the loader: an image's TLS callback in the target is called with DLL_THREAD_ATTACH (2) in the new thread BEFORE the start routine runs, and with DLL_THREAD_DETACH (3) after it ended (by returning or by ExitThread), in that order (attach before the routine before detach); the target's own first thread got only DLL_PROCESS_ATTACH (1) at start. A thread created with CREATE_SUSPENDED is not attached until it is resumed (no event after a 300 ms wait; the attach and the detach follow the resume). With kernel32!ExitThread as the start routine the attach and the detach are delivered the same way. (DLLs' DllMain calls are the same notifications; the tests used a TLS callback of the target's image)"
+  sandboxed_targets: "the call behaves exactly as for an ordinary target when the target runs under a restricted token (CreateRestrictedToken: DISABLE_MAX_PRIVILEGE and restricting SIDs of the user, Everyone, Users and RESTRICTED), at low integrity (level 0x1000, the medium caller 0x2000), restricted and low integrity together in a job (created suspended, assigned to a job with one active process, UI restrictions and kill-on-close, then resumed), and in an AppContainer (a profile made for the test, SECURITY_CAPABILITIES without capabilities; integrity level 0x1000 as for any AppContainer process): the caller is the standard medium-integrity token and the target was made with CreateProcessAsUser (CreateProcess with the capabilities attribute for the AppContainer). With the handle CreateProcess returned: CreateRemoteThread, CreateRemoteThreadEx and NtCreateThreadEx each create the thread (ExitThread with parameters 0x1234, 0x2468, 0x4321: exit codes as the parameters, GetProcessIdOfThread = the target), a routine written into the target runs (marker written, the routine saw the target's process id and the returned thread id, exit code 0x77, nothing before the resume when created suspended), a thread running ExitProcess(0x55) ends the target with exit code 0x55. Handles opened by process id with OpenProcess by the same caller (the object's default security descriptor lets the owner in): the five rights of Learn's list work, PROCESS_CREATE_THREAD alone works, PROCESS_QUERY_LIMITED_INFORMATION alone works with CreateRemoteThread (and is refused by NtCreateThreadEx: STATUS_ACCESS_DENIED 0xC0000022); a copy of the creator's handle without any right works too. No integrity, token or job check applies to the call from a medium-integrity caller to a lower-integrity or restricted target"
+  sandboxed_target_locked: "when the target's token has a default DACL that grants only SYSTEM (SetTokenInformation TokenDefaultDacl before CreateProcessAsUser, so the new process object grants its creator nothing), the handle CreateProcess returned still works for all three calls and for ExitProcess; OpenProcess by id with each of: the five rights, PROCESS_CREATE_THREAD, PROCESS_QUERY_LIMITED_INFORMATION returns NULL with ERROR_ACCESS_DENIED (5); a copy of the creator's handle without rights fails with NULL, ERROR_ACCESS_DENIED (5), STATUS_ACCESS_DENIED 0xC0000022 (the widening of rights_widening is refused). The target's token cannot be opened through the process handle then (OpenProcessToken with TOKEN_QUERY fails)"
   never_resumed_start_null_thread: "after a thread was created with a NULL start routine and never resumed, the next thread created in the same target ended with exit code 0xC0000005 (access violation) and took the target down. A tester must not create such a thread unless it ends the target afterwards"
   process_not_started: "a target created with CREATE_SUSPENDED (so that its first thread has not run and the loader has not started) accepts the call: the thread runs (ExitThread with parameter 0x2222: exit code 0x2222, WAIT_OBJECT_0), the target stays alive, and its first thread stays suspended until resumed (ResumeThread on it returns 1, after which the target runs its own code). A remote thread created suspended there is resumed with ResumeThread (previous count 1) and then runs"
   own_process: "with GetCurrentProcess() (or a real handle to the own process, also one with only PROCESS_CREATE_THREAD or only PROCESS_QUERY_LIMITED_INFORMATION) the call behaves like CreateThread: a handle, a new thread id different from the caller's, GetProcessIdOfThread = the caller's process id, the routine runs in the caller's process with the parameter (a routine returning parameter+1: exit code 0x5151 for parameter 0x5150), CREATE_SUSPENDED works as above (WAIT_TIMEOUT after 300 ms, routine not yet run)"
@@ -65,8 +68,8 @@ timing:
   typical: "the thread starts within a few milliseconds"
   guarantees: none
 tests:
-  visible: 10
-  held_out: 4
+  visible: 14
+  held_out: 6
 building_tests: >
   Rust tests (ADR 0075), one file each, one image in two roles: the test starts copies of itself (CreateProcessW with
   a hidden command-line marker) as the target, waits for a named event that the target signals when it runs its own
@@ -75,8 +78,8 @@ building_tests: >
   process ids, thread ids, handles or addresses. Handles with chosen rights are made with DuplicateHandle of the
   creator's full handle; the restrictive security descriptor is set with SetKernelObjectSecurity on the target.
 not_covered: >
-  A 32-bit caller with a 64-bit target and the reverse; targets running with a restricted token, low integrity or in
-  an AppContainer (second batch of this track); targets of another user, of higher integrity, protected processes,
+  A 32-bit caller with a 64-bit target and the reverse; a caller at low integrity or in an AppContainer (the tests'
+  callers are at medium integrity, as a browser broker is); targets of another user, of higher integrity, protected processes,
   processes in a job (OpenProcess usually refuses the handle before this call); lpThreadAttributes with a security
   descriptor; a start routine that crashes; very many threads; the loader's DLL_THREAD_ATTACH notifications (the test
   image has no DLLs that would show them).
