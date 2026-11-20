@@ -209,43 +209,87 @@ crate::kernel_test! {
     /// User memory stops at the kernel's reserve (ADR 0250): user frames are refused once only the
     /// reserve is free, the kernel heap still allocates then, and once they are freed user memory
     /// can be had again.
+    ///
+    /// Other CPUs free frames while it runs (the page cache gives pages back once free memory is
+    /// low, `fs::cache::kick`; the policy's thread shrinks it; programs of the boot end), so every
+    /// check reads the free count and asks for a frame under one hold of the frame lock: free
+    /// memory cannot move between the two.
     fn user_memory_stops_at_the_reserve() -> TestResult {
         TESTING.store(true, Ordering::SeqCst);
+        let mut held: Vec<u64> = Vec::new();
         let result = (|| {
-            let before = free_frames();
-            let mut held: Vec<u64> = Vec::new();
-            held.try_reserve(before as usize).map_err(|_| "no room to note the frames")?;
+            let floor = frames::user_floor();
+            held.try_reserve(free_frames() as usize).map_err(|_| "no room to note the frames")?;
+            // Most of the way with the allocator everyone uses (and its refusal, which wakes the
+            // page cache and the policy)...
             while let Some(phys) = frames::allocate_user_frame() {
                 held.push(phys);
             }
-            let at_stop = free_frames();
-            // The kernel may still allocate: a 1 MiB buffer and a thousand small ones.
-            let mut big: Vec<u8> = Vec::new();
-            let heap_ok = big.try_reserve_exact(1 << 20).is_ok();
-            let small: Vec<alloc::boxed::Box<[u8; 64]>> = (0..1000).map(|_| alloc::boxed::Box::new([0u8; 64])).collect();
-            let still_refused = frames::allocate_user_frame().is_none();
-            drop(small);
-            drop(big);
-            if let Some(f) = frames::FRAMES.lock().as_mut() {
-                for &phys in &held {
-                    f.free(phys, 0).map_err(|_| "a user frame could not be freed")?;
+            // ...and to the stop under the lock, taking what the others gave back meanwhile. The
+            // vector has room for what is taken under the lock (the heap is not asked then).
+            let at_stop = loop {
+                if held.len() == held.capacity() {
+                    held.try_reserve(4096).map_err(|_| "no room to note the frames")?;
                 }
-            }
-            let again = frames::allocate_user_frame();
-            if let (Some(phys), Some(f)) = (again, frames::FRAMES.lock().as_mut()) {
-                let _ = f.free(phys, 0);
-            }
-            if held.is_empty() || at_stop > frames::reserve() + 64 || at_stop + 64 < frames::reserve() / 2 {
+                let mut guard = frames::FRAMES.lock();
+                let f = guard.as_mut().ok_or("no frame allocator")?;
+                let mut stopped = false;
+                while held.len() < held.capacity() {
+                    match frames::take_user_frame(f, floor) {
+                        Some(phys) => held.push(phys),
+                        None => {
+                            stopped = true;
+                            break;
+                        }
+                    }
+                }
+                if stopped {
+                    break f.free_frames();
+                }
+            };
+            if held.is_empty() || at_stop > floor {
                 return Err("user frames did not stop at the reserve");
             }
-            if !heap_ok || !still_refused {
-                return Err("the heap failed, or user frames were still handed out, at the reserve");
+            // The kernel may still allocate: a 1 MiB buffer and a thousand small ones.
+            let mut big: Vec<u8> = Vec::new();
+            if big.try_reserve_exact(1 << 20).is_err() {
+                return Err("the kernel heap failed at the reserve");
             }
-            if again.is_none() {
-                return Err("user memory could not be had again after it was freed");
+            let small: Vec<alloc::boxed::Box<[u8; 64]>> = (0..1000).map(|_| alloc::boxed::Box::new([0u8; 64])).collect();
+            // A user frame is refused while no more than the reserve is free (and handed out if
+            // the others have given back more by now).
+            let (free, got) = {
+                let mut guard = frames::FRAMES.lock();
+                let f = guard.as_mut().ok_or("no frame allocator")?;
+                let free = f.free_frames();
+                let got = frames::take_user_frame(f, floor);
+                if let Some(phys) = got {
+                    f.free(phys, 0).map_err(|_| "a user frame could not be freed")?;
+                }
+                (free, got)
+            };
+            drop(small);
+            drop(big);
+            if got.is_some() != (free > floor) {
+                return Err("a user frame was handed out at the reserve, or refused above it");
             }
             Ok(())
         })();
+        if let Some(f) = frames::FRAMES.lock().as_mut() {
+            for &phys in &held {
+                let _ = f.free(phys, 0);
+            }
+        }
+        held.clear();
+        let result = result.and_then(|()| match frames::allocate_user_frame() {
+            Some(phys) => {
+                if let Some(f) = frames::FRAMES.lock().as_mut() {
+                    let _ = f.free(phys, 0);
+                }
+                Ok(())
+            }
+            None => Err("user memory could not be had again after it was freed"),
+        });
         TESTING.store(false, Ordering::SeqCst);
         result
     }

@@ -1,6 +1,6 @@
 //! Access-control helpers of `advapi32` (ADR 0171): the trustee builders,
-//! `SetEntriesInAclW` / `GetExplicitEntriesFromAclW` (`accctrl.h`
-//! layouts, x64) and the account lookups. The rules are
+//! `SetEntriesInAclW` / `GetExplicitEntriesFromAclW` (`accctrl.h` layouts in
+//! the process's own width: x64 and, in a 32-bit process, x86) and the account lookups. The rules are
 //! `poly_security::{explicit, account}`'s.
 
 use super::*;
@@ -19,9 +19,30 @@ unsafe fn put_u32(p: *mut u8, at: usize, v: u32) {
     unsafe { (p.add(at) as *mut u32).write_unaligned(v) }
 }
 
-unsafe fn put_u64(p: *mut u8, at: usize, v: u64) {
+/// The bytes of a pointer in this process.
+const P: usize = core::mem::size_of::<usize>();
+/// `TRUSTEE_W` (`accctrl.h`): `pMultipleTrustee` (a pointer), `MultipleTrusteeOperation`,
+/// `TrusteeForm`, `TrusteeType`, then `ptstrName` aligned to a pointer: 32 bytes on x64 (form at
+/// 12, name at 24), 20 on x86 (form at 8, name at 16). The x64 offsets in a 32-bit process wrote
+/// up to 16 bytes past the caller's structure (`wow64-gui-overrun`).
+const TRUSTEE_OPERATION: usize = P;
+const TRUSTEE_FORM: usize = P + 4;
+const TRUSTEE_TYPE: usize = P + 8;
+const TRUSTEE_NAME: usize = (P + 12).next_multiple_of(P);
+const TRUSTEE_SIZE: usize = TRUSTEE_NAME + P;
+/// `EXPLICIT_ACCESS_W`: three `DWORD`s, then the `TRUSTEE_W` aligned to a pointer: 48 bytes on
+/// x64 (trustee at 16), 32 on x86 (at 12).
+const EA_TRUSTEE: usize = 12usize.next_multiple_of(P);
+const EA_SIZE: usize = EA_TRUSTEE + TRUSTEE_SIZE;
+
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(TRUSTEE_SIZE == 32 && EA_SIZE == 48 && TRUSTEE_NAME == 24 && TRUSTEE_FORM == 12);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(TRUSTEE_SIZE == 20 && EA_SIZE == 32 && TRUSTEE_NAME == 16 && TRUSTEE_FORM == 8);
+
+unsafe fn put_ptr(p: *mut u8, at: usize, v: usize) {
     // SAFETY: the caller's structure.
-    unsafe { (p.add(at) as *mut u64).write_unaligned(v) }
+    unsafe { (p.add(at) as *mut usize).write_unaligned(v) }
 }
 
 unsafe fn get_u32(p: *const u8, at: usize) -> u32 {
@@ -29,22 +50,22 @@ unsafe fn get_u32(p: *const u8, at: usize) -> u32 {
     unsafe { (p.add(at) as *const u32).read_unaligned() }
 }
 
-unsafe fn get_u64(p: *const u8, at: usize) -> u64 {
+unsafe fn get_ptr(p: *const u8, at: usize) -> usize {
     // SAFETY: the caller's structure.
-    unsafe { (p.add(at) as *const u64).read_unaligned() }
+    unsafe { (p.add(at) as *const usize).read_unaligned() }
 }
 
-/// Fill the fields of a `TRUSTEE_W` that the builders write (not the two
-/// padding words): multiple trustee NULL / operation 0, `form`, type 0, the
-/// name or SID pointer.
-unsafe fn build_trustee(t: *mut u8, form: u32, name: u64) {
-    // SAFETY: the caller's 32-byte structure.
+/// Fill the fields of a `TRUSTEE_W` that the builders write (not the padding
+/// word of x64): multiple trustee NULL / operation 0, `form`, type 0, the name
+/// or SID pointer.
+unsafe fn build_trustee(t: *mut u8, form: u32, name: usize) {
+    // SAFETY: the caller's structure of `TRUSTEE_SIZE` bytes.
     unsafe {
-        put_u64(t, 0, 0);
-        put_u32(t, 8, 0);
-        put_u32(t, 12, form);
-        put_u32(t, 16, 0);
-        put_u64(t, 24, name);
+        put_ptr(t, 0, 0);
+        put_u32(t, TRUSTEE_OPERATION, 0);
+        put_u32(t, TRUSTEE_FORM, form);
+        put_u32(t, TRUSTEE_TYPE, 0);
+        put_ptr(t, TRUSTEE_NAME, name);
     }
 }
 
@@ -52,14 +73,14 @@ unsafe fn build_trustee(t: *mut u8, form: u32, name: u64) {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn BuildTrusteeWithNameW(trustee: *mut u8, name: *mut u16) {
     // SAFETY: the caller's structure.
-    unsafe { build_trustee(trustee, TRUSTEE_IS_NAME, name as u64) }
+    unsafe { build_trustee(trustee, TRUSTEE_IS_NAME, name as usize) }
 }
 
 /// `BuildTrusteeWithSidW`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn BuildTrusteeWithSidW(trustee: *mut u8, sid: *mut u8) {
     // SAFETY: the caller's structure.
-    unsafe { build_trustee(trustee, TRUSTEE_IS_SID, sid as u64) }
+    unsafe { build_trustee(trustee, TRUSTEE_IS_SID, sid as usize) }
 }
 
 /// `BuildExplicitAccessWithNameW`.
@@ -71,22 +92,22 @@ pub unsafe extern "system" fn BuildExplicitAccessWithNameW(
     mode: u32,
     inheritance: u32,
 ) {
-    // SAFETY: the caller's 48-byte structure.
+    // SAFETY: the caller's structure of `EA_SIZE` bytes.
     unsafe {
         put_u32(ea, 0, access);
         put_u32(ea, 4, mode);
         put_u32(ea, 8, inheritance);
-        build_trustee(ea.add(16), TRUSTEE_IS_NAME, name as u64);
+        build_trustee(ea.add(EA_TRUSTEE), TRUSTEE_IS_NAME, name as usize);
     }
 }
 
-/// The trustee at `t` (`TRUSTEE_W`, 32 bytes: the form at 12, the name or
-/// SID pointer at 24).
+/// The trustee at `t` (`TRUSTEE_W`: the form at `TRUSTEE_FORM`, the name or
+/// SID pointer at `TRUSTEE_NAME`).
 unsafe fn read_trustee(t: *const u8) -> Trustee {
     // SAFETY: the caller's structure.
     unsafe {
-        let ptr = get_u64(t, 24) as *const u8;
-        match get_u32(t, 12) {
+        let ptr = get_ptr(t, TRUSTEE_NAME) as *const u8;
+        match get_u32(t, TRUSTEE_FORM) {
             TRUSTEE_IS_SID if !ptr.is_null() => Trustee::Sid(sid_bytes(ptr).to_vec()),
             TRUSTEE_IS_NAME => match wide(ptr as *const u16) {
                 Some(w) => Trustee::Name(String::from_utf16_lossy(w)),
@@ -97,11 +118,16 @@ unsafe fn read_trustee(t: *const u8) -> Trustee {
     }
 }
 
-/// The entry at `p` (`EXPLICIT_ACCESS_W`, 48 bytes).
+/// The entry at `p` (`EXPLICIT_ACCESS_W`, `EA_SIZE` bytes).
 unsafe fn read_entry(p: *const u8) -> Entry {
     // SAFETY: the caller's array.
     unsafe {
-        Entry { access: get_u32(p, 0), mode: get_u32(p, 4), inherit: get_u32(p, 8), trustee: read_trustee(p.add(16)) }
+        Entry {
+            access: get_u32(p, 0),
+            mode: get_u32(p, 4),
+            inherit: get_u32(p, 8),
+            trustee: read_trustee(p.add(EA_TRUSTEE)),
+        }
     }
 }
 
@@ -123,8 +149,9 @@ fn trustee_sid(t: &Trustee) -> Result<sid::Sid, u32> {
                     &mut len,
                 )
             };
-            // TOKEN_USER: the SID_AND_ATTRIBUTES (16 bytes), then the SID.
-            if ok == 0 { Err(ERROR_NONE_MAPPED) } else { sid::Sid::from_bytes(&buf[16..]).ok_or(ERROR_NONE_MAPPED) }
+            // TOKEN_USER: the SID_AND_ATTRIBUTES (a pointer and a DWORD: 16 bytes, 8 in 32
+            // bits), then the SID.
+            if ok == 0 { Err(ERROR_NONE_MAPPED) } else { sid::Sid::from_bytes(&buf[2 * P..]).ok_or(ERROR_NONE_MAPPED) }
         }
         Trustee::Name(n) => account::lookup_name(n).map(|(s, _, _)| s).ok_or(ERROR_NONE_MAPPED),
         Trustee::Bad => Err(ERROR_INVALID_PARAMETER),
@@ -162,7 +189,7 @@ pub unsafe extern "system" fn BuildSecurityDescriptorW(
         let trustee = |t: *const u8| (!t.is_null()).then(|| read_trustee(t));
         let (owner, group) = (trustee(owner), trustee(group));
         let entries = |count: u32, p: *const u8| -> Vec<Entry> {
-            if p.is_null() { Vec::new() } else { (0..count as usize).map(|i| read_entry(p.add(48 * i))).collect() }
+            if p.is_null() { Vec::new() } else { (0..count as usize).map(|i| read_entry(p.add(EA_SIZE * i))).collect() }
         };
         let (access, audit) = (entries(access_count, access), entries(audit_count, audit));
         let request = poly_security::buildsd::Request {
@@ -210,7 +237,7 @@ pub unsafe extern "system" fn SetEntriesInAclW(
         if count != 0 && entries.is_null() {
             return ERROR_INVALID_PARAMETER;
         }
-        let list: Vec<Entry> = (0..count as usize).map(|i| read_entry(entries.add(48 * i))).collect();
+        let list: Vec<Entry> = (0..count as usize).map(|i| read_entry(entries.add(EA_SIZE * i))).collect();
         let old = (!old_acl.is_null()).then(|| {
             let size = usize::from((old_acl.add(2) as *const u16).read_unaligned());
             core::slice::from_raw_parts(old_acl, size.max(8))
@@ -255,7 +282,7 @@ pub unsafe extern "system" fn GetExplicitEntriesFromAclW(
         if list.is_empty() {
             return 0;
         }
-        let head = 48 * list.len();
+        let head = EA_SIZE * list.len();
         let total = head + list.iter().map(|e| e.sid.len()).sum::<usize>();
         let block = LocalAlloc(LMEM_FIXED, total);
         if block.is_null() {
@@ -264,11 +291,11 @@ pub unsafe extern "system" fn GetExplicitEntriesFromAclW(
         core::ptr::write_bytes(block, 0, total);
         let mut sid_at = head;
         for (i, e) in list.iter().enumerate() {
-            let p = block.add(48 * i);
+            let p = block.add(EA_SIZE * i);
             put_u32(p, 0, e.access);
             put_u32(p, 4, e.mode);
             put_u32(p, 8, e.inherit);
-            build_trustee(p.add(16), TRUSTEE_IS_SID, block.add(sid_at) as u64);
+            build_trustee(p.add(EA_TRUSTEE), TRUSTEE_IS_SID, block.add(sid_at) as usize);
             core::ptr::copy_nonoverlapping(e.sid.as_ptr(), block.add(sid_at), e.sid.len());
             sid_at += e.sid.len();
         }
@@ -402,10 +429,11 @@ fn user_sid_string() -> String {
     const TOKEN_USER: u32 = 1;
     let mut buf = [0u64; 12];
     let mut ret = 0;
-    // SAFETY: a 96-byte, 8-aligned buffer; TOKEN_USER is a pointer into it and the SID.
+    // SAFETY: a 96-byte, 8-aligned buffer; TOKEN_USER is a SID_AND_ATTRIBUTES (a pointer into it
+    // and a DWORD: 2 * P bytes) and the SID.
     let sid = unsafe {
         if GetTokenInformation(CURRENT_PROCESS_TOKEN, TOKEN_USER, buf.as_mut_ptr().cast(), 96, &mut ret) != 0 {
-            sid::Sid::from_bytes(core::slice::from_raw_parts(buf.as_ptr().cast::<u8>().add(16), 80))
+            sid::Sid::from_bytes(core::slice::from_raw_parts(buf.as_ptr().cast::<u8>().add(2 * P), 96 - 2 * P))
         } else {
             None
         }
@@ -422,16 +450,18 @@ unsafe fn open_registry_key(name: &str, access: u32) -> Result<Handle, u32> {
         return Err(ERROR_INVALID_PARAMETER);
     };
     let units: Vec<u16> = path.encode_utf16().collect();
-    // UNICODE_STRING and OBJECT_ATTRIBUTES (`winternl.h`, x64: 16 and 48 bytes).
+    // UNICODE_STRING and OBJECT_ATTRIBUTES (`winternl.h`) in this process's width: 16 and 48
+    // bytes on x64, 8 and 24 in a 32-bit process (the buffer at P; root, name, attributes,
+    // descriptor, quality of service at P, 2P, 3P, 4P, 5P).
     let mut ustr = [0u8; 16];
     let mut oa = [0u8; 48];
-    // SAFETY: the structures are locals of the sizes written.
+    // SAFETY: the structures are locals of at least the sizes written.
     unsafe {
         put_u32(ustr.as_mut_ptr(), 0, (units.len() * 2) as u32 | ((units.len() * 2) as u32) << 16);
-        put_u64(ustr.as_mut_ptr(), 8, units.as_ptr() as u64);
-        put_u32(oa.as_mut_ptr(), 0, 48);
-        put_u64(oa.as_mut_ptr(), 16, ustr.as_ptr() as u64);
-        put_u32(oa.as_mut_ptr(), 24, OBJ_CASE_INSENSITIVE);
+        put_ptr(ustr.as_mut_ptr(), P, units.as_ptr() as usize);
+        put_u32(oa.as_mut_ptr(), 0, (6 * P) as u32);
+        put_ptr(oa.as_mut_ptr(), 2 * P, ustr.as_ptr() as usize);
+        put_u32(oa.as_mut_ptr(), 3 * P, OBJ_CASE_INSENSITIVE);
         let mut h: Handle = 0;
         match NtOpenKey(&mut h, access, oa.as_ptr()) {
             0 => Ok(h),

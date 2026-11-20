@@ -39,6 +39,8 @@ pub mod font;
 pub mod fontmap;
 pub mod fonttab;
 pub mod gdi;
+pub mod glyphs;
+pub mod otm;
 pub mod outline;
 pub mod region;
 mod rgnshape;
