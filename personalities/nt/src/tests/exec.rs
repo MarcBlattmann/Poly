@@ -321,10 +321,25 @@ fn processor_number_and_thread_affinity() {
     let out = f.alloc(48);
     assert_eq!(f.call(Service::QueryInformationThread, &[(-2i64) as u64, 0, out, 48, 0]), STATUS_SUCCESS);
     assert_eq!(f.u64_at(out + 32), 1);
-    // A mask of 8 bytes only, through a handle that can set information.
-    let p = f.put_u64(0xF);
+    // A mask of 8 bytes only, through a handle that can set information, of processors the
+    // system has (the fake has one: a mask with others is refused, Learn "SetThreadAffinityMask").
+    let p = f.put_u64(0x1);
     assert_eq!(f.call(Service::SetInformationThread, &[(-2i64) as u64, 4, p, 8]), STATUS_SUCCESS);
     assert_eq!(f.call(Service::SetInformationThread, &[(-2i64) as u64, 4, p, 4]), STATUS_INFO_LENGTH_MISMATCH);
+    let wide = f.put_u64(0xF);
+    assert_eq!(f.call(Service::SetInformationThread, &[(-2i64) as u64, 4, wide, 8]), STATUS_INVALID_PARAMETER);
+    // The ideal processor: one PROCESSOR_NUMBER, the previous one returned in its place.
+    let n = f.alloc(4);
+    assert_eq!(f.call(Service::QueryInformationThread, &[(-2i64) as u64, 33, n, 4, 0]), STATUS_SUCCESS);
+    let mut got = [0u8; 4];
+    f.mem.read(n, &mut got).unwrap();
+    assert_eq!(got, [0, 0, 0, 0]);
+    assert_eq!(f.call(Service::QueryInformationThread, &[(-2i64) as u64, 33, n, 16, 0]), STATUS_INFO_LENGTH_MISMATCH);
+    let bad = f.alloc(4);
+    f.mem.write(bad, &[0, 0, 1, 0]).unwrap();
+    assert_eq!(f.call(Service::SetInformationThread, &[(-2i64) as u64, 33, bad, 4]), STATUS_INVALID_PARAMETER);
+    f.mem.write(n, &[0, 0, 0, 0]).unwrap();
+    assert_eq!(f.call(Service::SetInformationThread, &[(-2i64) as u64, 33, n, 4]), STATUS_SUCCESS);
 }
 
 #[test]
