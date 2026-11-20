@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsstring_compare_ordering",
+      "source_sha256": "a09f8d247f5192fd1d4c4fcc4ca5496a3f4e5847038e3ed1d0b5584fe6b458ea",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8b9473a28a5812b019156baaa5b2833be8892e194336fbdd2cb8fb44b30357dc",
+          "exit_code": 0,
+          "stdout": "ok [@\"a\" compare:@\"b\"] == NSOrderedAscending\nok [@\"b\" compare:@\"a\"] == NSOrderedDescending\nok [@\"a\" compare:@\"a\"] == NSOrderedSame\nok [@\"a\" compare:@\"B\"] == NSOrderedDescending\nok [@\"Z\" compare:@\"a\"] == NSOrderedAscending\nok [@\"ab\" compare:@\"abc\"] == NSOrderedAscending\nok [@\"abc\" compare:@\"ab\"] == NSOrderedDescending\nok [@\"\" compare:@\"a\"] == NSOrderedAscending\nok [@\"\" compare:@\"\"] == NSOrderedSame\nok [@\"a2\" compare:@\"a10\"] == NSOrderedDescending\nok [@\"a2\" compare:@\"a10\" options:NSNumericSearch] == NSOrderedAscending\nok [@\"a\" compare:@\"B\" options:NSCaseInsensitiveSearch] == NSOrderedAscending\nok [@\"A\" compare:@\"a\" options:NSCaseInsensitiveSearch] == NSOrderedSame\nok [@\"É\" compare:@\"é\" options:NSCaseInsensitiveSearch] == NSOrderedSame\nok [@\"a\" caseInsensitiveCompare:@\"A\"] == NSOrderedSame\nok [@\"a2\" compare:@\"a10\" options:NSNumericSearch | NSCaseInsensitiveSearch] == NSOrderedAscending\nok NSOrderedAscending == -1 && NSOrderedSame == 0 && NSOrderedDescending == 1\nok NSCaseInsensitiveSearch == 1 && NSLiteralSearch == 2 && NSBackwardsSearch == 4 && NSNumericSearch == 64\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7e973a880b123a14b440fa05542ab70575cde8af864bb457b4b1d9a39215d0d0",
+          "exit_code": 0,
+          "stdout": "ok [@\"a\" compare:@\"b\"] == NSOrderedAscending\nok [@\"b\" compare:@\"a\"] == NSOrderedDescending\nok [@\"a\" compare:@\"a\"] == NSOrderedSame\nok [@\"a\" compare:@\"B\"] == NSOrderedDescending\nok [@\"Z\" compare:@\"a\"] == NSOrderedAscending\nok [@\"ab\" compare:@\"abc\"] == NSOrderedAscending\nok [@\"abc\" compare:@\"ab\"] == NSOrderedDescending\nok [@\"\" compare:@\"a\"] == NSOrderedAscending\nok [@\"\" compare:@\"\"] == NSOrderedSame\nok [@\"a2\" compare:@\"a10\"] == NSOrderedDescending\nok [@\"a2\" compare:@\"a10\" options:NSNumericSearch] == NSOrderedAscending\nok [@\"a\" compare:@\"B\" options:NSCaseInsensitiveSearch] == NSOrderedAscending\nok [@\"A\" compare:@\"a\" options:NSCaseInsensitiveSearch] == NSOrderedSame\nok [@\"É\" compare:@\"é\" options:NSCaseInsensitiveSearch] == NSOrderedSame\nok [@\"a\" caseInsensitiveCompare:@\"A\"] == NSOrderedSame\nok [@\"a2\" compare:@\"a10\" options:NSNumericSearch | NSCaseInsensitiveSearch] == NSOrderedAscending\nok NSOrderedAscending == -1 && NSOrderedSame == 0 && NSOrderedDescending == 1\nok NSCaseInsensitiveSearch == 1 && NSLiteralSearch == 2 && NSBackwardsSearch == 4 && NSNumericSearch == 64\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsstring_compare_sorting",
+      "source_sha256": "8d7a930b6bdb34ffee7396a978db03d8bf5238fcde10f5aacffeb0b9aa8ac221",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e9dbc2bf9cfa10e6310e118015872fcdfc94e09afe85ecf0e4eb675764dbc93c",
+          "exit_code": 0,
+          "stdout": "ok ns_is([[words sortedArrayUsingSelector:@selector(compare:)] componentsJoinedByString:@\",\"], \"10,9,Apple,Banana,apple,banana,cherry\")\nok ns_is([[words sortedArrayUsingSelector:@selector(caseInsensitiveCompare:)] componentsJoinedByString:@\",\"], \"10,9,Apple,apple,banana,Banana,cherry\")\nok ns_is([sorted componentsJoinedByString:@\",\"], \"file1.txt,file2.txt,file10.txt\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "97fb7f6009474db27a62d3852851dd740b6734f7b656920a972c90e511e3ae94",
+          "exit_code": 0,
+          "stdout": "ok ns_is([[words sortedArrayUsingSelector:@selector(compare:)] componentsJoinedByString:@\",\"], \"10,9,Apple,Banana,apple,banana,cherry\")\nok ns_is([[words sortedArrayUsingSelector:@selector(caseInsensitiveCompare:)] componentsJoinedByString:@\",\"], \"10,9,Apple,apple,banana,Banana,cherry\")\nok ns_is([sorted componentsJoinedByString:@\",\"], \"file1.txt,file2.txt,file10.txt\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_sync_more",
+      "source_sha256": "1772040e7e11d2f269cfcdc10181e22d5a81cf9463ba06f851b01ce9253b805b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "51f3fb3a693d804242b4dfdd10d01d8fb38b863d145a35f69c805cf4e265b35a",
+          "exit_code": 0,
+          "stdout": "ok a sync block on a concurrent queue runs while an async block is still running\nok ten sync calls in a row: 55\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9170f57d90b3a45db83fd524430b3f7a31bcb57190628f3d1174d06aec52966c",
+          "exit_code": 0,
+          "stdout": "ok a sync block on a concurrent queue runs while an async block is still running\nok ten sync calls in a row: 55\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_sync_nesting",
+      "source_sha256": "89dcc819f736486c53d6d80b34c0f5f23a384924f2c8263ec6d95fe9d607431a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b65558520cab2d22f1700b81633f5dd0b0e5786bb5d661cb8b5f627ba563303b",
+          "exit_code": 0,
+          "stdout": "ok nested syncs into another queue run in call order\nok the sync block did not run while the queue was busy\nok it ran when the queue was free\nok after the busy block\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "eb09a084b4b7e937a17255669aeb66c2c0797cc02c0a68b036d9122dda024cc0",
+          "exit_code": 0,
+          "stdout": "ok nested syncs into another queue run in call order\nok the sync block did not run while the queue was busy\nok it ran when the queue was free\nok after the busy block\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

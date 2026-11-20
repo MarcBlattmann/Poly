@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsexception_raise_catch",
+      "source_sha256": "64bbb5c60b99729571878fbe227c873d79627d22568be2a13239ade528f0154c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "490e959720b30dca3543306bb7b4688414c943a259b91d867a58a58d7ff9e7a3",
+          "exit_code": 0,
+          "stdout": "ok made.callStackSymbols.count == 0\nok e == made\nok ns_is(e.name, \"PolyEx\") && ns_is(e.reason, \"because\") && ns_is(e.userInfo[@\"k\"], \"v\")\nok e.callStackSymbols.count > 0\nok caught\nok ns_is(e.name, \"Inner\")\nok fin\nok ns_is(e.name, \"PolyFmt\") && ns_is(e.reason, \"v=7 s=x\") && e.userInfo == nil\nok ns_is(o, \"a string\")\nok ns_is(e.name, \"NSInvalidArgumentException\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d36a1a7e202b01bc3ebd07f4104c06edd80c9641d6df28c8e1397d74b186aad5",
+          "exit_code": 0,
+          "stdout": "ok made.callStackSymbols.count == 0\nok e == made\nok ns_is(e.name, \"PolyEx\") && ns_is(e.reason, \"because\") && ns_is(e.userInfo[@\"k\"], \"v\")\nok e.callStackSymbols.count > 0\nok caught\nok ns_is(e.name, \"Inner\")\nok fin\nok ns_is(e.name, \"PolyFmt\") && ns_is(e.reason, \"v=7 s=x\") && e.userInfo == nil\nok ns_is(o, \"a string\")\nok ns_is(e.name, \"NSInvalidArgumentException\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsexception_raise_in_blocks_and_threads",
+      "source_sha256": "25113fd0822e42e9f5659374f04d2573e1f4aa84ea49beb8ecde435421300b28",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fcc60dcbe4d00f1439ebfe40fe31810a44304a1e67c0f8fd2f0041546d57c9ba",
+          "exit_code": 0,
+          "stdout": "ok ns_is(e.name, \"InBlock\")\nok worker_done && worker_caught\nok ns_is(e.name, \"FromObserver\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "65ce304cc858f1f3ba95cd99d85c12de305460f67c82e4f11c8c41f9ca521612",
+          "exit_code": 0,
+          "stdout": "ok ns_is(e.name, \"InBlock\")\nok worker_done && worker_caught\nok ns_is(e.name, \"FromObserver\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

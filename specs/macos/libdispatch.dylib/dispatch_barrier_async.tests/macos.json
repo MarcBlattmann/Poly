@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:15:06",
+  "tests": [
+    {
+      "name": "dispatch_barrier_async_more",
+      "source_sha256": "f671f830152b39fc794e7040a4b026260550aaae78f781f947b7abc02694557b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e0b86bf2d053a230339464b70c265e21a7f021b6208f9ae7c284e7f2ea8c079e",
+          "exit_code": 0,
+          "stdout": "ok on a serial queue the order is the submission order\nok on a global queue a barrier block does not hold back later blocks\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "dc83453f88111d047188d24017a2067840410ed0e8fc6bb31ac645ab82e5b338",
+          "exit_code": 0,
+          "stdout": "ok on a serial queue the order is the submission order\nok on a global queue a barrier block does not hold back later blocks\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_barrier_async_rw",
+      "source_sha256": "f6ca9012be7ff351f2c8116d59d340be438d950101c0a6e5a9be1fb56bb197bf",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6463ff3f19143de6d7e8951b8e877a24d69cc7343f5c2621ff944dd69c964724",
+          "exit_code": 0,
+          "stdout": "ok 1000 reads ran between 200 writes\nok no reader saw a half-written pair\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8db6b806a39fa5918819a88764339f1ffc61b39257752ba65cad73f2d69d20ea",
+          "exit_code": 0,
+          "stdout": "ok 1000 reads ran between 200 writes\nok no reader saw a half-written pair\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

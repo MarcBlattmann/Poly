@@ -1,0 +1,17 @@
+[package]
+name = "audioses"
+description = "Our audioses.dll (audio plan W2): the home of the audio session classes, a scaffold until W2's sheets fill it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "audioses"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true

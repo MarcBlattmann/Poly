@@ -3,6 +3,7 @@
 //! kernel says `STATUS_NO_MEMORY` when memory runs out instead of panicking.
 
 use crate::image::{ImageFile, ImageSection, RelocTables, try_filled};
+use crate::imageshare::FileIdentity;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -130,6 +131,49 @@ fn what_cannot_be_allocated_is_no_memory_not_a_panic() {
     assert_eq!(try_filled(0, 7u8), Ok(Vec::new()));
 }
 
+/// [`Counting`] that names its contents, as a file of a file system does.
+#[derive(Debug)]
+struct Named(Arc<Counting>);
+
+impl ImageFile for Named {
+    fn len(&self) -> u64 {
+        self.0.len()
+    }
+
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> usize {
+        self.0.read_at(offset, buf)
+    }
+
+    fn identity(&self) -> Option<FileIdentity> {
+        Some(FileIdentity { dev: 1, ino: 42, size: self.0.len, mtime_sec: 7, mtime_nsec: 0, base: 0 })
+    }
+}
+
+#[test]
+fn views_of_a_file_relocated_to_the_same_base_share_their_pages() {
+    // Two image sections of the same big file, as two processes make them.
+    let (head, len, _) = padded_exe(64 << 20);
+    let file = Counting::new(head, len);
+    let one = ImageSection::from_reader(Arc::new(Named(file.clone()))).expect("opens");
+    let two = ImageSection::from_reader(Arc::new(Named(file))).expect("opens");
+    let at_base = one.image.share_key().expect("a file's image");
+    assert_eq!(at_base.base, 0);
+    let to = one.image_base() + 0x1000_0000;
+    let a = one.relocated(to).expect("relocates").share_key().expect("a file's image");
+    let b = two.relocated(to).expect("relocates").share_key().expect("a file's image");
+    assert_eq!(a, b);
+    assert_eq!(a, FileIdentity { base: to, ..at_base });
+    let elsewhere = two.relocated(to + 0x10_0000).expect("relocates").share_key().expect("a file's image");
+    assert_ne!(elsewhere, a);
+    // A small image, held in memory: the same.
+    let small = small_exe();
+    let key = FileIdentity { dev: 1, ino: 43, size: small.len() as u64, mtime_sec: 7, mtime_nsec: 0, base: 0 };
+    let held = ImageSection::laid_out(&small, Some(key)).expect("parses");
+    assert_eq!(held.image.share_key(), Some(key));
+    let moved = held.relocated(held.image_base() + 0x1000_0000).expect("relocates");
+    assert_eq!(moved.share_key(), Some(FileIdentity { base: held.image_base() + 0x1000_0000, ..key }));
+}
+
 #[test]
 fn relocating_a_big_image_reads_its_table_not_its_file() {
     // A table of 40,000 blocks of one entry each.
@@ -155,25 +199,6 @@ fn relocating_a_big_image_reads_its_table_not_its_file() {
     // About 8 bytes per block and its entry, twice: nothing like the 160 MB file.
     let read = file.read_total() - before;
     assert!(read < 4 << 20, "{read} bytes read to check the table");
-}
-
-/// [`Counting`] as a file with a name ([`ImageFile::identity`]), so its relocation table may be
-/// kept by file.
-#[derive(Debug)]
-struct Named(Arc<Counting>);
-
-impl ImageFile for Named {
-    fn len(&self) -> u64 {
-        self.0.len()
-    }
-
-    fn read_at(&self, offset: u64, buf: &mut [u8]) -> usize {
-        self.0.read_at(offset, buf)
-    }
-
-    fn identity(&self) -> Option<crate::imageshare::FileIdentity> {
-        Some(crate::imageshare::FileIdentity { dev: 1, ino: 7, size: self.0.len, mtime_sec: 0, mtime_nsec: 0 })
-    }
 }
 
 /// ADR 0262: the second relocated view of a big image file, from a section of its own, takes the

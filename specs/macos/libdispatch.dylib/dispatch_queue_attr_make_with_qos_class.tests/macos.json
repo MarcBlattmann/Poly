@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_queue_attr_make_with_qos_class_basic",
+      "source_sha256": "99f55538e85484fbefa8302a20da592fc39cc92ed95e5b6235590076b84523a3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "00915a2832f282e68821dde104b12bbba2701708fd5e5ffc1599d7395ad4fea1",
+          "exit_code": 0,
+          "stdout": "ok a serial attribute with a class is not NULL\nok the queue's class is utility (17)\nok its relative priority is -3\nok user-interactive concurrent queue: class 33\nok relative priority 0, -5, -10, -15 are kept\nok relative priority 0, -5, -10, -15 are kept\nok relative priority 0, -5, -10, -15 are kept\nok relative priority 0, -5, -10, -15 are kept\nok a positive relative priority: NULL\nok below -15: NULL\nok an unknown class (12345): NULL\nok QOS_CLASS_UNSPECIFIED is accepted\nok the same arguments give the same attribute (a shared constant)\nok a different class gives a different attribute\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "08f74074f7b97df5907a02ad3de1d13f040345521a85849ec58e46c454eda4ff",
+          "exit_code": 0,
+          "stdout": "ok a serial attribute with a class is not NULL\nok the queue's class is utility (17)\nok its relative priority is -3\nok user-interactive concurrent queue: class 33\nok relative priority 0, -5, -10, -15 are kept\nok relative priority 0, -5, -10, -15 are kept\nok relative priority 0, -5, -10, -15 are kept\nok relative priority 0, -5, -10, -15 are kept\nok a positive relative priority: NULL\nok below -15: NULL\nok an unknown class (12345): NULL\nok QOS_CLASS_UNSPECIFIED is accepted\nok the same arguments give the same attribute (a shared constant)\nok a different class gives a different attribute\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_queue_attr_make_with_qos_class_more",
+      "source_sha256": "c010f0fcd4612843ba76d4f8caa6146697196b0b84153f4de6b8baa4a6f75b5b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e0d1f9ca9ec9c224ad479be228c85246ecad6b8beff714e783c26637a15a0a60",
+          "exit_code": 0,
+          "stdout": "ok qos_class_self() inside a block of a utility queue is utility (17)\nok a user-interactive queue: 33\nok the background global queue: 9\nok the main thread's own class is user-interactive (33)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cdc12ce59f2dd992483be2383bb6efe362c80490d1d6505ae1aaf071972d5300",
+          "exit_code": 0,
+          "stdout": "ok qos_class_self() inside a block of a utility queue is utility (17)\nok a user-interactive queue: 33\nok the background global queue: 9\nok the main thread's own class is user-interactive (33)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

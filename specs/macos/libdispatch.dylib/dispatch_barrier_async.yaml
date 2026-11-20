@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_barrier_async.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_barrier_async.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_barrier_async
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_barrier_async(queue, block) on a concurrent queue runs the block alone: it starts after every block submitted before it has finished (20 blocks of 5 ms: all
+  20 done and none running at its start) and no block submitted after it starts before it has finished (20 later blocks all saw the barrier's effect). With 200
+  barrier writers and 1000 readers, no reader saw a half-written pair. On a serial queue it behaves as dispatch_async (order 1, 2, 3 kept). On a global queue it is only an
+  ordinary async block: a block submitted after it ran while it was still running.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "queues a block"
+threading: "see the summary"
+ordering: ["a barrier block runs after all earlier and before all later blocks of a concurrent queue"]
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

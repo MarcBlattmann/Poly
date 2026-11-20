@@ -85,9 +85,10 @@ pub trait ImageBytes: Send + Sync + core::fmt::Debug {
         None
     }
 
-    /// The file these bytes are the image of, laid out at its preferred base, if they come from
-    /// one: every process that maps it may share its pages ([`crate::imageshare`], ADR 0188).
-    /// `None` for bytes of their own (a relocated view, an image the kernel was handed).
+    /// The file these bytes are the image of and the base they are relocated for (0: laid out at
+    /// its preferred base), if they come from one: every process that maps it there may share its
+    /// pages ([`crate::imageshare`], ADR 0188). `None` for bytes of their own (an image the kernel
+    /// was handed).
     fn share_key(&self) -> Option<FileIdentity> {
         None
     }
@@ -198,7 +199,14 @@ impl ImageFile for VfsFile {
     fn identity(&self) -> Option<FileIdentity> {
         let st = self.0.stat().ok()?;
         let dev = u64::from(st.dev.major) << 32 | u64::from(st.dev.minor);
-        Some(FileIdentity { dev, ino: st.ino, size: st.size, mtime_sec: st.mtime.sec, mtime_nsec: st.mtime.nsec })
+        Some(FileIdentity {
+            dev,
+            ino: st.ino,
+            size: st.size,
+            mtime_sec: st.mtime.sec,
+            mtime_nsec: st.mtime.nsec,
+            base: 0,
+        })
     }
 }
 
@@ -487,10 +495,11 @@ impl ImageBytes for Lazy {
     }
 
     fn share_key(&self) -> Option<FileIdentity> {
-        if self.fixups.is_some() {
-            return None;
-        }
-        self.file.identity()
+        let file = self.file.identity()?;
+        Some(match &self.fixups {
+            Some(f) => FileIdentity { base: f.new_base, ..file },
+            None => file,
+        })
     }
 }
 
@@ -501,7 +510,7 @@ impl ImageSection {
     }
 
     /// [`ImageSection::from_file`] of the bytes of the file `key` names, if it names one.
-    fn laid_out(file: &[u8], key: Option<FileIdentity>) -> Result<ImageSection, NtStatus> {
+    pub(crate) fn laid_out(file: &[u8], key: Option<FileIdentity>) -> Result<ImageSection, NtStatus> {
         let bad = |_| STATUS_INVALID_IMAGE_FORMAT;
         let pe = Pe::parse(file).map_err(bad)?;
         let plan = Self::checked_plan(&pe, file.len() as u64)?;
@@ -615,6 +624,11 @@ impl ImageSection {
         copy.try_reserve_exact(held.len()).map_err(|_| STATUS_NO_MEMORY)?;
         copy.extend_from_slice(held);
         poly_pe::relocate(&mut copy, &self.info, base).map_err(|_| STATUS_INVALID_IMAGE_FORMAT)?;
-        Ok(Arc::new(Held(copy.into())))
+        let held = Held(copy.into());
+        // The same file relocated to the same base is the same bytes: its views share them.
+        Ok(match self.image.share_key() {
+            Some(key) => Arc::new(HeldFile { held, key: FileIdentity { base, ..key } }),
+            None => Arc::new(held),
+        })
     }
 }

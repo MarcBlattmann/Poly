@@ -307,11 +307,11 @@ mod tests {
         assert_eq!(moved.read_at(lazy.size, &mut v), 0);
     }
 
-    /// An image read from a file at its preferred base names that file, so every process that maps
-    /// it may share its pages (ADR 0188); a relocated view, or an image made from bytes the kernel
-    /// was handed, has bytes of its own.
+    /// An image read from a file names that file and the base its bytes are for, so every process
+    /// that maps it there may share its pages (ADR 0188): at its preferred base (0) or relocated to
+    /// the same base. An image made from bytes the kernel was handed has bytes of its own.
     #[test]
-    fn only_images_of_a_file_at_their_base_share_pages() {
+    fn images_of_a_file_share_pages_by_file_and_base() {
         use crate::image::{FileBytes, ImageFile, ImageSection};
         use crate::imageshare::FileIdentity;
         #[derive(Debug)]
@@ -327,7 +327,7 @@ mod tests {
                 Some(self.1)
             }
         }
-        let key = FileIdentity { dev: 8, ino: 42, size: 0, mtime_sec: 1, mtime_nsec: 2 };
+        let key = FileIdentity { dev: 8, ino: 42, size: 0, mtime_sec: 1, mtime_nsec: 2, base: 0 };
         let file = sample(false).write();
         let named = |f: &[u8]| alloc::sync::Arc::new(Named(FileBytes(f.into()), key));
         // A small image is laid out at once, a big one read as it is touched: both name the file.
@@ -342,9 +342,11 @@ mod tests {
         held.image.read_at(0, &mut a);
         lazy.image.read_at(0, &mut b);
         assert_eq!(a, b);
-        // Relocated views and images without a file share nothing.
-        assert_eq!(held.relocated(0x2_0000_0000).unwrap().share_key(), None);
-        assert_eq!(lazy.relocated(0x2_0000_0000).unwrap().share_key(), None);
+        // Relocated views share with views of the file relocated to the same base; images without
+        // a file share nothing.
+        let moved = Some(FileIdentity { base: 0x2_0000_0000, ..key });
+        assert_eq!(held.relocated(0x2_0000_0000).unwrap().share_key(), moved);
+        assert_eq!(lazy.relocated(0x2_0000_0000).unwrap().share_key(), moved);
         assert_eq!(ImageSection::from_file(&file).unwrap().image.share_key(), None);
         let unnamed = ImageSection::from_reader(alloc::sync::Arc::new(FileBytes(file.into()))).unwrap();
         assert_eq!(unnamed.image.share_key(), None);

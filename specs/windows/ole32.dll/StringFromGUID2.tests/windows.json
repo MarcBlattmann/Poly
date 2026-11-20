@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "str_basic",
+      "exe_sha256": "48cd84ece305b0ac57ac3c6505c8251fac92b2c08b42e6068a5154895674ac72",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R1VJRF9OVUxMOiByZXR1cm5lZCAzOSwgdGV4dCB7MDAwMDAwMDAtMDAwMC0wMDAwLTAwMDAtMDAwMDAwMDAwMDAwfSwgTlVMIGF0IHVuaXQgMzgsIHVuaXQgYWZ0ZXIgdGhlIE5VTCB1bnRvdWNoZWQgMQpJSURfSVVua25vd246IHJldHVybmVkIDM5LCB0ZXh0IHswMDAwMDAwMC0wMDAwLTAwMDAtQzAwMC0wMDAwMDAwMDAwNDZ9LCBOVUwgYXQgdW5pdCAzOCwgdW5pdCBhZnRlciB0aGUgTlVMIHVudG91Y2hlZCAxCmFsbCBiaXRzIHNldDogcmV0dXJuZWQgMzksIHRleHQge0ZGRkZGRkZGLUZGRkYtRkZGRi1GRkZGLUZGRkZGRkZGRkZGRn0sIE5VTCBhdCB1bml0IDM4LCB1bml0IGFmdGVyIHRoZSBOVUwgdW50b3VjaGVkIDEKZGlnaXRzIGFuZCBsZXR0ZXJzOiByZXR1cm5lZCAzOSwgdGV4dCB7MDEyM0FCQ0QtRUYwMS0yMzQ1LTY3ODktQUJDREVGMDEyMzQ1fSwgTlVMIGF0IHVuaXQgMzgsIHVuaXQgYWZ0ZXIgdGhlIE5VTCB1bnRvdWNoZWQgMQpzaW5nbGUgZGlnaXRzOiByZXR1cm5lZCAzOSwgdGV4dCB7MDAwMDAwMDEtMDAwMi0wMDAzLTA0MDUtMDYwNzA4MDkwQTBCfSwgTlVMIGF0IHVuaXQgMzgsIHVuaXQgYWZ0ZXIgdGhlIE5VTCB1bnRvdWNoZWQgMQoyMDAgcm91bmQgdHJpcHMgdGhyb3VnaCBJSURGcm9tU3RyaW5nOiAyMDAgZXF1YWwKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GUID_NULL: returned 39, text {00000000-0000-0000-0000-000000000000}, NUL at unit 38, unit after the NUL untouched 1\nIID_IUnknown: returned 39, text {00000000-0000-0000-C000-000000000046}, NUL at unit 38, unit after the NUL untouched 1\nall bits set: returned 39, text {FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF}, NUL at unit 38, unit after the NUL untouched 1\ndigits and letters: returned 39, text {0123ABCD-EF01-2345-6789-ABCDEF012345}, NUL at unit 38, unit after the NUL untouched 1\nsingle digits: returned 39, text {00000001-0002-0003-0405-060708090A0B}, NUL at unit 38, unit after the NUL untouched 1\n200 round trips through IIDFromString: 200 equal\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    }
+  ]
+}

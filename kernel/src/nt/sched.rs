@@ -16,7 +16,7 @@ use crate::user::{self, Entry, Memory, UserRegs};
 use crate::{thread, time};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use poly_ntobj::status::{
     STATUS_INVALID_HANDLE, STATUS_PROCESS_IS_TERMINATING, STATUS_SUCCESS, STATUS_TIMEOUT, STATUS_UNSUCCESSFUL,
     STATUS_USER_APC,
@@ -475,8 +475,12 @@ fn spawn(
 
 /// Kernel tests only: how long [`resume`] waits between starting a suspended process's first
 /// thread and giving up the hold its creation took, so that the thread runs to its end first
-/// (the order a loaded machine can give: the resuming thread preempted there).
-pub static RESUME_PAUSE_MS: AtomicU64 = AtomicU64::new(0);
+/// (the order a loaded machine can give: the resuming thread preempted there). Set, [`resume`]
+/// waits there until the started process's threads have all left (at most
+/// [`RESUME_WAIT_LIMIT_NS`]), so the test gets that order every time and loses no time.
+pub static RESUME_WAITS_FOR_CHILD: AtomicBool = AtomicBool::new(false);
+/// The longest [`RESUME_WAITS_FOR_CHILD`] makes `resume` wait.
+const RESUME_WAIT_LIMIT_NS: u64 = 5_000_000_000;
 
 /// A hold on NT process `process` was given up (`ended`: what [`Process::release`] or
 /// [`Process::drop_holds`] returned). If that ended the process, its NT end runs now, as when its
@@ -653,9 +657,11 @@ pub fn resume(pid: ProcessId, memory: &Arc<Memory>, thread: ThreadRef) -> Result
         if let (Some((entry, teb)), Some((process, child_memory))) = (deferred, &child) {
             let started =
                 super::start_first_thread(process, child_memory, &super::Start { entry, teb, tid: thread.0 as u32 });
-            let pause = RESUME_PAUSE_MS.load(Ordering::Relaxed);
-            if pause > 0 {
-                thread::sleep(core::time::Duration::from_millis(pause));
+            if RESUME_WAITS_FOR_CHILD.load(Ordering::Relaxed) && started.is_ok() {
+                // A thread that leaves wakes the process waiters even while the hold keeps the
+                // process (`Process::detach_thread`).
+                let deadline = crate::time::now_ns().saturating_add(RESUME_WAIT_LIMIT_NS);
+                crate::process::wait_event_until(|| process.thread_count() == 0, deadline);
             }
             // The hold `create_process` took while it waited. The thread just started may have
             // run to its end already (a loaded machine runs the child before this caller): its

@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "wow_rights",
+      "exe_sha256": "c049e910f4a740579ca83c89dfc2a931d47fb439cf5abee36a75a8adb5d550dc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UFJPQ0VTU19URVJNSU5BVEUgMHgxOiAwIChlcnJvciA1KQpQUk9DRVNTX0NSRUFURV9USFJFQUQgMHgyOiAwIChlcnJvciA1KQpQUk9DRVNTX1ZNX09QRVJBVElPTiAweDg6IDAgKGVycm9yIDUpClBST0NFU1NfVk1fUkVBRCAweDEwOiAwIChlcnJvciA1KQpQUk9DRVNTX1ZNX1dSSVRFIDB4MjA6IDAgKGVycm9yIDUpClBST0NFU1NfRFVQX0hBTkRMRSAweDQwOiAwIChlcnJvciA1KQpQUk9DRVNTX0NSRUFURV9QUk9DRVNTIDB4ODA6IDAgKGVycm9yIDUpClBST0NFU1NfU0VUX1FVT1RBIDB4MTAwOiAwIChlcnJvciA1KQpQUk9DRVNTX1NFVF9JTkZPUk1BVElPTiAweDIwMDogMCAoZXJyb3IgNSkKUFJPQ0VTU19RVUVSWV9JTkZPUk1BVElPTiAweDQwMDogMSwgbm90IGEgMzItYml0IHByb2Nlc3MKUFJPQ0VTU19TVVNQRU5EX1JFU1VNRSAweDgwMDogMCAoZXJyb3IgNSkKUFJPQ0VTU19RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OIDB4MTAwMDogMSwgbm90IGEgMzItYml0IHByb2Nlc3MKU1lOQ0hST05JWkUgMHgxMDAwMDA6IDAgKGVycm9yIDUpClJFQURfQ09OVFJPTCAweDIwMDAwOiAwIChlcnJvciA1KQphbGwgcmlnaHRzLCB0d2ljZTogMSBhbmQgMQp0aGUgc2FtZSBoYW5kbGUgdXNlZCBmcm9tIGFub3RoZXIgdGhyZWFkOiByZXN1bHQgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "PROCESS_TERMINATE 0x1: 0 (error 5)\nPROCESS_CREATE_THREAD 0x2: 0 (error 5)\nPROCESS_VM_OPERATION 0x8: 0 (error 5)\nPROCESS_VM_READ 0x10: 0 (error 5)\nPROCESS_VM_WRITE 0x20: 0 (error 5)\nPROCESS_DUP_HANDLE 0x40: 0 (error 5)\nPROCESS_CREATE_PROCESS 0x80: 0 (error 5)\nPROCESS_SET_QUOTA 0x100: 0 (error 5)\nPROCESS_SET_INFORMATION 0x200: 0 (error 5)\nPROCESS_QUERY_INFORMATION 0x400: 1, not a 32-bit process\nPROCESS_SUSPEND_RESUME 0x800: 0 (error 5)\nPROCESS_QUERY_LIMITED_INFORMATION 0x1000: 1, not a 32-bit process\nSYNCHRONIZE 0x100000: 0 (error 5)\nREAD_CONTROL 0x20000: 0 (error 5)\nall rights, twice: 1 and 1\nthe same handle used from another thread: result 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 47
+    }
+  ]
+}

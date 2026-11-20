@@ -704,6 +704,11 @@ pub fn wait_event(ready: impl FnMut() -> bool) {
     EVENTS.wait_until(ready);
 }
 
+/// [`wait_event`] until `deadline_ns` at the latest; whether `ready()` held.
+pub fn wait_event_until(ready: impl FnMut() -> bool, deadline_ns: u64) -> bool {
+    EVENTS.wait_until_deadline(ready, deadline_ns)
+}
+
 /// Make every thread in [`wait_event`] (and [`park`]) check its condition
 /// again.
 pub fn wake_waiters() {
