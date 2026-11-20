@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "go_q_defaults",
-      "exe_sha256": "abc5e9d4c4466f7b5f5f294165501d83a4c8b184c9c90b42339c563ce9496050",
+      "exe_sha256": "60b802976f7e88bf10fb08fce18ff66252c5af7ebf454d5aa60179198d5f5baa",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
