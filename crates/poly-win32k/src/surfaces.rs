@@ -59,13 +59,18 @@ struct Buffer {
 
 impl Buffer {
     fn new(width: u32, height: u32) -> Buffer {
+        Buffer::filled(width, height, BLANK)
+    }
+
+    /// A buffer whose bytes all start as `fill`.
+    fn filled(width: u32, height: u32, fill: u8) -> Buffer {
         let stride = width as usize * 4;
         let rows_per_band = (BAND_BYTES / stride.max(1)).max(1) as u32;
         let mut bands = Vec::new();
         let mut row = 0;
         while row < height {
             let n = rows_per_band.min(height - row);
-            bands.push(vec![BLANK; n as usize * stride]);
+            bands.push(vec![fill; n as usize * stride]);
             row += n;
         }
         Buffer { width, height, bands, rows_per_band }
@@ -201,6 +206,18 @@ pub struct Surfaces {
     premultiplied: BTreeSet<u32>,
     /// Each surface's buffer units against physical pixels (`Wm::buffer_scale`, ADR 0231).
     scales: BTreeMap<u32, (u32, u32)>,
+    /// Top-level windows without a redirection surface (`WS_EX_NOREDIRECTIONBITMAP`, ADR 0232):
+    /// what GDI draws in them is not shown.
+    unredirected: BTreeSet<u32>,
+}
+
+/// Whether window `hwnd` has no redirection surface (Learn, "Extended Window Styles",
+/// `WS_EX_NOREDIRECTIONBITMAP`: "The window does not render to a redirection surface. This is for
+/// windows that do not have visible content or that use mechanisms other than surfaces to provide
+/// their visual."). Such a window shows only what DirectComposition gives it: nothing before its
+/// first frame, and none of its GDI drawing.
+fn unredirected(wm: &Wm, hwnd: u32) -> bool {
+    wm.info(hwnd).is_some_and(|i| i.ex_style & crate::metrics::WS_EX_NOREDIRECTIONBITMAP != 0)
 }
 
 impl Surfaces {
@@ -227,6 +244,7 @@ impl Surfaces {
         // A content lasts while its window is layered by UpdateLayeredWindow.
         self.contents.retain(|h, _| wm.layered(*h).is_some_and(|l| l.update));
         self.premultiplied.retain(|h| wm.info(*h).is_some());
+        self.unredirected.retain(|h| wm.info(*h).is_some());
         // Surfaces exist with a compositor, and in an interactive session
         // even without one (window DCs keep their pixels, BeginPaint.yaml
         // reads them back).
@@ -303,6 +321,12 @@ impl Surfaces {
                 self.scales.insert(h, scale);
                 let (cw, ch) = (own_units(cw, scale).max(1), own_units(ch, scale).max(1));
                 let format = self.pixel_format(wm, h);
+                let clear = unredirected(wm, h);
+                if clear {
+                    self.unredirected.insert(h);
+                } else {
+                    self.unredirected.remove(&h);
+                }
                 let current = desktop.surface(s).and_then(|x| x.buffer).map(|b| (b.id, b.width, b.height, b.format));
                 if current.map(|c| (c.1, c.2, c.3)) != Some((cw, ch, format))
                     && cw <= MAX_SIDE
@@ -311,7 +335,8 @@ impl Surfaces {
                 {
                     // A resized window keeps what it showed, from its top-left corner: commits
                     // carry only what was drawn since (ADR 0219).
-                    let mut new = Buffer::new(cw, ch);
+                    // A window without a redirection surface starts transparent (ADR 0232).
+                    let mut new = if clear { Buffer::filled(cw, ch, 0) } else { Buffer::new(cw, ch) };
                     if let Some(old) = current.map(|c| c.0).or(carried).and_then(|b| self.buffers.get(&b)) {
                         new.keep(old);
                     }
@@ -363,7 +388,11 @@ impl Surfaces {
         let layered_alpha = wm
             .layered(hwnd)
             .is_some_and(|l| l.update && !l.attrs && l.ulw_flags & crate::guic::ULW_ALPHA != 0 && l.ulw_src_alpha);
-        if layered_alpha || self.premultiplied.contains(&hwnd) { PixelFormat::Argb8888 } else { PixelFormat::Xrgb8888 }
+        if layered_alpha || self.premultiplied.contains(&hwnd) || unredirected(wm, hwnd) {
+            PixelFormat::Argb8888
+        } else {
+            PixelFormat::Xrgb8888
+        }
     }
 
     /// What window `hwnd` shows comes with premultiplied alpha, or no longer does (a swap chain
@@ -559,6 +588,10 @@ impl Surfaces {
     /// into its top-level window's surface, clipped to it. False when the surface is gone or
     /// changed size.
     pub fn write_child_rows(&mut self, desktop: &Desktop, area: &ChildArea, row: u32, pixels: &[u8]) -> bool {
+        if self.unredirected.contains(&area.top) {
+            // No redirection surface: GDI output is not shown (ADR 0232).
+            return self.surface(area.top).is_some();
+        }
         let Some(s) = self.surface(area.top) else { return false };
         let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
         let Some(b) = self.buffers.get_mut(&info.id) else { return false };
@@ -585,6 +618,9 @@ impl Surfaces {
     /// The child's rows are written: its area of the top-level surface is damaged.
     pub fn child_committed(&mut self, desktop: &mut Desktop, area: &ChildArea) -> bool {
         let Some(s) = self.surface(area.top) else { return false };
+        if self.unredirected.contains(&area.top) {
+            return true;
+        }
         let (sw, sh) = (area.surface.0 as i32, area.surface.1 as i32);
         let (l, t) = (area.x.clamp(0, sw), area.y.clamp(0, sh));
         let (r, b) = ((area.x + area.width as i32).clamp(0, sw), (area.y + area.height as i32).clamp(0, sh));
@@ -618,8 +654,10 @@ impl Surfaces {
     ) -> bool {
         let Some(s) = self.surface(hwnd) else { return false };
         let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
+        let unredirected = self.unredirected.contains(&hwnd);
         let Some(b) = self.buffers.get_mut(&info.id) else { return false };
-        (b.width, b.height) == (width, height) && b.write(row, pixels)
+        // No redirection surface: GDI output is not shown (ADR 0232).
+        (b.width, b.height) == (width, height) && (unredirected || b.write(row, pixels))
     }
 
     /// Spans of `x, row, width` pixels from row `row` on out of `pixels`
@@ -645,6 +683,10 @@ impl Surfaces {
         if x.saturating_add(width) > b.width || row.saturating_add(rows) > b.height {
             return false;
         }
+        if self.unredirected.contains(&hwnd) {
+            // No redirection surface: GDI output is not shown (ADR 0232).
+            return true;
+        }
         for (i, src) in pixels.chunks(span).enumerate() {
             b.write_span(x, row + i as u32, src);
         }
@@ -658,6 +700,9 @@ impl Surfaces {
         if desktop.surface(s).and_then(|x| x.buffer).is_none() {
             return false;
         }
+        if self.unredirected.contains(&hwnd) {
+            return true;
+        }
         desktop.damage(s, x, y, w, h);
         true
     }
@@ -668,6 +713,9 @@ impl Surfaces {
         let Some(s) = self.surface(hwnd) else { return false };
         let Some(info) = desktop.surface(s).and_then(|x| x.buffer) else { return false };
         let Some(b) = self.buffers.get(&info.id) else { return false };
+        if self.unredirected.contains(&hwnd) {
+            return true;
+        }
         desktop.damage(s, 0, 0, b.width, b.height);
         true
     }
@@ -1079,18 +1127,17 @@ mod tests {
         created.hwnd
     }
 
-    /// Chrome's menus and bubbles: popups with `WS_EX_NOREDIRECTIONBITMAP` that a
-    /// DirectComposition swap chain of `DXGI_ALPHA_MODE_PREMULTIPLIED` shows in. Their surface
-    /// reaches the compositor with that alpha (a corner pixel of alpha 0 is not black), keeps its
-    /// picture across the new buffer, and is opaque again when the swap chain goes.
+    /// A popup that a DirectComposition swap chain of `DXGI_ALPHA_MODE_PREMULTIPLIED` shows in
+    /// (Chrome's menus and bubbles; they are also unredirected, see below). Its surface reaches the
+    /// compositor with that alpha (a corner pixel of alpha 0 is not black), keeps its picture
+    /// across the new buffer, and is opaque again when the swap chain goes.
     #[test]
     fn a_window_a_premultiplied_swap_chain_shows_in_is_composed_with_its_alpha() {
-        const NO_REDIRECTION: u32 = 0x0020_0000;
         let mut wm = Wm::new();
         let mut d = Desktop::new();
         let mut s = Surfaces::new();
         connect(&mut d);
-        let menu = popup(&mut wm, &mut d, &mut s, 100, 100, NO_REDIRECTION, RED);
+        let menu = popup(&mut wm, &mut d, &mut s, 100, 100, 0, RED);
         let info = |s: &Surfaces, d: &Desktop| d.surface(s.surface(menu).unwrap()).unwrap().buffer.unwrap();
         assert_eq!(info(&s, &d).format, PixelFormat::Xrgb8888);
         assert!(!s.set_premultiplied(&wm, 0xBAD0, true));
@@ -1116,6 +1163,37 @@ mod tests {
         assert!(s.set_premultiplied(&wm, menu, false));
         s.sync(&wm, &mut d);
         assert_eq!(info(&s, &d).format, PixelFormat::Xrgb8888);
+    }
+
+    /// ADR 0232: a window with `WS_EX_NOREDIRECTIONBITMAP` has no redirection surface (Learn):
+    /// its surface is premultiplied and starts transparent, and what GDI draws in it is neither
+    /// kept nor damaged, so nothing shows before its swap chain's first frame (Chrome's white
+    /// first frame and its bubbles' white flash).
+    #[test]
+    fn a_window_without_a_redirection_surface_shows_none_of_its_gdi_drawing() {
+        const NO_REDIRECTION: u32 = 0x0020_0000;
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        // `popup` fills the window with GDI pixels and commits them.
+        let w = popup(&mut wm, &mut d, &mut s, 100, 100, NO_REDIRECTION, RED);
+        let id = s.surface(w).unwrap();
+        let b = d.surface(id).unwrap().buffer.unwrap();
+        assert_eq!(b.format, PixelFormat::Argb8888);
+        assert_eq!(s.rows(b.id, 0, 1).unwrap()[..8], [0u8; 8], "transparent, not red");
+        // A commit is accepted (so the app does not ask again) but damages nothing.
+        records(&mut d);
+        let px = vec![0x40u8; 40 * 30 * 4];
+        assert!(s.commit(&mut d, w, 40, 30, &px));
+        assert!(s.write_area(&d, w, (40, 30), (0, 0, 40), &px[..160]));
+        assert!(s.committed_area(&mut d, w, (0, 0, 40, 1)));
+        assert!(records(&mut d).is_empty());
+        assert_eq!(s.rows(b.id, 0, 1).unwrap()[..8], [0u8; 8]);
+        // An ordinary window keeps GDI's pixels.
+        let o = popup(&mut wm, &mut d, &mut s, 300, 300, 0, RED);
+        assert_eq!(s.screen_pixel(&wm, &d, 305, 305), RED);
+        assert_eq!(d.surface(s.surface(o).unwrap()).unwrap().buffer.unwrap().format, PixelFormat::Xrgb8888);
     }
 
     /// A popup shown before its owner had a surface (Chrome's "Restore pages?" bubble, shown
