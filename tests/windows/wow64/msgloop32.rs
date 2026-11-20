@@ -174,6 +174,15 @@ unsafe extern "system" {
     fn GetExplicitEntriesFromAclW(acl: *const u8, count: *mut u32, entries: *mut *mut u8) -> u32;
 }
 
+#[link(name = "gdi32", kind = "raw-dylib", import_name_type = "undecorated")]
+unsafe extern "system" {
+    fn CreateCompatibleDC(dc: Handle) -> Handle;
+    fn DeleteDC(dc: Handle) -> i32;
+    fn CreateDIBSection(dc: Handle, bmi: *const u8, usage: u32, bits: *mut *mut u8, section: Handle, offset: u32) -> Handle;
+    fn GetObjectW(h: Handle, size: i32, out: *mut u8) -> i32;
+    fn DeleteObject(h: Handle) -> i32;
+}
+
 #[link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated")]
 unsafe extern "system" {
     fn CreateEventW(sa: *const u8, manual: i32, initial: i32, name: *const u16) -> Handle;
@@ -301,6 +310,48 @@ unsafe fn create_file(sd: *mut u8) {
 /// `TVITEMW` (`hItem` 4, `pszText` 16, `cchTextMax` 20), `TCITEMW` (28 bytes: `pszText` 12,
 /// `cchTextMax` 16, `iImage` 20, `lParam` 24), `IMAGEINFO` (32 bytes: `rcImage` 16) and
 /// `IMAGELISTDRAWPARAMS` (56 bytes without the Windows XP fields).
+/// gdi32's `GetObjectW` on a DIB section, as Google's 32-bit installer does after
+/// `CreateDIBSection`: `DIBSECTION` (x86: 84 bytes; `BITMAP` 24 with `bmBits` at 20, the
+/// `BITMAPINFOHEADER` at 24, `dshSection` 76, `dsOffset` 80) and `BITMAP` alone (24).
+unsafe fn dib() {
+    // SAFETY: gdi32 calls on objects of this program with buffers of the 32-bit sizes.
+    unsafe {
+        let dc = CreateCompatibleDC(0);
+        // BITMAPINFOHEADER: 40 bytes, 32 x 16, one plane, 32 bits, BI_RGB.
+        let mut bmi = [0u8; 44];
+        put_u32(&mut bmi, 0, 40);
+        put_u32(&mut bmi, 4, 32);
+        put_u32(&mut bmi, 8, 16);
+        bmi[12] = 1;
+        bmi[14] = 32;
+        let mut bits: *mut u8 = core::ptr::null_mut();
+        let hbm = CreateDIBSection(dc, bmi.as_ptr(), 0, &mut bits, 0, 0);
+        let mut g = Guarded::<84>::new();
+        let n = GetObjectW(hbm, 84, g.ptr());
+        let ok = hbm != 0
+            && !bits.is_null()
+            && n == 84
+            && u32_at(&g.bytes, 4) == 32
+            && u32_at(&g.bytes, 8) == 16
+            && u32_at(&g.bytes, 20) == bits as u32
+            && u32_at(&g.bytes, 24) == 40
+            && u32_at(&g.bytes, 28) == 32;
+        check(b"DIBSECTION (84): GetObjectW", ok, g.guard);
+        if !ok {
+            detail(&[hbm as u32, n as u32, u32_at(&g.bytes, 20), bits as u32, u32_at(&g.bytes, 24)]);
+        }
+        let mut g = Guarded::<24>::new();
+        let n = GetObjectW(hbm, 24, g.ptr());
+        let ok = n == 24 && u32_at(&g.bytes, 4) == 32 && u32_at(&g.bytes, 20) == bits as u32;
+        check(b"BITMAP (24): GetObjectW", ok, g.guard);
+        if !ok {
+            detail(&[n as u32, u32_at(&g.bytes, 20)]);
+        }
+        DeleteObject(hbm);
+        DeleteDC(dc);
+    }
+}
+
 unsafe fn controls(parent: Handle) {
     const WS_CHILD: u32 = 0x4000_0000;
     // SAFETY: comctl32 controls of this program, with buffers of the 32-bit sizes.
@@ -632,12 +683,17 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         si[1] = 0x17;
         si[3] = 100;
         si[4] = 10;
-        SetScrollInfo(h, 1, si.as_ptr() as *const u8, 0);
+        si[5] = 40;
+        let set = SetScrollInfo(h, 1, si.as_ptr() as *const u8, 0) == 40;
         let mut g = Guarded::<28>::sized(28);
         g.bytes[4..8].copy_from_slice(&0x17u32.to_le_bytes());
-        // A fail stub on 32-bit today: only the guard counts.
-        GetScrollInfo(h, 1, g.ptr());
-        check(b"SCROLLINFO (28)", true, g.guard);
+        let ok = set
+            && GetScrollInfo(h, 1, g.ptr()) != 0
+            && u32_at(&g.bytes, 12) == 100
+            && u32_at(&g.bytes, 16) == 10
+            && u32_at(&g.bytes, 20) == 40
+            && u32_at(&g.bytes, 24) == 40;
+        check(b"SCROLLINFO (28): SetScrollInfo/GetScrollInfo", ok, g.guard);
 
         // A posted message through this thread's own loop, into a guarded MSG.
         #[repr(C)]
@@ -654,6 +710,7 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         check(b"GetMessageW MSG (28)", got && f.msg.lparam == 4, f.guard);
         menus();
         controls(h);
+        dib();
         DestroyWindow(h);
 
         // SECURITY_DESCRIPTOR (x86: 20 bytes) and the kernel's reading of it.

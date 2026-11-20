@@ -1,0 +1,112 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfequal_collections",
+      "source_sha256": "c22e72b8f881ab66bd0342f3d36abc06a83799a0e3203198c8f01c28e024e2c1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6575e464155cc07834db6830100a50bd19234035147bca2f04968cbc022fd3e2",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(a1, a2)\nok !CFEqual(a1, a3)\nok !CFEqual(a1, a4)\nok CFEqual(m, a1)\nok CFEqual(d1, d2)\nok !CFEqual(d1, d3)\nok CFEqual(s1, s2)\nok !CFEqual(s1, s3)\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1efbad4e9db0329d9297f502a84d009c093f25fc234e52413f55f70873adfe1e",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(a1, a2)\nok !CFEqual(a1, a3)\nok !CFEqual(a1, a4)\nok CFEqual(m, a1)\nok CFEqual(d1, d2)\nok !CFEqual(d1, d3)\nok CFEqual(s1, s2)\nok !CFEqual(s1, s3)\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfequal_data_and_singletons",
+      "source_sha256": "a70a982ac8edbcaccaecdb9a003cd1d18f5514fe8ae597c465fca406ce684423",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "290d4c7e9f95988ba285373c28dc3b4eaa23260cd467585a93d7c24ee3d2e55a",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(d1, d2)\nok !CFEqual(d1, d3)\nok !CFEqual(d1, d4)\nok CFEqual(CFDataCreate(kCFAllocatorDefault, a, 0), CFDataCreate(kCFAllocatorDefault, b, 0))\nok CFEqual(kCFNull, kCFNull)\nok CFEqual(kCFBooleanTrue, kCFBooleanTrue)\nok !CFEqual(kCFBooleanTrue, kCFBooleanFalse)\nok CFEqual(d1, d1)\nok CFEqual(m, d1)\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4a997aac1d65ad3c93410d682552aad29f9f449f6ad0e40f4a75d672ddcbd2e7",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(d1, d2)\nok !CFEqual(d1, d3)\nok !CFEqual(d1, d4)\nok CFEqual(CFDataCreate(kCFAllocatorDefault, a, 0), CFDataCreate(kCFAllocatorDefault, b, 0))\nok CFEqual(kCFNull, kCFNull)\nok CFEqual(kCFBooleanTrue, kCFBooleanTrue)\nok !CFEqual(kCFBooleanTrue, kCFBooleanFalse)\nok CFEqual(d1, d1)\nok CFEqual(m, d1)\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfequal_numbers",
+      "source_sha256": "4698897964f2872328ebea6e2ad7701d840e831a1bab026a179100b0f66dd768",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "33882c099eef8e84ffdf88e0e5e3c1654dc7aed4a5371e87f12d4d943cad75c2",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(mk(kCFNumberIntType, &i1), mk(kCFNumberLongLongType, &l1))\nok CFEqual(mk(kCFNumberShortType, &s1), mk(kCFNumberLongLongType, &l1))\nok CFEqual(mk(kCFNumberIntType, &i1), mk(kCFNumberFloatType, &f1))\nok CFEqual(mk(kCFNumberDoubleType, &d1), mk(kCFNumberIntType, &i1))\nok !CFEqual(mk(kCFNumberDoubleType, &d15), mk(kCFNumberIntType, &i1))\nok !CFEqual(mk(kCFNumberIntType, &m1), mk(kCFNumberIntType, &i1))\nok CFEqual(mk(kCFNumberLongLongType, &big), mk(kCFNumberLongLongType, &big))\nok !CFEqual(mk(kCFNumberLongLongType, &big), mk(kCFNumberLongLongType, &big2))\nok CFEqual(mk(kCFNumberDoubleType, &nan), mk(kCFNumberDoubleType, &nan))\nok CFEqual(kCFNumberNaN, kCFNumberNaN)\nok CFEqual(kCFNumberPositiveInfinity, kCFNumberPositiveInfinity)\nok !CFEqual(kCFNumberPositiveInfinity, kCFNumberNegativeInfinity)\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "243ef01f73e0121c115b6e59557d19d84dc90f4c09ef82c35688831fc06de782",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(mk(kCFNumberIntType, &i1), mk(kCFNumberLongLongType, &l1))\nok CFEqual(mk(kCFNumberShortType, &s1), mk(kCFNumberLongLongType, &l1))\nok CFEqual(mk(kCFNumberIntType, &i1), mk(kCFNumberFloatType, &f1))\nok CFEqual(mk(kCFNumberDoubleType, &d1), mk(kCFNumberIntType, &i1))\nok !CFEqual(mk(kCFNumberDoubleType, &d15), mk(kCFNumberIntType, &i1))\nok !CFEqual(mk(kCFNumberIntType, &m1), mk(kCFNumberIntType, &i1))\nok CFEqual(mk(kCFNumberLongLongType, &big), mk(kCFNumberLongLongType, &big))\nok !CFEqual(mk(kCFNumberLongLongType, &big), mk(kCFNumberLongLongType, &big2))\nok CFEqual(mk(kCFNumberDoubleType, &nan), mk(kCFNumberDoubleType, &nan))\nok CFEqual(kCFNumberNaN, kCFNumberNaN)\nok CFEqual(kCFNumberPositiveInfinity, kCFNumberPositiveInfinity)\nok !CFEqual(kCFNumberPositiveInfinity, kCFNumberNegativeInfinity)\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfequal_strings",
+      "source_sha256": "698fd28f1ec9abb220eb9909b6dbe1294ddf5e3f73021fc752400928d41aea76",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "873b827c40cb7c9deed30166a3792b34f0cf418a57e4abc8a1263f3b86b67a5b",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(S(\"same text\"), S(\"same text\"))\nok !CFEqual(S(\"abc\"), S(\"abd\"))\nok !CFEqual(S(\"abc\"), S(\"ABC\"))\nok !CFEqual(S(\"abc\"), S(\"abcd\"))\nok CFEqual(S(\"\"), CFSTR(\"\"))\nok CFEqual(CFSTR(\"constant\"), S(\"constant\"))\nok CFEqual(m, CFSTR(\"constant\"))\nok CFEqual(CFSTR(\"constant\"), m)\nok !CFEqual(c, d)\nok CFEqual(c, c)\nok CFEqual(S(\"h\\xc3\\xa9llo\"), CFSTR(\"héllo\"))\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "61d5f44207360bf7e53c7206545abb15296364f38683699de122907dd5fcb58c",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(S(\"same text\"), S(\"same text\"))\nok !CFEqual(S(\"abc\"), S(\"abd\"))\nok !CFEqual(S(\"abc\"), S(\"ABC\"))\nok !CFEqual(S(\"abc\"), S(\"abcd\"))\nok CFEqual(S(\"\"), CFSTR(\"\"))\nok CFEqual(CFSTR(\"constant\"), S(\"constant\"))\nok CFEqual(m, CFSTR(\"constant\"))\nok CFEqual(CFSTR(\"constant\"), m)\nok !CFEqual(c, d)\nok CFEqual(c, c)\nok CFEqual(S(\"h\\xc3\\xa9llo\"), CFSTR(\"héllo\"))\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

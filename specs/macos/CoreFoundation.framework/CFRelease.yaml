@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFRelease.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFRelease.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFRelease
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFRelease(cf) takes one off the retain count. When the count of a counted object reaches zero the
+  object is freed: its deallocate happens through the allocator it was made with (once per block the
+  allocator handed out for the object and its storage, never before the last release), and a
+  collection first releases every element, key and value through its callbacks. Until the last release
+  the object stays fully usable. Constant objects (kCFNull, Booleans, CFSTR strings, small stored
+  values) are never freed however often they are released. The count of allocate and deallocate calls
+  of a counting allocator balances after a full release of everything made with it; how many blocks
+  one object needs (a dictionary used 5 calls for one key and one value) is an internal detail.
+  Releasing NULL is a programming error that kills the process.
+returns:
+  success: "nothing"
+errors:
+  null: "NULL kills the process (SIGTRAP on arm64, SIGILL on x86_64)"
+  over_release: "releasing more often than retained is undefined behaviour (use after free)"
+side_effects: "retain count falls by one; on reaching zero the object, and the references it held, are released and its memory returned to its allocator"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: 
+  - "elements of a collection are released while the collection is freed, before its own memory goes back to the allocator"
+timing:
+  typical: "a few nanoseconds to microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

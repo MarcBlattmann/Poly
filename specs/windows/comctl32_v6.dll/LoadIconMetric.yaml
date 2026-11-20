@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32_v6.dll/LoadIconMetric.yaml
+id: windows/api/comctl32_v6.dll/LoadIconMetric
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station, 96 dpi) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output and two complete recordings agreed byte for byte, each run in a fresh scratch directory; the test programs carry no manifest (the icon tests carry the manifest that asks for comctl32 version 6). The fonts the tests use are the test's own TrueType font (added with AddFontMemResourceEx) and DejaVu Sans 2.37 (the file C:\\Windows\\Fonts\\DejaVuSans.ttf, copied there for the recording and removed afterwards, added with AddFontResourceExW and FR_PRIVATE); no Microsoft font is used"
+  observed_by: spec-win-glyphs
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). The fonts are free: a TrueType font the test writes itself (units per em 1024, every outline coordinate a multiple of 64 units, so that at 16 pixels per em every point lies on a whole pixel) and DejaVu Sans 2.37 (Bitstream Vera licence, shipped with Poly); where a number would depend on hinting, the test asks for 2048 pixels per em, the font's units per em, so that one pixel is one font unit and the outline is the file's. Microsoft Learn reference pages of the functions and structures named here and the public headers wingdi.h, winuser.h, winbase.h, shlwapi.h, dbghelp.h, commctrl.h, winerror.h and the TrueType and OpenType font file format documents for table layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Loads an icon resource at the system's small (LIM_SMALL 0) or large (LIM_LARGE 1) icon size, picking the best image of the icon and scaling it when no image has the size, and decoding PNG-compressed images. Notepad++ calls it for its toolbar and tab icons (it reported 'LoadIcon() function return null' while it was missing). The tests' own icons (resources of the test executable, ids 1..18) have solid colours per source size: 16 ff0000, 24 ff00ff, 32 00ff00, 48 0000ff, 64 00ffff, 256 ffff00 (sizes 16..64 as BMP images with a mask, 256 as a PNG-compressed image); the centre pixel of the loaded icon tells which image was the source. The test executables carry a manifest that asks for Microsoft.Windows.Common-Controls 6.0.0.0 (without it comctl32 is version 5.82 and has no ordinals 380 and 381); the functions are imported by ordinal 380 and 381.
+interface:
+  signature: "HRESULT LoadIconMetric(HINSTANCE hinst, PCWSTR pszName, int lims, HICON *phico)   (comctl32 version 6, ordinal 380)"
+rules:
+  sizes: "LIM_SMALL gives an icon of SM_CXSMICON x SM_CYSMICON (16x16 on the oracle at 96 dpi), LIM_LARGE of SM_CXICON x SM_CYICON (32x32); the call succeeds with S_OK (0) and stores the HICON. GetIconInfo of it: a colour bitmap of that size at 32 bits per pixel and a mask bitmap of the same size, for BMP and PNG images alike. Each call returns a new handle (two loads of one icon give different handles, each destroyed by its own DestroyIcon)."
+  source_choice: "LIM_SMALL uses the 16 image where there is one (ids 1, 4, 6, 7, 9: centre ff0000); an icon without a 16 image is scaled down from its best one: only a 48 image (3) 0000ff, only 256 PNG (2) ffff00, only 32 (5) 00ff00, only 64 (8) 00ffff. LIM_LARGE: from the 32 image where there is one (icon 1 and 5: 00ff00); with images 16 and 48 (6) it uses the 48 (0000ff); with 16 and a 256 PNG (7) it uses the 16 scaled up (ff0000); only 16 (4): scaled up ff0000; only 48 (3) scaled down 0000ff; only 256 PNG: scaled down ffff00; only 64: 00ffff. The selection is the one of LoadIconWithScaleDown at 16 and 32 pixels (see its sheet)."
+  png: "A PNG-compressed image (the 256x256 image of icon 2, 7) is decoded and scaled to 16x16 or 32x32 with its colour kept (centre ffff00); the result is a normal icon (32 bpp colour bitmap and mask bitmap)."
+  stock_icons: "With hinst NULL and a system icon id (IDI_APPLICATION 32512, IDI_ERROR 32513, IDI_QUESTION 32514, IDI_WARNING 32515, IDI_INFORMATION 32516, IDI_SHIELD 32518) the call succeeds: LIM_SMALL gives 16x16, LIM_LARGE 32x32 for each of them (the pictures are the system's and are not recorded)."
+errors:
+  missing_resource: "A resource id that is not in the module (999) or a name that is not there (L\"NOPE\"): HRESULT 0x80070715 (ERROR_RESOURCE_TYPE_NOT_FOUND 1813 as an HRESULT); the same for an icon id of a module with no icons (kernel32, id 1); the out value is set to NULL."
+  invalid_arguments: "Resource id 0 (a NULL name) and a size constant other than 0 and 1 (2, 3, -1, 0x10000): E_INVALIDARG (0x80070057); the out value is set to NULL."
+  null_out_pointer: "A NULL phico crashes the caller (access violation 0xC0000005); it is not tested."
+side_effects: "none beyond the rules above"
+threading: "a DC, a font and a font resource belong to the process; fonts added with FR_PRIVATE or from memory are visible to the adding process only; the tests use one thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (the 757 KB whole-font copies of DejaVu Sans a few milliseconds)"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations and its own TrueType writer. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md), built through polyd. Observations print results, error codes, sizes, glyph metrics, outline records and hashes of long data (the first 8 bytes of a SHA-256); no line holds a handle, an address or a machine, user or time. "err unchanged" in a line means the call left the last error as the test had set it before (a marker), "err N" the value after a failing result; the last error after a succeeding call is not printed. A test that uses DejaVu Sans reads C:\Windows\Fonts\DejaVuSans.ttf: on Poly the DejaVu fonts are in that folder (ADR 0170, `cargo xtask fonts fetch`), on the oracle the same file (757076 bytes, SHA-256 7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954) was copied there for the recording.
+not_covered: >
+  High-DPI systems (the sizes follow the system metrics, here 16 and 32), icons with 32-bit alpha images or other colour depths, icon files, LIM_* of a window's DPI (the call has no window), the pixel content of stock icons, a NULL phico (crash), cursors.

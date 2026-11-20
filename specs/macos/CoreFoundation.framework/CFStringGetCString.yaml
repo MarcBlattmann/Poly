@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFStringGetCString.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFStringGetCString.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFStringGetCString
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFStringGetCString(str, buffer, bufferSize, encoding) converts the whole string and writes the bytes
+  plus a terminating NUL into buffer, returning true; it is all or nothing: false when bufferSize is
+  too small for the bytes and the NUL (exact fit succeeds, one byte less fails; zero fails), or when
+  some character has no form in the encoding. On failure the first byte of the buffer is set to NUL
+  when bufferSize is at least 1 (and the bytes after it may have been partly written: tests look only
+  at byte 0); a bufferSize of 0 leaves the buffer untouched. UTF-8: é two bytes, characters above
+  U+FFFF one four-byte sequence, U+0000 written as a NUL byte inside the data (the string
+  'A',U+0000,'B' fills 4 bytes incl. terminator), a lone surrogate cannot be converted (false);
+  ISOLatin1: é is E9, MacRoman 8E, WindowsLatin1 E9 and the euro sign 80 (fails in Latin 1); ASCII
+  fails for é and for characters above U+007F. UTF-16: LE gives the units low byte first with no byte
+  order mark, BE high byte first, plain UTF16 starts with FF FE and then little endian; in all three
+  the data is followed by a single zero byte, and the byte after that is untouched ('hello' as LE is
+  10 data bytes + 1 zero byte = 11 bytes); plain UTF-32 starts FF FE 00 00 then 4-byte little endian
+  units, again one zero byte after. CFStringGetMaximumSizeForEncoding(n, enc) is a safe size for n
+  units: UTF-8 3*n (15 for 5), ASCII n, UTF-16 2*n.
+returns:
+  success: "true (1), buffer holds the bytes and a NUL"
+  failure: "false (0), buffer[0] = 0 if bufferSize >= 1"
+errors:
+  buffer_too_small: "false"
+  unrepresentable: "false"
+  null_buffer: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "writes at most bufferSize bytes to buffer"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds; linear in the length"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

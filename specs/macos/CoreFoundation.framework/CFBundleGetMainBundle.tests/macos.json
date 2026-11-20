@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfbundlegetmainbundle_plain_executable",
+      "source_sha256": "391af29c490277a9ce7aaa23c4739c3c546cb8f9d34de0adf71ea5b904ab34a8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ebdc15970e1358db5ad0b6aea433939480c1d57cd1bd79b7b4a6feeb90d850fc",
+          "exit_code": 0,
+          "stdout": "ok m != NULL\nok CFBundleGetMainBundle() == m\nok CFGetTypeID(m) == CFBundleGetTypeID()\nok CFBundleGetIdentifier(m) == NULL\nok CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"CFBundleName\")) == NULL\nok info != NULL && CFDictionaryGetCount(info) == 0\nok url != NULL\nok CFURLHasDirectoryPath(url)\nok exe != NULL && !CFURLHasDirectoryPath(exe)\nok CFEqual(CFURLCreateCopyDeletingLastPathComponent(kCFAllocatorDefault, exe), url)\nok CFBundleCopyResourceURL(m, CFSTR(\"hello\"), CFSTR(\"txt\"), NULL) == NULL\nok type == 0x424e444c\nok CFBundleGetVersionNumber(m) == 0\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f6153169c37eeb58573383a08b06b60b1baafcbd7245252dd8bf988f22fe11a9",
+          "exit_code": 0,
+          "stdout": "ok m != NULL\nok CFBundleGetMainBundle() == m\nok CFGetTypeID(m) == CFBundleGetTypeID()\nok CFBundleGetIdentifier(m) == NULL\nok CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"CFBundleName\")) == NULL\nok info != NULL && CFDictionaryGetCount(info) == 0\nok url != NULL\nok CFURLHasDirectoryPath(url)\nok exe != NULL && !CFURLHasDirectoryPath(exe)\nok CFEqual(CFURLCreateCopyDeletingLastPathComponent(kCFAllocatorDefault, exe), url)\nok CFBundleCopyResourceURL(m, CFSTR(\"hello\"), CFSTR(\"txt\"), NULL) == NULL\nok type == 0x424e444c\nok CFBundleGetVersionNumber(m) == 0\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

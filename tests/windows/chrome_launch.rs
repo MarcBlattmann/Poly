@@ -9,7 +9,10 @@
 //! (the program quoted as `CreateProcessW` expects, then the arguments),
 //! line 3 the current directory (optional), line 4 the time to wait in
 //! seconds (optional, default 300), line 7 `next` to run `stage<N+1>.cmd`
-//! after this one (optional; lines 5 and 6 are below). The program's standard output and
+//! after this one (optional; lines 5 and 6 are below), line 8 `installed` for a program an
+//! earlier stage installed (optional: `%NAME%` in lines 1 to 3 is expanded from the
+//! environment, and the launcher waits, within line 4's time, until the program's file exists,
+//! since an installer may finish in a process it started). The program's standard output and
 //! error go to `stdout.txt` and `stderr.txt` beside the launcher, standard
 //! input is an empty `stdin.txt`; afterwards the launcher prints them to
 //! its own standard output between marker lines, then
@@ -17,7 +20,8 @@
 //!
 //! Every call is on Microsoft Learn (`CreateProcessW`, `WaitForSingleObject`,
 //! `GetExitCodeProcess`, `TerminateProcess`, `CreateFileW`, `ReadFile`,
-//! `WriteFile`, `GetStdHandle`, `GetModuleFileNameW`); the layouts are from
+//! `WriteFile`, `GetStdHandle`, `GetModuleFileNameW`, `ExpandEnvironmentStringsW`,
+//! `GetFileAttributesW`, `Sleep`, `GetTickCount64`); the layouts are from
 //! the public SDK headers (`processthreadsapi.h`, `minwinbase.h`).
 #![no_std]
 #![no_main]
@@ -114,7 +118,14 @@ unsafe extern "system" {
     fn GetStdHandle(which: u32) -> HANDLE;
     fn GetCommandLineW() -> *const u16;
     fn GetLastError() -> u32;
+    fn ExpandEnvironmentStringsW(source: *const u16, destination: *mut u16, size: u32) -> u32;
+    fn GetFileAttributesW(name: *const u16) -> u32;
+    fn Sleep(milliseconds: u32);
+    fn GetTickCount64() -> u64;
 }
+
+/// `GetFileAttributesW`'s failure (fileapi.h).
+const INVALID_FILE_ATTRIBUTES: u32 = u32::MAX;
 
 /// A buffer the single thread of the launcher owns.
 struct Buffer<T>(UnsafeCell<T>);
@@ -451,12 +462,12 @@ fn report(line: &Line) {
 }
 
 /// The lines of `stage.cmd`: (start, end) of each in `SPEC`.
-fn lines(spec: &[u8]) -> [(usize, usize); 7] {
-    let mut out = [(0, 0); 7];
+fn lines(spec: &[u8]) -> [(usize, usize); 8] {
+    let mut out = [(0, 0); 8];
     let (mut start, mut k) = (0, 0);
     for (i, &c) in spec.iter().enumerate() {
         if c == b'\n' {
-            if k < 7 {
+            if k < 8 {
                 let mut end = i;
                 if end > start && spec[end - 1] == b'\r' {
                     end -= 1;
@@ -467,10 +478,23 @@ fn lines(spec: &[u8]) -> [(usize, usize); 7] {
             start = i + 1;
         }
     }
-    if start < spec.len() && k < 7 {
+    if start < spec.len() && k < 8 {
         out[k] = (start, spec.len());
     }
     out
+}
+
+/// `%NAME%` in the NUL-terminated `text` expanded from the environment, in place; false if the
+/// result does not fit.
+fn expand(text: &mut [u16]) -> bool {
+    let mut out = [0u16; 2048];
+    // SAFETY: `text` is NUL-terminated; `out` has room for `out.len()` units.
+    let n = unsafe { ExpandEnvironmentStringsW(text.as_ptr(), out.as_mut_ptr(), out.len() as u32) } as usize;
+    if n == 0 || n > out.len() || n > text.len() {
+        return false;
+    }
+    text[..n].copy_from_slice(&out[..n]);
+    true
 }
 
 /// ASCII bytes as NUL-terminated UTF-16 into `out`.
@@ -562,6 +586,8 @@ fn run_stage(t: &mut Test, dir: &[u16; PATH_UNITS], dir_len: usize, number: u32)
     // Line 7 (optional): `next` runs `stage<N+1>.cmd` after this one (a sequence of programs in
     // one boot, `cargo xtask win-app run --then`).
     let next = line(6) == b"next";
+    // Line 8 (optional): `installed`, a program an earlier stage installed.
+    let installed = line(7) == b"installed";
     let (app, cmdline, cwd) = (line(0), line(1), line(2));
     // Line 5 (optional): `NAME=VALUE` assignments separated by spaces, set in the launcher's
     // environment (which the program inherits) before it starts. Line 6 (optional): a file name
@@ -597,6 +623,29 @@ fn run_stage(t: &mut Test, dir: &[u16; PATH_UNITS], dir_len: usize, number: u32)
     widen(app, &mut app_w);
     widen(cmdline, &mut cmd_w);
     widen(cwd, &mut cwd_w);
+    if installed {
+        if !(expand(&mut app_w) && expand(&mut cmd_w) && (cwd.is_empty() || expand(&mut cwd_w))) {
+            report(&Line::new().text(b"LAUNCH-EXIT driver-error expanded-too-long"));
+            return false;
+        }
+        // SAFETY: no preconditions.
+        let start = unsafe { GetTickCount64() };
+        let limit = u64::from(seconds) * 1000;
+        // SAFETY: a NUL-terminated path.
+        while unsafe { GetFileAttributesW(app_w.as_ptr()) } == INVALID_FILE_ATTRIBUTES {
+            // SAFETY: no preconditions.
+            if unsafe { GetTickCount64() } - start >= limit {
+                break;
+            }
+            // SAFETY: no preconditions.
+            unsafe { Sleep(500) };
+        }
+        // SAFETY: no preconditions.
+        let waited = unsafe { GetTickCount64() } - start;
+        if waited >= 500 {
+            say_line(&Line::new().text(b"LAUNCH-WAITED ms=").num(waited, false));
+        }
+    }
 
     let (stdin_p, stdout_p, stderr_p) = (
         beside(dir, dir_len, "stdin.txt"),

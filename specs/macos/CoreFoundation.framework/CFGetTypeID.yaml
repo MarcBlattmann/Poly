@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFGetTypeID.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFGetTypeID.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFGetTypeID
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFGetTypeID(cf) returns the type identifier of the object's class, equal to what that class's
+  GetTypeID function returns (CFStringGetTypeID, CFArrayGetTypeID, ...). Mutable and immutable
+  variants of a class share the identifier (a CFMutableString is a CFString), and so do the different
+  internal representations of one class (a small number or string stored without an object, a heap
+  one, a CFSTR constant). Identifiers are distinct per class and never 0. The values seen on this
+  macOS are informative only, the same on both architectures: allocator 2, string 7, null 16, set 17,
+  dictionary 18, array 19, data 20, boolean 21, number 22, character set 25, error 27, URL 29, bundle
+  31, UUID 34, date 42, run loop 43, observer 45, source 46, timer 47, locale 55; an implementation
+  need only keep them distinct and stable within a process (the tests compare identifiers with each
+  other, never with these numbers). CFCopyTypeIDDescription(id) returns the class name as a new
+  string, with the names CFString, CFArray, CFDictionary, CFSet, CFData, CFNumber, CFBoolean, CFNull,
+  CFDate, CFBundle, CFRunLoop, CFRunLoopSource, CFRunLoopTimer, CFURL.
+returns:
+  success: "the CFTypeID of the object's class"
+errors:
+  null: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "none"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "a few nanoseconds to microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

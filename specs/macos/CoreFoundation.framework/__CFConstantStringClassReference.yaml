@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/__CFConstantStringClassReference.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in __CFConstantStringClassReference.tests/macos.json.
+id: macos/api/CoreFoundation.framework/__CFConstantStringClassReference
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFSTR("text") compiles to a constant object of 32 bytes in the program's data (the symbol
+  __CFConstantStringClassReference is the class reference every such object points to; it is imported
+  by the program, not called). Layout, as 8-byte words: word 0 the address of
+  __CFConstantStringClassReference; word 1 a 32-bit flags value (0x07C8 when every character fits in
+  one byte, 0x07D0 when the string holds characters needing UTF-16, e.g. any non-ASCII text such as
+  "héllo") followed by 32 bits of padding; word 2 the address of the characters (a NUL-terminated byte
+  string for flags 0x07C8, UTF-16 units for 0x07D0); word 3 the length in characters (UTF-16 units).
+  The empty string has flags 0x07C8, length 0 and a pointer to a NUL. The object is a normal CFString
+  for every function: CFGetTypeID is CFStringGetTypeID, length and characters read as written, CFEqual
+  and CFHash agree with a string made at run time, it can be retained and released any number of times
+  without effect (retain count shows as a huge number), it is the same object for the same literal in
+  one place, copied and appended to like any string. Poly's own compiler-visible layout must match
+  this for programs built with the macOS SDK (the SDK's CFSTR macro makes the objects).
+returns:
+  layout: "{isa -> __CFConstantStringClassReference, flags 0x07C8 | 0x07D0, characters pointer, length}"
+errors: {}
+side_effects: "none (constant data; the first CF call that uses it may finish its set-up)"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "a few nanoseconds to microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

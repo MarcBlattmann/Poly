@@ -29,6 +29,7 @@ mod test_threads;
 mod tests;
 
 mod sched;
+mod winstate;
 
 pub mod apitrace;
 mod exception;
@@ -881,10 +882,10 @@ fn make_state(slot: &mut Option<NtState>) {
         match *DISPLAY.lock() {
             Some(((w, h), p)) => {
                 let d = poly_win32k::metrics::Display::interactive_at(w, h, p, bottom);
-                state.sys.win32k.wm.set_system_dpi(poly_win32k::dpiscale::dpi_of(p));
-                state.sys.win32k.wm.set_display(d);
+                state.sys.win32k.wm.mutate().set_system_dpi(poly_win32k::dpiscale::dpi_of(p));
+                state.sys.win32k.wm.mutate().set_display(d);
             }
-            None => state.sys.win32k.wm.set_display(display),
+            None => state.sys.win32k.wm.mutate().set_display(display),
         }
     }
 }
@@ -904,6 +905,10 @@ fn build_state(slot: &mut Option<NtState>) {
         peak: BTreeMap::new(),
         private_peak: BTreeMap::new(),
     });
+    // Every change of the window manager raises the window-state page's generation (ADR 0249).
+    if let Some(s) = slot.as_mut() {
+        s.sys.win32k.wm.set_hook(winstate::changed);
+    }
 }
 
 /// Run `f` on the NT state if the first NT use made it already.
@@ -1310,6 +1315,8 @@ impl NtKernel for Kernel {
 
 /// Route an NT process's system call (its `SyscallHook`).
 pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
+    // The window-state page is made before any NT lock is held: making it may sleep (ADR 0249).
+    winstate::ensure();
     let Some(memory) = user::current_memory() else {
         regs.rax = u64::from(poly_personality_nt::STATUS_NOT_IMPLEMENTED);
         return Outcome::Handled;
@@ -1997,7 +2004,7 @@ fn shell_main(_: usize) -> usize {
             // The session's shell window answers as this process's (`GetShellWindow`).
             with(|s| {
                 let tid = s.processes.get(&ProcessId(p.pid)).and_then(|q| q.threads.first()).map_or(0, |t| t.thread.0);
-                s.sys.win32k.wm.set_shell_process(p.pid, tid as u32);
+                s.sys.win32k.wm.mutate().set_shell_process(p.pid, tid as u32);
             });
             crate::kprintln!("nt: explorer.exe started (p{}) with the filtered token", p.pid)
         }
