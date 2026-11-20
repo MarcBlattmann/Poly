@@ -147,6 +147,11 @@ macro_rules! wire_enum {
         $(#[$m])*
         #[derive(Clone, Debug, PartialEq, Eq)]
         pub enum $name { $($(#[$vm])* $var { $($f: $t),* }),* }
+        impl $name {
+            /// Every variant's tag (the first byte of its encoding) and name, for tools that
+            /// name requests by their first byte (the kernel's timeline, ADR 0247).
+            pub const TAGS: &'static [(u8, &'static str)] = &[$(($tag, stringify!($var))),*];
+        }
         impl $crate::wire::Wire for $name {
             #[allow(unused_variables)]
             fn put(&self, out: &mut alloc::vec::Vec<u8>) {
@@ -195,5 +200,11 @@ mod tests {
         b.push(0);
         assert_eq!(decode::<E>(&b), None, "trailing bytes");
         assert_eq!(decode::<Vec<u16>>(&[0xff, 0xff, 0xff, 0x7f]), None, "a count past the end");
+    }
+
+    #[test]
+    fn every_tag_is_named_and_is_the_first_byte() {
+        assert_eq!(E::TAGS, &[(1, "One"), (2, "Two"), (3, "Empty")]);
+        assert_eq!(encode(&E::Empty {})[0], 3);
     }
 }
