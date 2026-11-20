@@ -296,8 +296,15 @@ fn readme(args: &[String]) -> Result<(), String> {
     let current = std::fs::read_to_string(&readme_path).map_err(|e| format!("{}: {e}", readme_path.display()))?;
 
     let mut files = readme::assets(&coverage, &roadmap);
-    let updated = readme::splice(&current, &readme::render(&coverage, &roadmap))?;
-    files.push(("README.md".into(), readme::splice_phases(&updated, &readme::render_phases(&roadmap))?));
+    files.push(("README.md".into(), readme::splice_badges(&current, &readme::render_badges(&coverage, &roadmap))?));
+    let progress_path = root().join(readme::PROGRESS_DOC);
+    let progress_current =
+        std::fs::read_to_string(&progress_path).map_err(|e| format!("{}: {e}", progress_path.display()))?;
+    let progress_updated = readme::splice(&progress_current, &readme::render(&coverage, &roadmap))?;
+    files.push((
+        readme::PROGRESS_DOC.into(),
+        readme::splice_phases(&progress_updated, &readme::render_phases(&roadmap))?,
+    ));
     // The ADR index, once its markers are in the file (ADR 0213).
     let adr_path = root().join(generated::ADR_INDEX);
     let adr_current = std::fs::read_to_string(&adr_path).map_err(|e| format!("{}: {e}", adr_path.display()))?;
