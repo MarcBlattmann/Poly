@@ -56,6 +56,12 @@ impl Options {
     /// program address).
     pub const X86_64: Options =
         Options { cpu: CpuKind::X86_64, page_size: 4096, program_base: None, library_base: 0x8_0000_0000 };
+
+    /// arm64 with Apple silicon's 16 KiB pages, the program at its preferred
+    /// address and libraries from 32 GiB on: what the arm64 translator runs
+    /// (ADR 0257).
+    pub const ARM64: Options =
+        Options { cpu: CpuKind::Arm64, page_size: 16384, program_base: None, library_base: 0x8_0000_0000 };
 }
 
 /// Memory protection of a segment.
