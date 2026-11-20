@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGImageCreate.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGImageCreate.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGImageCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGImageCreate(width, height, bitsPerComponent, bitsPerPixel, bytesPerRow, space, bitmapInfo, provider, decode, shouldInterpolate, intent) makes an image over the provider's data without copying until needed. The getters return what was given (width, height, 8, 32, row bytes, bitmap info = alpha info for premultiplied last, not a mask, decode NULL, shouldInterpolate, rendering intent 0 for default, the colour space object given, a provider that gives back the bytes). NULL for: width 0, bytes per row too small, bits per pixel not a multiple of bits per component, a NULL provider, a NULL colour space for a non-mask. The pixel [40 80 c0 ff] drawn into an sRGB RGBA bitmap comes out as 40 80 c0 ff from RGBA, BGRA (premultiplied first + 32 little), ARGB (premultiplied first), ABGR (premultiplied last + 32 little) and RGBX (skip last) data; a premultiplied pixel 20 40 60 80 gives 20 40 60 80 and a non-premultiplied 40 80 c0 80 (kCGImageAlphaLast) gives 20 40 60 80; a premultiplied pixel whose colour exceeds its alpha (ff ff ff at alpha 40) is drawn as ff ff ff 40; a non-premultiplied pixel with alpha 0 draws 00 00 00 00. CGImageCreateWithImageInRect gives the sub-image (2x2 of a 4x4: the right pixels), NULL for a rect outside the image and the whole image for a rect larger than it; CGImageCreateCopy copies; CGImageMaskCreate makes a mask (CGImageIsMask, 8 bits per pixel, no colour space).
+returns:
+  "image": "a new image, NULL for bad arguments"
+errors:
+  "bad_arguments": "NULL"
+side_effects: "makes an image object"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

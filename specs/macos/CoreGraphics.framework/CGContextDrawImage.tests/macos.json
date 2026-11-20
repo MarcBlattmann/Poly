@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgdraw_alpha",
+      "source_sha256": "4613d05e904c979f969f00f7c22abad7ae07e4331362292355e46aba05004401",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "55a30f2d4846a0792ac7e76fac4801f355dac1e92898ce89c40e2240d612e20c",
+          "exit_code": 0,
+          "stdout": "value a row of 4 pixels (opaque red, half red, clear, quarter teal 00 ff0000ff 80007fff 0000ffff 0040ffff\nvalue the same with the context alpha 0.5 00 80007fff 4000bfff 0000ffff 0020ffff\nvalue onto a transparent backdrop: the image's own bytes 00 ff0000ff 80000080 00000000 00404040\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a52a30f00e6eb74fdf2978bb4540c083d8e87a627955b5f15b2cf46e14a92da2",
+          "exit_code": 0,
+          "stdout": "value a row of 4 pixels (opaque red, half red, clear, quarter teal 00 ff0000ff 80007fff 0000ffff 0040ffff\nvalue the same with the context alpha 0.5 00 80007fff 4000bfff 0000ffff 0020ffff\nvalue onto a transparent backdrop: the image's own bytes 00 ff0000ff 80000080 00000000 00404040\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgdraw_identity",
+      "source_sha256": "23fe20ab73978489897909b2eecdd2c7ed448368608d94e79a6727b759a78c26",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c3f136c92406d8b4dd402dab52f56a4d35ed378382db1e079a63e45b21c9c440",
+          "exit_code": 0,
+          "stdout": "value an image 4x3 drawn at (1,1) at its own size 00 00000000 00000000 00000000 00000000 00000000 00000000\nvalue an image 4x3 drawn at (1,1) at its own size 01 00000000 0f1400ff 5f140aff af1414ff ff141eff 00000000\nvalue an image 4x3 drawn at (1,1) at its own size 02 00000000 0f7801ff 5f780bff af7815ff ff781fff 00000000\nvalue an image 4x3 drawn at (1,1) at its own size 03 00000000 0fdc02ff 5fdc0cff afdc16ff ffdc20ff 00000000\nvalue an image 4x3 drawn at (1,1) at its own size 04 00000000 00000000 00000000 00000000 00000000 00000000\nok the image's first row is the top row of the drawn picture\nvalue the same image under a flipped CTM (y down): upside down 00 0fdc02ff 5fdc0cff afdc16ff ffdc20ff\nvalue the same image under a flipped CTM (y down): upside down 01 0f7801ff 5f780bff af7815ff ff781fff\nvalue the same image under a flipped CTM (y down): upside down 02 0f1400ff 5f140aff af1414ff ff141eff\nvalue drawn at (-1,-1): clipped by the bitmap 00 5f140aff af1414ff ff141eff\nvalue drawn at (-1,-1): clipped by the bitmap 01 5f780bff af7815ff ff781fff\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6a5fa173495eba1a6945e22dcd8518e8621c7a7af80f62535c6e58ca7ae7b110",
+          "exit_code": 0,
+          "stdout": "value an image 4x3 drawn at (1,1) at its own size 00 00000000 00000000 00000000 00000000 00000000 00000000\nvalue an image 4x3 drawn at (1,1) at its own size 01 00000000 0f1400ff 5f140aff af1414ff ff141eff 00000000\nvalue an image 4x3 drawn at (1,1) at its own size 02 00000000 0f7801ff 5f780bff af7815ff ff781fff 00000000\nvalue an image 4x3 drawn at (1,1) at its own size 03 00000000 0fdc02ff 5fdc0cff afdc16ff ffdc20ff 00000000\nvalue an image 4x3 drawn at (1,1) at its own size 04 00000000 00000000 00000000 00000000 00000000 00000000\nok the image's first row is the top row of the drawn picture\nvalue the same image under a flipped CTM (y down): upside down 00 0fdc02ff 5fdc0cff afdc16ff ffdc20ff\nvalue the same image under a flipped CTM (y down): upside down 01 0f7801ff 5f780bff af7815ff ff781fff\nvalue the same image under a flipped CTM (y down): upside down 02 0f1400ff 5f140aff af1414ff ff141eff\nvalue drawn at (-1,-1): clipped by the bitmap 00 5f140aff af1414ff ff141eff\nvalue drawn at (-1,-1): clipped by the bitmap 01 5f780bff af7815ff ff781fff\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgdraw_more",
+      "source_sha256": "efe41356c5a458ac24bfd7b7c20d115c4b76796babc9249bcffa1fa5e86bf7a5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5e5f54013d41fdfa644cb17773e56a27bcc26496b6dabc483c310dc990c29d1d",
+          "exit_code": 0,
+          "stdout": "value rotated a quarter turn about the centre 00 00ff00ff ffffffff\nvalue rotated a quarter turn about the centre 01 ff0000ff 0000ffff\nvalue a rect with negative width (2,0,-2,2): the image is standard 00 ff0000ff 00ff00ff\nvalue a rect with negative width (2,0,-2,2): the image is standard 01 0000ffff ffffffff\nvalue through a clip of the right column 00 00000000 00ff00ff\nvalue through a clip of the right column 01 00000000 ffffffff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "efed0d709af9920f8f4f364680a340a963107278b329fde9fdea53490c17a879",
+          "exit_code": 0,
+          "stdout": "value rotated a quarter turn about the centre 00 00ff00ff ffffffff\nvalue rotated a quarter turn about the centre 01 ff0000ff 0000ffff\nvalue a rect with negative width (2,0,-2,2): the image is standard 00 ff0000ff 00ff00ff\nvalue a rect with negative width (2,0,-2,2): the image is standard 01 0000ffff ffffffff\nvalue through a clip of the right column 00 00000000 00ff00ff\nvalue through a clip of the right column 01 00000000 ffffffff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

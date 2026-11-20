@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextSetInterpolationQuality.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextSetInterpolationQuality.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextSetInterpolationQuality
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextSetInterpolationQuality(context, quality) sets how images are resampled: kCGInterpolationDefault 0, None 1, Low 2, Medium 4, High 3; CGContextGetInterpolationQuality of a new context is 0 (default); setting High then reading gives 3, the setting is part of the saved state (the read after a restore gives the earlier value). A 2x2 image (red green / blue white) enlarged to 8x8: None gives sharp 4x4 blocks of the four colours; Low (2) and Medium (4) give the same bilinear enlargement bytes (row 0: ff0000 ff0000 f00f00 c03f00 3fc000 0ff000 00ff00 00ff00) and High (3) the grid recorded in the tests. Reducing an 8x8 checkerboard to 3x3 (row 0, then row 1 of the result): None picks pixels 00 00 ff / 00 00 ff / ff ff 00; Low averages to 1e 80 e1 / 80 80 7f / e1 7f 1e; Medium 78 80 87 / 80 80 80 / 87 80 78; High 60 80 9f / 80 7f 7f / 9f 7f 60. At the default quality an image with shouldInterpolate true and false draw the same bytes (no difference observed).
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "changes the graphics state"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

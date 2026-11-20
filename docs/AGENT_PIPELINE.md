@@ -697,6 +697,13 @@ starts every such program with a 30 second `alarm`, so a test that hangs is kill
 and fails instead of blocking the run. A test about the main queue and run loops
 carries both `poly-mac: libsystem` and `poly-mac: corefoundation`.
 
+CoreGraphics' tests (`macos/api/CoreGraphics.framework/...`) say `poly-mac: coregraphics`
+and include `poly_mcg.h`: they are linked with `-framework CoreGraphics -framework
+CoreFoundation` and may import CoreGraphics's and CoreFoundation's own symbols. They
+draw into a `CGBitmapContext` over a static buffer and print the bytes of chosen pixels
+(alpha grids, whole-pixel dumps, hashes of the buffer), so what is recorded is pixel
+exact; doubles are printed as the hex of their bits.
+
 ```sh
 cargo xtask pipeline mac build [--tests-dir DIR]... [--tests a,b]   # target/pipeline/macos/bin/<arch>/, manifest.json
 cargo xtask pipeline mac run [--tests-dir DIR]... [--tests a,b] [--runs 3] [--record]
