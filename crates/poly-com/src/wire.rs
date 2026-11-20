@@ -341,6 +341,12 @@ impl Reply {
     }
 }
 
+/// The byte an object exporter writes as soon as it has read a whole call, before it runs it: a
+/// client that sees it knows the call was delivered, so a connection that breaks after it means
+/// the server ended during the call (`RPC_S_CALL_FAILED`), and one that breaks before it means the
+/// server was gone (`RPC_S_SERVER_UNAVAILABLE`). The activation pipe does not send it.
+pub const RECEIVED: u8 = 0x06;
+
 /// A frame: the payload's length, then the payload.
 pub fn frame(payload: &[u8]) -> Vec<u8> {
     let mut v = Vec::with_capacity(payload.len() + 4);
