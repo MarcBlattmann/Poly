@@ -31,6 +31,8 @@ pub struct Plan {
     pub ntdll: bool,
     pub win32: bool,
     pub wintrace: bool,
+    /// Poly's libSystem crate (fmt and clippy for its Darwin target).
+    pub libsystem: bool,
 }
 
 impl Plan {
@@ -47,6 +49,7 @@ impl Plan {
             ntdll: true,
             win32: true,
             wintrace: true,
+            libsystem: true,
         }
     }
 
@@ -66,6 +69,7 @@ impl Plan {
             (self.ntdll, "ntdll (fmt)"),
             (self.win32, "win32 (fmt)"),
             (self.wintrace, "wintrace (fmt)"),
+            (self.libsystem, "libsystem"),
         ] {
             if on {
                 units.push(name.into());
@@ -102,6 +106,8 @@ pub fn plan(changed: &[String], members: &[(String, String)]) -> std::result::Re
             plan.win32 = true;
         } else if under(file, "tools/wintrace") {
             plan.wintrace = true;
+        } else if under(file, "personalities/xnu/libsystem") {
+            plan.libsystem = true;
         } else if let Some((_, package)) =
             members.iter().filter(|(dir, _)| under(file, dir)).max_by_key(|(dir, _)| dir.len())
         {
@@ -266,6 +272,7 @@ mod tests {
             "kernel/src/arch/aarch64/src/lib.rs",
             "userland/native/hello/src/main.rs",
             "tools/wintrace/proxy/common.rs",
+            "personalities/xnu/libsystem/src/c.rs",
             "tools/xtask/src/main.rs",
         ])
         .unwrap();
@@ -282,6 +289,7 @@ mod tests {
                 ntdll: true,
                 win32: true,
                 wintrace: true,
+                libsystem: true,
             }
         );
         assert!(p.describe().starts_with("poly-nt, xtask, xtask for Windows, the kernel"));

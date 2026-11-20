@@ -1,0 +1,12 @@
+_NXArgc
+_NXArgv
+__NSGetExecutablePath
+___progname
+__dyld_get_image_header
+__dyld_get_image_name
+__dyld_get_image_vmaddr_slide
+__dyld_get_prog_image_header
+__dyld_image_count
+__tlv_bootstrap
+_environ
+dyld_stub_binder
