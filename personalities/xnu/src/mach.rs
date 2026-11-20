@@ -40,7 +40,7 @@ pub fn trap(k: &mut dyn XnuKernel, number: u64, a: &[u64; 8]) -> Option<u64> {
         SEMAPHORE_TIMEDWAIT_SIGNAL => u64::from(semaphore_wait(k, n32(0), Some(n32(1)), Some((n32(2), n32(3) as i32)))),
         MACH_TIMEBASE_INFO => u64::from(timebase_info(k, a[0])),
         MACH_WAIT_UNTIL => u64::from(wait_until(k, a[0])),
-        _ => return None,
+        _ => return crate::ports::trap(k, number, a),
     };
     Some(r)
 }
@@ -90,7 +90,7 @@ fn port_mod_refs(k: &mut dyn XnuKernel, task: u32, name: u32, right: u32, delta:
         kr
     });
     unblock_all(k, woken);
-    kr
+    crate::ports::guarded(k, kr)
 }
 
 fn port_type(k: &mut dyn XnuKernel, task: u32, name: u32, ptr: u64) -> u32 {
@@ -257,6 +257,9 @@ fn mach_msg(
     }
 }
 
+/// SIGKILL: what a port guard violation ends a process with.
+pub(crate) const SIGKILL: u32 = 9;
+
 /// The largest message Poly sends (inline data; out-of-line memory is not
 /// there yet).
 const MAX_SEND: u32 = 1 << 20;
@@ -293,6 +296,10 @@ fn send(k: &mut dyn XnuKernel, msg: u64, send_size: u32, option: u32, timeout_ms
             Ok(woken) => {
                 if let Some(t) = woken {
                     k.unblock(t);
+                }
+                // A request that broke a port guard ends the sender.
+                if with_mach(k, |m, k| m.ipc.take_violation(k.task())) {
+                    k.kill_self(SIGKILL);
                 }
                 return MACH_MSG_SUCCESS;
             }

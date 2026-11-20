@@ -50,6 +50,12 @@ a64 issetugid_exec_child
 a64 issetugid_zero
 a64 listx_names
 a64 lstat_regular
+a64 mach_pid_for_task_refused
+a64 mach_pid_for_task_self
+a64 mach_task_for_pid_bad_target
+a64 mach_task_for_pid_refused
+a64 mach_task_for_pid_self
+a64 mach_task_name_for_pid_self
 a64 madvise_advice
 a64 mask_operations
 a64 mincore_errors
@@ -172,6 +178,12 @@ x64 issetugid_exec_child
 x64 issetugid_zero
 x64 listx_names
 x64 lstat_regular
+x64 mach_pid_for_task_refused
+x64 mach_pid_for_task_self
+x64 mach_task_for_pid_bad_target
+x64 mach_task_for_pid_refused
+x64 mach_task_for_pid_self
+x64 mach_task_name_for_pid_self
 x64 madvise_advice
 x64 madvise_ranges
 x64 mask_operations
