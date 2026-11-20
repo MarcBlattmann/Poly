@@ -112,7 +112,7 @@ What stops them are functions that **exist as fail-only stubs**. Their imports c
    - `comctl32` `LoadIconMetric` (ordinal 381) and `LoadIconWithScaleDown` (380): Notepad++'s icon error.
    - `TaskDialogIndirect`: not exported.
    - `CoCreateInstance` of the MMDevice enumerator: audio (the audio track, ADR 0244).
-9. **Tooling** (both fixed in W3, ADR 0252).
+9. **Tooling** (both fixed in W3, ADR 0255).
    - `win-app` booted QEMU's default CPU model (no SSE4.2, no AVX). Programs that check CPU features (Paint.NET, many
      games, .NET's own checks) refused to run. Now `win-app`, the desktop and the other boots that run programs use
      `-cpu host` on a hypervisor and `max` under TCG.
@@ -161,7 +161,7 @@ Sizes as in `chrome-installer-plan.md`:
    clean room from spec sheets, rather than asking users to install Microsoft's redistributable.
 3. **The CPU model Poly's desktop boots with.** **Decided (coordinator, 2026-11-20).** The desktop, the release image and the test
    tools boot with `-cpu host` on a hypervisor (KVM, WHPX, HVF) and QEMU's `max` under TCG, so programs that need
-   SSE4.2 or AVX run (W3, ADR 0252). The kernel boot tests keep QEMU's default model.
+   SSE4.2 or AVX run (W3, ADR 0255). The kernel boot tests keep QEMU's default model.
 
 ## 5. Not covered
 

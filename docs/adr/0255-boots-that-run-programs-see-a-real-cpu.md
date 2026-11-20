@@ -1,4 +1,4 @@
-# 0252: Boots that run programs see a real CPU
+# 0255: Boots that run programs see a real CPU
 
 **Status:** Accepted. Track `w3-dotnet-host` (batch W3 of [the Windows apps survey](../windows/apps-survey.md)).
 Refines [ADR 0077](0077-ci-in-parallel-jobs-and-qemu-on-kvm.md) (QEMU on KVM) and the CPU-model note of

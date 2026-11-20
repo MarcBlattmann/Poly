@@ -7,7 +7,7 @@
 //! `whpx` requires that hypervisor (an error without it), `auto` (or unset)
 //! chooses.
 //!
-//! The CPU model depends on the boot (ADR 0252). The boots a person or a
+//! The CPU model depends on the boot (ADR 0255). The boots a person or a
 //! test tool runs programs in (`desktop`, `run`, `chromium run`, `toolkits`,
 //! `chrome-win`, `win-app`: everything that starts QEMU through
 //! [`crate::qemu_with`]) show the guest a real CPU, as Poly on a PC sees one:
@@ -54,7 +54,7 @@ pub fn cpu_args(var: Option<&str>, default: Option<&str>) -> Vec<String> {
 /// The CPU model of the boots that run programs (desktop, test tools) on
 /// `accel`: the host's CPU on a hypervisor, everything TCG emulates under
 /// TCG. Either has SSE4.2 and AVX on any machine that runs Poly's programs
-/// (ADR 0252).
+/// (ADR 0255).
 pub fn program_cpu(accel: Accel) -> &'static str {
     match accel {
         Accel::Kvm | Accel::Whpx => "host",
