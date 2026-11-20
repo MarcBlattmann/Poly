@@ -1,5 +1,7 @@
 # Runs of the macho-specs boot group that pass (<arch> <test>); one that fails fails the group.
 # Regenerate from a run's PASS lines (tools/xtask/src/macho_specs.rs, ADR 0246).
+# Left out: runs whose output depends on how a parent and its child are scheduled
+# (a64 spawn_edges and spawn_inherit interleave their lines under KVM).
 a64 byname_errors
 a64 byname_strings
 a64 chdir_errors
@@ -92,9 +94,7 @@ a64 signal_forked
 a64 signal_invalid_names
 a64 signal_thread_invalid_names
 a64 signal_thread_thread_argument
-a64 spawn_edges
 a64 spawn_errors
-a64 spawn_inherit
 a64 spd_exec
 a64 sysctl_hw
 a64 sysctl_hw_numbers
