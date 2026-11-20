@@ -1,8 +1,8 @@
 //! `polysquirrel.exe`: Poly installs a Squirrel app itself (the owner's decision for batch W6,
-//! `docs/windows/apps-survey.md`: no .NET Framework; ADR 0253).
+//! `docs/windows/apps-survey.md`: no .NET Framework; ADR 0256).
 //!
 //! ```text
-//! polysquirrel SETUP.EXE           install the app the Squirrel installer carries, then start it
+//! polysquirrel SETUP.EXE [--start] install the app the Squirrel installer carries (and start it)
 //! polysquirrel --uninstall ID      remove what an install of ID made
 //! ```
 //!
@@ -21,10 +21,10 @@
 //! `CreateFileMappingW`, `MapViewOfFile`, `UnmapViewOfFile`, `CloseHandle`, `WriteFile`,
 //! `CreateDirectoryW`, `GetLastError`, `GetStdHandle`, `ExitProcess`, `CreateProcessW`,
 //! `FindFirstFileW`, `FindNextFileW`, `FindClose`, `DeleteFileW`, `RemoveDirectoryW`,
-//! `SetFileAttributesW`, `SHGetFolderPathW`, `CoInitializeEx`, `CoCreateInstance`,
+//! `SetFileAttributesW`, `GetEnvironmentVariableW`, `CoInitializeEx`, `CoCreateInstance`,
 //! `IShellLinkW`, `IPersistFile`, `RegCreateKeyExW`, `RegSetValueExW`, `RegGetValueW`,
 //! `RegDeleteKeyW`, `RegCloseKey`); the layouts and constants are the public SDK headers'
-//! (`processthreadsapi.h`, `minwinbase.h`, `shlobj_core.h`, `shobjidl_core.h`, `objidl.h`,
+//! (`processthreadsapi.h`, `minwinbase.h`, `shobjidl_core.h`, `objidl.h`,
 //! `winreg.h`, `winnt.h`, `winerror.h`).
 
 #![no_std]
@@ -46,9 +46,18 @@ const INVALID_HANDLE: Handle = -1isize as Handle;
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn GetCommandLineW() -> *const u16;
-    fn CreateFileW(name: *const u16, access: u32, share: u32, sa: *mut c_void, disposition: u32, flags: u32, template: Handle) -> Handle;
+    fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *mut c_void,
+        disposition: u32,
+        flags: u32,
+        template: Handle,
+    ) -> Handle;
     fn GetFileSizeEx(file: Handle, size: *mut i64) -> i32;
-    fn CreateFileMappingW(file: Handle, sa: *mut c_void, protect: u32, high: u32, low: u32, name: *const u16) -> Handle;
+    fn CreateFileMappingW(file: Handle, sa: *mut c_void, protect: u32, high: u32, low: u32, name: *const u16)
+    -> Handle;
     fn MapViewOfFile(mapping: Handle, access: u32, high: u32, low: u32, bytes: usize) -> *mut u8;
     fn UnmapViewOfFile(base: *const u8) -> i32;
     fn CloseHandle(handle: Handle) -> i32;
@@ -75,19 +84,20 @@ unsafe extern "system" {
     fn DeleteFileW(name: *const u16) -> i32;
     fn RemoveDirectoryW(name: *const u16) -> i32;
     fn SetFileAttributesW(name: *const u16, attributes: u32) -> i32;
-}
-
-#[cfg_attr(target_arch = "x86", link(name = "shell32", kind = "raw-dylib", import_name_type = "undecorated"))]
-#[cfg_attr(not(target_arch = "x86"), link(name = "shell32", kind = "raw-dylib"))]
-unsafe extern "system" {
-    fn SHGetFolderPathW(hwnd: Handle, csidl: i32, token: Handle, flags: u32, path: *mut u16) -> i32;
+    fn GetEnvironmentVariableW(name: *const u16, buffer: *mut u16, size: u32) -> u32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "ole32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "ole32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn CoInitializeEx(reserved: *mut c_void, flags: u32) -> i32;
-    fn CoCreateInstance(clsid: *const Guid, outer: *mut c_void, context: u32, iid: *const Guid, out: *mut *mut c_void) -> i32;
+    fn CoCreateInstance(
+        clsid: *const Guid,
+        outer: *mut c_void,
+        context: u32,
+        iid: *const Guid,
+        out: *mut *mut c_void,
+    ) -> i32;
 }
 
 #[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -105,7 +115,15 @@ unsafe extern "system" {
         disposition: *mut u32,
     ) -> i32;
     fn RegSetValueExW(key: isize, name: *const u16, reserved: u32, kind: u32, data: *const u8, size: u32) -> i32;
-    fn RegGetValueW(key: isize, sub: *const u16, value: *const u16, flags: u32, kind: *mut u32, data: *mut u8, size: *mut u32) -> i32;
+    fn RegGetValueW(
+        key: isize,
+        sub: *const u16,
+        value: *const u16,
+        flags: u32,
+        kind: *mut u32,
+        data: *mut u8,
+        size: *mut u32,
+    ) -> i32;
     fn RegDeleteKeyW(key: isize, sub: *const u16) -> i32;
     fn RegCloseKey(key: isize) -> i32;
 }
@@ -170,10 +188,6 @@ const REG_DWORD: u32 = 4;
 const RRF_RT_REG_SZ: u32 = 2;
 const COINIT_APARTMENTTHREADED: u32 = 2;
 const CLSCTX_INPROC_SERVER: u32 = 1;
-/// `CSIDL_*` (shlobj_core.h).
-const CSIDL_PROGRAMS: i32 = 0x02;
-const CSIDL_DESKTOPDIRECTORY: i32 = 0x10;
-const CSIDL_LOCAL_APPDATA: i32 = 0x1C;
 /// The largest package taken (a full app is a few hundred MB).
 const MAX_PACKAGE: usize = 2 << 30;
 
@@ -217,7 +231,15 @@ impl Mapped {
     fn open(path: &[u16]) -> Result<Mapped, String> {
         // SAFETY: a NUL-terminated path.
         let file = unsafe {
-            CreateFileW(path.as_ptr(), GENERIC_READ, FILE_SHARE_READ, core::ptr::null_mut(), OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, core::ptr::null_mut())
+            CreateFileW(
+                path.as_ptr(),
+                GENERIC_READ,
+                FILE_SHARE_READ,
+                core::ptr::null_mut(),
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                core::ptr::null_mut(),
+            )
         };
         if file == INVALID_HANDLE {
             // SAFETY: no preconditions.
@@ -227,7 +249,8 @@ impl Mapped {
         // SAFETY: the open file.
         let ok = unsafe { GetFileSizeEx(file, &mut size) } != 0;
         // SAFETY: the open file; a read-only mapping of all of it.
-        let mapping = unsafe { CreateFileMappingW(file, core::ptr::null_mut(), PAGE_READONLY, 0, 0, core::ptr::null()) };
+        let mapping =
+            unsafe { CreateFileMappingW(file, core::ptr::null_mut(), PAGE_READONLY, 0, 0, core::ptr::null()) };
         // SAFETY: the file handle, closed once (the mapping keeps the file).
         unsafe { CloseHandle(file) };
         if !ok || size <= 0 || mapping.is_null() {
@@ -256,23 +279,27 @@ impl Drop for Mapped {
     }
 }
 
-/// A shell folder's path.
-fn folder(csidl: i32) -> Result<String, String> {
-    let mut buf = [0u16; 260];
-    // SAFETY: a MAX_PATH buffer.
-    let hr = unsafe { SHGetFolderPathW(core::ptr::null_mut(), csidl, core::ptr::null_mut(), 0, buf.as_mut_ptr()) };
-    if hr < 0 {
-        return Err(alloc::format!("SHGetFolderPathW({csidl:#x}) failed ({hr:#x})"));
+/// An environment variable's value.
+fn env(name: &str) -> Result<String, String> {
+    let n = wide(name);
+    let mut buf = [0u16; 1024];
+    // SAFETY: a NUL-terminated name and a buffer of 1024 units.
+    let len = unsafe { GetEnvironmentVariableW(n.as_ptr(), buf.as_mut_ptr(), buf.len() as u32) } as usize;
+    if len == 0 || len >= buf.len() {
+        return Err(alloc::format!("%{name}% is not set"));
     }
-    let n = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-    Ok(String::from_utf16_lossy(&buf[..n]))
+    Ok(String::from_utf16_lossy(&buf[..len]))
 }
 
+/// The user's folders, from the environment Windows gives every process (Learn, "KNOWNFOLDERID":
+/// `FOLDERID_LocalAppData` is `%LOCALAPPDATA%`, `FOLDERID_Programs` is
+/// `%APPDATA%\Microsoft\Windows\Start Menu\Programs`, `FOLDERID_Desktop` is
+/// `%USERPROFILE%\Desktop`).
 fn places() -> Result<Places, String> {
     Ok(Places {
-        local_app_data: folder(CSIDL_LOCAL_APPDATA)?,
-        programs: folder(CSIDL_PROGRAMS)?,
-        desktop: folder(CSIDL_DESKTOPDIRECTORY)?,
+        local_app_data: env("LOCALAPPDATA")?,
+        programs: alloc::format!(r"{}\Microsoft\Windows\Start Menu\Programs", env("APPDATA")?),
+        desktop: alloc::format!(r"{}\Desktop", env("USERPROFILE")?),
     })
 }
 
@@ -301,7 +328,15 @@ fn write_file(path: &str, data: &[u8]) -> Result<(), String> {
     let w = wide(path);
     // SAFETY: a NUL-terminated path.
     let f = unsafe {
-        CreateFileW(w.as_ptr(), GENERIC_WRITE, 0, core::ptr::null_mut(), CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, core::ptr::null_mut())
+        CreateFileW(
+            w.as_ptr(),
+            GENERIC_WRITE,
+            0,
+            core::ptr::null_mut(),
+            CREATE_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL,
+            core::ptr::null_mut(),
+        )
     };
     if f == INVALID_HANDLE {
         // SAFETY: no preconditions.
@@ -345,7 +380,9 @@ fn shortcut(lnk: &str, target: &str, dir: &str, description: &str) -> Result<(),
     type Release = unsafe extern "system" fn(*mut c_void) -> u32;
     let mut link: *mut c_void = core::ptr::null_mut();
     // SAFETY: the class and interface ids; `link` receives the interface.
-    let hr = unsafe { CoCreateInstance(&CLSID_SHELL_LINK, core::ptr::null_mut(), CLSCTX_INPROC_SERVER, &IID_ISHELL_LINK_W, &mut link) };
+    let hr = unsafe {
+        CoCreateInstance(&CLSID_SHELL_LINK, core::ptr::null_mut(), CLSCTX_INPROC_SERVER, &IID_ISHELL_LINK_W, &mut link)
+    };
     if hr < 0 || link.is_null() {
         return Err(alloc::format!("no ShellLink object ({hr:#x})"));
     }
@@ -375,7 +412,17 @@ fn register(plan: &Plan) -> Result<(), String> {
     let mut key = 0isize;
     // SAFETY: a NUL-terminated subkey; `key` receives the handle.
     let e = unsafe {
-        RegCreateKeyExW(HKEY_CURRENT_USER, sub.as_ptr(), 0, core::ptr::null(), 0, KEY_ALL_ACCESS, core::ptr::null_mut(), &mut key, core::ptr::null_mut())
+        RegCreateKeyExW(
+            HKEY_CURRENT_USER,
+            sub.as_ptr(),
+            0,
+            core::ptr::null(),
+            0,
+            KEY_ALL_ACCESS,
+            core::ptr::null_mut(),
+            &mut key,
+            core::ptr::null_mut(),
+        )
     };
     if e != 0 {
         return Err(alloc::format!("the Uninstall key cannot be made ({e})"));
@@ -412,11 +459,27 @@ fn start(program: &str, dir: &str) -> Result<(), String> {
     // SAFETY: zeroed is a valid STARTUPINFOW.
     let mut si: StartupInfoW = unsafe { core::mem::zeroed() };
     si.cb = core::mem::size_of::<StartupInfoW>() as u32;
-    let mut pi = ProcessInformation { process: core::ptr::null_mut(), thread: core::ptr::null_mut(), process_id: 0, thread_id: 0 };
+    let mut pi = ProcessInformation {
+        process: core::ptr::null_mut(),
+        thread: core::ptr::null_mut(),
+        process_id: 0,
+        thread_id: 0,
+    };
     // SAFETY: NUL-terminated strings (the command line writable), STARTUPINFOW and
     // PROCESS_INFORMATION.
     let ok = unsafe {
-        CreateProcessW(app.as_ptr(), line.as_mut_ptr(), core::ptr::null_mut(), core::ptr::null_mut(), 0, 0, core::ptr::null_mut(), d.as_ptr(), &si, &mut pi)
+        CreateProcessW(
+            app.as_ptr(),
+            line.as_mut_ptr(),
+            core::ptr::null_mut(),
+            core::ptr::null_mut(),
+            0,
+            0,
+            core::ptr::null_mut(),
+            d.as_ptr(),
+            &si,
+            &mut pi,
+        )
     };
     if ok == 0 {
         // SAFETY: no preconditions.
@@ -430,13 +493,14 @@ fn start(program: &str, dir: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn install(setup: &[u16]) -> Result<(), String> {
+fn install(setup: &[u16], start_app: bool) -> Result<(), String> {
     let file = Mapped::open(setup)?;
     let data = poly_squirrel::bundle_resource(file.bytes()).ok_or("no Squirrel package in the installer")?;
     let outer = poly_zip::Archive::parse(data).map_err(|e| alloc::format!("the package bundle is damaged ({e:?})"))?;
     let bundle = poly_squirrel::bundle(&outer).ok_or("no Squirrel package in the installer")?;
     say(&["polysquirrel: unpacking ", &bundle.package.name]);
-    let package = poly_zip::read(data, &bundle.package, MAX_PACKAGE).map_err(|e| alloc::format!("{}: {e:?}", bundle.package.name))?;
+    let package = poly_zip::read(data, &bundle.package, MAX_PACKAGE)
+        .map_err(|e| alloc::format!("{}: {e:?}", bundle.package.name))?;
     let pkg = poly_zip::Archive::parse(&package).map_err(|e| alloc::format!("the package is damaged ({e:?})"))?;
     let spec_entry = poly_squirrel::spec_entry(&pkg).ok_or("the package has no .nuspec")?;
     let spec_text = poly_zip::read(&package, spec_entry, 1 << 20).map_err(|e| alloc::format!(".nuspec: {e:?}"))?;
@@ -445,7 +509,8 @@ fn install(setup: &[u16]) -> Result<(), String> {
     say(&["polysquirrel: installing ", &spec.title, " ", &spec.version, " into ", &plan.app_dir]);
     for (index, path) in &plan.files {
         let entry = &pkg.entries[*index];
-        let bytes = poly_zip::read(&package, entry, MAX_PACKAGE).map_err(|e| alloc::format!("{}: {e:?}", entry.name))?;
+        let bytes =
+            poly_zip::read(&package, entry, MAX_PACKAGE).map_err(|e| alloc::format!("{}: {e:?}", entry.name))?;
         write_file(path, &bytes)?;
     }
     if let Some(update) = &bundle.update {
@@ -464,8 +529,8 @@ fn install(setup: &[u16]) -> Result<(), String> {
         shortcut(lnk, &plan.program, &plan.app_dir, &spec.description)?;
     }
     register(&plan)?;
-    say(&["polysquirrel: installed ", &spec.title, " ", &spec.version, "; starting ", &plan.program]);
-    start(&plan.program, &plan.app_dir)
+    say(&["polysquirrel: installed ", &spec.title, " ", &spec.version, ": ", &plan.program]);
+    if start_app { start(&plan.program, &plan.app_dir) } else { Ok(()) }
 }
 
 /// A text value of the key `sub` below `HKEY_CURRENT_USER`.
@@ -475,7 +540,15 @@ fn reg_text(sub: &[u16], name: &str) -> Option<String> {
     let mut size = (buf.len() * 2) as u32;
     // SAFETY: NUL-terminated names and a buffer of `size` bytes.
     let e = unsafe {
-        RegGetValueW(HKEY_CURRENT_USER, sub.as_ptr(), n.as_ptr(), RRF_RT_REG_SZ, core::ptr::null_mut(), buf.as_mut_ptr().cast(), &mut size)
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            sub.as_ptr(),
+            n.as_ptr(),
+            RRF_RT_REG_SZ,
+            core::ptr::null_mut(),
+            buf.as_mut_ptr().cast(),
+            &mut size,
+        )
     };
     if e != 0 {
         return None;
@@ -602,8 +675,9 @@ pub extern "system" fn polysquirrel_main() -> ! {
     let args = arguments();
     let result = match args.get(1..).unwrap_or(&[]) {
         [flag, id] if flag == "--uninstall" => uninstall(id),
-        [setup] if !setup.starts_with("--") => install(&wide(setup)),
-        _ => Err("usage: polysquirrel SETUP.EXE | polysquirrel --uninstall ID".into()),
+        [setup] if !setup.starts_with("--") => install(&wide(setup), false),
+        [setup, flag] if !setup.starts_with("--") && flag == "--start" => install(&wide(setup), true),
+        _ => Err("usage: polysquirrel SETUP.EXE [--start] | polysquirrel --uninstall ID".into()),
     };
     match result {
         Ok(()) => {

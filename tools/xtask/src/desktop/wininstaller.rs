@@ -28,6 +28,12 @@
 //!    read and the consent prompt comes **once, before it runs**; it runs elevated, never asks
 //!    itself, and registers its app ("Poly Admin App") under `HKLM`.
 //!
+//! 6. A **Squirrel** installer (ADR 0256; [`squirrel_setup`]: the test program with a `DATA`
+//!    resource holding the package bundle) is opened the same way: the window knows it, **Install**
+//!    starts Poly's `polysquirrel.exe` instead of the installer, the app lands in
+//!    `%LOCALAPPDATA%\PolySquirrelApp\app-1.0.0`, its shortcut becomes a launcher entry, its
+//!    per-user `Uninstall` key the registration, and the app starts.
+//!
 //! Skipped where the Windows test programs cannot be built and on hosts
 //! without Unix sockets (QMP).
 
@@ -85,11 +91,25 @@ fn align(v: u32, a: u32) -> u32 {
     v.div_ceil(a.max(1)) * a.max(1)
 }
 
-/// `exe` with `manifest` embedded as its `RT_MANIFEST` resource 1 (language 0x409): a new last
-/// section `.rsrc` holding a resource directory (the PE format specification: the type, name and
-/// language tables, one data entry, the data) and the image's resource directory pointing at it.
-/// Only for an image without resources and with room for one more section header.
+/// `exe` with `manifest` embedded as its `RT_MANIFEST` resource 1 (language 0x409).
 pub fn with_manifest(exe: &[u8], manifest: &str) -> Result<Vec<u8>> {
+    with_resource(exe, ResourceType::Id(24), 1, manifest.as_bytes())
+}
+
+/// The type of a resource [`with_resource`] embeds.
+#[derive(Clone, Copy, Debug)]
+pub enum ResourceType {
+    Id(u32),
+    /// A named type (`DATA`, a Squirrel installer's package bundle).
+    Name(&'static str),
+}
+
+/// `exe` with `data` embedded as resource `name` of type `kind` (language 0x409): a new last
+/// section `.rsrc` holding a resource directory (the PE format specification: the type, name and
+/// language tables, one data entry, the data, the type's name string) and the image's resource
+/// directory pointing at it. Only for an image without resources and with room for one more
+/// section header.
+pub fn with_resource(exe: &[u8], kind: ResourceType, name: u32, data: &[u8]) -> Result<Vec<u8>> {
     let pe = u32_at(exe, 0x3C)? as usize;
     if exe.get(..2) != Some(b"MZ") || exe.get(pe..pe + 4) != Some(b"PE\0\0") {
         return Err("not a PE image".into());
@@ -128,24 +148,36 @@ pub fn with_manifest(exe: &[u8], manifest: &str) -> Result<Vec<u8>> {
         return Err("no room for another section header".into());
     }
     let va = align(end_va, section_align);
-    // The resource directory: root -> type 24 -> name 1 -> language 0x409 -> data entry -> data.
-    let data = manifest.as_bytes();
+    // The resource directory: root -> type -> name -> language 0x409 -> data entry -> data, then
+    // the type's name (its length, UTF-16) for a named type.
     let mut rsrc = Vec::new();
-    let dir = |out: &mut Vec<u8>, id: u32, target: u32| {
+    let dir = |out: &mut Vec<u8>, named: bool, id: u32, target: u32| {
         out.extend_from_slice(&[0u8; 12]);
-        out.extend_from_slice(&0u16.to_le_bytes());
-        out.extend_from_slice(&1u16.to_le_bytes());
+        out.extend_from_slice(&u16::from(named).to_le_bytes());
+        out.extend_from_slice(&u16::from(!named).to_le_bytes());
         out.extend_from_slice(&id.to_le_bytes());
         out.extend_from_slice(&target.to_le_bytes());
     };
     const SUBDIR: u32 = 0x8000_0000;
-    dir(&mut rsrc, 24, SUBDIR | 24);
-    dir(&mut rsrc, 1, SUBDIR | 48);
-    dir(&mut rsrc, 0x409, 72);
+    let data_at = 88 + data.len() as u32;
+    let name_at = data_at.div_ceil(4) * 4;
+    match kind {
+        ResourceType::Id(id) => dir(&mut rsrc, false, id, SUBDIR | 24),
+        ResourceType::Name(_) => dir(&mut rsrc, true, SUBDIR | name_at, SUBDIR | 24),
+    }
+    dir(&mut rsrc, false, name, SUBDIR | 48);
+    dir(&mut rsrc, false, 0x409, 72);
     rsrc.extend_from_slice(&(va + 88).to_le_bytes());
     rsrc.extend_from_slice(&(data.len() as u32).to_le_bytes());
     rsrc.extend_from_slice(&[0u8; 8]);
     rsrc.extend_from_slice(data);
+    if let ResourceType::Name(text) = kind {
+        rsrc.resize(name_at as usize, 0);
+        rsrc.extend_from_slice(&(text.encode_utf16().count() as u16).to_le_bytes());
+        for u in text.encode_utf16() {
+            rsrc.extend_from_slice(&u.to_le_bytes());
+        }
+    }
     let len = rsrc.len() as u32;
     let raw = align(exe.len() as u32, file_align);
     let raw_size = align(len, file_align);
@@ -164,6 +196,80 @@ pub fn with_manifest(exe: &[u8], manifest: &str) -> Result<Vec<u8>> {
     put32(&mut out, res_dir + 4, len);
     Ok(out)
 }
+/// The Squirrel installer (ADR 0256), its window, the app its package carries and its entry.
+const SQUIRREL_DOWNLOAD: &str = "/root/Downloads/poly-squirrel-setup.exe";
+const SQUIRREL_TITLE: &str = "Install poly-squirrel-setup";
+const SQUIRREL_APP: &str = "Poly Squirrel App";
+const SQUIRREL_ID: &str = "poly-windows-poly-squirrel-app.desktop";
+
+/// A zip archive of stored files (PKWARE's APPNOTE.TXT: local headers, the central directory, the
+/// end record).
+fn stored_zip(files: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut central = Vec::new();
+    let p16 = |b: &mut Vec<u8>, v: u16| b.extend_from_slice(&v.to_le_bytes());
+    let p32 = |b: &mut Vec<u8>, v: u32| b.extend_from_slice(&v.to_le_bytes());
+    for (name, data) in files {
+        let at = out.len() as u32;
+        let crc = poly_png::crc32(&[data]);
+        for (b, in_central) in [(&mut out, false), (&mut central, true)] {
+            p32(b, if in_central { 0x0201_4b50 } else { 0x0403_4b50 });
+            if in_central {
+                p16(b, 20);
+            }
+            for v in [20, 0, 0, 0, 0] {
+                p16(b, v);
+            }
+            p32(b, crc);
+            p32(b, data.len() as u32);
+            p32(b, data.len() as u32);
+            p16(b, name.len() as u16);
+            p16(b, 0);
+            if in_central {
+                for v in [0, 0, 0] {
+                    p16(b, v);
+                }
+                p32(b, 0);
+                p32(b, at);
+            }
+            b.extend_from_slice(name.as_bytes());
+            if !in_central {
+                b.extend_from_slice(data);
+            }
+        }
+    }
+    let cd_at = out.len() as u32;
+    out.extend_from_slice(&central);
+    p32(&mut out, 0x0605_4b50);
+    for v in [0, 0, files.len() as u16, files.len() as u16] {
+        p16(&mut out, v);
+    }
+    p32(&mut out, central.len() as u32);
+    p32(&mut out, cd_at);
+    p16(&mut out, 0);
+    out
+}
+
+/// A Squirrel installer as the boot test needs one: the test program with a `DATA` resource holding
+/// the package bundle (`RELEASES`, an `Update.exe` that is never run, the full package), the package
+/// a NuGet zip with a `.nuspec` and the app, the test program again, under a name holding `squirrel`.
+fn squirrel_setup(exe: &[u8]) -> Result<Vec<u8>> {
+    let nuspec = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<package><metadata><id>PolySquirrelApp</id>\
+<version>1.0.0</version><title>Poly Squirrel App</title><authors>Poly</authors>\
+<description>A test app of Poly's Squirrel installs</description></metadata></package>\n";
+    let package = stored_zip(&[
+        ("PolySquirrelApp.nuspec", nuspec.as_bytes()),
+        ("[Content_Types].xml", b"<Types/>"),
+        ("lib/net45/PolySquirrelApp.exe", exe),
+    ]);
+    let bundle = stored_zip(&[
+        ("RELEASES", b"0000000000000000000000000000000000000000 PolySquirrelApp-1.0.0-full.nupkg 1"),
+        ("Update.exe", b"MZ, never run"),
+        ("PolySquirrelApp-1.0.0-full.nupkg", &package),
+    ]);
+    with_resource(exe, ResourceType::Name("DATA"), 131, &bundle)
+}
+
 /// The launcher entry the shortcut becomes.
 const APP: &str = "Poly Test App";
 const ID: &str = "poly-windows-poly-test-app.desktop";
@@ -326,6 +432,39 @@ fn steps(d: &mut Driver) -> std::result::Result<(), String> {
     d.shot("win-installer-manifest-done")?;
     let asked = super::count(&d.lines, "poly-compositor: consent prompt ") - prompts;
     expect(&format!("the installer with the manifest was asked about once ({asked} prompts)"), asked == 1)?;
+
+    // 6. A Squirrel installer (ADR 0256): Poly's polysquirrel.exe installs its package, the app
+    //    starts from its new entry. The Terminal is found by its title bar: the window of step 5
+    //    is still open over its middle.
+    click(d, terminal.0 + 40, terminal.1 + 8)?;
+    thread::sleep(Duration::from_secs(1));
+    type_str(d, &format!("poly-installer {SQUIRREL_DOWNLOAD}\n"))?;
+    let said = d.wait(&format!("poly-installer: {SQUIRREL_DOWNLOAD}: Windows"), 60)?;
+    expect(
+        &format!("the installer knows a Squirrel installer by its package ({said:?})"),
+        said.contains("Windows installer (Squirrel), installed by Poly"),
+    )?;
+    let place = shown(d, SQUIRREL_TITLE, 90)?;
+    thread::sleep(Duration::from_secs(2));
+    let (x, y) = crate::installer::main_button(place);
+    click(d, x, y)?;
+    // polysquirrel.exe installs it; the installer itself is not run.
+    d.wait("poly-installer: running /nt/c/Windows/System32/polysquirrel.exe", 60)?;
+    let entry = d.wait(&format!("poly-installer: launcher entry {SQUIRREL_ID} for "), 120)?;
+    expect(
+        &format!("the entry runs the app in its Squirrel folder ({entry:?})"),
+        entry.contains("AppData\\Local\\PolySquirrelApp\\app-1.0.0\\PolySquirrelApp.exe"),
+    )?;
+    let registered = d.wait(&format!("poly-installer: registered {SQUIRREL_APP} 1.0.0 "), 30)?;
+    expect(
+        &format!("the per-user Uninstall key names polysquirrel.exe ({registered:?})"),
+        registered.contains("polysquirrel.exe\" --uninstall PolySquirrelApp")
+            && registered.contains("HKCU\\PolySquirrelApp"),
+    )?;
+    d.wait(&format!("poly-installer: started {SQUIRREL_APP} ({SQUIRREL_ID})"), 60)?;
+    d.wait("poly-squirrel-app: started", 120)?;
+    thread::sleep(Duration::from_secs(1));
+    d.shot("win-installer-squirrel-done")?;
     Ok(())
 }
 
@@ -353,9 +492,11 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
     let exe = std::fs::read(exe_path()).map_err(|e| format!("{}: {e}", exe_path().display()))?;
     let admin = with_manifest(&exe, ADMIN_MANIFEST)?;
+    let squirrel = squirrel_setup(&exe)?;
     let extra = vec![
         (DOWNLOAD.trim_start_matches('/').to_string(), 0o644, exe),
         (ADMIN_DOWNLOAD.trim_start_matches('/').to_string(), 0o644, admin),
+        (SQUIRREL_DOWNLOAD.trim_start_matches('/').to_string(), 0o644, squirrel),
     ];
     let image = super::image_with("poly-desktop-win-installer-initramfs.cpio", false, extra)?;
     // A disk with a `poly` folder: C: and the hive files go on it.
@@ -455,6 +596,24 @@ mod tests {
             put32(&mut b, h + off, v);
         }
         b
+    }
+
+    #[test]
+    fn a_squirrel_setup_carries_its_bundle_in_a_named_data_resource() {
+        let setup = squirrel_setup(&image()).unwrap();
+        let bundle = poly_squirrel::bundle_resource(&setup).expect("the DATA resource");
+        let archive = poly_zip::Archive::parse(bundle).unwrap();
+        let b = poly_squirrel::bundle(&archive).expect("a Squirrel bundle");
+        assert_eq!((b.id.as_str(), b.version.as_str()), ("PolySquirrelApp", "1.0.0"));
+        let package = poly_zip::read(bundle, &b.package, 1 << 20).unwrap();
+        let pkg = poly_zip::Archive::parse(&package).unwrap();
+        let spec = poly_zip::read(&package, poly_squirrel::spec_entry(&pkg).unwrap(), 4096).unwrap();
+        let spec = poly_squirrel::nuspec(core::str::from_utf8(&spec).unwrap()).unwrap();
+        assert_eq!((spec.title.as_str(), spec.authors.as_str()), ("Poly Squirrel App", "Poly"));
+        assert_eq!(
+            poly_zip::read(&package, pkg.find("lib/net45/PolySquirrelApp.exe").unwrap(), 1 << 20).unwrap(),
+            image()
+        );
     }
 
     #[test]

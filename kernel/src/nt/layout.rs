@@ -210,6 +210,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("cmd.exe", super::CMD_EXE),
         // ADR 0230.
         ("polyopen.exe", super::POLYOPEN_EXE),
+        // ADR 0256.
+        ("polysquirrel.exe", super::POLYSQUIRREL_EXE),
     ] {
         if bytes.is_empty() {
             continue;

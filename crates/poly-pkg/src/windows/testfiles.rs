@@ -9,6 +9,10 @@ use alloc::vec::Vec;
 /// One resource: type id, name id, language, bytes.
 pub type Res<'a> = (u32, u32, u32, &'a [u8]);
 
+/// The type id that stands for the named type `DATA` (a Squirrel installer's
+/// package bundle): no real type id is this large.
+pub const NAMED_DATA: u32 = 0xD47A_0000;
+
 const SECTION_RVA: u32 = 0x1000;
 const FILE_ALIGN: usize = 0x200;
 
@@ -36,10 +40,10 @@ pub fn resource_tree(rva: u32, leaves: &[Res<'_>]) -> Vec<u8> {
         type_at.insert(*t, offset);
         offset += dir_size(names.len());
     }
-    let mut name_at = BTreeMap::new();
+    let mut dir_name_at = BTreeMap::new();
     for (t, names) in &tree {
         for (n, langs) in names {
-            name_at.insert((*t, *n), offset);
+            dir_name_at.insert((*t, *n), offset);
             offset += dir_size(langs.len());
         }
     }
@@ -61,30 +65,40 @@ pub fn resource_tree(rva: u32, leaves: &[Res<'_>]) -> Vec<u8> {
             }
         }
     }
+    // The name of the named type, after the data: its length, then UTF-16.
+    let name_text = "DATA";
+    let name_at = offset;
     let mut out = Vec::with_capacity(offset);
-    let dir = |out: &mut Vec<u8>, ids: &[(u32, u32)]| {
+    let dir = |out: &mut Vec<u8>, named: u16, ids: &[(u32, u32)]| {
         put32(out, 0);
         put32(out, 0);
         put16(out, 0);
         put16(out, 0);
-        put16(out, 0);
-        put16(out, ids.len() as u16);
+        put16(out, named);
+        put16(out, ids.len() as u16 - named);
         for &(id, target) in ids {
             put32(out, id);
             put32(out, target);
         }
     };
     let high = 0x8000_0000u32;
-    let ids: Vec<(u32, u32)> = tree.keys().map(|t| (*t, type_at[t] as u32 | high)).collect();
-    dir(&mut out, &ids);
+    // Named entries first (the PE format's order), the name an offset with the high bit.
+    let named: Vec<(u32, u32)> =
+        tree.keys().filter(|t| **t == NAMED_DATA).map(|t| (name_at as u32 | high, type_at[t] as u32 | high)).collect();
+    let ids: Vec<(u32, u32)> = named
+        .iter()
+        .copied()
+        .chain(tree.keys().filter(|t| **t != NAMED_DATA).map(|t| (*t, type_at[t] as u32 | high)))
+        .collect();
+    dir(&mut out, named.len() as u16, &ids);
     for (t, names) in &tree {
-        let ids: Vec<(u32, u32)> = names.keys().map(|n| (*n, name_at[&(*t, *n)] as u32 | high)).collect();
-        dir(&mut out, &ids);
+        let ids: Vec<(u32, u32)> = names.keys().map(|n| (*n, dir_name_at[&(*t, *n)] as u32 | high)).collect();
+        dir(&mut out, 0, &ids);
     }
     for (t, names) in &tree {
         for (n, langs) in names {
             let ids: Vec<(u32, u32)> = langs.keys().map(|l| (*l, entry_at[&(*t, *n, *l)] as u32)).collect();
-            dir(&mut out, &ids);
+            dir(&mut out, 0, &ids);
         }
     }
     for (t, names) in &tree {
@@ -107,6 +121,58 @@ pub fn resource_tree(rva: u32, leaves: &[Res<'_>]) -> Vec<u8> {
             }
         }
     }
+    put16(&mut out, name_text.len() as u16);
+    for u in name_text.encode_utf16() {
+        put16(&mut out, u);
+    }
+    out
+}
+
+/// A zip archive of stored files (APPNOTE.TXT: local headers, the central
+/// directory, the end record).
+pub fn stored_zip(files: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut central = Vec::new();
+    for (name, data) in files {
+        let at = out.len() as u32;
+        let crc = poly_png::crc32(&[data]);
+        for (b, central_entry) in [(&mut out, false), (&mut central, true)] {
+            put32(b, if central_entry { 0x0201_4b50 } else { 0x0403_4b50 });
+            if central_entry {
+                put16(b, 20);
+            }
+            put16(b, 20);
+            put16(b, 0);
+            put16(b, 0);
+            put32(b, 0);
+            put32(b, crc);
+            put32(b, data.len() as u32);
+            put32(b, data.len() as u32);
+            put16(b, name.len() as u16);
+            put16(b, 0);
+            if central_entry {
+                put16(b, 0);
+                put16(b, 0);
+                put16(b, 0);
+                put32(b, 0);
+                put32(b, at);
+            }
+            b.extend_from_slice(name.as_bytes());
+            if !central_entry {
+                b.extend_from_slice(data);
+            }
+        }
+    }
+    let cd_at = out.len() as u32;
+    out.extend_from_slice(&central);
+    put32(&mut out, 0x0605_4b50);
+    put16(&mut out, 0);
+    put16(&mut out, 0);
+    put16(&mut out, files.len() as u16);
+    put16(&mut out, files.len() as u16);
+    put32(&mut out, central.len() as u32);
+    put32(&mut out, cd_at);
+    put16(&mut out, 0);
     out
 }
 

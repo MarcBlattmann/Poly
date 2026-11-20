@@ -23,6 +23,9 @@
 //! `HKCU` (where `Program Files` or `HKLM` refuse it). With `--app` (the
 //! installed app) it writes `poly-test-app.txt` next to itself and ends.
 //!
+//! A copy whose file name holds `squirrel` is the app of the boot test's Squirrel installer (ADR
+//! 0256: Poly's `polysquirrel.exe` puts it in place): it says `poly-squirrel-app: started` and ends.
+//!
 //! A copy whose file name holds `admin` installs another app, "Poly Admin App" (its folder, program,
 //! shortcut and key named after it), so one boot can install both (the boot test gives that copy a
 //! `requireAdministrator` manifest: it is elevated before it runs and never asks itself).
@@ -384,12 +387,16 @@ struct Names {
     key: &'static [u16],
 }
 
-/// The names this copy installs under: "Poly Admin App" when its file name holds `admin`.
-fn names() -> Names {
+/// Whether this copy's file name holds `word` (lower-case ASCII), without regard to case.
+fn name_holds(word: &[u8]) -> bool {
     let me = own_path();
     let file = &me.units()[me.units().iter().rposition(|&c| c == u16::from(b'\\')).map_or(0, |i| i + 1)..];
-    let admin = file.windows(5).any(|w| w.iter().zip(b"admin").all(|(&c, &a)| c == u16::from(a) || c == u16::from(a.to_ascii_uppercase())));
-    if admin {
+    file.windows(word.len()).any(|w| w.iter().zip(word).all(|(&c, &a)| c == u16::from(a) || c == u16::from(a.to_ascii_uppercase())))
+}
+
+/// The names this copy installs under: "Poly Admin App" when its file name holds `admin`.
+fn names() -> Names {
+    if name_holds(b"admin") {
         Names { app: utf16!("Poly Admin App"), program: utf16!("poly-admin-app.exe"), key: utf16!("PolyAdminApp") }
     } else {
         Names { app: utf16!("Poly Test App"), program: utf16!("poly-test-app.exe"), key: utf16!("PolyTestApp") }
@@ -550,6 +557,10 @@ pub extern "system" fn mainCRTStartup() -> ! {
         // SAFETY: no preconditions.
         unsafe { Sleep(4000) };
         say(b"poly-test-setup: the helper ends");
+        poly_wtest::exit(0);
+    }
+    if name_holds(b"squirrel") {
+        say(b"poly-squirrel-app: started");
         poly_wtest::exit(0);
     }
     if has_arg(utf16!("--app")) {

@@ -1,6 +1,6 @@
 use super::apps::{self, Entry, Files, Seen, Uninstall};
 use super::program::{self, Image, Pick};
-use super::testfiles::{dib4, dib32, fake_png, icon_group, pe, version_info};
+use super::testfiles::{NAMED_DATA, dib4, dib32, fake_png, icon_group, pe, stored_zip, version_info};
 use crate::format::{self, Format};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -113,6 +113,27 @@ fn the_version_resource_names_the_program() {
     assert_eq!(named.publisher_text(), "Google LLC (signature not verified)");
     // The largest image of the first group (0 is 256).
     assert_eq!(p.icon, Some(fake_png(2)));
+}
+
+#[test]
+fn a_squirrel_installer_is_known_by_its_package_bundle() {
+    let bundle = stored_zip(&[
+        ("RELEASES", b"0 App-2.1.0-full.nupkg 4"),
+        ("Update.exe", b"MZ"),
+        ("App-2.1.0-full.nupkg", b"PK.."),
+    ]);
+    let exe = pe(32, false, true, &[(NAMED_DATA, 131, 1033, &bundle)], &[]);
+    let p = program::read_program("/root/Downloads/AppSetup.exe", exe.len() as u64, &mut reader(&exe)).unwrap();
+    assert_eq!(p.squirrel, Some(program::Squirrel { id: "App".into(), version: "2.1.0".into() }));
+    assert!(p.installer);
+    assert_eq!(p.kind(), "Windows installer (Squirrel), installed by Poly (32-bit)");
+    // A DATA resource that is not a package bundle, and an ordinary program.
+    let other = stored_zip(&[("readme.txt", b"hello")]);
+    let exe = pe(32, false, true, &[(NAMED_DATA, 131, 1033, &other)], &[]);
+    let p = program::read_program("/root/Downloads/tool.exe", exe.len() as u64, &mut reader(&exe)).unwrap();
+    assert_eq!((p.squirrel, p.installer), (None, false));
+    let exe = pe(32, false, true, &[(NAMED_DATA, 131, 1033, b"not a zip archive at all, but long enough")], &[]);
+    assert_eq!(program::read_program("x.exe", exe.len() as u64, &mut reader(&exe)).unwrap().squirrel, None);
 }
 
 #[test]

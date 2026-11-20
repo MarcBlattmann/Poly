@@ -1,5 +1,5 @@
 //! `polysquirrel.exe`'s entry point and subsystem: no C runtime, so the entry is our own
-//! `polysquirrel_main` (ADR 0253). A console program: its lines go to the standard output its
+//! `polysquirrel_main` (ADR 0256). A console program: its lines go to the standard output its
 //! starter gave it.
 
 fn main() {

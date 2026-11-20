@@ -22,6 +22,9 @@
 //!   uses too (ADR 0222), named the same way (`publisher_label`).
 //! - **Windows Installer packages** ([MS-CFB]): a compound file whose root
 //!   storage has the class `{000C1084-0000-0000-C000-000000000046}`.
+//! - **Squirrel installers** (ADR 0256): a `DATA` resource holding a zip
+//!   archive with a full NuGet package (`poly_squirrel::bundle`); only the
+//!   archive's central directory is read, from the resource's last bytes.
 
 use crate::Error;
 use alloc::string::{String, ToString};
@@ -77,6 +80,16 @@ pub struct Program {
     pub publisher: Option<String>,
     /// Its own icon, as a PNG file.
     pub icon: Option<Vec<u8>>,
+    /// A Squirrel installer's app (ADR 0256): Poly installs it itself with
+    /// `polysquirrel.exe` instead of running the installer.
+    pub squirrel: Option<Squirrel>,
+}
+
+/// The app a Squirrel installer carries, from its package's file name.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Squirrel {
+    pub id: String,
+    pub version: String,
 }
 
 impl Program {
@@ -91,7 +104,13 @@ impl Program {
 
     /// The window's "Kind" fact.
     pub fn kind(&self) -> String {
-        let what = if self.installer { "Windows installer" } else { "Windows program" };
+        let what = if self.squirrel.is_some() {
+            "Windows installer (Squirrel), installed by Poly"
+        } else if self.installer {
+            "Windows installer"
+        } else {
+            "Windows program"
+        };
         alloc::format!("{what} ({}-bit)", self.bits)
     }
 }
@@ -225,6 +244,31 @@ impl<'f> Image<'f> {
         }
         let bytes = read_upto(self.read, at, len);
         (bytes.len() == len).then_some(bytes)
+    }
+
+    /// The Squirrel bundle of the image (ADR 0256): the first resource of the
+    /// named type `DATA`, read as a zip archive from its end (the central
+    /// directory only), and the full package in it.
+    pub fn squirrel(&mut self) -> Option<Squirrel> {
+        let data = {
+            let (tree, _) = self.tree.as_ref()?;
+            let root = ResourceDirectory::from_tree(tree).ok()?;
+            let names = root.find(ResourceKey::Name(poly_squirrel::RESOURCE_TYPE)).ok()??.directory().ok()??;
+            let langs = names.entries().next()?.ok()?.directory().ok()??;
+            langs.entries().next()?.ok()?.data().ok()??
+        };
+        let (at, room) = self.offset_of(data.data_rva)?;
+        let len = (data.size as usize).min(room);
+        let tail_len = len.min(poly_zip::TAIL);
+        let tail = read_upto(self.read, at + (len - tail_len) as u64, tail_len);
+        let dir = poly_zip::central_directory(&tail, len as u64).ok()?;
+        if dir.size > MAX_ITEM as u64 || dir.offset.checked_add(dir.size)? > len as u64 {
+            return None;
+        }
+        let central = read_upto(self.read, at + dir.offset, dir.size as usize);
+        let archive = poly_zip::Archive::from_directory(&central, dir.entries).ok()?;
+        let bundle = poly_squirrel::bundle(&archive)?;
+        Some(Squirrel { id: bundle.id, version: bundle.version })
     }
 
     /// How many entries resource type `kind` has.
@@ -428,13 +472,15 @@ pub fn read_program(file_name: &str, size: u64, read: ReadAt<'_>) -> Result<Prog
     let name = version.get("ProductName").or(version.get("FileDescription")).unwrap_or(stem).to_string();
     let text_version = version.get("ProductVersion").or(version.get("FileVersion")).map(|v| v.replace(", ", "."));
     let fixed = version.product_version.or(version.file_version).filter(|v| v.iter().any(|&p| p != 0));
-    let installer = names_an_installer(&[
-        stem,
-        version.get("FileDescription").unwrap_or(""),
-        version.get("ProductName").unwrap_or(""),
-        version.get("OriginalFilename").unwrap_or(""),
-        version.get("InternalName").unwrap_or(""),
-    ]);
+    let squirrel = image.squirrel();
+    let installer = squirrel.is_some()
+        || names_an_installer(&[
+            stem,
+            version.get("FileDescription").unwrap_or(""),
+            version.get("ProductName").unwrap_or(""),
+            version.get("OriginalFilename").unwrap_or(""),
+            version.get("InternalName").unwrap_or(""),
+        ]);
     Ok(Program {
         name,
         description: version.get("FileDescription").unwrap_or("").to_string(),
@@ -447,6 +493,7 @@ pub fn read_program(file_name: &str, size: u64, read: ReadAt<'_>) -> Result<Prog
         signed: image.signed(),
         publisher: poly_x509::authenticode::publisher_of(&mut *image.read),
         icon: image.icon(0),
+        squirrel,
     })
 }
 

@@ -16,7 +16,7 @@
 //!   start the app's program directly (Squirrel's own start `Update.exe --processStart`, which is
 //!   the .NET program); `Update.exe` is still put where the app expects it.
 //!
-//! Nothing of Squirrel itself was read. `polysquirrel.exe` (ADR 0253) does the writing on the NT
+//! Nothing of Squirrel itself was read. `polysquirrel.exe` (ADR 0256) does the writing on the NT
 //! personality; Poly's installer window recognises a Squirrel installer with [`bundle`].
 
 #![no_std]

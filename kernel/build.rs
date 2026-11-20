@@ -124,6 +124,8 @@ fn embed_win32() {
         "cmd.exe",
         // ADR 0230.
         "polyopen.exe",
+        // ADR 0256.
+        "polysquirrel.exe",
         // The Windows Firewall's COM objects.
         "hnetcfg.dll",
         // AlphaBlend (it was a generated stub DLL).

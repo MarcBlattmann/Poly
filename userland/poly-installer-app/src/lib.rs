@@ -744,6 +744,10 @@ impl view::Host for Native {
         }
     }
 
+    fn squirrel_installer(&mut self) -> Option<String> {
+        winapps::vfs_path(winapps::POLYSQUIRREL, &VfsFiles).filter(|p| poly_rt::fs::exists(p))
+    }
+
     fn run_windows(&mut self, argv: &[String]) -> Result<(), String> {
         let (argv, opener) = opened(argv)?;
         self.before = (scan_links(), uninstall_keys());

@@ -1153,6 +1153,7 @@ Description: scientific calculator\n A GTK 3 calculator.\n";
             signed: true,
             publisher: None,
             icon: None,
+            squirrel: None,
         }
     }
 

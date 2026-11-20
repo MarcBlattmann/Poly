@@ -185,6 +185,10 @@ pub static CMD_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cmd.exe"))
 /// so its manifest is honoured), for Poly's installer window; installed in `C:\Windows\System32`
 /// by [`layout`]; empty without `xtask`.
 pub static POLYOPEN_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/polyopen.exe"));
+/// Poly's `polysquirrel.exe` (ADR 0256): installs a Squirrel app from its installer's package
+/// without .NET Framework, for Poly's installer window; installed in `C:\Windows\System32` by
+/// [`layout`]; empty without `xtask`.
+pub static POLYSQUIRREL_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/polysquirrel.exe"));
 /// Our `hnetcfg.dll`: the Windows Firewall's COM objects over a rule table that enforces nothing.
 pub static HNETCFG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hnetcfg.dll"));
 /// Our `msimg32.dll`: `AlphaBlend` over `gdi32!GdiAlphaBlend`.

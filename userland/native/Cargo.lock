@@ -206,8 +206,10 @@ dependencies = [
  "poly-png",
  "poly-registry",
  "poly-squashfs",
+ "poly-squirrel",
  "poly-vfs",
  "poly-x509",
+ "poly-zip",
 ]
 
 [[package]]
@@ -262,6 +264,14 @@ version = "0.0.1"
 dependencies = [
  "poly-compress",
  "poly-vfs",
+]
+
+[[package]]
+name = "poly-squirrel"
+version = "0.0.1"
+dependencies = [
+ "poly-pe",
+ "poly-zip",
 ]
 
 [[package]]
@@ -331,4 +341,11 @@ name = "poly-x509"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+]
+
+[[package]]
+name = "poly-zip"
+version = "0.0.1"
+dependencies = [
+ "poly-png",
 ]

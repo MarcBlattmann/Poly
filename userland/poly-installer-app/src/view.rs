@@ -88,6 +88,8 @@ pub trait Host {
     /// (ADR 0230). What the shortcut folders and the registry hold now is
     /// remembered, to tell what the installer made.
     fn run_windows(&mut self, argv: &[String]) -> Result<(), String>;
+    /// Poly's `polysquirrel.exe` (ADR 0256) as a path of Poly's file system, if the disk has it.
+    fn squirrel_installer(&mut self) -> Option<String>;
     /// Stop waiting for the programs a Windows installer left running: the
     /// next [`Host::pump`] says it has ended.
     fn stop_waiting(&mut self);
@@ -338,6 +340,18 @@ impl InstallerApp {
             self.host.apps_changed();
         }
         self.report_end();
+        // A Squirrel app starts once it is installed, as Squirrel's own installer starts it
+        // (ADR 0256); the window stays with Close and Open.
+        let squirrel = self.model.program.as_ref().is_some_and(|p| p.squirrel.is_some());
+        if windows
+            && squirrel
+            && !uninstalling
+            && self.model.phase == Phase::Done
+            && let Some((id, name)) = self.model.apps.first()
+        {
+            self.host.open(&id.clone());
+            self.host.report(&alloc::format!("started {name} ({id})"));
+        }
         self.run(next, cx);
     }
 
@@ -361,10 +375,22 @@ impl InstallerApp {
         cx.redraw();
     }
 
-    /// Start the Windows installer, or the app's uninstaller (ADR 0230).
+    /// Start the Windows installer, or the app's uninstaller (ADR 0230). A
+    /// Squirrel installer is not run: Poly's `polysquirrel.exe` installs its
+    /// package (ADR 0256).
     fn start_program(&mut self, cx: &mut Cx) {
+        let squirrel = self.model.program.as_ref().is_some_and(|p| p.squirrel.is_some());
         let argv = match &self.model.removal {
             Some(Removal::Windows { command, .. }) => command.clone(),
+            _ if squirrel => match self.host.squirrel_installer() {
+                Some(polysquirrel) => alloc::vec![polysquirrel, self.model.path.clone()],
+                None => {
+                    self.model.fail("This Squirrel installer needs Poly's polysquirrel.exe, which this disk lacks.");
+                    self.report_end();
+                    cx.redraw();
+                    return;
+                }
+            },
             _ => alloc::vec![self.model.path.clone()],
         };
         self.host.report(&alloc::format!("running {}", argv.join(" ")));

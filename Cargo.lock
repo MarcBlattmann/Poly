@@ -530,8 +530,10 @@ dependencies = [
  "poly-png",
  "poly-registry",
  "poly-squashfs",
+ "poly-squirrel",
  "poly-vfs",
  "poly-x509",
+ "poly-zip",
 ]
 
 [[package]]
@@ -917,13 +919,16 @@ dependencies = [
  "poly-pe",
  "poly-personality-native",
  "poly-pkg",
+ "poly-png",
  "poly-shell",
+ "poly-squirrel",
  "poly-stubs",
  "poly-term",
  "poly-vfs",
  "poly-win32k",
  "poly-wincrypt",
  "poly-winsock",
+ "poly-zip",
  "rustc-demangle",
  "serde_json",
 ]

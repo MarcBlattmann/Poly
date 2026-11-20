@@ -100,6 +100,10 @@ impl Host for FakeHost {
         if f.refuse_delete { Err("permission denied".into()) } else { Ok(()) }
     }
 
+    fn squirrel_installer(&mut self) -> Option<String> {
+        Some("/nt/c/Windows/System32/polysquirrel.exe".into())
+    }
+
     fn run_windows(&mut self, argv: &[String]) -> Result<(), String> {
         self.0.borrow_mut().windows.push(argv.to_vec());
         Ok(())
@@ -576,6 +580,7 @@ fn windows_app(installer: bool) -> (InstallerApp, Rc<RefCell<Fake>>) {
         signed: false,
         publisher: None,
         icon: None,
+        squirrel: None,
     };
     let model = Installer::for_windows("/root/Downloads/poly-test-setup.exe", Ok(program));
     let fake = Rc::new(RefCell::new(Fake::default()));
@@ -619,6 +624,29 @@ fn a_windows_installer_runs_with_its_windows_and_its_shortcuts_become_apps() {
     // Open asks the desktop for the new entry.
     click(&mut app, Action::Open);
     assert_eq!(fake.borrow().opened, ["poly-windows-poly-test-app.desktop"]);
+}
+
+#[test]
+fn a_squirrel_installer_is_installed_by_polysquirrel_and_the_app_starts() {
+    let (mut app, fake) = windows_app(true);
+    if let Some(p) = app.model.program.as_mut() {
+        p.squirrel = Some(poly_pkg::windows::program::Squirrel { id: "PolyTest".into(), version: "1.0.0".into() });
+    }
+    click(&mut app, Action::Install);
+    let mut cx = Cx::default();
+    app.tick(&mut cx);
+    // Poly's program installs the package; the installer itself is not run.
+    assert_eq!(
+        fake.borrow().windows,
+        [["/nt/c/Windows/System32/polysquirrel.exe", "/root/Downloads/poly-test-setup.exe"]]
+    );
+    fake.borrow_mut().collected = alloc::vec![("poly-windows-polytest.desktop".into(), "PolyTest".into(), None)];
+    fake.borrow_mut().script.push(Pumped { ended: Some(true), ..Pumped::default() });
+    app.tick(&mut cx);
+    assert_eq!(app.model.phase, Phase::Done);
+    // The app starts at once, as Squirrel's own installer starts it; the window stays.
+    assert_eq!(fake.borrow().opened, ["poly-windows-polytest.desktop"]);
+    assert!(!quit(&cx));
 }
 
 #[test]
