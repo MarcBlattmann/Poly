@@ -226,6 +226,32 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Installer, disk encryption, updates
 - [ ] **Milestone:** Poly runs as the only OS on one real laptop for a full workday
 
+## Phase 12: Desktop choice and the lean OS installer
+
+Planned, not current (owner request, 2026-11-20). The user picks Poly's own desktop (the default),
+GNOME or KDE Plasma at install time and at login. The detailed plan and the survey behind these items
+are in `docs/desktop-sessions-plan.md`. The survey found that Debian's Mutter already runs as a window
+on Poly's desktop, and that weston on Poly's DRM/KMS gets as far as input.
+
+- [ ] udev for foreign desktops: the kernel's uevent netlink socket, `/sys/class/input` and its attributes, Debian's `systemd-udevd` filling the udev database (weston on DRM with keyboard and mouse, boot test)
+- [ ] Seat and VT semantics: `/dev/tty0` and more VTs, VT switching ioctls, DRM master handed over and taken back on a switch, the DRM cursor (weston and sway on stock seatd)
+- [ ] Login plumbing in the Debian base: the system D-Bus, a logind (elogind or systemd-logind), cgroup v2, PAM sessions and polkit (KWin and Mutter start on DRM from a logind session)
+- [ ] A minimal KDE Plasma session starts on Poly (with PipeWire, the XDG desktop portals and a NetworkManager stand-in where it needs them)
+- [ ] A minimal GNOME session starts on Poly (with `systemd --user` or its replacement, and the same services)
+- [ ] Session choice: Poly's own login screen lists the users and the installed sessions (Poly is the default, GNOME, KDE Plasma); desktops are added and removed from Settings
+- [x] ⚖️ Decided (owner, 2026-11-20): the desktop is quickly swappable later, never by reinstalling: the chosen desktops stay installed side by side
+- [ ] Quick switch: Settings → Desktop → Switch now logs out and straight back into the other desktop within seconds, without asking for the password again; each desktop keeps its own settings, while keyboard, language, time zone and scale follow the user
+- [ ] Session restore across a switch: the apps that were open come back where they support it (Poly's list of open apps, the desktops' own restore, `RegisterApplicationRestart` for Windows apps)
+- [ ] Live switch for Poly's own apps: Windows (and later macOS) apps keep running through a switch and their windows move to the new desktop, like a remote-desktop reconnect (Linux apps cannot be carried over; they restart through session restore)
+- [ ] Windows (and later macOS) apps under a foreign desktop: a bridge shows each window as a Wayland window of GNOME's or Plasma's compositor, with input, focus, popups and its frame
+- [ ] Poly's features under a foreign desktop: launcher entries for Windows apps, Poly's installer opens `.deb`/`.rpm`/AppImage/`.exe`/`.msi` from the foreign file manager, notifications and tray icons through D-Bus
+- [ ] Real user accounts: the user made at install logs in, the desktop and apps run as that user (not root), and the Windows side's profile follows the name
+- [ ] One language and keyboard setting for everything: locale, the shell, the console, X11 and foreign desktops, the Windows side
+- [ ] Desktops and browsers install into a root from pinned package sets, offline from the install medium or downloaded (Chromium is preinstalled; Firefox and Google Chrome on request); Settings → Desktop and Default apps use the same path
+- [x] ⚖️ Decided (owner, 2026-11-20): the OS installer works like Windows' setup but asks only six things (language and keyboard, disk, user and password, desktop with Poly as the default, default browser, finish); no telemetry, account or ad pages; everything else has defaults that Settings changes later
+- [ ] The lean OS installer in those six steps, on Phase 11's disk and UEFI boot: GPT, EFI partition and ext4 root, the chosen desktop and browser installed, the first boot logs the new user straight into the chosen desktop
+- [ ] **Milestone:** the same Poly install logs into Poly's desktop, GNOME and KDE Plasma in turn, and Windows and Linux apps run in each
+
 ## Ongoing (every phase)
 
 - Security hardening and fuzzing of every parser and syscall

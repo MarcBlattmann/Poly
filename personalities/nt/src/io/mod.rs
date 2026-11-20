@@ -433,6 +433,17 @@ fn profile_path() -> String {
 
 /// The profile's security (ADR 0222): owned by the user, SYSTEM, Administrators and the user in
 /// full control of everything below, nothing inherited from above (Windows' profile folders).
+/// The directory Windows tests run in (`tools/pipeline`, ADR 0185).
+pub const TEST_DIR: &str = "\\PolyTests";
+
+/// Its descriptor: the user owns it (the oracle's runner puts a test there as the user who runs
+/// it, with the standard token as with the elevated one); SYSTEM, Administrators and the user
+/// have full access, and nothing is inherited.
+pub fn test_dir_sddl() -> String {
+    let u = poly_registry::defaults::POLY_USER_SID;
+    alloc::format!("O:{u}G:{u}D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;{u})")
+}
+
 pub fn profile_sddl() -> String {
     let u = poly_registry::defaults::POLY_USER_SID;
     alloc::format!("O:{u}G:{u}D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;{u})")
@@ -551,6 +562,11 @@ impl IoState {
                 om.seed_path_security(&key, &profile_sddl());
                 let key = poly_ntobj::path_key(&alloc::format!("F{}", self.volumes.len()), &wide(SYSTEM_TEMP));
                 om.set_path_security(&key, SYSTEM_TEMP_SDDL);
+                // The directory Windows tests run in (ADR 0185) passes nothing down, as the
+                // oracle's scratch directory does (specs/windows/advapi32.dll/GetFileSecurityW.yaml,
+                // `default_security`).
+                let key = poly_ntobj::path_key(&alloc::format!("F{}", self.volumes.len()), &wide(TEST_DIR));
+                om.seed_verbatim_path(&key, &test_dir_sddl());
             }
             self.volumes.push(Volume {
                 device,

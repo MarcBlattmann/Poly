@@ -20,7 +20,7 @@
 {"symbol":"GetTimestampForLoadedLibrary","src":["wine-spec"]},
 {"symbol":"ImageDirectoryEntryToData","status":"stub","src":["wine-spec"]},
 {"symbol":"ImageDirectoryEntryToDataEx","src":["wine-spec"]},
-{"symbol":"ImageNtHeader","status":"stub","src":["wine-spec"]},
+{"symbol":"ImageNtHeader","status":"claimed","claimed_by":"spec-win-glyphs","src":["wine-spec"]},
 {"symbol":"ImageRvaToSection","src":["wine-spec"]},
 {"symbol":"ImageRvaToVa","src":["wine-spec"]},
 {"symbol":"ImagehlpApiVersion","src":["wine-spec"]},

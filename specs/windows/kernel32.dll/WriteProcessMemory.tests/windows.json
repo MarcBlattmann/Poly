@@ -2,17 +2,17 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "a1cf84e98d3a",
+  "bundle": "bfff893e4289",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-15T17:48:34Z",
+  "started": "2026-11-20T06:29:38Z",
   "tests": [
     {
       "name": "wpm_rules",
-      "exe_sha256": "27b648d211487417af331838035dbe308c7dce51b3d66d5c49fd4b4cd2782312",
+      "exe_sha256": "a09d41f2f8e0b10e19e43b42766f27ed37990058755f63339033cdf275e4e8c7",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -22,11 +22,11 @@
       "output": "image code page before: type=MEM_IMAGE state=0x1000 protect=0x20 allocprotect=0x80\nWriteProcessMemory to image code (PAGE_EXECUTE_READ): ok=true copied=16 error=0\nprivate 0x2: NtWriteVirtualMemory status=0x8000000d copied=0\nprivate 0x1: NtWriteVirtualMemory status=0x8000000d copied=0\nprivate 0x20: NtWriteVirtualMemory status=0x8000000d copied=0\nprivate 0x4: NtWriteVirtualMemory status=0x0 copied=4\n16 bytes from a committed page into a reserved one: ok=false copied=8 error=299\nto address 0x10: ok=false copied=0 error=998\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 62
+      "ms": 76
     },
     {
       "name": "wpm_rules_c",
-      "exe_sha256": "04ce6337de93065681998568eeff42dfe75ae5b1d75a8e1c3fe806261583eb31",
+      "exe_sha256": "bd5798f37a71d5fb9ecad02723ecf7626fe0def4c7c608ee9c8f47d4a7761571",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -36,7 +36,7 @@
       "output": "image code page after it: protect=0x20\nthe child's stub holds the new bytes: true\nprivate 0x2: read back ok=true copied=4 bytes [0, 0, 0, 0]\nprivate 0x1: read back ok=false copied=0 bytes [0, 0, 0, 0]\nprivate 0x20: read back ok=true copied=4 bytes [1, 2, 3, 4]\nprivate 0x4: read back ok=true copied=4 bytes [1, 2, 3, 4]\n0 bytes: ok=true copied=0 error=0\nchild ran: exit code 5200\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 65
+      "ms": 59
     }
   ]
 }

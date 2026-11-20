@@ -217,6 +217,11 @@ impl Prot {
     }
 
     /// `self` without the permissions in `other`.
+    /// The rights in both.
+    pub const fn intersect(self, other: Prot) -> Prot {
+        Prot(self.0 & other.0)
+    }
+
     pub const fn without(self, other: Prot) -> Prot {
         Prot(self.0 & !other.0)
     }
@@ -790,6 +795,7 @@ enum Op<F> {
     WipeOnFork(bool),
     Lock(bool),
     Seal,
+    MaxProt(Prot),
     UserFault(u32),
     Name(Option<Arc<str>>),
 }

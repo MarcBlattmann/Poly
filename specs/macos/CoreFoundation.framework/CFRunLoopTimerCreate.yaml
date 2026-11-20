@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFRunLoopTimerCreate.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFRunLoopTimerCreate.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFRunLoopTimerCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFRunLoopTimerCreate(alloc, fireDate, interval, flags, order, callout, context) returns a new
+  CFRunLoopTimer (CFRunLoopTimerGetTypeID): valid, not in any mode until CFRunLoopAddTimer(rl, timer,
+  mode); CFRunLoopContainsTimer says which modes (the same timer may be in several: added to 'A' and
+  'B', removed from 'B', still in 'A'); CFRunLoopTimerGetInterval is the interval asked (0 for a
+  one-shot, 0.25 stays 0.25); CFRunLoopTimerInvalidate makes it invalid and takes it out of its modes
+  (CFRunLoopTimerIsValid false, ContainsTimer false) so it no longer fires; a one-shot becomes invalid
+  once it has fired. The callout receives the timer and the context's info pointer. A one-shot timer
+  whose fireDate is in the past fires once at the first run of its mode. CFRunLoopTimerSetNextFireDate
+  moves the next firing (a timer 100 s away set to 0.02 s ahead fires within 0.3 s). Seen with no run
+  in the mode at all: a mode holding only a timer 100 s in the future makes CFRunLoopRunInMode wait
+  its timeout (TimedOut); once the timer is removed the mode is empty again (Finished).
+  CFRunLoopTimerGetTolerance is 0 by default. Observers are created with
+  CFRunLoopObserverCreate(alloc, activities, repeats, order, callout, context) and added with
+  CFRunLoopAddObserver; the order of their stations is in the CFRunLoopRunInMode sheet.
+returns:
+  success: "a new timer (retain count 1)"
+errors:
+  null_callout: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "allocates; nothing runs until it is added to a loop and the loop runs"
+threading: "a timer belongs to the loop it is added to; fires on that loop's thread"
+ordering: []
+timing:
+  typical: "fires within a few ms of the due time while its loop runs"
+  guarantees: "none; coalescing by tolerance is not enabled by default"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

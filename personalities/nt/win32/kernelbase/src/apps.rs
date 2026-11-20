@@ -27,12 +27,7 @@ poly_win32_rt::fail_exports!("kernelbase", value(120), [GetPackagePathByFullName
 poly_win32_rt::fail_exports!(
     "kernelbase",
     value(15700),
-    [
-        AppPolicyGetProcessTerminationMethod,
-        AppPolicyGetThreadInitializationType,
-        GetCurrentPackageFullName,
-        GetPackageFullName,
-    ]
+    [AppPolicyGetProcessTerminationMethod, AppPolicyGetThreadInitializationType, GetPackageFullName,]
 );
 
 poly_win32_rt::fail_exports!(

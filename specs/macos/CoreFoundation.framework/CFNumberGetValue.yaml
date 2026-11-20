@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFNumberGetValue.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFNumberGetValue.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFNumberGetValue
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFNumberGetValue(number, theType, valuePtr) reads the number as the asked C type and returns true
+  when the conversion was exact. Widening and same size are exact (int -5 as long long, short, double,
+  float; 2^40 as double; a double that is a whole number as int). Narrowing an integer wraps modulo
+  the target size and still answers true (int 300 as char gives 44, -129 as SInt8 gives 127, 70000 as
+  short 4464). A fraction read as an integer is truncated toward zero and answers false (2.75 gives 2,
+  -2.75 gives -2); a double not exactly representable as float (0.1) answers false, 0.5 as float is
+  true. A double beyond the integer's range answers true and stores the processor's own
+  float-to-integer result: arm64 saturates (INT_MAX / LLONG_MAX), x86_64 gives the smallest negative
+  integer (-2147483648 / LLONG_MIN) - observed on both and a difference to keep (the test does not
+  check the stored value); NaN as integer answers false (value 0 on arm64, minimum on x86_64). NaN and
+  the infinities read as double give the float values. With valuePtr NULL the call only reports (true
+  for an exact type). The returned value does not depend on how the number was made.
+returns:
+  exact: "true"
+  inexact: "false, with the truncated value stored when the target is an integer"
+errors:
+  null_number: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "writes the converted value through valuePtr"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "a few nanoseconds to microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

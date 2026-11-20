@@ -78,14 +78,10 @@ pub unsafe extern "system" fn CreateFileW(
     if unsafe { crate::base::sa_inherits(security) } {
         oa.attributes |= nt::OBJ_INHERIT;
     }
-    // The descriptor of the structure is the new file's (SECURITY_ATTRIBUTES.lpSecurityDescriptor
-    // at 8; a file that exists keeps its own).
+    // The descriptor of the structure is the new file's (SECURITY_ATTRIBUTES.lpSecurityDescriptor,
+    // at 8 on x64 and 4 in a 32-bit process; a file that exists keeps its own).
     // SAFETY: the caller's structure when non-null.
-    oa.security_descriptor = if security.is_null() {
-        core::ptr::null()
-    } else {
-        unsafe { (security.add(8) as *const *const u8).read_unaligned() }
-    };
+    oa.security_descriptor = unsafe { crate::base::sa_descriptor(security) };
     let mut h: Handle = 0;
     let mut iosb = IoStatusBlock::default();
     // SAFETY: valid pointers.
@@ -411,6 +407,20 @@ pub(crate) fn open_for(win32: &[u16], access: u32, options: u32) -> Result<Handl
     let st = unsafe {
         nt::NtOpenFile(&mut h, access | SYNCHRONIZE, &oa, &mut iosb, SHARE_ALL, options | FILE_SYNCHRONOUS_IO_NONALERT)
     };
+    if st.is_success() { Ok(h) } else { Err(from_status(st)) }
+}
+
+/// Open `win32` for its security alone: exactly `access`, every sharing mode, no
+/// `SYNCHRONIZE` (a handle for `NtQuerySecurityObject` / `NtSetSecurityObject` does no I/O, and a
+/// DACL that denies `SYNCHRONIZE`, as `FILE_GENERIC_WRITE` does, must not keep its owner from it:
+/// specs/windows/advapi32.dll/SetFileSecurityW.yaml).
+pub(crate) fn open_for_security(win32: &[u16], access: u32, options: u32) -> Result<Handle, u32> {
+    let name = nt_name(win32)?;
+    let oa = name.attributes();
+    let mut h: Handle = 0;
+    let mut iosb = IoStatusBlock::default();
+    // SAFETY: valid pointers.
+    let st = unsafe { nt::NtOpenFile(&mut h, access, &oa, &mut iosb, SHARE_ALL, options) };
     if st.is_success() { Ok(h) } else { Err(from_status(st)) }
 }
 

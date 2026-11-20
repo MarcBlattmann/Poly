@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "abcf_errors",
+      "exe_sha256": "14699d1a85c5e7a531d7068c964b6d7b1e42a63d59b78de2f86aa9795f58e95b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgPiBsYXN0OiByZXN1bHQgMCBlcnIgODcgdW50b3VjaGVkIHRydWUKYmV5b25kIFUrRkZGRjogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZApVK0ZGRkYgYWxvbmU6IHJlc3VsdCAxIGVyciB1bmNoYW5nZWQgQSAxIEIgOCBDIDEKTlVMTCBidWZmZXI6IHJlc3VsdCAwIGVyciA4NwpOVUxMIGRjOiByZXN1bHQgMCBlcnIgNgptYWRlLXVwIGRjOiByZXN1bHQgMCBlcnIgNgpkZWxldGVkIGRjOiByZXN1bHQgMCBlcnIgNgpzdG9jayBPRU1fRklYRURfRk9OVDogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZApzdG9jayBTWVNURU1fRk9OVDogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first > last: result 0 err 87 untouched true\nbeyond U+FFFF: result 1 err unchanged\nU+FFFF alone: result 1 err unchanged A 1 B 8 C 1\nNULL buffer: result 0 err 87\nNULL dc: result 0 err 6\nmade-up dc: result 0 err 6\ndeleted dc: result 0 err 6\nstock OEM_FIXED_FONT: result 1 err unchanged\nstock SYSTEM_FONT: result 1 err unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    },
+    {
+      "name": "abcf_sizes",
+      "exe_sha256": "8ea14c43812b82d550afb5e04ce1812e0507ea26dbcb07fefcb7de9dd1d90737",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "LS0gLTE2ClUrMDAyMDogcmVzdWx0IDEgQSAwIEIgMSBDIDUgZXJyIHVuY2hhbmdlZAonQSc6IHJlc3VsdCAxIEEgMiBCIDggQyAyIGVyciB1bmNoYW5nZWQKJ0InOiByZXN1bHQgMSBBIDEgQiA2IEMgMSBlcnIgdW5jaGFuZ2VkCidNJzogcmVzdWx0IDEgQSAwIEIgMTIgQyAwIGVyciB1bmNoYW5nZWQKJ08nOiByZXN1bHQgMSBBIDEgQiA4IEMgMSBlcnIgdW5jaGFuZ2VkCidnJzogcmVzdWx0IDEgQSAxIEIgOCBDIDEgZXJyIHVuY2hhbmdlZAonaSc6IHJlc3VsdCAxIEEgMSBCIDIgQyAxIGVyciB1bmNoYW5nZWQKJ2onOiByZXN1bHQgMSBBIC0yIEIgNCBDIDIgZXJyIHVuY2hhbmdlZAonayc6IHJlc3VsdCAxIEEgMSBCIDYgQyAtMiBlcnIgdW5jaGFuZ2VkClUrMDMwMTogcmVzdWx0IDEgQSAtMyBCIDMgQyAwIGVyciB1bmNoYW5nZWQKJ1cnOiByZXN1bHQgMSBBIDIgQiAxMiBDIDIgZXJyIHVuY2hhbmdlZAoneic6IHJlc3VsdCAxIEEgMSBCIDggQyAxIGVyciB1bmNoYW5nZWQKLS0gLTEzClUrMDAyMDogcmVzdWx0IDEgQSAwIEIgMSBDIDQgZXJyIHVuY2hhbmdlZAonQSc6IHJlc3VsdCAxIEEgMiBCIDYgQyAyIGVyciB1bmNoYW5nZWQKJ0InOiByZXN1bHQgMSBBIDEgQiA1IEMgMSBlcnIgdW5jaGFuZ2VkCidNJzogcmVzdWx0IDEgQSAwIEIgMTAgQyAwIGVyciB1bmNoYW5nZWQKJ08nOiByZXN1bHQgMSBBIDEgQiA2IEMgMSBlcnIgdW5jaGFuZ2VkCidnJzogcmVzdWx0IDEgQSAxIEIgNiBDIDEgZXJyIHVuY2hhbmdlZAonaSc6IHJlc3VsdCAxIEEgMSBCIDEgQyAxIGVyciB1bmNoYW5nZWQKJ2onOiByZXN1bHQgMSBBIC0yIEIgNCBDIDEgZXJyIHVuY2hhbmdlZAonayc6IHJlc3VsdCAxIEEgMSBCIDUgQyAtMiBlcnIgdW5jaGFuZ2VkClUrMDMwMTogcmVzdWx0IDEgQSAtMiBCIDIgQyAwIGVyciB1bmNoYW5nZWQKJ1cnOiByZXN1bHQgMSBBIDIgQiA5IEMgMiBlcnIgdW5jaGFuZ2VkCid6JzogcmVzdWx0IDEgQSAxIEIgNiBDIDEgZXJyIHVuY2hhbmdlZAotLSAtMTAyNApVKzAwMjA6IHJlc3VsdCAxIEEgMCBCIDEgQyAzODMgZXJyIHVuY2hhbmdlZAonQSc6IHJlc3VsdCAxIEEgMTI4IEIgNTEyIEMgMTI4IGVyciB1bmNoYW5nZWQKJ0InOiByZXN1bHQgMSBBIDY0IEIgMzg0IEMgNjQgZXJyIHVuY2hhbmdlZAonTSc6IHJlc3VsdCAxIEEgMCBCIDc2OCBDIDAgZXJyIHVuY2hhbmdlZAonTyc6IHJlc3VsdCAxIEEgNjQgQiA1MTIgQyA2NCBlcnIgdW5jaGFuZ2VkCidnJzogcmVzdWx0IDEgQSA2NCBCIDUxMiBDIDY0IGVyciB1bmNoYW5nZWQKJ2knOiByZXN1bHQgMSBBIDY0IEIgMTI4IEMgNjQgZXJyIHVuY2hhbmdlZAonaic6IHJlc3VsdCAxIEEgLTEyOCBCIDI1NiBDIDEyOCBlcnIgdW5jaGFuZ2VkCidrJzogcmVzdWx0IDEgQSA2NCBCIDM4NCBDIC0xMjggZXJyIHVuY2hhbmdlZApVKzAzMDE6IHJlc3VsdCAxIEEgLTE5MiBCIDE5MiBDIDAgZXJyIHVuY2hhbmdlZAonVyc6IHJlc3VsdCAxIEEgMTI4IEIgNzY4IEMgMTI4IGVyciB1bmNoYW5nZWQKJ3onOiByZXN1bHQgMSBBIDY0IEIgNTEyIEMgNjQgZXJyIHVuY2hhbmdlZAotLSAtNwpVKzAwMjA6IHJlc3VsdCAxIEEgMCBCIDEgQyAyIGVyciB1bmNoYW5nZWQKJ0EnOiByZXN1bHQgMSBBIDEgQiAzIEMgMSBlcnIgdW5jaGFuZ2VkCidCJzogcmVzdWx0IDEgQSAwIEIgMyBDIDEgZXJyIHVuY2hhbmdlZAonTSc6IHJlc3VsdCAxIEEgMCBCIDUgQyAwIGVyciB1bmNoYW5nZWQKJ08nOiByZXN1bHQgMSBBIDAgQiA0IEMgMCBlcnIgdW5jaGFuZ2VkCidnJzogcmVzdWx0IDEgQSAwIEIgNCBDIDAgZXJyIHVuY2hhbmdlZAonaSc6IHJlc3VsdCAxIEEgMCBCIDEgQyAxIGVyciB1bmNoYW5nZWQKJ2onOiByZXN1bHQgMSBBIC0xIEIgMiBDIDEgZXJyIHVuY2hhbmdlZAonayc6IHJlc3VsdCAxIEEgMCBCIDMgQyAtMSBlcnIgdW5jaGFuZ2VkClUrMDMwMTogcmVzdWx0IDEgQSAtMSBCIDEgQyAwIGVyciB1bmNoYW5nZWQKJ1cnOiByZXN1bHQgMSBBIDEgQiA1IEMgMSBlcnIgdW5jaGFuZ2VkCid6JzogcmVzdWx0IDEgQSAwIEIgNCBDIDAgZXJyIHVuY2hhbmdlZApyYW5nZSAnQScuLidDJzogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZCBbKDIuMCwgOC4wLCAyLjApLCAoMS4wLCA2LjAsIDEuMCksICgxLjAsIDguMCwgMS4wKV0KdGhlIGZsb2F0IHdpZHRocyBlcXVhbCB0aGUgaW50ZWdlciB3aWR0aHMgb2YgR2V0Q2hhckFCQ1dpZHRoc1cgYXQgLTE2LCAtMTMsIC03LCAtMTAyNDogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "-- -16\nU+0020: result 1 A 0 B 1 C 5 err unchanged\n'A': result 1 A 2 B 8 C 2 err unchanged\n'B': result 1 A 1 B 6 C 1 err unchanged\n'M': result 1 A 0 B 12 C 0 err unchanged\n'O': result 1 A 1 B 8 C 1 err unchanged\n'g': result 1 A 1 B 8 C 1 err unchanged\n'i': result 1 A 1 B 2 C 1 err unchanged\n'j': result 1 A -2 B 4 C 2 err unchanged\n'k': result 1 A 1 B 6 C -2 err unchanged\nU+0301: result 1 A -3 B 3 C 0 err unchanged\n'W': result 1 A 2 B 12 C 2 err unchanged\n'z': result 1 A 1 B 8 C 1 err unchanged\n-- -13\nU+0020: result 1 A 0 B 1 C 4 err unchanged\n'A': result 1 A 2 B 6 C 2 err unchanged\n'B': result 1 A 1 B 5 C 1 err unchanged\n'M': result 1 A 0 B 10 C 0 err unchanged\n'O': result 1 A 1 B 6 C 1 err unchanged\n'g': result 1 A 1 B 6 C 1 err unchanged\n'i': result 1 A 1 B 1 C 1 err unchanged\n'j': result 1 A -2 B 4 C 1 err unchanged\n'k': result 1 A 1 B 5 C -2 err unchanged\nU+0301: result 1 A -2 B 2 C 0 err unchanged\n'W': result 1 A 2 B 9 C 2 err unchanged\n'z': result 1 A 1 B 6 C 1 err unchanged\n-- -1024\nU+0020: result 1 A 0 B 1 C 383 err unchanged\n'A': result 1 A 128 B 512 C 128 err unchanged\n'B': result 1 A 64 B 384 C 64 err unchanged\n'M': result 1 A 0 B 768 C 0 err unchanged\n'O': result 1 A 64 B 512 C 64 err unchanged\n'g': result 1 A 64 B 512 C 64 err unchanged\n'i': result 1 A 64 B 128 C 64 err unchanged\n'j': result 1 A -128 B 256 C 128 err unchanged\n'k': result 1 A 64 B 384 C -128 err unchanged\nU+0301: result 1 A -192 B 192 C 0 err unchanged\n'W': result 1 A 128 B 768 C 128 err unchanged\n'z': result 1 A 64 B 512 C 64 err unchanged\n-- -7\nU+0020: result 1 A 0 B 1 C 2 err unchanged\n'A': result 1 A 1 B 3 C 1 err unchanged\n'B': result 1 A 0 B 3 C 1 err unchanged\n'M': result 1 A 0 B 5 C 0 err unchanged\n'O': result 1 A 0 B 4 C 0 err unchanged\n'g': result 1 A 0 B 4 C 0 err unchanged\n'i': result 1 A 0 B 1 C 1 err unchanged\n'j': result 1 A -1 B 2 C 1 err unchanged\n'k': result 1 A 0 B 3 C -1 err unchanged\nU+0301: result 1 A -1 B 1 C 0 err unchanged\n'W': result 1 A 1 B 5 C 1 err unchanged\n'z': result 1 A 0 B 4 C 0 err unchanged\nrange 'A'..'C': result 1 err unchanged [(2.0, 8.0, 2.0), (1.0, 6.0, 1.0), (1.0, 8.0, 1.0)]\nthe float widths equal the integer widths of GetCharABCWidthsW at -16, -13, -7, -1024: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

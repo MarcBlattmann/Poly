@@ -14,13 +14,19 @@
 //!     every host.
 //!   - `--mode desktop`: Poly's desktop boots with a desktop file for the program; the
 //!     steps (`--steps a,b,c`) start it from the launcher and drive it through QMP (Unix hosts).
-//!     Steps: `launch`, `sleep:S`, `wait:TEXT` (a line of the kernel log, 60 s), `shot:NAME`,
+//!     Steps: `launch` (`launch:N`: the program of the N-th run, `--then-exe` below), `sleep:S`,
+//!     `wait:TEXT` (a line of the kernel log, 60 s), `shot:NAME`,
 //!     `type:TEXT`, `key:QCODE`, `chord:ctrl+s`, `click:X|Y`, `dclick:X|Y`, `rclick:X|Y`,
 //!     `drag:X1|Y1|X2|Y2`, `move:X|Y`, `wheel:X|Y|N` (N notches, down when N > 0).
 //!     Without steps: `launch`, `sleep:20`, `shot:window`, `sleep:20`, `shot:later`.
 //!   - Options: `--name N` (default: the program's file stem), `--args "..."` (the program's
 //!     command line after its name), `--then "..."` (repeatable: run the program again with
 //!     these arguments after the previous run, in the same boot and on the same disk),
+//!     `--then-exe "PATH|ARGS"` (repeatable, in order with `--then`: run another program after
+//!     the previous run, by its Windows path, such as the one an installer of the first run just
+//!     put in `C:\Program Files`; `%NAME%` is expanded in the guest and the run waits, within
+//!     `--seconds`, until the file exists; on the desktop it is the `launch:N` step's program,
+//!     a `C:\` path without `%`),
 //!     `--dir-cwd REL`, `--seconds S`, `--timeout S` (QEMU's
 //!     limit), `--exceptions[=N]`, `--trace`, `--kernel "OPTIONS"` (more kernel options, such as
 //!     `poly.nt.waits=10 poly.nt.trail`), `--release`, `--out DIR` (log, summary and
@@ -86,11 +92,6 @@ fn own_dlls(dir: &Path) -> Result<BTreeMap<String, BTreeMap<String, crate::winim
 
 fn flag(args: &[String], name: &str) -> Option<String> {
     args.iter().position(|a| a == name).and_then(|i| args.get(i + 1).cloned())
-}
-
-/// Every value of an option that may be given more than once.
-fn flags(args: &[String], name: &str) -> Vec<String> {
-    args.windows(2).filter(|w| w[0] == name).map(|w| w[1].clone()).collect()
 }
 
 fn imports(args: &[String]) -> Result {
@@ -198,18 +199,24 @@ fn parse(args: &[String]) -> Result<Opts> {
     };
     let rest: Vec<String> =
         args.iter().filter(|a| a.starts_with("--memory=") || a.starts_with("--cpus=")).cloned().collect();
+    let runs = runs_of(args, &exe)?;
+    let desktop = mode == "desktop";
+    if desktop {
+        for (i, (exe, _)) in runs.iter().enumerate().skip(1) {
+            if is_windows_path(exe) && unix_path(exe).is_none() {
+                return Err(format!("--then-exe {exe}: on the desktop a C:\\ path without %NAME% (run {})", i + 1));
+            }
+        }
+    }
     Ok(Opts {
         out: flag(args, "--out")
             .map_or_else(|| root().join("target/win-app").join(format!("{name}-out")), PathBuf::from),
         dir,
-        runs: core::iter::once(flag(args, "--args").unwrap_or_default())
-            .chain(flags(args, "--then"))
-            .map(|a| (exe.clone(), a))
-            .collect(),
+        runs,
         exe,
         args: flag(args, "--args").unwrap_or_default(),
         cwd: flag(args, "--dir-cwd").unwrap_or_default(),
-        desktop: mode == "desktop",
+        desktop,
         seconds: num("--seconds", 60)?,
         timeout: num("--timeout", 900)?,
         exceptions: args.iter().find_map(|a| {
@@ -228,6 +235,50 @@ fn parse(args: &[String]) -> Result<Opts> {
     })
 }
 
+/// The runs of a command line, in order: `exe` with `--args`, then one for each `--then "ARGS"`
+/// (`exe` again) and `--then-exe "PATH|ARGS"` (another program, by its Windows path).
+fn runs_of(args: &[String], exe: &str) -> Result<Vec<(String, String)>> {
+    let mut runs = vec![(exe.to_string(), flag(args, "--args").unwrap_or_default())];
+    for w in args.windows(2) {
+        match w[0].as_str() {
+            "--then" => runs.push((exe.to_string(), w[1].clone())),
+            "--then-exe" => {
+                let (path, rest) = w[1].split_once('|').unwrap_or((&w[1], ""));
+                let path = path.trim().replace('/', "\\");
+                if !is_windows_path(&path) {
+                    return Err(format!("--then-exe {path}: a Windows path (C:\\...), or one with %NAME%"));
+                }
+                runs.push((path, rest.trim().to_string()));
+            }
+            _ => {}
+        }
+    }
+    Ok(runs)
+}
+
+/// Whether a run's program is a Windows path (`C:\...`, `%LOCALAPPDATA%\...`) rather than a file
+/// of the program's directory.
+fn is_windows_path(exe: &str) -> bool {
+    let b = exe.as_bytes();
+    exe.starts_with('%') || (b.len() > 2 && b[0].is_ascii_alphabetic() && b[1] == b':' && matches!(b[2], b'\\' | b'/'))
+}
+
+/// A run's program as the programs of the disk see it: a Windows path as given, a file of the
+/// directory below `C:\apps\<name>`.
+fn dos_path(name: &str, exe: &str) -> String {
+    if is_windows_path(exe) { exe.to_string() } else { format!("{APPS_DOS}\\{name}\\{}", exe.replace('/', "\\")) }
+}
+
+/// A `C:\` path as the desktop sees it (the disk's `poly/nt/c` at `/mnt/root`); None for another
+/// drive or a path with `%NAME%`.
+fn unix_path(exe: &str) -> Option<String> {
+    let rest = exe.strip_prefix("C:\\").or_else(|| exe.strip_prefix("c:\\"))?;
+    if rest.contains('%') {
+        return None;
+    }
+    Some(format!("/mnt/root/poly/nt/c/{}", rest.replace('\\', "/")))
+}
+
 /// The disk: the program's directory as `C:\apps\<name>`, the launcher, the stage file
 /// (`stage1.cmd`), `polystub.dll`.
 fn disk(o: &Opts) -> Result<PathBuf> {
@@ -238,22 +289,29 @@ fn disk(o: &Opts) -> Result<PathBuf> {
     let launcher = built.into_iter().next().map(|(_, b)| b).ok_or("the launcher was not built")?;
     let x86 = is_pe32(&o.dir.join(&o.exe));
     let stubs = polystub(&o.dir, x86)?;
-    let exe_dos = format!("{APPS_DOS}\\{}\\{}", o.name, o.exe.replace('/', "\\"));
+    let exe_dos = dos_path(&o.name, &o.exe);
     let cwd = if o.cwd.is_empty() {
         exe_dos.rsplit_once('\\').map_or(APPS_DOS.to_string(), |p| p.0.to_string())
     } else {
         o.cwd.clone()
     };
-    // One stage per run; each but the last asks the launcher for the next one (line 7).
+    // One stage per run; each but the last asks the launcher for the next one (line 7). A
+    // program by its Windows path (`--then-exe`) runs in its own directory, and the launcher
+    // expands `%NAME%` and waits for the file (line 8).
     let stages: Vec<String> = o
         .runs
         .iter()
         .enumerate()
         .map(|(i, (exe, args))| {
-            let exe_dos = format!("{APPS_DOS}\\{}\\{}", o.name, exe.replace('/', "\\"));
+            let exe_dos = dos_path(&o.name, exe);
             let cmdline = format!("\"{exe_dos}\" {args}").trim_end().to_string();
             let next = if i + 1 < o.runs.len() { "next" } else { "" };
-            format!("{exe_dos}\n{cmdline}\n{cwd}\n{}\n\n\n{next}\n", o.seconds)
+            let (cwd, installed) = if is_windows_path(exe) {
+                (exe_dos.rsplit_once('\\').map_or("C:\\", |p| p.0).to_string(), "installed")
+            } else {
+                (cwd.clone(), "")
+            };
+            format!("{exe_dos}\n{cmdline}\n{cwd}\n{}\n\n\n{next}\n{installed}\n", o.seconds)
         })
         .collect();
     let mut tree = crate::rootdisk::RootTree::default();
@@ -528,6 +586,25 @@ fn desktop_file(name: &str, exe: &str, args: &str) -> String {
     )
 }
 
+/// A program path as one argument of `Exec`: in double quotes, with `"`, `` ` ``, `$` and `\`
+/// escaped by a backslash and `%` doubled (the Desktop Entry Specification, "The Exec key").
+#[cfg_attr(not(unix), allow(dead_code))]
+fn quoted_exec(path: &str) -> String {
+    let mut out = String::from("\"");
+    for c in path.chars() {
+        match c {
+            '"' | '`' | '$' | '\\' => {
+                out.push('\\');
+                out.push(c);
+            }
+            '%' => out.push_str("%%"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 /// A desktop run: the compositor is init, a desktop file starts the program, QMP drives it.
 fn run_desktop(
     o: &Opts,
@@ -557,7 +634,17 @@ fn run_desktop_checked(
 ) -> Result<(String, Option<String>)> {
     let dos = format!("/mnt/root/{APPS_ON_DISK}/{}/{}", o.name, o.exe);
     let file = desktop_file(&o.name, &dos, &o.args);
-    let extra = vec![(format!("usr/share/applications/winapp-{}.desktop", o.name), 0o644, file.into_bytes())];
+    let mut extra = vec![(format!("usr/share/applications/winapp-{}.desktop", o.name), 0o644, file.into_bytes())];
+    // The later runs' programs, for `launch:N`: `Winapp <name> runN`.
+    for (i, (exe, args)) in o.runs.iter().enumerate().skip(1) {
+        let path = if is_windows_path(exe) {
+            unix_path(exe).ok_or(format!("{exe}: not a C:\\ path"))?
+        } else {
+            format!("/mnt/root/{APPS_ON_DISK}/{}/{exe}", o.name)
+        };
+        let file = desktop_file(&format!("{} run{}", o.name, i + 1), &quoted_exec(&path), args);
+        extra.push((format!("usr/share/applications/winapp-{}-{}.desktop", o.name, i + 1), 0o644, file.into_bytes()));
+    }
     let initrd = crate::desktop::image_with("poly-win-app-initramfs.cpio", false, extra)?;
     let spec = DriveSpec {
         out: o.out.clone(),
@@ -750,7 +837,8 @@ pub fn steps_parse(steps: &str) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(not(unix), allow(dead_code))]
 enum Step {
-    Launch,
+    /// Start the program from the launcher; `Some(N)`: the program of the N-th run (`launch:N`).
+    Launch(Option<usize>),
     Sleep(u64),
     Wait(String),
     /// Wait until the log has TEXT at least N times (`waitn:N|TEXT`): the second window of a
@@ -791,7 +879,10 @@ impl Step {
             ))
         };
         Ok(match kind {
-            "launch" => Step::Launch,
+            "launch" if arg.is_empty() => Step::Launch(None),
+            "launch" => Step::Launch(Some(
+                arg.parse().ok().filter(|&n| n >= 2).ok_or(format!("step {s:?}: launch:N, N from 2"))?,
+            )),
             "sleep" => Step::Sleep(arg.parse().map_err(|_| format!("step {s:?}: seconds"))?),
             "wait" => Step::Wait(arg.into()),
             "waitn" => {
@@ -1002,8 +1093,11 @@ impl Driver {
     }
     fn step(&mut self, step: &Step) -> Result {
         match step {
-            Step::Launch => {
-                let query = self.query.clone();
+            Step::Launch(run) => {
+                let query = match run {
+                    Some(n) => format!("{} run{n}", self.query),
+                    None => self.query.clone(),
+                };
                 for c in query.chars() {
                     let (q, shift) = qcode(c).ok_or(format!("cannot type {c:?}"))?;
                     if shift {
@@ -1136,8 +1230,48 @@ mod tests {
     }
 
     #[test]
+    fn runs_are_in_order_and_installed_programs_by_their_windows_path() {
+        let args: Vec<String> = [
+            "--exe",
+            "setup.exe",
+            "--args",
+            "/S",
+            "--then-exe",
+            r"C:\Program Files\App\app.exe|--x 1",
+            "--then",
+            "/U",
+            "--then-exe",
+            r"%LOCALAPPDATA%\Programs\b\b.exe",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let runs = runs_of(&args, "setup.exe").unwrap();
+        let want = [
+            ("setup.exe", "/S"),
+            (r"C:\Program Files\App\app.exe", "--x 1"),
+            ("setup.exe", "/U"),
+            (r"%LOCALAPPDATA%\Programs\b\b.exe", ""),
+        ];
+        assert_eq!(runs, want.map(|(e, a)| (e.to_string(), a.to_string())));
+        assert!(runs_of(&["--then-exe".to_string(), "app.exe".to_string()], "x.exe").is_err());
+        assert_eq!(dos_path("npp", "bin/npp.exe"), r"C:\apps\npp\bin\npp.exe");
+        assert_eq!(dos_path("npp", r"C:\P\n.exe"), r"C:\P\n.exe");
+        assert_eq!(
+            unix_path(r"C:\Program Files\App\app.exe").as_deref(),
+            Some("/mnt/root/poly/nt/c/Program Files/App/app.exe")
+        );
+        assert_eq!(unix_path(r"%LOCALAPPDATA%\b.exe"), None);
+        assert_eq!(unix_path(r"D:\b.exe"), None);
+        assert_eq!(quoted_exec("/a b/c$%.exe"), "\"/a b/c\\$%%.exe\"");
+    }
+
+    #[test]
     fn steps_parse() {
-        assert_eq!(Step::parse("launch"), Ok(Step::Launch));
+        assert_eq!(Step::parse("launch"), Ok(Step::Launch(None)));
+        assert_eq!(Step::parse("launch:2"), Ok(Step::Launch(Some(2))));
+        assert!(Step::parse("launch:1").is_err());
+        assert!(Step::parse("launch:x").is_err());
         assert_eq!(Step::parse("sleep:5"), Ok(Step::Sleep(5)));
         assert_eq!(Step::parse("waitn:2|launch-to-window"), Ok(Step::WaitN(2, "launch-to-window".into())));
         assert!(Step::parse("waitn:launch-to-window").is_err());

@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "cwf_dejavu",
+      "exe_sha256": "fb33c5cde60f793d032b4d84421f4b4fd589242b8bca5a649fc4b364a678f75d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "LS0gLTIwNDgKVSswMDIwOiByZXN1bHQgMSB3aWR0aCA0MC42ODc1IChpbnRlZ2VyIGNhbGwgNjUxKQonQSc6IHJlc3VsdCAxIHdpZHRoIDg3LjU2MjUgKGludGVnZXIgY2FsbCAxNDAxKQonZyc6IHJlc3VsdCAxIHdpZHRoIDgxLjI1IChpbnRlZ2VyIGNhbGwgMTMwMCkKVSswMEU5OiByZXN1bHQgMSB3aWR0aCA3OC43NSAoaW50ZWdlciBjYWxsIDEyNjApClUrMjBBQzogcmVzdWx0IDEgd2lkdGggODEuNDM3NSAoaW50ZWdlciBjYWxsIDEzMDMpClUrMDNCMTogcmVzdWx0IDEgd2lkdGggODQuMzc1IChpbnRlZ2VyIGNhbGwgMTM1MCkKLS0gLTEwMDAKVSswMDIwOiByZXN1bHQgMSB3aWR0aCAxOS44NzUgKGludGVnZXIgY2FsbCAzMTgpCidBJzogcmVzdWx0IDEgd2lkdGggNDIuNzUgKGludGVnZXIgY2FsbCA2ODQpCidnJzogcmVzdWx0IDEgd2lkdGggMzkuNjg3NSAoaW50ZWdlciBjYWxsIDYzNSkKVSswMEU5OiByZXN1bHQgMSB3aWR0aCAzOC40Mzc1IChpbnRlZ2VyIGNhbGwgNjE1KQpVKzIwQUM6IHJlc3VsdCAxIHdpZHRoIDM5Ljc1IChpbnRlZ2VyIGNhbGwgNjM2KQpVKzAzQjE6IHJlc3VsdCAxIHdpZHRoIDQxLjE4NzUgKGludGVnZXIgY2FsbCA2NTkpCi0tIC0xMDAKVSswMDIwOiByZXN1bHQgMSB3aWR0aCAyIChpbnRlZ2VyIGNhbGwgMzIpCidBJzogcmVzdWx0IDEgd2lkdGggNC4yNSAoaW50ZWdlciBjYWxsIDY4KQonZyc6IHJlc3VsdCAxIHdpZHRoIDMuOTM3NSAoaW50ZWdlciBjYWxsIDYzKQpVKzAwRTk6IHJlc3VsdCAxIHdpZHRoIDMuODc1IChpbnRlZ2VyIGNhbGwgNjIpClUrMjBBQzogcmVzdWx0IDEgd2lkdGggNCAoaW50ZWdlciBjYWxsIDY0KQpVKzAzQjE6IHJlc3VsdCAxIHdpZHRoIDQuMTg3NSAoaW50ZWdlciBjYWxsIDY3KQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "-- -2048\nU+0020: result 1 width 40.6875 (integer call 651)\n'A': result 1 width 87.5625 (integer call 1401)\n'g': result 1 width 81.25 (integer call 1300)\nU+00E9: result 1 width 78.75 (integer call 1260)\nU+20AC: result 1 width 81.4375 (integer call 1303)\nU+03B1: result 1 width 84.375 (integer call 1350)\n-- -1000\nU+0020: result 1 width 19.875 (integer call 318)\n'A': result 1 width 42.75 (integer call 684)\n'g': result 1 width 39.6875 (integer call 635)\nU+00E9: result 1 width 38.4375 (integer call 615)\nU+20AC: result 1 width 39.75 (integer call 636)\nU+03B1: result 1 width 41.1875 (integer call 659)\n-- -100\nU+0020: result 1 width 2 (integer call 32)\n'A': result 1 width 4.25 (integer call 68)\n'g': result 1 width 3.9375 (integer call 63)\nU+00E9: result 1 width 3.875 (integer call 62)\nU+20AC: result 1 width 4 (integer call 64)\nU+03B1: result 1 width 4.1875 (integer call 67)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    },
+    {
+      "name": "cwf_errors",
+      "exe_sha256": "a0d903e919631b7f6ee95fd0112dd01d6502acfc28e41a8fa2646da4a5f9213d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgPiBsYXN0OiByZXN1bHQgMCBlcnIgODcgdW50b3VjaGVkIHRydWUKYmV5b25kIFUrRkZGRjogcmVzdWx0IDAgZXJyIDg3ClUrRkZGRiBhbG9uZTogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZCB3aWR0aCAwLjYyNQpVK0ZGRkYuLlUrMTAwMDA6IHJlc3VsdCAwIGVyciA4NwpOVUxMIGJ1ZmZlcjogcmVzdWx0IDAgZXJyIDg3Ck5VTEwgZGM6IHJlc3VsdCAwIGVyciA4NwptYWRlLXVwIGRjOiByZXN1bHQgMCBlcnIgODcKZGVsZXRlZCBkYzogcmVzdWx0IDAgZXJyIDg3CnN0b2NrIE9FTV9GSVhFRF9GT05UOiByZXN1bHQgMSBlcnIgdW5jaGFuZ2VkCnN0b2NrIFNZU1RFTV9GT05UOiByZXN1bHQgMSBlcnIgdW5jaGFuZ2VkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first > last: result 0 err 87 untouched true\nbeyond U+FFFF: result 0 err 87\nU+FFFF alone: result 1 err unchanged width 0.625\nU+FFFF..U+10000: result 0 err 87\nNULL buffer: result 0 err 87\nNULL dc: result 0 err 87\nmade-up dc: result 0 err 87\ndeleted dc: result 0 err 87\nstock OEM_FIXED_FONT: result 1 err unchanged\nstock SYSTEM_FONT: result 1 err unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 51
+    }
+  ]
+}

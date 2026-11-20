@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfarrayappendvalue_order_and_count",
+      "source_sha256": "55f60e66375445daa6a1b2327e7b735aeea80bd72aa6acaebdf914db6f71d3d3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ad4e83eb06e8899c4b8a063a61e64c9ac418112157690427a06fd5806b6c0f6d",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(m) == 1\nok CFArrayGetCount(m) == 3\nok CFArrayGetValueAtIndex(m, 0) == a && CFArrayGetValueAtIndex(m, 1) == b && CFArrayGetValueAtIndex(m, 2) == a\nok CFArrayGetFirstIndexOfValue(m, CFRangeMake(0, 3), b) == 1\nok CFArrayGetFirstIndexOfValue(m, CFRangeMake(1, 2), a) == 2\nok CFArrayGetLastIndexOfValue(m, CFRangeMake(0, 3), a) == 2\nok CFArrayContainsValue(m, CFRangeMake(0, 3), S(\"b\"))\nok !CFArrayContainsValue(m, CFRangeMake(0, 3), S(\"q\"))\nok CFArrayGetFirstIndexOfValue(m, CFRangeMake(0, 3), S(\"q\")) == kCFNotFound\nok CFArrayGetCountOfValue(m, CFRangeMake(0, 3), a) == 2\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "622ecbd5921b8e7137331654e8505470f52feb8ba4e85e1b063293ba237c43ce",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(m) == 1\nok CFArrayGetCount(m) == 3\nok CFArrayGetValueAtIndex(m, 0) == a && CFArrayGetValueAtIndex(m, 1) == b && CFArrayGetValueAtIndex(m, 2) == a\nok CFArrayGetFirstIndexOfValue(m, CFRangeMake(0, 3), b) == 1\nok CFArrayGetFirstIndexOfValue(m, CFRangeMake(1, 2), a) == 2\nok CFArrayGetLastIndexOfValue(m, CFRangeMake(0, 3), a) == 2\nok CFArrayContainsValue(m, CFRangeMake(0, 3), S(\"b\"))\nok !CFArrayContainsValue(m, CFRangeMake(0, 3), S(\"q\"))\nok CFArrayGetFirstIndexOfValue(m, CFRangeMake(0, 3), S(\"q\")) == kCFNotFound\nok CFArrayGetCountOfValue(m, CFRangeMake(0, 3), a) == 2\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfarrayappendvalue_retains",
+      "source_sha256": "d67ace42b2ef0cbfacb3be2aefaae8613521258ed176cff76f5a0666fc7ec14c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5d2589b5d6337048addc86d273947193bf01be07351a825be3be111477b25f7f",
+          "exit_code": 0,
+          "stdout": "ok CFGetRetainCount(d) == 2\nok CFGetRetainCount(d) == 3\nok CFGetRetainCount(d) == 2\nok CFGetRetainCount(d) == 1\nok CFGetRetainCount(d) == 1\nok CFGetRetainCount(d) == 1\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4fef5ff46846cffda33e4a786c65348344f567d424fe496a46e0bd791a792d5a",
+          "exit_code": 0,
+          "stdout": "ok CFGetRetainCount(d) == 2\nok CFGetRetainCount(d) == 3\nok CFGetRetainCount(d) == 2\nok CFGetRetainCount(d) == 1\nok CFGetRetainCount(d) == 1\nok CFGetRetainCount(d) == 1\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

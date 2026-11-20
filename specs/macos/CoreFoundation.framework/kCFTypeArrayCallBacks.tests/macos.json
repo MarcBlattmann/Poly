@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "kcftypearraycallbacks_table",
+      "source_sha256": "c9217207610db5bb4d082f41f2dc956585d44ec3eae8c0341dbb569929df005a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "11cc967d696ed3e455097891d4572cfed1b764e794db713b42a2109113d6b751",
+          "exit_code": 0,
+          "stdout": "ok cb->version == 0\nok cb->retain && cb->release && cb->copyDescription && cb->equal\nok cb->equal == (CFArrayEqualCallBack)CFEqual\nok r == d && CFGetRetainCount(d) == 2\nok CFGetRetainCount(d) == 1\nok cb->equal(CFSTR(\"a\"), S(\"a\")) && !cb->equal(CFSTR(\"a\"), S(\"b\"))\nok desc != NULL && CFGetTypeID(desc) == CFStringGetTypeID()\nok sizeof(CFArrayCallBacks) == 40\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "36167d2c749915c94b23b323933504d5faa2d482ffec822232d9a9dff3230d23",
+          "exit_code": 0,
+          "stdout": "ok cb->version == 0\nok cb->retain && cb->release && cb->copyDescription && cb->equal\nok cb->equal == (CFArrayEqualCallBack)CFEqual\nok r == d && CFGetRetainCount(d) == 2\nok CFGetRetainCount(d) == 1\nok cb->equal(CFSTR(\"a\"), S(\"a\")) && !cb->equal(CFSTR(\"a\"), S(\"b\"))\nok desc != NULL && CFGetTypeID(desc) == CFStringGetTypeID()\nok sizeof(CFArrayCallBacks) == 40\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

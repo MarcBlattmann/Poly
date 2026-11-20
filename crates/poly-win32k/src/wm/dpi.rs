@@ -208,6 +208,29 @@ impl Wm {
         self.reply_to_caller(&u, reply)
     }
 
+    /// [`Wm::handle`] for a request that only reads (ADR 0249), without changing anything: the
+    /// same reply `handle` gives now, or `None` for every other request and for a thread whose
+    /// first request this is (`handle` makes its queue). `user32` caches what `Window` answers
+    /// and asks again once the window state changed ([`Wm`] users bump a generation on every
+    /// change); answering here keeps the asking from counting as a change.
+    pub fn handle_read(&self, ctx: Ctx, req: &Request) -> Option<Reply> {
+        if !self.has_queue(ctx.key()) {
+            return None;
+        }
+        let reply = match req {
+            Request::Window { hwnd } => match self.info(*hwnd as u32).filter(|_| self.is_window(*hwnd)) {
+                Some(info) => Reply::Window { info },
+                None => Reply::Error { code: crate::wm::ERROR_INVALID_WINDOW_HANDLE },
+            },
+            Request::Desktop {} => self.desktop_reply(ctx.key()),
+            Request::GetLong { hwnd, index, size } => self.get_long(*hwnd, *index, *size),
+            Request::KeyboardState {} => Reply::Keys { keys: self.keys_of(ctx.key()) },
+            _ => return None,
+        };
+        let u = self.units_of(ctx.key());
+        Some(if u.identity() { reply } else { self.reply_to_caller(&u, reply) })
+    }
+
     /// [`Wm::handle`] for a request whose coordinates are physical already.
     pub fn handle_phys(&mut self, ctx: Ctx, req: Request, fx: &mut Effects) -> Reply {
         self.handle_raw(ctx, req, fx)

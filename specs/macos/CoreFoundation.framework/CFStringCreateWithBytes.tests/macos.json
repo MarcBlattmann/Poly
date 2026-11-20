@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfstringcreatewithbytes_utf16_byte_order_mark",
+      "source_sha256": "09d1b9fc198beb637bfa04f6b88cadb8ae631b2407c1e9f0d69830f5493da9c1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1163e284fdd01abcd4b2bfcc2d5f9e9a0770a748a108081052d189c68e0aadab",
+          "exit_code": 0,
+          "stdout": "ok UNITS(mk(bomle, 4, kCFStringEncodingUTF16, 1), 0x61)\nok UNITS(mk(bombe, 4, kCFStringEncodingUTF16, 1), 0x61)\nok UNITS(mk(bomle, 4, kCFStringEncodingUTF16, 0), 0xfeff, 0x61)\nok UNITS(mk(bomle, 4, kCFStringEncodingUTF16LE, 0), 0xfeff, 0x61)\nok UNITS(mk(bomle, 4, kCFStringEncodingUTF16LE, 1), 0xfeff, 0x61)\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "10438f0ab93be4f8c2184a70654fb5ac5042b187e5d4aa4359c712cb2653facc",
+          "exit_code": 0,
+          "stdout": "ok UNITS(mk(bomle, 4, kCFStringEncodingUTF16, 1), 0x61)\nok UNITS(mk(bombe, 4, kCFStringEncodingUTF16, 1), 0x61)\nok UNITS(mk(bomle, 4, kCFStringEncodingUTF16, 0), 0xfeff, 0x61)\nok UNITS(mk(bomle, 4, kCFStringEncodingUTF16LE, 0), 0xfeff, 0x61)\nok UNITS(mk(bomle, 4, kCFStringEncodingUTF16LE, 1), 0xfeff, 0x61)\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringcreatewithbytes_utf16_forms",
+      "source_sha256": "ab5011207c2b7cb72daa7a544ad957311b6f63ba9cd2adebbbd0a21315167f9a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "37ca6916841c191fad7e36c0166558b5121a0505048377eba48970d1a2d1f32a",
+          "exit_code": 0,
+          "stdout": "ok UNITS(mk(le, 4, kCFStringEncodingUTF16LE, 0), 0x61, 0x62)\nok UNITS(mk(be, 4, kCFStringEncodingUTF16BE, 0), 0x61, 0x62)\nok UNITS(mk(le, 4, kCFStringEncodingUTF16, 0), 0x61, 0x62)\nok UNITS(mk(be, 4, kCFStringEncodingUTF16, 1), 0x61, 0x62)\nok UNITS(mk(le, 4, kCFStringEncodingUTF16LE, 1), 0x61, 0x62)\nok UNITS(mk(be, 4, kCFStringEncodingUTF16BE, 1), 0x61, 0x62)\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d1cc01b54875949d8d0382a16a2aed57f0b099e9c14983410e56da5d83b6f34b",
+          "exit_code": 0,
+          "stdout": "ok UNITS(mk(le, 4, kCFStringEncodingUTF16LE, 0), 0x61, 0x62)\nok UNITS(mk(be, 4, kCFStringEncodingUTF16BE, 0), 0x61, 0x62)\nok UNITS(mk(le, 4, kCFStringEncodingUTF16, 0), 0x61, 0x62)\nok UNITS(mk(be, 4, kCFStringEncodingUTF16, 1), 0x61, 0x62)\nok UNITS(mk(le, 4, kCFStringEncodingUTF16LE, 1), 0x61, 0x62)\nok UNITS(mk(be, 4, kCFStringEncodingUTF16BE, 1), 0x61, 0x62)\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringcreatewithbytes_utf16_odd_and_utf32",
+      "source_sha256": "87c20dfc167988d20237cabd67ec14c37bcd154d0273d8410e187c049dcfb89d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "72e09e1e63c917ca9654c2501859b6780ace3fd40b9a8e756a2a3d78d56d0ab6",
+          "exit_code": 0,
+          "stdout": "ok UNITS(CFStringCreateWithBytes(kCFAllocatorDefault, le, 3, kCFStringEncodingUTF16LE, 0), 0x61)\nok CFStringCreateWithBytes(kCFAllocatorDefault, le, 1, kCFStringEncodingUTF16LE, 0) == NULL\nok UNITS(CFStringCreateWithBytes(kCFAllocatorDefault, u32, 8, kCFStringEncodingUTF32LE, 0), 0x41, 0xd83d, 0xde00)\nok UNITS(CFStringCreateWithBytes(kCFAllocatorDefault, u32be, 8, kCFStringEncodingUTF32BE, 0), 0x41, 0xd83d, 0xde00)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "02c1e48aa35406fa3f365fc1f45c9e396b6c4cdbef14148ca77b1348e6916795",
+          "exit_code": 0,
+          "stdout": "ok UNITS(CFStringCreateWithBytes(kCFAllocatorDefault, le, 3, kCFStringEncodingUTF16LE, 0), 0x61)\nok CFStringCreateWithBytes(kCFAllocatorDefault, le, 1, kCFStringEncodingUTF16LE, 0) == NULL\nok UNITS(CFStringCreateWithBytes(kCFAllocatorDefault, u32, 8, kCFStringEncodingUTF32LE, 0), 0x41, 0xd83d, 0xde00)\nok UNITS(CFStringCreateWithBytes(kCFAllocatorDefault, u32be, 8, kCFStringEncodingUTF32BE, 0), 0x41, 0xd83d, 0xde00)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

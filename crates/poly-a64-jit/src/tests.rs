@@ -27,14 +27,18 @@ struct Services<'a> {
 }
 
 impl BsdKernel for Services<'_> {
-    fn write(&mut self, fd: i32, buf: u64, len: u64) -> Result<u64, u64> {
+    fn copy_in(&self, addr: u64, buf: &mut [u8]) -> Result<(), ()> {
+        self.mem.peek(addr, buf).map_err(|_| ())
+    }
+    fn copy_out(&mut self, _addr: u64, _buf: &[u8]) -> Result<(), ()> {
+        Err(())
+    }
+    fn write(&mut self, fd: i32, buf: &[u8], _offset: Option<u64>) -> Result<usize, u32> {
         if fd != 1 && fd != 2 {
-            return Err(bsd::EBADF);
+            return Err(bsd::errno::EBADF);
         }
-        let mut b = alloc::vec![0u8; len as usize];
-        self.mem.peek(buf, &mut b).map_err(|_| bsd::EFAULT)?;
-        self.out.extend_from_slice(&b);
-        Ok(len)
+        self.out.extend_from_slice(buf);
+        Ok(buf.len())
     }
     fn exit(&mut self, status: u8) {
         self.exit = Some(status);

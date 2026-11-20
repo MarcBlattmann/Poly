@@ -79,13 +79,15 @@ pub(crate) fn proxy_call(px: &Proxy, slot: u32, args: *const u64) -> Hresult {
             if out.is_null() {
                 return E_INVALIDARG;
             }
-            put(out, core::ptr::null_mut());
             w.u32(arg(args, 1) as u32);
             w.u32(arg(args, 2) as u32);
             let reply = match send(chan, &iid, 4, &w.0) {
                 Ok(r) => r,
+                // A failure of the channel leaves the out values alone (sheet `CoUnmarshalInterface`,
+                // rule `dead_server`).
                 Err(hr) => return hr,
             };
+            put(out, core::ptr::null_mut());
             let mut r = R(&reply);
             let Ok(hr) = r.u32().map(|v| v as i32) else { return codec::RPC_E_INVALID_DATA };
             if hr >= 0 && r.u8() == Ok(1) {
@@ -167,9 +169,11 @@ fn proxy_invoke(chan: *mut c_void, iid: &Guid, args: *const u64) -> Hresult {
     if dp.c_args > MAX_ARGS || dp.c_named > dp.c_args || (dp.c_args > 0 && dp.args.is_null()) {
         return E_INVALIDARG;
     }
-    if !result.is_null() {
-        variant::set(result, 0, 0);
-    }
+    let empty_result = || {
+        if !result.is_null() {
+            variant::set(result, 0, 0);
+        }
+    };
     let mut w = W::default();
     w.u32(id as u32);
     w.u32(lcid);
@@ -177,6 +181,8 @@ fn proxy_invoke(chan: *mut c_void, iid: &Guid, args: *const u64) -> Hresult {
     w.u32(dp.c_args);
     for i in 0..dp.c_args as usize {
         if let Err(hr) = codec::enc(&mut w, &codec::Ty::Variant, dp.args.wrapping_add(i).cast()) {
+            // Not sent: the result is left empty, as a call that fails before it is sent leaves it.
+            empty_result();
             return hr;
         }
     }
@@ -188,8 +194,10 @@ fn proxy_invoke(chan: *mut c_void, iid: &Guid, args: *const u64) -> Hresult {
     w.u8(u8::from(!result.is_null()));
     let reply = match send(chan, iid, 6, &w.0) {
         Ok(r) => r,
+        // A failure of the channel leaves the out values alone (rule `dead_server`).
         Err(hr) => return hr,
     };
+    empty_result();
     let mut r = R(&reply);
     let Ok(hr) = r.u32().map(|v| v as i32) else { return codec::RPC_E_INVALID_DATA };
     if !result.is_null() && r.u8() == Ok(1) {

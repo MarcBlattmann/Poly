@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfnumbercreate_compare",
+      "source_sha256": "4d7159094f4bb14cedbf742502db3a51467cfefd9f9e8eda144aaadc42e7d3ef",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c8c85486fcebc145fa6ba11c99ebbc78407545c1a1f2592bbd9b84757445e22a",
+          "exit_code": 0,
+          "stdout": "ok CFNumberCompare(I(1), D(1.5), NULL) == -1\nok CFNumberCompare(D(2.5), I(2), NULL) == 1\nok CFNumberCompare(I(7), D(7.0), NULL) == 0\nok CFNumberCompare(I(-1), I(1), NULL) == -1\nok CFNumberCompare(kCFNumberNaN, kCFNumberNaN, NULL) == 0\nok CFNumberCompare(kCFNumberNaN, I(1), NULL) == -1\nok CFNumberCompare(I(1), kCFNumberNaN, NULL) == 1\nok CFNumberCompare(kCFNumberNegativeInfinity, I(-1000), NULL) == -1\nok CFNumberCompare(kCFNumberPositiveInfinity, D(1e300), NULL) == 1\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "21ce155ded8e2d7a3fb016f50e8c628c5baaa732b9de8ec20aa772d860f7ec21",
+          "exit_code": 0,
+          "stdout": "ok CFNumberCompare(I(1), D(1.5), NULL) == -1\nok CFNumberCompare(D(2.5), I(2), NULL) == 1\nok CFNumberCompare(I(7), D(7.0), NULL) == 0\nok CFNumberCompare(I(-1), I(1), NULL) == -1\nok CFNumberCompare(kCFNumberNaN, kCFNumberNaN, NULL) == 0\nok CFNumberCompare(kCFNumberNaN, I(1), NULL) == -1\nok CFNumberCompare(I(1), kCFNumberNaN, NULL) == 1\nok CFNumberCompare(kCFNumberNegativeInfinity, I(-1000), NULL) == -1\nok CFNumberCompare(kCFNumberPositiveInfinity, D(1e300), NULL) == 1\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfnumbercreate_edge_values",
+      "source_sha256": "064f9f750f52caddd899e6a84ffd7fa812dfbff0294844968b954fe2426ca4fa",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0f049f9857943a079270841331aa70227d69855fe43170c5569692800289c02e",
+          "exit_code": 0,
+          "stdout": "ok CFNumberGetValue(big, kCFNumberLongLongType, &out) && out == 0x7fffffffffffffffLL\nok CFNumberGetValue(small, kCFNumberLongLongType, &out) && out == (long long)0x8000000000000000ULL\nok CFNumberGetValue(neg, kCFNumberLongLongType, &out) && out == -12\nok CFNumberGetValue(CFNumberCreate(kCFAllocatorDefault, kCFNumberDoubleType, &(double){2.5}), kCFNumberDoubleType, &d) && d == 2.5\nok CFNumberIsFloatType(kCFNumberNaN) && CFNumberIsFloatType(kCFNumberPositiveInfinity)\nok CFGetTypeID(kCFNumberNaN) == CFNumberGetTypeID()\nok CFNumberGetValue(kCFNumberNaN, kCFNumberDoubleType, &d) && d != d\nok CFNumberGetValue(kCFNumberPositiveInfinity, kCFNumberDoubleType, &d) && d > 1e300\nok CFNumberGetValue(kCFNumberNegativeInfinity, kCFNumberDoubleType, &d) && d < -1e300\nok CFNumberCreate(kCFAllocatorDefault, kCFNumberDoubleType, &(double){__builtin_nan(\"\")}) == kCFNumberNaN\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2da6a9e7fd0d1b0e3a8dc1dfa36e65d4614f76bb4125fb2e14e004042375387a",
+          "exit_code": 0,
+          "stdout": "ok CFNumberGetValue(big, kCFNumberLongLongType, &out) && out == 0x7fffffffffffffffLL\nok CFNumberGetValue(small, kCFNumberLongLongType, &out) && out == (long long)0x8000000000000000ULL\nok CFNumberGetValue(neg, kCFNumberLongLongType, &out) && out == -12\nok CFNumberGetValue(CFNumberCreate(kCFAllocatorDefault, kCFNumberDoubleType, &(double){2.5}), kCFNumberDoubleType, &d) && d == 2.5\nok CFNumberIsFloatType(kCFNumberNaN) && CFNumberIsFloatType(kCFNumberPositiveInfinity)\nok CFGetTypeID(kCFNumberNaN) == CFNumberGetTypeID()\nok CFNumberGetValue(kCFNumberNaN, kCFNumberDoubleType, &d) && d != d\nok CFNumberGetValue(kCFNumberPositiveInfinity, kCFNumberDoubleType, &d) && d > 1e300\nok CFNumberGetValue(kCFNumberNegativeInfinity, kCFNumberDoubleType, &d) && d < -1e300\nok CFNumberCreate(kCFAllocatorDefault, kCFNumberDoubleType, &(double){__builtin_nan(\"\")}) == kCFNumberNaN\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
