@@ -46,6 +46,21 @@ pub const ARCHES: [&str; 2] = ["x86_64", "arm64"];
 /// libSystem, which macOS needs to start any program.
 pub const ALLOWED_DYLIBS: [&str; 1] = ["/usr/lib/libSystem.B.dylib"];
 
+/// A test about libSystem's own functions says so in its header comment with
+/// this line, and may then call them (`tests/macos/include/poly_mlibc.h`);
+/// the output still goes through raw system calls, so what the test reports
+/// is not routed through the code under test. Other tests import nothing.
+pub const LIBSYSTEM_DIRECTIVE: &str = "poly-mac: libsystem";
+
+/// Whether `source` carries [`LIBSYSTEM_DIRECTIVE`] in a comment line among
+/// its first 30 lines.
+pub fn uses_libsystem(source: &str) -> bool {
+    source.lines().take(30).any(|l| {
+        let l = l.trim_start();
+        (l.starts_with("//") || l.starts_with('*') || l.starts_with("/*")) && l.contains(LIBSYSTEM_DIRECTIVE)
+    })
+}
+
 /// The CoreFoundation framework's install name: what a test about
 /// CoreFoundation's own functions may load besides libSystem.
 pub const COREFOUNDATION_DYLIB: &str = "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation";
@@ -125,6 +140,8 @@ pub fn is_foundation_symbol(name: &str) -> bool {
 pub enum Imports {
     /// Nothing: raw system calls only.
     Raw,
+    /// Any libSystem symbol ([`LIBSYSTEM_DIRECTIVE`]); no other library.
+    LibSystem,
     /// CoreFoundation's own symbols ([`COREFOUNDATION_DIRECTIVE`]).
     CoreFoundation,
     /// Foundation's, CoreFoundation's and the Objective-C runtime's ([`FOUNDATION_DIRECTIVE`]).
@@ -137,6 +154,8 @@ impl Imports {
             Imports::Foundation
         } else if uses_corefoundation(source) {
             Imports::CoreFoundation
+        } else if uses_libsystem(source) {
+            Imports::LibSystem
         } else {
             Imports::Raw
         }
@@ -298,13 +317,13 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
     let dylibs: Vec<String> = m.dylibs().map(|d| d.name.to_string()).collect();
     let allowed = |d: &str| {
         ALLOWED_DYLIBS.contains(&d)
-            || (imports_kind != Imports::Raw && d == COREFOUNDATION_DYLIB)
+            || (matches!(imports_kind, Imports::CoreFoundation | Imports::Foundation) && d == COREFOUNDATION_DYLIB)
             || (imports_kind == Imports::Foundation && (d == FOUNDATION_DYLIB || d == OBJC_DYLIB))
     };
     if let Some(d) = dylibs.iter().find(|d| !allowed(d)) {
         return Err(format!("loads {d}; a test may load only {}", ALLOWED_DYLIBS.join(", ")));
     }
-    if let Some(symtab) = m.symtab().map_err(|e| format!("{e:?}"))? {
+    if let (false, Some(symtab)) = (imports_kind == Imports::LibSystem, m.symtab().map_err(|e| format!("{e:?}"))?) {
         let mut imports = Vec::new();
         for sym in symtab.iter() {
             if sym.n_type & N_EXT != 0 && sym.n_type & N_TYPE == N_UNDF {
@@ -312,7 +331,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
             }
         }
         match imports_kind {
-            Imports::Raw => {}
+            Imports::Raw | Imports::LibSystem => {}
             Imports::CoreFoundation => imports.retain(|i| !is_corefoundation_symbol(i)),
             Imports::Foundation => imports.retain(|i| !is_foundation_symbol(i)),
         }
@@ -321,7 +340,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
                 "imports {}; a test makes raw system calls only (poly_mtest.h) and imports nothing{}",
                 imports.join(", "),
                 match imports_kind {
-                    Imports::Raw => "",
+                    Imports::Raw | Imports::LibSystem => "",
                     Imports::CoreFoundation => " but CoreFoundation's own symbols",
                     Imports::Foundation => " but those of Foundation, CoreFoundation and the Objective-C runtime",
                 }
@@ -402,7 +421,7 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
             let mut cc = Command::new(&clang);
             cc.args(["-arch", arch, "-isysroot", &sdk_path]).args(CFLAGS);
             match imports_kind {
-                Imports::Raw => {}
+                Imports::Raw | Imports::LibSystem => {}
                 Imports::CoreFoundation => {
                     cc.args(["-framework", "CoreFoundation"]);
                 }
@@ -973,6 +992,14 @@ mod tests {
     }
 
     #[test]
+    fn the_libsystem_directive_is_found_in_comments_only() {
+        assert!(uses_libsystem("/* x\n * poly-mac: libsystem\n */\nint main(void) { return 0; }\n"));
+        assert!(uses_libsystem("// poly-mac: libsystem\n"));
+        assert!(!uses_libsystem("int main(void) { return 0; }\n"));
+        assert!(!uses_libsystem("const char *s = \"poly-mac: libsystem\";\n"));
+    }
+
+    #[test]
     fn the_corefoundation_directive_is_found_in_comments_only() {
         assert!(uses_corefoundation("/* x\n * poly-mac: corefoundation\n */\nint main(void) { return 0; }\n"));
         assert!(uses_corefoundation("// poly-mac: corefoundation\n"));
@@ -1049,7 +1076,7 @@ mod tests {
              int main(void) { CFTypeRef n = CFNumberGetTypeID() ? kCFNull : 0; return n == 0; }\n",
         )
         .unwrap();
-        let m = build(&crate::repo_root(), &base.join("bin4"), &sources_in(&cf).unwrap()).unwrap();
+        let m = build(&crate::repo_root(), &base.join("bin5"), &sources_in(&cf).unwrap()).unwrap();
         assert_eq!(m.tests[0].executables.len(), 2);
         util::write(
             &cf.join("cf_one.c"),
@@ -1057,7 +1084,7 @@ mod tests {
              int main(void) { CFGetTypeID(0); return getpid() < 0; }\n",
         )
         .unwrap();
-        let err = build(&crate::repo_root(), &base.join("bin5"), &sources_in(&cf).unwrap()).unwrap_err();
+        let err = build(&crate::repo_root(), &base.join("bin6"), &sources_in(&cf).unwrap()).unwrap_err();
         assert!(err.contains("imports _getpid"), "{err}");
         // A Foundation test is built as Objective-C, and only Foundation's, CoreFoundation's and
         // the runtime's symbols are let through.
@@ -1078,6 +1105,14 @@ mod tests {
         .unwrap();
         let err = build(&crate::repo_root(), &base.join("bin7"), &sources_in(&f).unwrap()).unwrap_err();
         assert!(err.contains("imports _getpid"), "{err}");
+        // ... unless it says in its header that it tests libSystem.
+        util::write(
+            &impure.join("impure_one.c"),
+            "// poly-mac: libsystem\n#include <unistd.h>\nint main(void) { return getpid() < 0; }\n",
+        )
+        .unwrap();
+        let m = build(&crate::repo_root(), &base.join("bin8"), &sources_in(&impure).unwrap()).unwrap();
+        assert_eq!(m.tests[0].executables.len(), 2);
         // The arm64 program runs here and passes its (empty) checks.
         let o = run_once(&base.join("bin/arm64/pure_one"), &base.join("scratch"), Duration::from_secs(10));
         assert_eq!((o.status.as_str(), o.exit_code), ("ran", Some(0)), "{o:?}");

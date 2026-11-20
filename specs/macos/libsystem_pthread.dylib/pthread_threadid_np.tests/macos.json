@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "pthread_threadid_np_basic",
+      "source_sha256": "56653a4fadc532dc04523f7005ca4a0cc1c197dd447559c212497ac064216a37",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7d9728b6e3fa02a34d13010f2b74564aa5bd125db56297d67ebb1e8cb5d3d53e",
+          "exit_code": 0,
+          "stdout": "ok NULL thread: returns 0\nok the id is nonzero\nok pthread_self(): returns 0\nok and gives the same id\nok it equals the thread_selfid system call's result\nok the main thread's id is not the process id\nok NULL output with the NULL thread: EINVAL (22)\nok NULL output with self: EINVAL\nok another thread's id can be read: returns 0\nok it is the id that thread reads for itself\nok and differs from main's\nok a joined thread: ESRCH (3)\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c7fec9997ac4ac02ab520503b4bb22d22d874a2781167117191ea92f6ee93a0e",
+          "exit_code": 0,
+          "stdout": "ok NULL thread: returns 0\nok the id is nonzero\nok pthread_self(): returns 0\nok and gives the same id\nok it equals the thread_selfid system call's result\nok the main thread's id is not the process id\nok NULL output with the NULL thread: EINVAL (22)\nok NULL output with self: EINVAL\nok another thread's id can be read: returns 0\nok it is the id that thread reads for itself\nok and differs from main's\nok a joined thread: ESRCH (3)\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pthread_threadid_np_more",
+      "source_sha256": "f4e8648192a604a53c902e4b61bae26f89255e5cf69239aff99cc8ec40981916",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "78dc0f72ba0de1a7161ae9002ec542bd87d5e2e3e9acedfe8839d693b0c35617",
+          "exit_code": 0,
+          "stdout": "ok the child reported\nok its call returned 0\nok its id is nonzero and not its parent's thread id\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d38684af6fd8950c7c5a24d0eab1a523bb69895016a72a7e8f4a769bfcaefeae",
+          "exit_code": 0,
+          "stdout": "ok the child reported\nok its call returned 0\nok its id is nonzero and not its parent's thread id\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

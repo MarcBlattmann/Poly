@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_c.dylib/atexit.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in atexit.tests/macos.json.
+id: macos/api/libsystem_c.dylib/atexit
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  atexit(function) registers a function to run at normal process end and returns 0 (a function may be
+  registered several times; 1000 registrations all succeeded, far beyond the 32 the C standard requires,
+  and all ran). Handlers run when main returns and when exit(n) is called, in the reverse order of registration
+  (1, 2, 3, 1 registered: runs 1, 3, 2, 1), after the program's own output of main. A handler registered
+  during exit runs next, before the older handlers still pending. The exit status is kept (exit(5) gave 5). _exit() skips all handlers. Output of handlers written with raw write calls
+  comes after main's.
+returns:
+  "success": "0"
+errors:
+  "table_full": "not reached: 1000 registrations succeed"
+side_effects: "handlers run once each at exit"
+threading: "no thread-specific behaviour observed"
+ordering: ["handlers run in reverse registration order after main returns or exit() is called; a handler registered while exiting runs before the remaining older ones"]
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

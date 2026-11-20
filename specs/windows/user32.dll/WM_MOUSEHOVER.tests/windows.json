@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "640cf2d46e54",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T09:06:50Z",
+  "tests": [
+    {
+      "name": "mlv_hover_time",
+      "exe_sha256": "8603cd0e82953acace933dfb255a05c5d39686ed4c4916beafafac8f6fd86c7e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZApzeXN0ZW0gaG92ZXIgdGltZSA0MDAgd2lkdGggNCBoZWlnaHQgNAo9PSBUTUVfSE9WRVIgMTAwIG1zLCBwb2ludGVyIHN0aWxsCiAgcXVlcnkgZmxhZ3MgMHgxIGhvdmVyIHRpbWUgMTAwCiAgaG92ZXIgbWVzc2FnZSB3aXRoaW4gNTAuLjM1MCBtczogdHJ1ZQogIHF1ZXJ5IGFmdGVyIHRoZSBob3ZlcjogZmxhZ3MgMHgwCiAgQSBXTV9NT1VTRUhPVkVSIGtleXM9MHgwIGNsaWVudD0xMDAsNjAKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQQo9PSBUTUVfSE9WRVIgMjAwIG1zLCBwb2ludGVyIHN0aWxsCiAgcXVlcnkgZmxhZ3MgMHgxIGhvdmVyIHRpbWUgMjAwCiAgaG92ZXIgbWVzc2FnZSB3aXRoaW4gMTAwLi40NTAgbXM6IHRydWUKICBxdWVyeSBhZnRlciB0aGUgaG92ZXI6IGZsYWdzIDB4MAogIEEgV01fTU9VU0VIT1ZFUiBrZXlzPTB4MCBjbGllbnQ9MTAwLDYwCiAgY3Vyc29yICgyMDgsMTkxKSBvdmVyIEEKPT0gVE1FX0hPVkVSIHdpdGggSE9WRVJfREVGQVVMVCwgcG9pbnRlciBzdGlsbAogIGhvdmVyIGFmdGVyIDIwMCBtczogZmFsc2UKICBxdWVyeTogZmxhZ3MgMHgxIGhvdmVyIHRpbWUgNDAwCiAgaG92ZXIgbWVzc2FnZSB3aXRoaW4gMjAwLi42NTAgbXM6IHRydWUKICBBIFdNX01PVVNFSE9WRVIga2V5cz0weDAgY2xpZW50PTEwMCw2MAogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBBCj09IFRNRV9IT1ZFUiAxMDAgbXM6IG9uZSBtZXNzYWdlLCBhbmQgYSBzZWNvbmQgb25lIG9ubHkgYWZ0ZXIgYSBuZXcgVHJhY2tNb3VzZUV2ZW50CiAgZmlyc3QgaG92ZXIgc2VlbiB0cnVlCiAgc2Vjb25kIGhvdmVyIHdpdGhvdXQgYSByZXF1ZXN0ICgzMDAgbXMgbW9yZSk6IGZhbHNlCiAgc2Vjb25kIGhvdmVyIGFmdGVyIGEgbmV3IHJlcXVlc3Q6IHRydWUKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\nsystem hover time 400 width 4 height 4\n== TME_HOVER 100 ms, pointer still\n  query flags 0x1 hover time 100\n  hover message within 50..350 ms: true\n  query after the hover: flags 0x0\n  A WM_MOUSEHOVER keys=0x0 client=100,60\n  cursor (208,191) over A\n== TME_HOVER 200 ms, pointer still\n  query flags 0x1 hover time 200\n  hover message within 100..450 ms: true\n  query after the hover: flags 0x0\n  A WM_MOUSEHOVER keys=0x0 client=100,60\n  cursor (208,191) over A\n== TME_HOVER with HOVER_DEFAULT, pointer still\n  hover after 200 ms: false\n  query: flags 0x1 hover time 400\n  hover message within 200..650 ms: true\n  A WM_MOUSEHOVER keys=0x0 client=100,60\n  cursor (208,191) over A\n== TME_HOVER 100 ms: one message, and a second one only after a new TrackMouseEvent\n  first hover seen true\n  second hover without a request (300 ms more): false\n  second hover after a new request: true\n  cursor (208,191) over A\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 5678
+    }
+  ]
+}

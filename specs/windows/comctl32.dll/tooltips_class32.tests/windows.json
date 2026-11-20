@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "640cf2d46e54",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T09:06:50Z",
+  "tests": [
+    {
+      "name": "mlv_tip_tool",
+      "exe_sha256": "f6ab06831ee27db1b06d82f7367c44cf0c68171e00deb74eb9fb918f6bba0d3d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAp0b29sdGlwIHdpbmRvdyBjcmVhdGVkIHRydWUKVFRNX0FERFRPT0xXIHdpdGggY2JTaXplIDcyOiByZXR1cm5zIDAsIHRvb2wgY291bnQgMApUVE1fQUREVE9PTFcgd2l0aCBjYlNpemUgNjQ6IHJldHVybnMgMSwgdG9vbCBjb3VudCAxClRUTV9BRERUT09MVyB3aXRoIGNiU2l6ZSA0ODogcmV0dXJucyAxLCB0b29sIGNvdW50IDIKVFRNX0FERFRPT0xXIHdpdGggY2JTaXplIDQwOiByZXR1cm5zIDEsIHRvb2wgY291bnQgMwpUVE1fQUREVE9PTFcgd2l0aCBjYlNpemUgMDogcmV0dXJucyAxLCB0b29sIGNvdW50IDQKdG9vbHRpcCB2aXNpYmxlIGJlZm9yZSBhY3RpdmF0aW9uIDAKYWZ0ZXIgVFRNX1RSQUNLQUNUSVZBVEUgMTogdmlzaWJsZSAxCiAgcGxhY2VkIGF0IHRoZSB0cmFja2VkIHBvc2l0aW9uOiBsZWZ0IHRydWUgdG9wIHRydWUKICBtb3ZlZCBieSBUVE1fVFJBQ0tQT1NJVElPTjogbGVmdCB0cnVlIHRvcCB0cnVlCmFmdGVyIFRUTV9UUkFDS0FDVElWQVRFIDA6IHZpc2libGUgMAp3aW5kb3cgc3R5bGUgaGFzIFdTX1BPUFVQIHRydWUsIFdTX0VYX1RPUE1PU1QgdHJ1ZSwgV1NfRVhfVE9PTFdJTkRPVyB0cnVlLCBXU19FWF9UUkFOU1BBUkVOVCBmYWxzZQpUVE1fREVMVE9PTFcgcmV0dXJucyAwLCB0b29sIGNvdW50IDMKICBBIFdNX1NFVENVUlNPUiB3aW5kb3c9QSBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQSBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTEwMCw2MAogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBBCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\ntooltip window created true\nTTM_ADDTOOLW with cbSize 72: returns 0, tool count 0\nTTM_ADDTOOLW with cbSize 64: returns 1, tool count 1\nTTM_ADDTOOLW with cbSize 48: returns 1, tool count 2\nTTM_ADDTOOLW with cbSize 40: returns 1, tool count 3\nTTM_ADDTOOLW with cbSize 0: returns 1, tool count 4\ntooltip visible before activation 0\nafter TTM_TRACKACTIVATE 1: visible 1\n  placed at the tracked position: left true top true\n  moved by TTM_TRACKPOSITION: left true top true\nafter TTM_TRACKACTIVATE 0: visible 0\nwindow style has WS_POPUP true, WS_EX_TOPMOST true, WS_EX_TOOLWINDOW true, WS_EX_TRANSPARENT false\nTTM_DELTOOLW returns 0, tool count 3\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1248
+    }
+  ]
+}

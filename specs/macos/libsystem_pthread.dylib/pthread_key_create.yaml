@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_key_create.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_key_create.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_key_create
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_key_create(&key, destructor) makes a thread-specific data key and returns 0. A new key reads NULL
+  in every thread, and each thread has its own value (a second thread sees NULL while the creator holds 5).
+  Keys are numbers from a small table: the first ones observed are 258 and 259; PTHREAD_KEYS_MAX is 512
+  (<limits.h>) and 507 more keys could be made on top of the ones in use; when it is used up pthread_key_create
+  returns EAGAIN (35); pthread_key_delete of a key frees its number and the next create reuses it, and the reused key reads NULL in every thread (also main's old value). pthread_key_delete does not call
+  any destructor. A destructor runs when a thread ends with a non-NULL value for the key, called with that value
+  (7 in the test); a NULL value gets no call. Several keys' destructors all run. A destructor that sets the value
+  again is called again, up to PTHREAD_DESTRUCTOR_ITERATIONS = 4 times in all, then dropped (4 calls observed).
+  sizeof(pthread_key_t) is 8. Same on both architectures.
+returns:
+  "success": "0, *key set"
+errors:
+  "EAGAIN": "35: all 512 keys in use"
+  "EINVAL": "22: pthread_key_delete of a key that is not in use, or out of range"
+side_effects: "takes a key number from the process-wide table"
+threading: "keys are process wide, values per thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

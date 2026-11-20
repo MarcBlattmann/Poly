@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_create.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_create.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_create
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_create(&thread, attr, start, arg) starts a thread that runs start(arg) and returns 0; attr may be
+  NULL. pthread_t is a pointer-sized (8 byte) value; inside the new thread pthread_self() equals the id the
+  creator received and differs from the creator's. The start routine's return value (or pthread_exit's) reaches
+  pthread_join. 64 threads were alive at the same time, each with its own argument, result and a stack that
+  does not overlap the others'. A thread can create threads, and a thread whose creator has already ended can be
+  joined by another thread. With a detached attribute (PTHREAD_CREATE_DETACHED) the thread runs and cannot be
+  joined. A stack size set in the attribute is really usable: 4 MiB (3000 KiB deep recursion), 64 KiB (20 KiB
+  deep), 8 MiB, 32 MiB (30 MiB deep) and the default 512 KiB (256 KiB deep) all worked. The thread starts with no
+  name (it does not inherit its creator's). The thread's stack as reported by pthread_get_stacksize_np is the
+  requested size on x86_64 and 12288 bytes more on arm64 (see that entry). Same behaviour on both architectures
+  otherwise.
+returns:
+  "success": "0, *thread set"
+errors:
+  "EAGAIN": "35: not reached in the tests (no thread limit was hit with 200 threads)"
+side_effects: "creates a thread"
+threading: "the new thread runs concurrently; the creating thread's pthread_create returns after the id is stored"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

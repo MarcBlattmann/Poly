@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/WM_MOUSEHOVER.yaml
+id: windows/api/user32.dll/WM_MOUSEHOVER
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, one monitor 1920x1080 at 100 %, 96 dpi), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner's \"keeper\" window in the foreground; the pointer is parked at (1500, 600) and moved only by SetCursorPos, SendInput button events never reach a window of another process; no mouse is attached; every test ran three times with identical output; the test programs carry no manifest (common controls 5.82, no visual styles)"
+  observed_by: spec-win-mouseleave
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: TrackMouseEvent, TRACKMOUSEEVENT, WM_MOUSELEAVE, WM_NCMOUSELEAVE, WM_MOUSEHOVER, WM_MOUSEMOVE, WM_CAPTURECHANGED, WM_SETCURSOR, WM_NCHITTEST, SetCapture, ReleaseCapture, GetCapture, WindowFromPoint, SetCursorPos, GetMessagePos, "About Mouse Input", "Tooltip Controls", the tooltip messages TTM_*; winuser.h and commctrl.h for constants and layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The hover timing Chrome's hover logic relies on: one message per request after the hover time, the hover rectangle, what cancels it. Observed with the pointer parked in A's client area; the system's hover time is 400 ms, hover rectangle width 4 and height 4 (SPI_GETMOUSEHOVERTIME 0x66, SPI_GETMOUSEHOVERWIDTH 0x62, SPI_GETMOUSEHOVERHEIGHT 0x64).
+interface:
+  signature: "WM_MOUSEHOVER (0x02A1), wParam the key flags, lParam the client coordinates of the pointer: posted when the pointer has rested over a window that asked with TrackMouseEvent(TME_HOVER)"
+rules:
+  timing: "TME_HOVER with 100 ms and a pointer that does not move: TME_QUERY gives flags 1 and hover time 100; the message comes within 50 to 350 ms; afterwards the query gives flags 0 (the request is used up). 200 ms: within 100 to 450 ms. HOVER_DEFAULT (0xFFFFFFFF): the query reports the hover time 400; nothing within 200 ms, the message within 200 to 650 ms. keys 0, client coordinates of the pointer."
+  one_per_request: "One message per request. A second WM_MOUSEHOVER comes only after TrackMouseEvent is called again: none within 300 ms of the first, one after the new request."
+  rectangle: "A move of 1 pixel (inside the 4x4 rectangle) does not restart the hover: the pointer move message is delivered (client 101,60) and the hover message follows at the original time (a 300 ms request with a move at 100 ms still hovered, at client 101,60). A move of 8 pixels restarts the timer: the hover message comes after the move, at the new position (client 108,60) and the request is used up."
+  covering: "A popup shown over the pointer before the hover time: no WM_MOUSEHOVER for A (the popup gets the synthesized move), and TME_QUERY then gives flags 0. With TME_HOVER | TME_LEAVE the same plus WM_MOUSELEAVE for A. With TME_HOVER alone A gets no WM_MOUSELEAVE."
+  hidden: "A hidden before the hover time: no WM_MOUSEHOVER."
+  cancel: "TME_CANCEL | TME_HOVER at 100 ms of a 300 ms request returns 1 and no message follows."
+errors:
+  none: "The message has no error result."
+side_effects: "none beyond the rules above"
+threading: "mouse tracking and mouse capture belong to the thread that asked; a window belongs to the thread that created it; the cover tests with a window of another thread use one extra thread"
+ordering: []
+timing:
+  typical: "the messages after a change arrive within about 60 ms"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations and a message log; run with poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because pointer, hit testing and showing windows need the visible desktop. Window A (300x200 at 100,100, WS_EX_NOACTIVATE, never activated) has the pointer in its client area at screen (208,191) (or in its caption at (200,115)); it asks for TME_LEAVE where the rule says so. Every scene prints the mouse messages of every window of the test in the order they arrived, under the window's tag letter (A, B; handles are never printed), repeated identical lines once, then the pointer position and what WindowFromPoint reports; the scenes start with the pointer settled and the log empty, and wait 350 ms at the end. Times are checked against envelopes, never printed. The pointer is parked at (1500, 600) between scenes and put back at the end.
+not_covered: >
+  TME_HOVER with a pointer that moves by less than the rectangle repeatedly, non-default SPI hover settings, hover while a button is down, hover over a child window, the exact delay (an envelope only).

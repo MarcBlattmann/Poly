@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "640cf2d46e54",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T09:06:50Z",
+  "tests": [
+    {
+      "name": "mlv_synth_changes",
+      "exe_sha256": "92ba9039ad9315825a08ad13f017271a845134efaa5278bfc14e1b7b5dc6e793",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBBIHNob3duIHdpdGggdGhlIHBvaW50ZXIgYWxyZWFkeSBvbiBpdHMgcGxhY2UKICBBIFdNX1NIT1dXSU5ET1cgc2hvdz0xIHN0YXR1cz0wCiAgQSBXTV9TRVRDVVJTT1Igd2luZG93PUEgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD0xMDAsNjAKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQQo9PSBwb3B1cCBCIHNob3duIG92ZXIgdGhlIHBvaW50ZXIKICBCIFdNX1NIT1dXSU5ET1cgc2hvdz0xIHN0YXR1cz0wCiAgQiBXTV9TRVRDVVJTT1Igd2luZG93PUIgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEIgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD01OCw3MQogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBCCj09IEEgbW92ZWQgYnkgMTAgcGl4ZWxzCiAgQSBXTV9TRVRDVVJTT1Igd2luZG93PUEgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD05MCw1MAogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBBCj09IEEgcmVzaXplZCAodGhlIGNsaWVudCBhcmVhIGJlY29tZXMgMjAgcGl4ZWxzIHdpZGVyKQogIEEgV01fU0VUQ1VSU09SIHdpbmRvdz1BIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBBIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9MTAwLDYwCiAgY3Vyc29yICgyMDgsMTkxKSBvdmVyIEEKPT0gcG9wdXAgQiBvdmVyIHRoZSBwb2ludGVyIGhpZGRlbiBhZ2FpbjogQSBnZXRzIHRoZSBtb3ZlCiAgQiBXTV9TSE9XV0lORE9XIHNob3c9MCBzdGF0dXM9MAogIEEgV01fU0VUQ1VSU09SIHdpbmRvdz1BIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBBIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9MTAwLDYwCiAgY3Vyc29yICgyMDgsMTkxKSBvdmVyIEEKPT0gcG9wdXAgQiBvdmVyIHRoZSBwb2ludGVyIGRlc3Ryb3llZDogQSBnZXRzIHRoZSBtb3ZlCiAgQiBXTV9ERVNUUk9ZIHc9MHgwIGw9MHgwCiAgQSBXTV9TRVRDVVJTT1Igd2luZG93PUEgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD0xMDAsNjAKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQQo9PSBBIG9ubHkgZGlzYWJsZWQ6IG5vIG1vdmUKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== A shown with the pointer already on its place\n  A WM_SHOWWINDOW show=1 status=0\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\n== popup B shown over the pointer\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=58,71\n  cursor (208,191) over B\n== A moved by 10 pixels\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=90,50\n  cursor (208,191) over A\n== A resized (the client area becomes 20 pixels wider)\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\n== popup B over the pointer hidden again: A gets the move\n  B WM_SHOWWINDOW show=0 status=0\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\n== popup B over the pointer destroyed: A gets the move\n  B WM_DESTROY w=0x0 l=0x0\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\n== A only disabled: no move\n  cursor (208,191) over A\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 6239
+    }
+  ]
+}

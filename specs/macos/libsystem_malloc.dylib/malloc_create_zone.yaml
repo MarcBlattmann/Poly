@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_malloc.dylib/malloc_create_zone.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in malloc_create_zone.tests/macos.json.
+id: macos/api/libsystem_malloc.dylib/malloc_create_zone
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  malloc_create_zone(start_size, flags) makes a new zone (version 16, no name) and registers it at once:
+  malloc_get_all_zones lists it, last. malloc_set_zone_name(zone, name) gives it a name, copied (changing the
+  caller's buffer afterwards changes nothing), malloc_get_zone_name reads it back, a NULL name clears it. Blocks
+  allocated from the zone with malloc_zone_malloc belong to it. malloc_zone_unregister removes it from the list (the
+  count drops by one and it is no longer listed; it still allocates, and its blocks are then unknown to malloc_size,
+  size 0), malloc_zone_register puts it back, malloc_destroy_zone removes and frees it; blocks of another zone are
+  not affected. Several zones are listed in creation order. malloc_get_all_zones(0, NULL, &zones, &count) returns
+  0 (KERN_SUCCESS); the first zone is the default zone. Zones that exist at start: arm64 two ("DefaultMallocZone", "objc-class_rw_t");
+  x86_64 three (an extra "MallocHelperZone" between them). The "DefaultPurgeableMallocZone" is added to the list, last, the first time
+  malloc_default_purgeable_zone() is called (also at start-up of a program that uses it). malloc() alone does not add a zone.
+returns:
+  "zone": "pointer to the new zone"
+errors:
+  "none": "no error result"
+side_effects: "adds a zone to the process's list"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "zones at start: arm64 2, x86_64 3 (extra MallocHelperZone)"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/WM_NCMOUSELEAVE.yaml
+id: windows/api/user32.dll/WM_NCMOUSELEAVE
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, one monitor 1920x1080 at 100 %, 96 dpi), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner's \"keeper\" window in the foreground; the pointer is parked at (1500, 600) and moved only by SetCursorPos, SendInput button events never reach a window of another process; no mouse is attached; every test ran three times with identical output; the test programs carry no manifest (common controls 5.82, no visual styles)"
+  observed_by: spec-win-mouseleave
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: TrackMouseEvent, TRACKMOUSEEVENT, WM_MOUSELEAVE, WM_NCMOUSELEAVE, WM_MOUSEHOVER, WM_MOUSEMOVE, WM_CAPTURECHANGED, WM_SETCURSOR, WM_NCHITTEST, SetCapture, ReleaseCapture, GetCapture, WindowFromPoint, SetCursorPos, GetMessagePos, "About Mouse Input", "Tooltip Controls", the tooltip messages TTM_*; winuser.h and commctrl.h for constants and layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The non-client counterpart of WM_MOUSELEAVE. DefWindowProc tracks the non-client area by itself: a window whose caption the pointer is in gets WM_NCMOUSELEAVE without any request, also when the pointer does not move. Observed with the pointer in A's caption (WM_NCHITTEST 2, HTCAPTION, screen point (200,115)).
+interface:
+  signature: "WM_NCMOUSELEAVE (0x02A2), wParam 0, lParam 0: posted when the pointer leaves the non-client area of a window that is tracked for it"
+rules:
+  covered: "A popup B shown over the pointer in the caption: B gets WM_SETCURSOR and WM_MOUSEMOVE (client 50,15), then A gets WM_NCMOUSELEAVE. The same without any TrackMouseEvent call by the program, and the same when the program had asked only for TME_LEAVE (the client request): the window gets WM_NCMOUSELEAVE and no WM_MOUSELEAVE, because the pointer was never in the client area."
+  window_changes: "A hidden with the pointer in the caption: WM_NCMOUSELEAVE. A moved away: WM_NCMOUSELEAVE. The pointer moved out of the window from the caption: WM_NCMOUSELEAVE."
+  between_areas: "TME_NONCLIENT | TME_LEAVE with the pointer in the caption: TME_QUERY gives flags 0x12; the pointer moved into the client area by SetCursorPos: A gets WM_SETCURSOR, WM_MOUSEMOVE (client 100,60) and then WM_NCMOUSELEAVE. The pointer in the client area with a TME_LEAVE request, then moved into the caption: A gets WM_SETCURSOR (hit 2), WM_NCMOUSEMOVE (hit 2, screen 200,115) and then WM_MOUSELEAVE."
+  asked_outside: "TME_NONCLIENT | TME_LEAVE while the pointer is in the client area returns 1 and A gets WM_NCMOUSELEAVE at once."
+errors:
+  none: "The message has no error result."
+side_effects: "none beyond the rules above"
+threading: "mouse tracking and mouse capture belong to the thread that asked; a window belongs to the thread that created it; the cover tests with a window of another thread use one extra thread"
+ordering: []
+timing:
+  typical: "the messages after a change arrive within about 60 ms"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations and a message log; run with poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because pointer, hit testing and showing windows need the visible desktop. Window A (300x200 at 100,100, WS_EX_NOACTIVATE, never activated) has the pointer in its client area at screen (208,191) (or in its caption at (200,115)); it asks for TME_LEAVE where the rule says so. Every scene prints the mouse messages of every window of the test in the order they arrived, under the window's tag letter (A, B; handles are never printed), repeated identical lines once, then the pointer position and what WindowFromPoint reports; the scenes start with the pointer settled and the log empty, and wait 350 ms at the end. Times are checked against envelopes, never printed. The pointer is parked at (1500, 600) between scenes and put back at the end.
+not_covered: >
+  TME_NONCLIENT | TME_HOVER (WM_NCMOUSEHOVER), borders and caption buttons other than the caption itself, a menu bar, windows with WS_EX_NOACTIVATE other than the test's A.
