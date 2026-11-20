@@ -16,7 +16,9 @@
 //! yet); the `$INODE64` forms are the 64-bit `stat` calls. The functions
 //! the SDK declares over a trap with the same arguments
 //! (`mach_port_allocate` …) are the trap itself; `semaphore_timedwait*`
-//! split their `mach_timespec_t`.
+//! split their `mach_timespec_t`; `posix_spawn` maps its six C arguments
+//! to the call's five and returns the errno (`__posix_spawn` is the raw
+//! call).
 
 /// A BSD wrapper per (name, number), then the error tail.
 #[cfg(target_arch = "x86_64")]
@@ -135,7 +137,7 @@ bsd! {
     "fremovexattr" = 239,
     "listxattr" = 240,
     "flistxattr" = 241,
-    "posix_spawn" = 244, "__posix_spawn" = 244,
+    "__posix_spawn" = 244,
     "minherit" = 250,
     "__sysctlbyname" = 274,
     "__shared_region_check_np" = 294,
@@ -262,6 +264,36 @@ bsd! {
 
 #[cfg(target_arch = "x86_64")]
 core::arch::global_asm!(
+    // posix_spawn(pid, path, file_actions, attrp, argv, envp): the C call
+    // has six arguments, BSD call 244 five (pid, path, descriptor, argv,
+    // envp; specs/macos/bsd/posix_spawn.yaml). The descriptor of file
+    // actions and attributes is 0: v0 has neither (a non-empty one is
+    // EINVAL). The result is the errno itself, as POSIX has it, not -1.
+    ".globl _posix_spawn",
+    ".p2align 4",
+    "_posix_spawn:",
+    "    test rdx, rdx",
+    "    je 4f",
+    "    cmp qword ptr [rdx], 0",
+    "    jne 6f",
+    "4:",
+    "    test rcx, rcx",
+    "    je 5f",
+    "    cmp qword ptr [rcx], 0",
+    "    jne 6f",
+    "5:",
+    "    xor edx, edx",
+    "    mov r10, r8",
+    "    mov r8, r9",
+    "    mov eax, 0x2000000 + 244",
+    "    syscall",
+    "    jb 7f",
+    "    xor eax, eax",
+    "7:",
+    "    ret",
+    "6:",
+    "    mov eax, 22",
+    "    ret",
     // pipe(fds): the two descriptors come back in rax and rdx.
     ".globl _pipe",
     ".p2align 4",
@@ -299,6 +331,35 @@ core::arch::global_asm!(
     "    mov r10, rcx",
     "    mov eax, 0x1000000 + 39",
     "    syscall",
+    "    ret",
+);
+
+// The same on arm64: x0 pid, x1 path, x2 file actions, x3 attributes, x4
+// argv, x5 envp into BSD call 244's (pid, path, 0, argv, envp).
+#[cfg(target_arch = "aarch64")]
+core::arch::global_asm!(
+    ".globl _posix_spawn",
+    ".p2align 2",
+    "_posix_spawn:",
+    "    cbz x2, 4f",
+    "    ldr x9, [x2]",
+    "    cbnz x9, 6f",
+    "4:",
+    "    cbz x3, 5f",
+    "    ldr x9, [x3]",
+    "    cbnz x9, 6f",
+    "5:",
+    "    mov x2, #0",
+    "    mov x3, x4",
+    "    mov x4, x5",
+    "    mov x16, #244",
+    "    svc #0x80",
+    "    b.cs 7f",
+    "    mov w0, #0",
+    "7:",
+    "    ret",
+    "6:",
+    "    mov w0, #22",
     "    ret",
 );
 

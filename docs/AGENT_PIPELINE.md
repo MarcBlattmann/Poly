@@ -517,6 +517,16 @@ with them without the PC). The hand-off works as for Linux entries.
 
 **Test names are unique** (`coverage check`, run by `ci coverage` and `ci lint`): `win build` builds the tests of every entry it is given, and the corpus, as one Cargo package with one binary per file, and results are looked up by name, so two files with the same name (`uc_basic` of two entries ended a CI run once) cannot live together. The check lists every name used by two entries among the visible tests and the corpus (an error); where the held-out store is present it also warns about held-out names shared with another entry (`--strict-heldout` makes those errors), reading only the manifests. Prefix a test's name with something of its entry.
 
+**Named pipes: a client that starts right after the server's `DisconnectNamedPipe` must retry** (test-hygiene-3). After a
+disconnect the instance is not listening until the server calls `ConnectNamedPipe`, so a client thread that opens the pipe in
+that window gets `ERROR_PIPE_BUSY` (231; Poly: `STATUS_PIPE_NOT_AVAILABLE`). A client that opens once, with no retry, loses
+the race when its thread runs first (CI runners with overcommitted vCPUs; Windows never loses it in practice): the open fails
+and the server's `ConnectNamedPipe` then waits for ever, a whole-test timeout. The clients of `ImpersonateNamedPipeClient`'s
+tests (#409) loop on 231 with `Sleep(5)` (as callers of `WaitNamedPipeW` do). Proof that it works: with a `Sleep(300)` put
+between the client start and the server's `ConnectNamedPipe`, the old tests hang on Windows and on Poly, the retrying ones pass
+with the recorded output. Tests that open a pipe from the same thread as the server (the kernel32 pipe entries) are not
+affected: they are sequential, and `dnp_basic` asserts the busy answer on purpose.
+
 **A test waits for its child before it reads the child's exit code** (`coverage check` warns): `GetExitCodeProcess` answers 259 (`STILL_ACTIVE`) until the process has ended, so a read that comes before any wait in its function (`WaitForSingleObject`, `wait_exit`, `.finish()`, ...) depends on timing and fails on a loaded CI runner. The check lists such reads (`tools/coverage/src/childwait.rs`); a read on purpose (a suspended or running process answering 259) goes into `tools/coverage/childwait-baseline.txt` as `path:function` once someone has looked at it. The check does not look at the length of the wait: a bound of 5 or 10 s for a child is short under CI load (`finish()` of the copied child helper waits 10 s, then ends the child and waits 5 s); give a wait for a child 30 s or more.
 
 **Keeping green Windows entries green** ([ADR 0099](adr/0099-cpp-exception-handling-in-msvcrt.md)):
@@ -659,6 +669,16 @@ architecture and must print the same bytes each time. A value may differ
 between x86_64 and arm64 (the page size); each architecture is recorded on
 its own. A test starts in a fresh, empty scratch directory (use relative
 paths), with an empty environment.
+
+**Tests of libSystem's own functions** (entries `macos/api/libsystem_c.dylib/...`,
+`libsystem_pthread`, `libsystem_malloc`, `libdyld`) are the exception: such a
+test says `poly-mac: libsystem` in a comment among its first 30 lines, includes
+`poly_mlibc.h` (`tests/macos/include`) instead and calls the function under test
+through libSystem. It still reports with raw `write` calls only (`check`,
+`check_str`, `value`, `finish`, the same output format), so a broken function
+cannot hide behind its own output. `mac build` lets exactly these tests import
+libSystem symbols and still refuses every other library; all other tests import
+nothing.
 
 ```sh
 cargo xtask pipeline mac build [--tests-dir DIR]... [--tests a,b]   # target/pipeline/macos/bin/<arch>/, manifest.json

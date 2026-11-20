@@ -155,22 +155,25 @@ unsafe extern "C" fn valloc(size: usize) -> *mut c_void {
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn malloc_size(p: *const c_void) -> usize {
-    // SAFETY: as for `free`; a pointer malloc did not return gives 0.
+    // SAFETY: the heap reads nothing outside its arenas; a pointer malloc
+    // did not return, or a freed one, gives 0.
     unsafe { heap().usable_size(p as *mut u8) }.unwrap_or(0)
 }
 
 /// `malloc_good_size`: the size a request of `size` bytes really gets.
 #[unsafe(no_mangle)]
 extern "C" fn malloc_good_size(size: usize) -> usize {
-    size.saturating_add(16).max(32).checked_next_power_of_two().map_or(size, |b| b - 16)
+    poly_libsystem::heap::good_size(size)
 }
 
 // ------------------------------------------------------------- zones
 
-/// `malloc_zone_t` (`<malloc/malloc.h>`): the fields up to
-/// `pressure_relief`. Poly has one zone, the default one; every zone
-/// function is the plain allocator. Programs may call through the
-/// function pointers (SQLite calls `size`).
+/// `malloc_zone_t` (`<malloc/malloc.h>`, 200 bytes). The default zone has
+/// version 10 and every function filled in, and calling through the table
+/// agrees with malloc, free and malloc_size (the malloc_default_zone
+/// sheet); programs do call through it (SQLite calls `size`). Poly has one
+/// zone so far: `malloc_create_zone` gives the default one (separate zones,
+/// as the malloc_create_zone sheet describes them, are a later step).
 #[repr(C)]
 pub struct Zone {
     reserved: [usize; 2],
@@ -182,13 +185,15 @@ pub struct Zone {
     realloc: unsafe extern "C" fn(*mut Zone, *mut c_void, usize) -> *mut c_void,
     destroy: unsafe extern "C" fn(*mut Zone),
     zone_name: *const u8,
-    batch_malloc: usize,
-    batch_free: usize,
-    introspect: usize,
+    batch_malloc: unsafe extern "C" fn(*mut Zone, usize, *mut *mut c_void, u32) -> u32,
+    batch_free: unsafe extern "C" fn(*mut Zone, *mut *mut c_void, u32),
+    introspect: *const u8,
     version: u32,
-    memalign: usize,
-    free_definite_size: usize,
-    pressure_relief: usize,
+    memalign: unsafe extern "C" fn(*mut Zone, usize, usize) -> *mut c_void,
+    free_definite_size: unsafe extern "C" fn(*mut Zone, *mut c_void, usize),
+    pressure_relief: unsafe extern "C" fn(*mut Zone, usize) -> usize,
+    claimed_address: unsafe extern "C" fn(*mut Zone, *const c_void) -> u32,
+    rest: [usize; 7],
 }
 
 unsafe extern "C" fn zone_size(_: *mut Zone, p: *const c_void) -> usize {
@@ -234,14 +239,63 @@ static DEFAULT_ZONE: crate::Global<Zone> = crate::Global::new(Zone {
     realloc: zone_realloc,
     destroy: zone_destroy,
     zone_name: c"DefaultMallocZone".as_ptr() as *const u8,
-    batch_malloc: 0,
-    batch_free: 0,
-    introspect: 0,
-    version: 0,
-    memalign: 0,
-    free_definite_size: 0,
-    pressure_relief: 0,
+    batch_malloc: zone_batch_malloc,
+    batch_free: zone_batch_free,
+    introspect: INTROSPECT.as_ptr(),
+    version: 10,
+    memalign: zone_memalign,
+    free_definite_size: zone_free_definite_size,
+    pressure_relief: zone_pressure_relief,
+    claimed_address: zone_claimed_address,
+    rest: [0; 7],
 });
+
+/// The introspection table the zone points to (`malloc_introspection_t`):
+/// nothing in it yet.
+static INTROSPECT: [u8; 256] = [0; 256];
+
+unsafe extern "C" fn zone_batch_malloc(z: *mut Zone, size: usize, out: *mut *mut c_void, n: u32) -> u32 {
+    let mut made = 0;
+    while made < n {
+        // SAFETY: the zone contract: `out` holds `n` pointers.
+        let p = unsafe { zone_malloc(z, size) };
+        if p.is_null() {
+            break;
+        }
+        // SAFETY: as above.
+        unsafe { *out.add(made as usize) = p };
+        made += 1;
+    }
+    made
+}
+
+unsafe extern "C" fn zone_batch_free(z: *mut Zone, ptrs: *mut *mut c_void, n: u32) {
+    for i in 0..n as usize {
+        // SAFETY: the zone contract: `ptrs` holds `n` blocks of the zone.
+        unsafe { zone_free(z, *ptrs.add(i)) };
+    }
+}
+
+unsafe extern "C" fn zone_memalign(_: *mut Zone, align: usize, size: usize) -> *mut c_void {
+    let mut p = core::ptr::null_mut();
+    // SAFETY: as posix_memalign.
+    let r = unsafe { posix_memalign(&mut p, align.max(core::mem::size_of::<usize>()), size) };
+    if r == 0 { p } else { core::ptr::null_mut() }
+}
+
+unsafe extern "C" fn zone_free_definite_size(z: *mut Zone, p: *mut c_void, _size: usize) {
+    // SAFETY: as free.
+    unsafe { zone_free(z, p) }
+}
+
+unsafe extern "C" fn zone_pressure_relief(_: *mut Zone, _goal: usize) -> usize {
+    0
+}
+
+unsafe extern "C" fn zone_claimed_address(_: *mut Zone, p: *const c_void) -> u32 {
+    // SAFETY: malloc_size answers 0 for an address it did not hand out.
+    u32::from(unsafe { malloc_size(p) } != 0)
+}
 
 fn default_zone() -> *mut Zone {
     DEFAULT_ZONE.0.get()
@@ -264,9 +318,12 @@ extern "C" fn malloc_destroy_zone(_z: *mut Zone) {}
 #[unsafe(no_mangle)]
 extern "C" fn malloc_set_zone_name(_z: *mut Zone, _name: *const u8) {}
 
+/// The zone of a block: the default zone for one malloc handed out, NULL
+/// for NULL or any other address (the malloc_default_zone sheet).
 #[unsafe(no_mangle)]
-extern "C" fn malloc_zone_from_ptr(_p: *const c_void) -> *mut Zone {
-    default_zone()
+unsafe extern "C" fn malloc_zone_from_ptr(p: *const c_void) -> *mut Zone {
+    // SAFETY: malloc_size answers 0 for an address it did not hand out.
+    if p.is_null() || unsafe { malloc_size(p) } == 0 { core::ptr::null_mut() } else { default_zone() }
 }
 
 #[unsafe(no_mangle)]
@@ -292,3 +349,5 @@ unsafe extern "C" fn malloc_zone_free(_z: *mut Zone, p: *mut c_void) {
     // SAFETY: as free.
     unsafe { free(p) }
 }
+
+const _: () = assert!(core::mem::size_of::<Zone>() == 200);

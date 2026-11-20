@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "malloc_zone_malloc_failure",
+      "source_sha256": "fb676027814e1fd9e321201b5f91573447425670a1e3bc82a3a7a6177376dd26",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fc7149914e7b220b318a4790770bf8413a296a269b03aa1c90feb982afecca9c",
+          "exit_code": 0,
+          "stdout": "ok zone_malloc(SIZE_MAX) is NULL\nvalue errno after zone_malloc(SIZE_MAX) (the zone call leaves errno alone) 0\nok zone_calloc overflow is NULL\nok malloc(1<<62) is NULL with ENOMEM\nok calloc(2^32, 2^32) is NULL with ENOMEM\nok realloc to SIZE_MAX fails with ENOMEM\nok and leaves the original block valid\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a594faff51af1900c4fbbdfe209c9f2a3a2eb89ebe28a734b31c991e4850bcd6",
+          "exit_code": 0,
+          "stdout": "ok zone_malloc(SIZE_MAX) is NULL\nvalue errno after zone_malloc(SIZE_MAX) (the zone call leaves errno alone) 0\nok zone_calloc overflow is NULL\nok malloc(1<<62) is NULL with ENOMEM\nok calloc(2^32, 2^32) is NULL with ENOMEM\nok realloc to SIZE_MAX fails with ENOMEM\nok and leaves the original block valid\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "malloc_zone_malloc_more",
+      "source_sha256": "57a700d19375e20cf88fca366ecb13bc6f6c4bd4ba5451bdb75357b2bdd10435",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6e20c0e6dcccbbfc709575d65d8516860169f411d243ebab75b3b00f2ad99d98",
+          "exit_code": 0,
+          "stdout": "ok 1000 blocks of two zones keep their owner and their content\nok freed through free() and malloc_zone_free in reverse order\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "81a078678d105eac731786106737a0b286db09477e59c4b07903431561a54dd9",
+          "exit_code": 0,
+          "stdout": "ok 1000 blocks of two zones keep their owner and their content\nok freed through free() and malloc_zone_free in reverse order\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

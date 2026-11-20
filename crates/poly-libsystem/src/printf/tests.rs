@@ -115,17 +115,57 @@ fn characters_strings_and_pointers() {
 }
 
 #[test]
-fn errors() {
+fn errors_and_odd_formats() {
     let mut out = Vec::new();
-    let mut none = Slots { ints: &[0x20ac], doubles: &[] };
+    // Above 0xFF: EILSEQ (the snprintf sheet); up to 0xFF the byte itself.
     // SAFETY: the format names the one integer.
-    assert_eq!(unsafe { format(b"%lc", &mut none, &mut out) }, Err(Error::Encoding));
-    // SAFETY: as above.
-    assert_eq!(unsafe { format(b"%1$d", &mut Slots { ints: &[1], doubles: &[] }, &mut out) }, Err(Error::Invalid));
+    assert_eq!(unsafe { format(b"%lc", &mut Slots { ints: &[0x20ac], doubles: &[] }, &mut out) }, Err(Error::Encoding));
+    let mut bytes = Vec::new();
+    // SAFETY: the format names the one integer.
+    assert_eq!(unsafe { format(b"%lc", &mut Slots { ints: &[0xe9], doubles: &[] }, &mut bytes) }, Ok(1));
+    assert_eq!(bytes, [0xe9]);
+    let w: [u32; 2] = [0x100, 0];
+    let mut wide = Slots { ints: &[w.as_ptr() as u64], doubles: &[] };
+    // SAFETY: the one argument is a wide string.
+    let r = unsafe { format(b"%ls", &mut wide, &mut out) };
+    assert_eq!(r, Err(Error::Encoding));
+    // Unknown conversions print their letter; %5% pads.
+    assert_eq!(f("%b %m %y %@", &[], &[]), "b m y @");
+    assert_eq!(f("[%5%]", &[], &[]), "[    %]");
+    // A format that ends inside a conversion prints nothing more.
+    assert_eq!(f("abc%", &[], &[]), "abc");
+    assert_eq!(f("x%q", &[], &[]), "x");
+    assert_eq!(f("y%z", &[], &[]), "y");
+    // A number 0, or one beyond the table, is invalid.
     // SAFETY: no argument is read.
-    assert_eq!(unsafe { format(b"%k", &mut Slots { ints: &[], doubles: &[] }, &mut out) }, Err(Error::Invalid));
-    // SAFETY: as above.
-    assert_eq!(unsafe { format(b"abc%", &mut Slots { ints: &[], doubles: &[] }, &mut out) }, Err(Error::Invalid));
+    assert_eq!(unsafe { format(b"%0$d", &mut Slots { ints: &[1], doubles: &[] }, &mut out) }, Err(Error::Invalid));
+}
+
+#[test]
+fn positional_arguments() {
+    assert_eq!(f("%2$d %1$d", &[1, 2], &[]), "2 1");
+    assert_eq!(f("%1$s %1$s", &[b"ab\0".as_ptr() as u64], &[]), "ab ab");
+    // After a numbered conversion an unnumbered one takes the next number.
+    assert_eq!(f("%2$d %d", &[1, 2, 3], &[]), "2 3");
+    // Classes are read in argument order: here int, double, int.
+    assert_eq!(f("%3$d %2$.1f %1$d", &[10, 30], &[2.5]), "30 2.5 10");
+    assert_eq!(f("%1$*2$d|", &[7, 4], &[]), "   7|");
+    assert_eq!(f("%2$.*1$f", &[2], &[3.14159]), "3.14");
+}
+
+#[test]
+fn long_double_hexadecimal() {
+    // x86-64's 80-bit format as it is: 1.0 is 0x8p-3 (the snprintf sheet).
+    assert_eq!(d("%La", 1.0), "0x8p-3");
+    assert_eq!(d("%La", 0.0), "0x0p+0");
+    assert_eq!(d("%La", -2.0), "-0x8p-2");
+    assert_eq!(d("%LA", 255.0), "0XF.FP+4");
+    assert_eq!(d("%.1La", 1.0), "0x8.0p-3");
+    assert_eq!(d("%.0La", 1.75), "0xep-3");
+    assert_eq!(d("%La", f64::INFINITY), "inf");
+    assert_eq!(f64_to_x87(1.0), (1 << 63, 0x3fff));
+    assert_eq!(x87_to_f64(f64_to_x87(f64::from_bits(1)).0, f64_to_x87(f64::from_bits(1)).1), f64::from_bits(1));
+    assert_eq!(x87_to_f64(f64_to_x87(-123.456).0, f64_to_x87(-123.456).1), -123.456);
 }
 
 #[test]
@@ -289,4 +329,42 @@ fn apple_arm64_va_list_reads_8_byte_slots() {
     // SAFETY: the `%s` argument points to a NUL-terminated string.
     let n = unsafe { format(b"%d %s %.1f %Lf %c", &mut StackSlots(slots.as_ptr().cast()), &mut sink) }.unwrap();
     assert_eq!(&out[..n], b"7 x 2.5 1.250000 q");
+}
+
+/// The examples `specs/macos/libsystem_c.dylib/snprintf.yaml` gives.
+#[test]
+fn the_snprintf_sheets_examples() {
+    assert_eq!(f("%D %O %U", &[5, 8, 7], &[]), "5 10 7");
+    assert_eq!(i("%hhd", 300), "44");
+    assert_eq!(i("%hd", 70000), "4464");
+    assert_eq!(i("%u", -1), "4294967295");
+    assert_eq!(i("%#o", 8), "010");
+    assert_eq!(i("%#x", 0), "0");
+    assert_eq!(i("%.0d", 0), "");
+    assert_eq!(i("%05d", -7), "-0007");
+    assert_eq!(i("%'d", 1_234_567), "1234567");
+    assert_eq!(f("%#p", &[0], &[]), "0x0");
+    assert_eq!(f("%.2s|%10s", &[0, 0], &[]), "(n|    (null)");
+    assert_eq!(d("%f", 1.5), "1.500000");
+    assert_eq!(d("%f", -0.0), "-0.000000");
+    assert_eq!(d("%e", 12345.678), "1.234568e+04");
+    assert_eq!(d("%g", 0.0001), "0.0001");
+    assert_eq!(d("%g", 0.00001), "1e-05");
+    assert_eq!(d("%g", 123_456_789.0), "1.23457e+08");
+    assert_eq!(d("%.1g", 150.0), "2e+02");
+    assert_eq!(d("%.20f", 0.1), "0.10000000000000000555");
+    assert_eq!((d("%.0f", 0.5), d("%.0f", 1.5), d("%.0f", 2.5)), ("0".into(), "2".into(), "2".into()));
+    assert_eq!(d("%#.0f", 1.0), "1.");
+    assert_eq!(d("%05f", f64::NEG_INFINITY), " -inf");
+    assert_eq!(d("%+f", f64::INFINITY), "+inf");
+    assert_eq!(d("%a", 1.0), "0x1p+0");
+    assert_eq!(d("%A", 255.0), "0X1.FEP+7");
+    assert_eq!(d("%.2a", 1.0), "0x1.00p+0");
+    assert_eq!(d("%.400f", 1.0).len(), 402);
+    assert_eq!(i("%1500d", 1).len(), 1500);
+    let mut buf = [0xffu8; 4];
+    let mut b = Buffer { buf: &mut buf, len: 0 };
+    // SAFETY: the format names the one integer.
+    let n = unsafe { format(b"%c", &mut Slots { ints: &[0], doubles: &[] }, &mut b) }.unwrap();
+    assert_eq!((n, b.len, buf[0]), (1, 1, 0));
 }

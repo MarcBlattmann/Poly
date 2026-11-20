@@ -24,6 +24,7 @@
 //! under the name of another port's receive right is `KERN_RIGHT_EXISTS`.
 
 use crate::consts::{kern::*, msg::*, port::*};
+use crate::exc::HandlerTable;
 use crate::waitq::{ThreadId, WaitQueue};
 use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
 use alloc::vec::Vec;
@@ -114,6 +115,9 @@ struct Port {
     qlimit: usize,
     /// A semaphore's count.
     count: u32,
+    /// A port whose receive right the kernel keeps to wait for a reply (an
+    /// exception's): the death of a send-once right to it wakes the waiter.
+    kernel_reply: bool,
 }
 
 #[derive(Debug)]
@@ -246,6 +250,13 @@ pub struct Ipc {
     rcv_waiters: WaitQueue<RcvKey, WakeReason>,
     send_waiters: WaitQueue<PortId, WakeReason>,
     sem_waiters: WaitQueue<PortId, WakeReason>,
+    /// Exception handlers of tasks, threads and the host.
+    exc_task: BTreeMap<TaskId, HandlerTable>,
+    exc_thread: BTreeMap<ThreadId, HandlerTable>,
+    exc_host: HandlerTable,
+    /// Threads woken by a right that went away (a send-once right to a
+    /// kernel reply port), for the caller to unblock ([`Ipc::take_woken`]).
+    woken: Vec<ThreadId>,
 }
 
 impl Default for Ipc {
@@ -253,6 +264,9 @@ impl Default for Ipc {
         Self::new()
     }
 }
+
+mod mig;
+pub use mig::{Exception, NoThreads, Target, ThreadServer};
 
 const HEADER: usize = 24;
 const PORT_DESCRIPTOR: usize = 12;
@@ -277,6 +291,10 @@ impl Ipc {
             rcv_waiters: WaitQueue::new(),
             send_waiters: WaitQueue::new(),
             sem_waiters: WaitQueue::new(),
+            exc_task: BTreeMap::new(),
+            exc_thread: BTreeMap::new(),
+            exc_host: HandlerTable::default(),
+            woken: Vec::new(),
         };
         ipc.host_port = ipc.new_port(KObject::Host, None);
         ipc
@@ -300,6 +318,7 @@ impl Ipc {
                 seqno: 0,
                 qlimit: MACH_PORT_QLIMIT_DEFAULT,
                 count: 0,
+                kernel_reply: false,
             },
         );
         id
@@ -339,6 +358,7 @@ impl Ipc {
     pub fn destroy_thread(&mut self, thread: ThreadId) -> Vec<ThreadId> {
         let mut woken = Vec::new();
         self.cancel_waits(thread);
+        self.exc_thread.remove(&thread);
         if let Some(p) = self.thread_ports.remove(&thread) {
             self.destroy_port(p, &mut woken);
         }
@@ -350,12 +370,14 @@ impl Ipc {
     /// woken by that (receivers whose ports died).
     pub fn destroy_task(&mut self, task: TaskId) -> Vec<ThreadId> {
         let mut woken = Vec::new();
+        self.exc_task.remove(&task);
         let Some(space) = self.spaces.get(&task) else { return woken };
         let task_port = space.task_port;
         let entries: Vec<(u32, Entry)> = space.entries.iter().map(|(&n, &e)| (n, e)).collect();
         for (_, e) in &entries {
             match e.obj {
                 Obj::Port(p) if e.receive => self.destroy_port(p, &mut woken),
+                Obj::Port(p) if e.send_once > 0 => self.send_once_gone(p),
                 Obj::Set(s) => self.destroy_set(s),
                 _ => {}
             }
@@ -417,6 +439,20 @@ impl Ipc {
         space.entries.insert(name, e);
         space.by_port.insert(port, name);
         name
+    }
+
+    /// A send-once right to `p` went away unused: a kernel waiter on a reply
+    /// to `p` learns it.
+    fn send_once_gone(&mut self, p: PortId) {
+        if self.ports.get(&p).is_some_and(|q| q.kernel_reply) {
+            let woken = &mut self.woken;
+            self.rcv_waiters.wake_all(RcvKey::Port(p), || WakeReason::Died, &mut |t| woken.push(t));
+        }
+    }
+
+    /// The threads woken since the last call, for the caller to unblock.
+    pub fn take_woken(&mut self) -> Vec<ThreadId> {
+        core::mem::take(&mut self.woken)
     }
 
     fn remove_name(&mut self, task: TaskId, name: u32) {
@@ -505,6 +541,14 @@ impl Ipc {
             e.send -= 1;
         } else if e.send_once > 0 {
             e.send_once -= 1;
+            if let Obj::Port(p) = e.obj {
+                self.send_once_gone(p);
+            }
+            let Some(e) = self.entry_mut(task, name) else { return KERN_SUCCESS };
+            if e.is_empty() {
+                self.remove_name(task, name);
+            }
+            return KERN_SUCCESS;
         } else if e.obj == Obj::Dead {
             e.dead -= 1;
         } else {
@@ -583,6 +627,9 @@ impl Ipc {
                         ent.send_once -= 1;
                         if ent.is_empty() {
                             self.remove_name(task, name);
+                        }
+                        if let Obj::Port(p) = e.obj {
+                            self.send_once_gone(p);
                         }
                         KERN_SUCCESS
                     }
@@ -789,8 +836,14 @@ impl Ipc {
     fn destroy_message(&mut self, m: Message, woken: &mut Vec<ThreadId>) {
         let rights = [Some(m.dest), m.reply].into_iter().chain(m.ports.into_iter().map(|(_, r)| r));
         for r in rights.flatten() {
-            if let Carried::Receive(p) = r {
-                self.destroy_port(p, woken);
+            match r {
+                Carried::Receive(p) => self.destroy_port(p, woken),
+                // A send-once right is used up without a reply: a kernel
+                // waiter on that reply learns it now.
+                Carried::SendOnce(p) if self.ports.get(&p).is_some_and(|q| q.kernel_reply) => {
+                    self.rcv_waiters.wake_all(RcvKey::Port(p), || WakeReason::Died, &mut |t| woken.push(t));
+                }
+                _ => {}
             }
         }
     }
@@ -884,6 +937,20 @@ impl Ipc {
     /// a full queue is not queued ([`SendError::Full`]); the caller waits
     /// for room (or times out) and sends again.
     pub fn send(&mut self, task: TaskId, msg: &[u8], sender: SenderInfo) -> Result<Option<ThreadId>, SendError> {
+        self.send_with(task, msg, sender, &mut mig::NoThreads)
+    }
+
+    /// [`Ipc::send`], with the kernel's thread services for the requests a
+    /// message to a task or thread port makes (`mig`). A request to a
+    /// kernel object is served at once and its reply queued on the reply
+    /// port.
+    pub fn send_with(
+        &mut self,
+        task: TaskId,
+        msg: &[u8],
+        sender: SenderInfo,
+        threads: &mut dyn mig::ThreadServer,
+    ) -> Result<Option<ThreadId>, SendError> {
         use SendError::Return;
         if msg.len() < HEADER || !msg.len().is_multiple_of(4) {
             return Err(Return(MACH_SEND_MSG_TOO_SMALL));
@@ -907,7 +974,7 @@ impl Ipc {
             None => return Err(Return(MACH_SEND_INVALID_DEST)),
         };
         let kobject = self.ports.get(&dest_port).map(|p| p.kobject).ok_or(Return(MACH_SEND_INVALID_DEST))?;
-        if kobject != KObject::None {
+        if kobject == KObject::Host {
             return Err(SendError::KernelObject(kobject));
         }
         // Check every right before moving any.
@@ -954,7 +1021,7 @@ impl Ipc {
             }
         }
         let dest = self.ports.get(&dest_port).expect("checked");
-        if dest.queue.len() >= dest.qlimit {
+        if kobject == KObject::None && dest.queue.len() >= dest.qlimit {
             return Err(SendError::Full(dest_port));
         }
         // Move the rights into the message.
@@ -983,6 +1050,9 @@ impl Ipc {
             ports,
             sender,
         };
+        if kobject != KObject::None {
+            return Ok(self.serve(task, kobject, m, threads));
+        }
         let port = self.ports.get_mut(&dest_port).expect("checked");
         port.queue.push_back(m);
         let set = port.set;

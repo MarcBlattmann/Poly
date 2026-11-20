@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "pthread_key_create_basic",
+      "source_sha256": "39727dce6dcb1d131f894aeaf9192dcb0b66b6b97a3dcf95e32b187ed1226638",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5047766297405f7861bd025719a02fd7f58d62147f52ae53fe7cfffa04c6f9f5",
+          "exit_code": 0,
+          "stdout": "ok create returns 0\nok a new key reads NULL\nok main's value reads back\nok another thread sees NULL, not main's 5\nok the destructor ran once for the ended thread\nok with the thread's value\nok a NULL value gets no destructor call\nok delete returns 0\nok delete did not call the destructor for main's value\nok the deleted key is reused\nok a reused key reads NULL in every thread (main's old value is gone)\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ed15826b1f396f1a929b038987f93acfb0350e995023174e6e74fd56d69829e5",
+          "exit_code": 0,
+          "stdout": "ok create returns 0\nok a new key reads NULL\nok main's value reads back\nok another thread sees NULL, not main's 5\nok the destructor ran once for the ended thread\nok with the thread's value\nok a NULL value gets no destructor call\nok delete returns 0\nok delete did not call the destructor for main's value\nok the deleted key is reused\nok a reused key reads NULL in every thread (main's old value is gone)\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pthread_key_create_more",
+      "source_sha256": "c1a6221760ffc25444bc31b76cff242deb29e8fc89bb055a4a964d15d9e66f68",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2fd39613b02eee182f54ad0b77f0b99fa520fe951de9d1ee9b020c9763e5f038",
+          "exit_code": 0,
+          "stdout": "ok destructor of key a ran with 11\nok destructor of key b ran with 22\nok a destructor that re-arms its key is called 4 times, then dropped\nvalue PTHREAD_DESTRUCTOR_ITERATIONS 4\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4bd995ff815987482eaff7ce00995dd89794df53f183985593580c1e10806dc6",
+          "exit_code": 0,
+          "stdout": "ok destructor of key a ran with 11\nok destructor of key b ran with 22\nok a destructor that re-arms its key is called 4 times, then dropped\nvalue PTHREAD_DESTRUCTOR_ITERATIONS 4\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

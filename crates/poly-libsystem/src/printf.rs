@@ -12,13 +12,19 @@
 //! - `%p` is printed as by `%#lx` (`printf(3)`: "The void * pointer argument
 //!   is printed in hexadecimal (as if by `%#x' or `%#lx')").
 //!
-//! Choices no public document settles, to be confirmed by the libc sheets
-//! (spec-macos-5): a null `%p` prints `0x0`; a null `%s` prints `(null)`; a
-//! NaN keeps its sign (`-nan`); `%a` normalizes subnormals to a leading `1`
-//! and carries a rounding overflow into the exponent; a wide character
-//! outside ASCII fails with `EILSEQ` (the C locale); an unknown conversion,
-//! and positional arguments (`%1$d`), fail with `EINVAL`; `long double` is
-//! converted to `double` first.
+//! What `specs/macos/libsystem_c.dylib/snprintf.yaml` records and this
+//! follows: a null `%p` prints `0x0` (`%#p` the same), a null `%s` prints
+//! `(null)` (cut by the precision, padded to the width); `%lc`/`%ls` keep a
+//! wide character up to 0xFF as its byte and fail with `EILSEQ` above;
+//! positional arguments (`%2$d`, repeated, `*1$`) work, and an unnumbered
+//! conversion after a numbered one takes the next number; an unknown
+//! conversion prints its letter (padded like a character, `%5%` too), and
+//! a format that ends inside a conversion (`%`, `%q`, `%z`) prints nothing
+//! more; infinities and NaNs are padded with spaces even with `0`; `%La`
+//! prints the 80-bit value as it is (`0x8p-3` for 1.0, its explicit
+//! integer bit leading). Choices of Poly's the sheet does not show: a NaN
+//! keeps its sign (`-nan`); `%a` normalizes a subnormal `double` to a
+//! leading `1`; the other `long double` conversions go through `double`.
 
 use core::fmt::Write as _;
 
@@ -28,9 +34,9 @@ pub trait Args {
     fn int(&mut self) -> u64;
     /// The next `double` (`SSE` class).
     fn double(&mut self) -> f64;
-    /// The next `long double` (`X87` class, always in memory), as a
-    /// `double`.
-    fn long_double(&mut self) -> f64;
+    /// The next `long double` (`X87` class, always in memory): its 64-bit
+    /// significand and its sign and exponent word.
+    fn long_double(&mut self) -> (u64, u16);
 }
 
 /// Where the output goes.
@@ -41,7 +47,8 @@ pub trait Sink {
 /// Why formatting stopped (the `errno` the function sets).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
-    /// An unknown conversion, or positional arguments: `EINVAL`.
+    /// Positional arguments beyond [`MAX_POSITION`], or a number 0:
+    /// `EINVAL`.
     Invalid,
     /// A wide character with no form in the C locale: `EILSEQ`.
     Encoding,
@@ -109,12 +116,11 @@ impl Args for VaList {
         unsafe { (self.overflow(8, 8) as *const f64).read_unaligned() }
     }
 
-    fn long_double(&mut self) -> f64 {
+    fn long_double(&mut self) -> (u64, u16) {
         // SAFETY: as for `int`; a long double takes 16 bytes, 16-aligned.
         let p = unsafe { self.overflow(16, 16) };
         // SAFETY: the 10 bytes of the x87 value.
-        let (m, se) = unsafe { ((p as *const u64).read_unaligned(), (p.add(8) as *const u16).read_unaligned()) };
-        x87_to_f64(m, se)
+        unsafe { ((p as *const u64).read_unaligned(), (p.add(8) as *const u16).read_unaligned()) }
     }
 }
 
@@ -183,8 +189,8 @@ impl Args for StackSlots {
     fn double(&mut self) -> f64 {
         f64::from_le_bytes(self.next())
     }
-    fn long_double(&mut self) -> f64 {
-        self.double()
+    fn long_double(&mut self) -> (u64, u16) {
+        f64_to_x87(self.double())
     }
 }
 
@@ -207,9 +213,29 @@ impl Args for Slots<'_> {
         self.doubles = rest;
         v
     }
-    fn long_double(&mut self) -> f64 {
-        self.double()
+    fn long_double(&mut self) -> (u64, u16) {
+        f64_to_x87(self.double())
     }
+}
+
+/// A `double` as the x87 extended value of the same number.
+pub fn f64_to_x87(v: f64) -> (u64, u16) {
+    let bits = v.to_bits();
+    let sign = if bits >> 63 != 0 { 0x8000u16 } else { 0 };
+    let e = ((bits >> 52) & 0x7ff) as i32;
+    let m = bits & ((1 << 52) - 1);
+    if e == 0x7ff {
+        return (1 << 63 | m << 11, sign | 0x7fff);
+    }
+    if e == 0 {
+        if m == 0 {
+            return (0, sign);
+        }
+        // Subnormal: normalize (the x87 format has the range).
+        let shift = m.leading_zeros();
+        return (m << shift, sign | (16383 - 1022 - (shift as i32 - 11)) as u16);
+    }
+    (1 << 63 | m << 11, sign | (e - 1023 + 16383) as u16)
 }
 
 /// A sink that only counts.
@@ -285,6 +311,231 @@ impl<S: Sink> Out<'_, S> {
     }
 }
 
+/// The most argument numbers a format may use.
+pub const MAX_POSITION: usize = 128;
+
+/// A width or precision: digits, or `*` (with its argument number).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Amount {
+    Fixed(usize),
+    Star(Option<usize>),
+}
+
+/// One conversion specification as written.
+#[derive(Clone, Copy, Debug)]
+struct Conversion {
+    flags: Spec,
+    width: Option<Amount>,
+    precision: Option<Amount>,
+    size: Size,
+    /// The conversion letter; `None` when the format ended first.
+    conv: Option<u8>,
+    /// `n$`.
+    position: Option<usize>,
+}
+
+/// What class an argument has.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Class {
+    None,
+    Int,
+    Double,
+    LongDouble,
+}
+
+impl Conversion {
+    /// The class of the conversion's own argument.
+    fn class(&self) -> Class {
+        match self.conv {
+            Some(b'd' | b'i' | b'o' | b'u' | b'x' | b'X' | b'c' | b's' | b'p' | b'n') => Class::Int,
+            Some(b'C' | b'S' | b'D' | b'O' | b'U') => Class::Int,
+            Some(b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A') if self.size == Size::BigL => Class::LongDouble,
+            Some(b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A') => Class::Double,
+            _ => Class::None,
+        }
+    }
+}
+
+/// `n$` at `fmt[i..]`: the number, and `i` moved past the `$`.
+fn dollar(fmt: &[u8], i: &mut usize) -> Option<usize> {
+    let mut j = *i;
+    while fmt.get(j).is_some_and(u8::is_ascii_digit) {
+        j += 1;
+    }
+    if j > *i && fmt.get(j) == Some(&b'$') {
+        let n = number(fmt, i);
+        *i += 1;
+        return Some(n);
+    }
+    None
+}
+
+/// The specification after a `%` at `fmt[i..]`; `i` moves past it.
+fn parse(fmt: &[u8], i: &mut usize) -> Conversion {
+    let mut c = Conversion {
+        flags: Spec::default(),
+        width: None,
+        precision: None,
+        size: Size::None,
+        conv: None,
+        position: None,
+    };
+    c.position = dollar(fmt, i);
+    while let Some(&f) = fmt.get(*i) {
+        match f {
+            b'-' => c.flags.left = true,
+            b'+' => c.flags.plus = true,
+            b' ' => c.flags.space = true,
+            b'#' => c.flags.alt = true,
+            b'0' => c.flags.zero = true,
+            b'\'' => {}
+            _ => break,
+        }
+        *i += 1;
+    }
+    if fmt.get(*i) == Some(&b'*') {
+        *i += 1;
+        c.width = Some(Amount::Star(dollar(fmt, i)));
+    } else if fmt.get(*i).is_some_and(u8::is_ascii_digit) {
+        c.width = Some(Amount::Fixed(number(fmt, i)));
+    }
+    if fmt.get(*i) == Some(&b'.') {
+        *i += 1;
+        if fmt.get(*i) == Some(&b'*') {
+            *i += 1;
+            c.precision = Some(Amount::Star(dollar(fmt, i)));
+        } else {
+            c.precision = Some(Amount::Fixed(number(fmt, i)));
+        }
+    }
+    loop {
+        let s = match (c.size, fmt.get(*i)) {
+            (Size::None, Some(b'h')) => Size::H,
+            (Size::H, Some(b'h')) => Size::Hh,
+            (Size::None, Some(b'l')) => Size::L,
+            (Size::L, Some(b'l')) => Size::Ll,
+            (Size::None, Some(b'q')) => Size::Ll,
+            (Size::None, Some(b'L')) => Size::BigL,
+            (Size::None, Some(b'j')) => Size::J,
+            (Size::None, Some(b'z')) => Size::Z,
+            (Size::None, Some(b't')) => Size::T,
+            _ => break,
+        };
+        c.size = s;
+        *i += 1;
+    }
+    c.conv = fmt.get(*i).copied();
+    if c.conv.is_some() {
+        *i += 1;
+    }
+    c
+}
+
+/// One argument read ahead for numbered access.
+#[derive(Clone, Copy, Debug)]
+enum Slot {
+    Int(u64),
+    Double(f64),
+    LongDouble(u64, u16),
+}
+
+/// Where conversions take their arguments from.
+enum Source<'a, A> {
+    /// The next one of its class.
+    InOrder(&'a mut A),
+    /// By number, from the arguments read ahead; `next` is the number an
+    /// unnumbered use takes.
+    Numbered { slots: &'a [Slot], next: usize },
+}
+
+impl<A: Args> Source<'_, A> {
+    fn slot(&mut self, position: Option<usize>, class: Class) -> Slot {
+        match self {
+            Source::InOrder(a) => match class {
+                Class::Double => Slot::Double(a.double()),
+                Class::LongDouble => {
+                    let (m, se) = a.long_double();
+                    Slot::LongDouble(m, se)
+                }
+                _ => Slot::Int(a.int()),
+            },
+            Source::Numbered { slots, next } => {
+                let n = position.unwrap_or(*next);
+                *next = n + 1;
+                slots.get(n.wrapping_sub(1)).copied().unwrap_or(Slot::Int(0))
+            }
+        }
+    }
+
+    fn int(&mut self, position: Option<usize>) -> u64 {
+        match self.slot(position, Class::Int) {
+            Slot::Int(v) => v,
+            Slot::Double(d) => d.to_bits(),
+            Slot::LongDouble(m, _) => m,
+        }
+    }
+}
+
+/// For a format that numbers its arguments: the class of every argument up
+/// to the highest number, read ahead in order. `Ok(None)` if nothing is
+/// numbered.
+fn read_ahead<A: Args>(fmt: &[u8], args: &mut A, slots: &mut [Slot; MAX_POSITION]) -> Result<Option<usize>, Error> {
+    let mut classes = [Class::None; MAX_POSITION];
+    let mut numbered = false;
+    let mut next = 1usize;
+    let mut max = 0usize;
+    let mut note = |n: usize, class: Class, max: &mut usize| -> Result<(), Error> {
+        if n == 0 || n > MAX_POSITION {
+            return Err(Error::Invalid);
+        }
+        if classes[n - 1] == Class::None {
+            classes[n - 1] = class;
+        }
+        *max = (*max).max(n);
+        Ok(())
+    };
+    let mut i = 0;
+    while i < fmt.len() {
+        if fmt[i] != b'%' {
+            i += 1;
+            continue;
+        }
+        i += 1;
+        let c = parse(fmt, &mut i);
+        numbered |= c.position.is_some()
+            || matches!(c.width, Some(Amount::Star(Some(_))))
+            || matches!(c.precision, Some(Amount::Star(Some(_))));
+        for count in [c.width, c.precision] {
+            if let Some(Amount::Star(p)) = count {
+                let n = p.unwrap_or(next);
+                next = n + 1;
+                note(n, Class::Int, &mut max)?;
+            }
+        }
+        let class = c.class();
+        if class != Class::None {
+            let n = c.position.unwrap_or(next);
+            next = n + 1;
+            note(n, class, &mut max)?;
+        }
+    }
+    if !numbered {
+        return Ok(None);
+    }
+    for k in 0..max {
+        slots[k] = match classes[k] {
+            Class::Double => Slot::Double(args.double()),
+            Class::LongDouble => {
+                let (m, se) = args.long_double();
+                Slot::LongDouble(m, se)
+            }
+            // An unused number is taken as an integer.
+            _ => Slot::Int(args.int()),
+        };
+    }
+    Ok(Some(max))
+}
+
 /// Format `fmt` (without its NUL) into `out`; the number of bytes the full
 /// output has (C: what `printf` returns, before any check against
 /// `INT_MAX`).
@@ -293,6 +544,11 @@ impl<S: Sink> Out<'_, S> {
 /// The arguments are those `fmt` describes (C11 7.21.6.1p9): string and
 /// `%n` arguments are valid pointers (a string may be null).
 pub unsafe fn format<A: Args, S: Sink>(fmt: &[u8], args: &mut A, sink: &mut S) -> Result<usize, Error> {
+    let mut slots = [Slot::Int(0); MAX_POSITION];
+    let mut source = match read_ahead(fmt, args, &mut slots)? {
+        Some(n) => Source::Numbered { slots: &slots[..n], next: 1 },
+        None => Source::InOrder(args),
+    };
     let mut out = Out { sink, count: 0 };
     let mut i = 0;
     while i < fmt.len() {
@@ -307,66 +563,29 @@ pub unsafe fn format<A: Args, S: Sink>(fmt: &[u8], args: &mut A, sink: &mut S) -
             break;
         }
         i += 1; // '%'
-        let mut spec = Spec::default();
-        // Positional arguments (`%1$d`) are not supported.
-        let mut j = i;
-        while j < fmt.len() && fmt[j].is_ascii_digit() {
-            j += 1;
-        }
-        if j > i && fmt.get(j) == Some(&b'$') {
-            return Err(Error::Invalid);
-        }
-        while let Some(&c) = fmt.get(i) {
-            match c {
-                b'-' => spec.left = true,
-                b'+' => spec.plus = true,
-                b' ' => spec.space = true,
-                b'#' => spec.alt = true,
-                b'0' => spec.zero = true,
-                b'\'' => {}
-                _ => break,
+        let c = parse(fmt, &mut i);
+        let mut spec = c.flags;
+        match c.width {
+            Some(Amount::Fixed(w)) => spec.width = w,
+            Some(Amount::Star(p)) => {
+                let w = source.int(p) as i32;
+                if w < 0 {
+                    spec.left = true;
+                }
+                spec.width = w.unsigned_abs() as usize;
             }
-            i += 1;
+            None => {}
         }
-        if fmt.get(i) == Some(&b'*') {
-            i += 1;
-            let w = args.int() as i32;
-            if w < 0 {
-                spec.left = true;
+        match c.precision {
+            Some(Amount::Fixed(p)) => spec.precision = Some(p),
+            Some(Amount::Star(p)) => {
+                let v = source.int(p) as i32;
+                spec.precision = (v >= 0).then_some(v as usize);
             }
-            spec.width = w.unsigned_abs() as usize;
-        } else {
-            spec.width = number(fmt, &mut i);
+            None => {}
         }
-        if fmt.get(i) == Some(&b'.') {
-            i += 1;
-            if fmt.get(i) == Some(&b'*') {
-                i += 1;
-                let p = args.int() as i32;
-                spec.precision = (p >= 0).then_some(p as usize);
-            } else {
-                spec.precision = Some(number(fmt, &mut i));
-            }
-        }
-        let mut size = Size::None;
-        loop {
-            let s = match (size, fmt.get(i)) {
-                (Size::None, Some(b'h')) => Size::H,
-                (Size::H, Some(b'h')) => Size::Hh,
-                (Size::None, Some(b'l')) => Size::L,
-                (Size::L, Some(b'l')) => Size::Ll,
-                (Size::None, Some(b'q')) => Size::Ll,
-                (Size::None, Some(b'L')) => Size::BigL,
-                (Size::None, Some(b'j')) => Size::J,
-                (Size::None, Some(b'z')) => Size::Z,
-                (Size::None, Some(b't')) => Size::T,
-                _ => break,
-            };
-            size = s;
-            i += 1;
-        }
-        let Some(&conv) = fmt.get(i) else { return Err(Error::Invalid) };
-        i += 1;
+        // A format that ends inside a conversion prints nothing more.
+        let Some(conv) = c.conv else { break };
         // `printf(3)`'s deprecated capitals: `C S D O U` are `lc ls ld lo lu`.
         let (conv, size) = match conv {
             b'C' => (b'c', Size::L),
@@ -374,12 +593,18 @@ pub unsafe fn format<A: Args, S: Sink>(fmt: &[u8], args: &mut A, sink: &mut S) -
             b'D' => (b'd', Size::L),
             b'O' => (b'o', Size::L),
             b'U' => (b'u', Size::L),
-            c => (c, size),
+            other => (other, c.size),
+        };
+        let class = c.class();
+        let value = if class == Class::None { Slot::Int(0) } else { source.slot(c.position, class) };
+        let int = match value {
+            Slot::Int(v) => v,
+            Slot::Double(d) => d.to_bits(),
+            Slot::LongDouble(m, _) => m,
         };
         match conv {
-            b'%' => out.put(b"%"),
             b'd' | b'i' => {
-                let v = signed(args.int(), size);
+                let v = signed(int, size);
                 let sign: &[u8] = if v < 0 {
                     b"-"
                 } else if spec.plus {
@@ -391,13 +616,10 @@ pub unsafe fn format<A: Args, S: Sink>(fmt: &[u8], args: &mut A, sink: &mut S) -
                 };
                 integer(&mut out, spec, sign, b"", v.unsigned_abs(), 10, false);
             }
-            b'u' => integer(&mut out, spec, b"", b"", unsigned(args.int(), size), 10, false),
-            b'o' => {
-                let v = unsigned(args.int(), size);
-                integer(&mut out, spec, b"", b"", v, 8, false);
-            }
+            b'u' => integer(&mut out, spec, b"", b"", unsigned(int, size), 10, false),
+            b'o' => integer(&mut out, spec, b"", b"", unsigned(int, size), 8, false),
             b'x' | b'X' => {
-                let v = unsigned(args.int(), size);
+                let v = unsigned(int, size);
                 let upper = conv == b'X';
                 let prefix: &[u8] = match (spec.alt && v != 0, upper) {
                     (false, _) => b"",
@@ -406,22 +628,13 @@ pub unsafe fn format<A: Args, S: Sink>(fmt: &[u8], args: &mut A, sink: &mut S) -
                 };
                 integer(&mut out, spec, b"", prefix, v, 16, upper);
             }
-            b'p' => {
-                let v = args.int();
-                integer(&mut out, spec, b"", b"0x", v, 16, false);
-            }
+            b'p' => integer(&mut out, spec, b"", b"0x", int, 16, false),
             b'c' => {
-                let v = args.int();
-                let mut b = [0u8; 1];
-                if size == Size::L {
-                    b[0] = narrow(v as u32)?;
-                } else {
-                    b[0] = v as u8;
-                }
-                field(&mut out, spec, &[], &[], &b, 0);
+                let b = if size == Size::L { narrow(int as u32)? } else { int as u8 };
+                field(&mut out, spec, &[], &[], &[b], 0);
             }
             b's' => {
-                let p = args.int() as *const u8;
+                let p = int as *const u8;
                 if size == Size::L {
                     // SAFETY: the caller's contract: a wide string or null.
                     unsafe { wide_string(&mut out, spec, p as *const u32)? };
@@ -438,7 +651,7 @@ pub unsafe fn format<A: Args, S: Sink>(fmt: &[u8], args: &mut A, sink: &mut S) -
                 }
             }
             b'n' => {
-                let p = args.int() as *mut u8;
+                let p = int as *mut u8;
                 let n = out.count as u64;
                 // SAFETY: the caller's contract: a pointer to the object the
                 // size names.
@@ -451,11 +664,17 @@ pub unsafe fn format<A: Args, S: Sink>(fmt: &[u8], args: &mut A, sink: &mut S) -
                     }
                 }
             }
-            b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A' => {
-                let v = if size == Size::BigL { args.long_double() } else { args.double() };
-                float(&mut out, spec, conv, v);
-            }
-            _ => return Err(Error::Invalid),
+            b'f' | b'F' | b'e' | b'E' | b'g' | b'G' | b'a' | b'A' => match value {
+                Slot::LongDouble(m, se) if conv.eq_ignore_ascii_case(&b'a') => {
+                    float(&mut out, spec, conv, x87_to_f64(m, se), Some((m, se)));
+                }
+                Slot::LongDouble(m, se) => float(&mut out, spec, conv, x87_to_f64(m, se), None),
+                Slot::Double(d) => float(&mut out, spec, conv, d, None),
+                Slot::Int(v) => float(&mut out, spec, conv, f64::from_bits(v), None),
+            },
+            // `%%` and unknown conversions: the letter, padded like a
+            // character.
+            other => field(&mut out, Spec { zero: false, ..spec }, &[], &[], &[other], 0),
         }
     }
     Ok(out.count)
@@ -542,9 +761,9 @@ fn field<S: Sink>(out: &mut Out<'_, S>, spec: Spec, sign: &[u8], prefix: &[u8], 
     }
 }
 
-/// A wide character in the C locale: ASCII only.
+/// A wide character in the C locale: its byte up to 0xFF.
 fn narrow(c: u32) -> Result<u8, Error> {
-    if c < 0x80 { Ok(c as u8) } else { Err(Error::Encoding) }
+    u8::try_from(c).map_err(|_| Error::Encoding)
 }
 
 /// The bytes at `p` up to its NUL, or `max` bytes, whichever comes first.
@@ -597,7 +816,9 @@ unsafe fn wide_string<S: Sink>(out: &mut Out<'_, S>, spec: Spec, p: *const u32) 
 }
 
 /// A floating-point conversion.
-fn float<S: Sink>(out: &mut Out<'_, S>, spec: Spec, conv: u8, v: f64) {
+/// A floating-point conversion; `x87` is the `long double` itself for
+/// `%La`, whose digits are those of the 80-bit value.
+fn float<S: Sink>(out: &mut Out<'_, S>, spec: Spec, conv: u8, v: f64, x87: Option<(u64, u16)>) {
     let upper = conv.is_ascii_uppercase();
     let conv = conv.to_ascii_lowercase();
     let sign: &[u8] = if v.is_sign_negative() {
@@ -609,7 +830,8 @@ fn float<S: Sink>(out: &mut Out<'_, S>, spec: Spec, conv: u8, v: f64) {
     } else {
         b""
     };
-    if !v.is_finite() {
+    let finite = x87.map_or(v.is_finite(), |(_, se)| se & 0x7fff != 0x7fff);
+    if !finite {
         let body: &[u8] = match (v.is_nan(), upper) {
             (true, false) => b"nan",
             (true, true) => b"NAN",
@@ -625,7 +847,7 @@ fn float<S: Sink>(out: &mut Out<'_, S>, spec: Spec, conv: u8, v: f64) {
         (b'a', true) => b"0X",
         _ => b"",
     };
-    let body = Body { conv, upper, alt: spec.alt, precision: spec.precision, v };
+    let body = Body { conv, upper, alt: spec.alt, precision: spec.precision, v, x87 };
     let mut count = Count(0);
     body.emit(&mut count);
     let len = sign.len() + prefix.len() + count.0;
@@ -660,6 +882,7 @@ struct Body {
     alt: bool,
     precision: Option<usize>,
     v: f64,
+    x87: Option<(u64, u16)>,
 }
 
 impl Body {
@@ -686,7 +909,10 @@ impl Body {
                     strip.finish();
                 }
             }
-            _ => hex(sink, self.v, self.precision, self.upper, self.alt),
+            _ => match self.x87 {
+                Some((m, se)) => hex_x87(sink, m, se, self.precision, self.upper, self.alt),
+                None => hex(sink, self.v, self.precision, self.upper, self.alt),
+            },
         }
     }
 }
@@ -913,6 +1139,65 @@ fn hex(sink: &mut dyn Sink, v: f64, precision: Option<usize>, upper: bool, alt: 
         sink.put(&[set[((m >> (4 * k)) & 0xf) as usize]]);
     }
     for _ in shown..digits {
+        sink.put(b"0");
+    }
+    let mut buf = [0u8; 24];
+    let n = digits_of(u64::from(exp.unsigned_abs()), 10, false, &mut buf);
+    sink.put(if upper { b"P" } else { b"p" });
+    sink.put(if exp < 0 { b"-" } else { b"+" });
+    sink.put(&buf[24 - n..]);
+}
+
+/// `%La`'s digits after the `0x`: the 64-bit significand as it is, its
+/// first four bits (the explicit integer bit leading) before the point,
+/// the exponent counted for that digit (1.0 is `8p-3`).
+fn hex_x87(sink: &mut dyn Sink, m: u64, se: u16, precision: Option<usize>, upper: bool, alt: bool) {
+    let set: &[u8; 16] = if upper { b"0123456789ABCDEF" } else { b"0123456789abcdef" };
+    let e = i32::from(se & 0x7fff);
+    let (mut lead, mut frac, mut exp) = if m == 0 {
+        (0u64, 0u64, 0i32)
+    } else {
+        // A denormal has the exponent of the smallest normal value.
+        (m >> 60, m << 4, e.max(1) - 16383 - 3)
+    };
+    // 15 hexadecimal digits after the point.
+    let digits = match precision {
+        Some(p) if p < 15 => {
+            let drop = 4 * (15 - p) as u32;
+            let rem = if drop == 64 { frac } else { frac & ((1u64 << drop) - 1) };
+            let half = 1u64 << (drop - 1);
+            let mut kept = if drop == 64 { 0 } else { frac >> drop };
+            if rem > half || (rem == half && (if p == 0 { lead } else { kept }) & 1 == 1) {
+                kept += 1;
+                if p == 0 || kept >> (4 * p) != 0 {
+                    kept = 0;
+                    lead += 1;
+                    if lead == 16 {
+                        lead = 1;
+                        exp += 4;
+                    }
+                }
+            }
+            frac = if p == 0 { 0 } else { kept << drop };
+            p
+        }
+        Some(p) => p,
+        None => {
+            let mut n = 15;
+            while n > 0 && (frac >> (64 - 4 * n)) & 0xf == 0 {
+                n -= 1;
+            }
+            n
+        }
+    };
+    sink.put(&[set[lead as usize]]);
+    if digits > 0 || alt {
+        sink.put(b".");
+    }
+    for k in 0..digits.min(15) {
+        sink.put(&[set[((frac >> (60 - 4 * k)) & 0xf) as usize]]);
+    }
+    for _ in 15..digits {
         sink.put(b"0");
     }
     let mut buf = [0u8; 24];

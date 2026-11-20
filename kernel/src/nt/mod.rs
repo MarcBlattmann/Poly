@@ -1800,6 +1800,17 @@ pub fn own_pages() -> Vec<(u32, u64)> {
         .collect()
 }
 
+/// Every NT process's out-of-memory score adjustment (ADR 0250 addendum,
+/// `poly_personality_nt::oomadj`): a child in a job its still running parent made, a lowered
+/// memory priority.
+pub fn oom_score_adjs() -> Vec<(u32, i32)> {
+    with_existing(|s| {
+        let alive = |p: ProcessId| s.processes.contains_key(&p) && !s.sys.process_exits.contains_key(&p);
+        s.processes.keys().map(|&pid| (pid.0, poly_personality_nt::oomadj::score_adj(&s.sys, pid, alive))).collect()
+    })
+    .unwrap_or_default()
+}
+
 /// The path of NT process `pid`'s executable below its volume, for logs.
 pub fn image_of(pid: u32) -> Option<String> {
     with_existing(|s| {

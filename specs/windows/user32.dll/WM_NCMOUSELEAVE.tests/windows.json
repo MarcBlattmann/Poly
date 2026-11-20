@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "640cf2d46e54",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T09:06:50Z",
+  "tests": [
+    {
+      "name": "mlv_nc_cover",
+      "exe_sha256": "734656db0106a615d9c43d53f90bb162f942a7ceabc18c52e5cdab98d134bc88",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBwb2ludGVyIGluIHRoZSBjYXB0aW9uLCBUTUVfTk9OQ0xJRU5UIHwgVE1FX0xFQVZFLCBwb3B1cCBCIHNob3duIG92ZXIgdGhlIHBvaW50ZXIKICBXTV9OQ0hJVFRFU1QgYXQgdGhlIHBvaW50ZXI6IDIKICBCIFdNX1NIT1dXSU5ET1cgc2hvdz0xIHN0YXR1cz0wCiAgQiBXTV9TRVRDVVJTT1Igd2luZG93PUIgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEIgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD01MCwxNQogIEEgV01fTkNNT1VTRUxFQVZFCiAgY3Vyc29yICgyMDAsMTE1KSBvdmVyIEIKPT0gcG9pbnRlciBpbiB0aGUgY2FwdGlvbiwgbm8gcmVxdWVzdCBmcm9tIHRoZSB0ZXN0LCBwb3B1cCBCIHNob3duIG92ZXIgdGhlIHBvaW50ZXIKICBCIFdNX1NIT1dXSU5ET1cgc2hvdz0xIHN0YXR1cz0wCiAgQiBXTV9TRVRDVVJTT1Igd2luZG93PUIgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEIgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD01MCwxNQogIEEgV01fTkNNT1VTRUxFQVZFCiAgY3Vyc29yICgyMDAsMTE1KSBvdmVyIEIKPT0gcG9pbnRlciBpbiB0aGUgY2FwdGlvbiwgVE1FX0xFQVZFIChjbGllbnQpIG9ubHksIHBvcHVwIEIgc2hvd24gb3ZlciB0aGUgcG9pbnRlcgogIEIgV01fU0hPV1dJTkRPVyBzaG93PTEgc3RhdHVzPTAKICBCIFdNX1NFVENVUlNPUiB3aW5kb3c9QiBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQiBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTUwLDE1CiAgQSBXTV9OQ01PVVNFTEVBVkUKICBjdXJzb3IgKDIwMCwxMTUpIG92ZXIgQgo9PSBwb2ludGVyIGluIHRoZSBjYXB0aW9uLCBUTUVfTk9OQ0xJRU5UIHwgVE1FX0xFQVZFLCBBIGhpZGRlbgogIEEgV01fU0hPV1dJTkRPVyBzaG93PTAgc3RhdHVzPTAKICBBIFdNX05DTU9VU0VMRUFWRQogIGN1cnNvciAoMjAwLDExNSkgb3ZlciBvdGhlcgo9PSBwb2ludGVyIGluIHRoZSBjYXB0aW9uLCBUTUVfTk9OQ0xJRU5UIHwgVE1FX0xFQVZFLCBBIG1vdmVkIGF3YXkKICBBIFdNX05DTU9VU0VMRUFWRQogIGN1cnNvciAoMjAwLDExNSkgb3ZlciBvdGhlcgpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== pointer in the caption, TME_NONCLIENT | TME_LEAVE, popup B shown over the pointer\n  WM_NCHITTEST at the pointer: 2\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=50,15\n  A WM_NCMOUSELEAVE\n  cursor (200,115) over B\n== pointer in the caption, no request from the test, popup B shown over the pointer\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=50,15\n  A WM_NCMOUSELEAVE\n  cursor (200,115) over B\n== pointer in the caption, TME_LEAVE (client) only, popup B shown over the pointer\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=50,15\n  A WM_NCMOUSELEAVE\n  cursor (200,115) over B\n== pointer in the caption, TME_NONCLIENT | TME_LEAVE, A hidden\n  A WM_SHOWWINDOW show=0 status=0\n  A WM_NCMOUSELEAVE\n  cursor (200,115) over other\n== pointer in the caption, TME_NONCLIENT | TME_LEAVE, A moved away\n  A WM_NCMOUSELEAVE\n  cursor (200,115) over other\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 4040
+    }
+  ]
+}

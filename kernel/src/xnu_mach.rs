@@ -15,7 +15,9 @@ use crate::user::{self};
 use alloc::sync::Arc;
 use core::sync::atomic::Ordering;
 use alloc::vec::Vec;
+use poly_mach::exc::ThreadState64;
 use poly_mach::{TaskId, ThreadId, ulock};
+use poly_personality_xnu::exc;
 use poly_personality_xnu::kernel::{
     Arch, Backing, Fault, Inherit, MachState, PageInfo, Region, ThreadStart, Wakeup, XnuKernel,
 };
@@ -132,6 +134,8 @@ impl XnuKernel for MachThread<'_> {
             m.ipc.create_thread(task, thread);
         } else {
             m.ipc.create_task(task, thread);
+            // A child inherits its parent's task exception handlers.
+            m.ipc.inherit_exception_ports(u64::from(self.process.ppid), task);
         }
         f(m, self);
     }
@@ -266,5 +270,45 @@ impl XnuKernel for MachThread<'_> {
 
     fn end_thread(&mut self) {
         let _ = user::request_exit(crate::process::ExitStatus::Exited(0));
+    }
+
+    fn current_state(&self) -> Option<ThreadState64> {
+        Some(state_of(&user::registers()))
+    }
+}
+
+/// The x86-64 registers of a trap frame as `x86_thread_state64_t` (segment
+/// selectors fs and gs are 0: Poly uses the bases, not selectors).
+fn state_of(r: &user::UserRegs) -> ThreadState64 {
+    ThreadState64([
+        r.rax, r.rbx, r.rcx, r.rdx, r.rdi, r.rsi, r.rbp, r.rsp, r.r8, r.r9, r.r10, r.r11, r.r12, r.r13, r.r14, r.r15,
+        r.rip, r.rflags, r.cs, 0, 0,
+    ])
+}
+
+/// `regs` with the general registers, rip, rflags and rsp of `s`.
+fn apply(mut regs: user::UserRegs, s: &ThreadState64) -> user::UserRegs {
+    let v = &s.0;
+    (regs.rax, regs.rbx, regs.rcx, regs.rdx, regs.rdi, regs.rsi, regs.rbp, regs.rsp) =
+        (v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]);
+    (regs.r8, regs.r9, regs.r10, regs.r11, regs.r12, regs.r13, regs.r14, regs.r15) =
+        (v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]);
+    (regs.rip, regs.rflags) = (v[16], v[17]);
+    regs
+}
+
+/// A CPU fault of the running thread of XNU process `process` that demand
+/// paging did not resolve: raise its Mach exception (ADR 0238, addendum).
+/// `true` if a handler took it and the thread goes on (with the registers
+/// it was given); `false` for the default action.
+pub fn fault(process: &Process, fault: &user::Fault) -> bool {
+    let (Some(flags), Some(tid)) = (user::current_flags(), user::current_tid()) else { return false };
+    let regs = user::registers();
+    let mapped = matches!(fault.page, Some(user::FaultError::Segv(poly_vm::SegvCode::AccErr) | user::FaultError::Bus));
+    let f = exc::Fault { vector: fault.vector, error: fault.error_code as u32, address: fault.address, mapped };
+    let mut t = MachThread { process, flags, tid };
+    match exc::deliver(&mut t, f, state_of(&regs)) {
+        exc::Outcome::Resume(s) => user::set_registers(&apply(regs, &s)).is_ok(),
+        exc::Outcome::Default => false,
     }
 }

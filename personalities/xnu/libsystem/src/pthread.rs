@@ -29,6 +29,12 @@ const EBUSY: i32 = 16;
 const EDEADLK: i32 = 11;
 const ETIMEDOUT: i32 = 60;
 
+/// A thread record's join state: joinable, detached, gone (joined, or
+/// detached and ended: its id no longer names a thread).
+const JOINABLE_STATE: u32 = 0;
+const DETACHED_STATE: u32 = 1;
+const GONE: u32 = 2;
+
 /// `_PTHREAD_MUTEX_SIG_init` and the errorcheck and recursive forms.
 const SIG_NORMAL: i64 = 0x32AA_ABA7;
 const SIG_ERRORCHECK: i64 = 0x32AA_ABA1;
@@ -52,8 +58,12 @@ const START_CUSTOM: u32 = 0x0100_0000;
 /// The stack of a new thread unless its attribute says otherwise (512 KiB,
 /// what macOS documents for secondary threads).
 const DEFAULT_STACK: usize = 512 << 10;
-/// `PTHREAD_STACK_MIN` (`<limits.h>`): 16 KiB.
-const STACK_MIN: usize = 16 << 10;
+/// The smallest stack `pthread_attr_setstacksize` takes (the sheet: 4096
+/// on arm64, 8192 on x86-64, in multiples of 4096).
+#[cfg(target_arch = "aarch64")]
+const STACK_MIN: usize = 4096;
+#[cfg(target_arch = "x86_64")]
+const STACK_MIN: usize = 8192;
 
 /// `UL_COMPARE_AND_WAIT` and `ULF_WAKE_ALL`.
 const UL_WAIT: u32 = 1;
@@ -83,8 +93,16 @@ fn wake(word: &AtomicU32, all: bool) {
 
 // ------------------------------------------------------------- threads
 
-/// `PTHREAD_KEYS_MAX` (`<limits.h>`).
-const KEYS: usize = 512;
+/// `PTHREAD_KEYS_MAX` (`<limits.h>`) is 512; the pthread_key_create sheet
+/// saw the first keys a program makes numbered 258 and 259, and 507 more
+/// after those two: keys 258 to 766.
+const FIRST_KEY: usize = 258;
+const KEYS: usize = 509;
+
+/// A key's index in the tables, if it is one.
+fn index(key: usize) -> Option<usize> {
+    key.checked_sub(FIRST_KEY).filter(|&k| k < KEYS)
+}
 
 /// A thread's record (`pthread_t` points to it).
 #[repr(C, align(16))]
@@ -94,7 +112,8 @@ struct Thread {
     result: usize,
     /// 1 once the thread has ended (joiners wait on it).
     done: AtomicU32,
-    detached: AtomicU32,
+    /// JOINABLE_STATE, DETACHED_STATE or GONE.
+    state: AtomicU32,
     stack: usize,
     stack_size: usize,
     /// Its thread-specific values.
@@ -106,7 +125,7 @@ static MAIN: crate::Global<Thread> = crate::Global::new(Thread {
     arg: 0,
     result: 0,
     done: AtomicU32::new(0),
-    detached: AtomicU32::new(0),
+    state: AtomicU32::new(JOINABLE_STATE),
     stack: 0,
     stack_size: 0,
     values: [0; KEYS],
@@ -161,6 +180,8 @@ unsafe fn end(t: *mut Thread, r: usize) -> ! {
     unsafe {
         run_destructors(&mut *t);
         (*t).result = r;
+        // A detached thread's id is gone once it has ended (the sheets).
+        let _ = (*t).state.compare_exchange(DETACHED_STATE, GONE, Ordering::AcqRel, Ordering::Relaxed);
         (*t).done.store(1, Ordering::Release);
         wake(&(*t).done, true);
         __bsdthread_terminate(0, 0, 0, 0);
@@ -214,9 +235,20 @@ unsafe extern "C" fn pthread_attr_destroy(a: *mut Attr) -> i32 {
     0
 }
 
+/// Whether `a` is an initialized attribute (after `pthread_attr_destroy`
+/// every get and set is `EINVAL`, the sheet).
+///
+/// # Safety
+/// `a` points to a `pthread_attr_t`.
+unsafe fn live(a: *const Attr) -> bool {
+    // SAFETY: the caller's contract.
+    unsafe { (*a).sig == SIG_THREAD_ATTR }
+}
+
 #[unsafe(no_mangle)]
 unsafe extern "C" fn pthread_attr_setstacksize(a: *mut Attr, size: usize) -> i32 {
-    if size < STACK_MIN || size % 16384 != 0 {
+    // SAFETY: as above.
+    if !unsafe { live(a) } || size < STACK_MIN || size % 4096 != 0 {
         return EINVAL;
     }
     // SAFETY: as above.
@@ -227,13 +259,19 @@ unsafe extern "C" fn pthread_attr_setstacksize(a: *mut Attr, size: usize) -> i32
 #[unsafe(no_mangle)]
 unsafe extern "C" fn pthread_attr_getstacksize(a: *const Attr, size: *mut usize) -> i32 {
     // SAFETY: as above.
-    unsafe { *size = (*a).stack_size };
+    unsafe {
+        if !live(a) {
+            return EINVAL;
+        }
+        *size = (*a).stack_size;
+    }
     0
 }
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn pthread_attr_setdetachstate(a: *mut Attr, state: i32) -> i32 {
-    if state != JOINABLE && state != DETACHED {
+    // SAFETY: as above.
+    if !unsafe { live(a) } || (state != JOINABLE && state != DETACHED) {
         return EINVAL;
     }
     // SAFETY: as above.
@@ -244,7 +282,12 @@ unsafe extern "C" fn pthread_attr_setdetachstate(a: *mut Attr, state: i32) -> i3
 #[unsafe(no_mangle)]
 unsafe extern "C" fn pthread_attr_getdetachstate(a: *const Attr, state: *mut i32) -> i32 {
     // SAFETY: as above.
-    unsafe { *state = (*a).detach };
+    unsafe {
+        if !live(a) {
+            return EINVAL;
+        }
+        *state = (*a).detach;
+    }
     0
 }
 
@@ -259,6 +302,8 @@ unsafe extern "C" fn pthread_create(out: *mut usize, attr: *const Attr, func: us
         }
     };
     let record_len = core::mem::size_of::<Thread>().next_multiple_of(16384);
+    // Whole pages: a size the attribute took in 4 KiB steps.
+    let size = size.next_multiple_of(16384);
     let stack = map(size);
     let t = map(record_len) as *mut Thread;
     if stack.is_null() || t.is_null() {
@@ -268,7 +313,7 @@ unsafe extern "C" fn pthread_create(out: *mut usize, attr: *const Attr, func: us
     unsafe {
         (*t).func = func;
         (*t).arg = arg;
-        (*t).detached.store(u32::from(detached), Ordering::Relaxed);
+        (*t).state.store(if detached { DETACHED_STATE } else { JOINABLE_STATE }, Ordering::Relaxed);
         (*t).stack = stack as usize;
         (*t).stack_size = size;
     }
@@ -288,6 +333,10 @@ unsafe extern "C" fn pthread_create(out: *mut usize, attr: *const Attr, func: us
     0
 }
 
+/// `pthread_join` (the sheet): `ESRCH` for a zero id, one already joined
+/// or a detached thread that has ended; `EINVAL` for a detached thread
+/// still running; `EDEADLK` for the calling thread. Records stay mapped, so
+/// an old id still reads as gone.
 #[unsafe(no_mangle)]
 unsafe extern "C" fn pthread_join(t: usize, result: *mut usize) -> i32 {
     let t = t as *mut Thread;
@@ -297,13 +346,18 @@ unsafe extern "C" fn pthread_join(t: usize, result: *mut usize) -> i32 {
     if t == me() {
         return EDEADLK;
     }
-    // SAFETY: the C contract: a thread pthread_create made and nobody joined.
+    // SAFETY: the C contract: an id pthread_create gave.
     unsafe {
-        if (*t).detached.load(Ordering::Relaxed) != 0 {
-            return EINVAL;
+        match (*t).state.load(Ordering::Acquire) {
+            GONE => return ESRCH,
+            DETACHED_STATE => return EINVAL,
+            _ => {}
         }
         while (*t).done.load(Ordering::Acquire) == 0 {
             wait(&(*t).done, 0);
+        }
+        if (*t).state.compare_exchange(JOINABLE_STATE, GONE, Ordering::AcqRel, Ordering::Acquire).is_err() {
+            return ESRCH;
         }
         if !result.is_null() {
             *result = (*t).result;
@@ -312,11 +366,31 @@ unsafe extern "C" fn pthread_join(t: usize, result: *mut usize) -> i32 {
     0
 }
 
+/// `pthread_detach` (the sheet): 0, and the id is gone at once for a thread
+/// that has already ended; `EINVAL` for a running thread detached before;
+/// `ESRCH` for a zero id or one that is gone.
 #[unsafe(no_mangle)]
 unsafe extern "C" fn pthread_detach(t: usize) -> i32 {
-    // SAFETY: the C contract.
-    unsafe { (*(t as *mut Thread)).detached.store(1, Ordering::Relaxed) };
-    0
+    let t = t as *mut Thread;
+    if t.is_null() {
+        return ESRCH;
+    }
+    // SAFETY: the C contract: an id pthread_create gave.
+    unsafe {
+        match (*t).state.load(Ordering::Acquire) {
+            GONE => ESRCH,
+            DETACHED_STATE => EINVAL,
+            _ => {
+                let ended = (*t).done.load(Ordering::Acquire) != 0;
+                (*t).state.store(if ended { GONE } else { DETACHED_STATE }, Ordering::Release);
+                // It may have ended between the two reads.
+                if !ended && (*t).done.load(Ordering::Acquire) != 0 {
+                    (*t).state.store(GONE, Ordering::Release);
+                }
+                0
+            }
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -359,11 +433,14 @@ struct Mutex {
     _rest: [u8; 40],
 }
 
-fn kind(sig: i64) -> i32 {
+/// The kind a mutex's signature names; `None` for one not initialized or
+/// destroyed (`EINVAL`).
+fn kind(sig: i64) -> Option<i32> {
     match sig {
-        SIG_ERRORCHECK => ERRORCHECK,
-        SIG_RECURSIVE => RECURSIVE,
-        _ => NORMAL,
+        SIG_NORMAL => Some(NORMAL),
+        SIG_ERRORCHECK => Some(ERRORCHECK),
+        SIG_RECURSIVE => Some(RECURSIVE),
+        _ => None,
     }
 }
 
@@ -428,6 +505,9 @@ unsafe extern "C" fn pthread_mutex_init(m: *mut Mutex, a: *const i64) -> i32 {
 unsafe extern "C" fn pthread_mutex_destroy(m: *mut Mutex) -> i32 {
     // SAFETY: as above.
     let m = unsafe { &mut *m };
+    if kind(m.sig).is_none() {
+        return EINVAL;
+    }
     if m.lock.load(Ordering::Relaxed) != 0 {
         return EBUSY;
     }
@@ -458,15 +538,17 @@ fn unlock_word(w: &AtomicU32) {
 unsafe fn acquire(m: *mut Mutex, wait_for_it: bool) -> i32 {
     // SAFETY: the caller's mutex.
     let m = unsafe { &mut *m };
-    let k = kind(m.sig);
+    let Some(k) = kind(m.sig) else { return EINVAL };
     let me = me() as usize;
     if m.lock.load(Ordering::Relaxed) != 0 && m.owner == me {
+        // The pthread_mutex_trylock sheet: trylock of a normal or
+        // error-checking mutex the caller holds is EBUSY.
         match k {
             RECURSIVE => {
                 m.count += 1;
                 return 0;
             }
-            ERRORCHECK => return EDEADLK,
+            ERRORCHECK if wait_for_it => return EDEADLK,
             _ => {}
         }
     }
@@ -494,7 +576,7 @@ unsafe extern "C" fn pthread_mutex_trylock(m: *mut Mutex) -> i32 {
 unsafe extern "C" fn pthread_mutex_unlock(m: *mut Mutex) -> i32 {
     // SAFETY: the caller's mutex.
     let m = unsafe { &mut *m };
-    let k = kind(m.sig);
+    let Some(k) = kind(m.sig) else { return EINVAL };
     if k != NORMAL && (m.lock.load(Ordering::Relaxed) == 0 || m.owner != me() as usize) {
         return EPERM;
     }
@@ -634,35 +716,36 @@ unsafe extern "C" fn pthread_key_create(key: *mut usize, dtor: usize) -> i32 {
     // calling thread's value starts at 0.
     unsafe {
         (*me()).values[k] = 0;
-        *key = k;
+        *key = FIRST_KEY + k;
     }
     0
 }
 
+/// `pthread_key_delete`: no destructor runs; the calling thread's value is
+/// forgotten (other threads' values are never read again for this key
+/// number until it is made anew, which zeroes the maker's).
 #[unsafe(no_mangle)]
 extern "C" fn pthread_key_delete(key: usize) -> i32 {
-    if key >= KEYS || !KEY_USED[key].swap(false, Ordering::AcqRel) {
-        return EINVAL;
-    }
+    let Some(k) = index(key).filter(|&k| KEY_USED[k].swap(false, Ordering::AcqRel)) else { return EINVAL };
+    // SAFETY: the calling thread's record.
+    unsafe { (*me()).values[k] = 0 };
     0
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn pthread_getspecific(key: usize) -> usize {
-    if key >= KEYS {
-        return 0;
+    match index(key).filter(|&k| KEY_USED[k].load(Ordering::Relaxed)) {
+        // SAFETY: the calling thread's record.
+        Some(k) => unsafe { (*me()).values[k] },
+        None => 0,
     }
-    // SAFETY: the calling thread's record.
-    unsafe { (*me()).values[key] }
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn pthread_setspecific(key: usize, value: usize) -> i32 {
-    if key >= KEYS || !KEY_USED[key].load(Ordering::Relaxed) {
-        return EINVAL;
-    }
+    let Some(k) = index(key).filter(|&k| KEY_USED[k].load(Ordering::Relaxed)) else { return EINVAL };
     // SAFETY: the calling thread's record.
-    unsafe { (*me()).values[key] = value };
+    unsafe { (*me()).values[k] = value };
     0
 }
 
