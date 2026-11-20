@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_semaphore_wait.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_semaphore_wait.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_semaphore_wait
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_semaphore_wait(sem, timeout) takes a token and returns 0, or waits and returns nonzero (49 observed) when the time ran out: a 100 ms wait with no token took at least 100 ms (and under 1.1 s) and returned nonzero; DISPATCH_TIME_NOW
+  with no token returns nonzero at once; with a token present it returns 0 at once; a timeout in the past behaves like NOW; DISPATCH_TIME_FOREVER waits until a signal arrives. With six waiters and one signal at a time, each signal woke exactly one waiter and none woke without a
+  signal. A thread blocked in a wait does not hold back other work: 100 other blocks ran while 16 blocks sat in the wait of a global queue.
+returns:
+  "token_taken": "0"
+  "timed_out": "nonzero (49)"
+errors:
+  "timeout": "nonzero (49)"
+side_effects: "none"
+threading: "blocks the caller"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

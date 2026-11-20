@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_queue_create_concurrent",
+      "source_sha256": "b894dea7675595b51fa1205caab3cc87a618cc5cec0b50841be25d46612004c7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "97cc8cdb9b18bb7fc8f433fbe007fdc6cc00bd1ad5856dbccf85563b6ef2c365",
+          "exit_code": 0,
+          "stdout": "ok both blocks finished\nok each was running while the other waited for it (they ran in parallel)\nok four blocks were running at the same time\nok and all finished\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "33ee8bccc4e5d7755bad78058b4f0bc79a391aef7ff2f2f36efdf25301963bb3",
+          "exit_code": 0,
+          "stdout": "ok both blocks finished\nok each was running while the other waited for it (they ran in parallel)\nok four blocks were running at the same time\nok and all finished\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_queue_create_labels",
+      "source_sha256": "ccec7d8ad2cc2b3c838738efa9dd3b25fe511b981b259ba5f144995b661febbc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7ad2bc194fe161c9018e4bad6bc7d525c434a19603c63c6ecd0b8eb165953e9f",
+          "exit_code": 0,
+          "stdout": "ok a serial queue is made\nok its label\nok the same label gives a different queue\nok DISPATCH_QUEUE_SERIAL is NULL\nok DISPATCH_QUEUE_CONCURRENT is not NULL\nok a concurrent queue is made\nok its label\nok a NULL label still makes a queue\nok its label is not NULL but empty\nok an empty label\nok the label is copied: changing the caller's string changes nothing\nok a 299 byte label is kept whole\nok ... and is a copy, not the caller's buffer\nok DISPATCH_CURRENT_QUEUE_LABEL on the main thread names the main queue\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "68d937c5ba2012cdcff701a09d8c6fbc1221c916cf577542e4fe888ace19d05a",
+          "exit_code": 0,
+          "stdout": "ok a serial queue is made\nok its label\nok the same label gives a different queue\nok DISPATCH_QUEUE_SERIAL is NULL\nok DISPATCH_QUEUE_CONCURRENT is not NULL\nok a concurrent queue is made\nok its label\nok a NULL label still makes a queue\nok its label is not NULL but empty\nok an empty label\nok the label is copied: changing the caller's string changes nothing\nok a 299 byte label is kept whole\nok ... and is a copy, not the caller's buffer\nok DISPATCH_CURRENT_QUEUE_LABEL on the main thread names the main queue\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_queue_create_serial",
+      "source_sha256": "035f779738dc99b82c16fde2665d4212916db2e6934faefe05c8e9b0bb3b055e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "19251b58df70ea0e427b0f3d276621606f97652bb60cdf967e0da0b15df4add3",
+          "exit_code": 0,
+          "stdout": "ok the last block ran\nok 1000 blocks ran in submission order\nok never two at the same time\nok never on the main thread (the main thread was not draining)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f50b810d20a952de6c4c4a4536aad4acf3ba0f9b35380aa3ef13e133ebb63f6c",
+          "exit_code": 0,
+          "stdout": "ok the last block ran\nok 1000 blocks ran in submission order\nok never two at the same time\nok never on the main thread (the main thread was not draining)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

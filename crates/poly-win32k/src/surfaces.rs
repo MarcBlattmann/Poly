@@ -209,6 +209,8 @@ pub struct Surfaces {
     /// Top-level windows without a redirection surface (`WS_EX_NOREDIRECTIONBITMAP`, ADR 0232):
     /// what GDI draws in them is not shown.
     unredirected: BTreeSet<u32>,
+    /// The foreground window the compositor was last told to raise.
+    told_foreground: u32,
 }
 
 /// Whether window `hwnd` has no redirection surface (Learn, "Extended Window Styles",
@@ -372,6 +374,18 @@ impl Surfaces {
             };
             desktop.set_margins(s, margins);
             desktop.set_visible(s, shown);
+        }
+        // A window that became the foreground window on the Windows side (a click into its client
+        // area, SetForegroundWindow) comes to the top of the desktop as well: on Windows the
+        // active window is raised with its activation (Learn, "Window Features": "the system
+        // brings the window to the top of the z-order"). The compositor raises a window it
+        // activates itself; it is told only of a change, so its own activations do not come back.
+        let fg = wm.foreground();
+        if fg != self.told_foreground {
+            self.told_foreground = fg;
+            if let Some(&s) = self.windows.get(&fg) {
+                desktop.request_activate(s);
+            }
         }
     }
 
@@ -1401,6 +1415,31 @@ mod tests {
         d.receive(&encode_all(&[FromCompositor::Released { buffer }]));
         s.sync(&wm, &mut d);
         assert!(s.rows(buffer, 0, 1).is_none());
+    }
+
+    /// A window that becomes the foreground window on the Windows side (a click into a background
+    /// window's page, SetForegroundWindow) is raised on the desktop too; nothing is sent while the
+    /// foreground stays where it is.
+    #[test]
+    fn the_foreground_window_is_raised_on_the_desktop() {
+        let mut wm = Wm::new();
+        let mut d = Desktop::new();
+        let mut s = Surfaces::new();
+        connect(&mut d);
+        let a = window(&mut wm, true);
+        let b = window(&mut wm, true);
+        s.sync(&wm, &mut d);
+        records(&mut d);
+        let mut fx = Effects::default();
+        wm.handle(CTX, Request::GiveForeground { hwnd: a }, &mut fx);
+        s.sync(&wm, &mut d);
+        let ida = s.surface(a).unwrap();
+        assert!(records(&mut d).contains(&ToCompositor::Activate { surface: ida }));
+        s.sync(&wm, &mut d);
+        assert!(!records(&mut d).iter().any(|r| matches!(r, ToCompositor::Activate { .. })));
+        wm.handle(CTX, Request::GiveForeground { hwnd: b }, &mut fx);
+        s.sync(&wm, &mut d);
+        assert!(records(&mut d).contains(&ToCompositor::Activate { surface: s.surface(b).unwrap() }));
     }
 
     /// ADR 0219: a commit of an area changes and damages only that area, and a resized window's

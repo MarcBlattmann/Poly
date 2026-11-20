@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libxpc.dylib/xpc_dictionary_create.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in xpc_dictionary_create.tests/macos.json.
+id: macos/api/libxpc.dylib/xpc_dictionary_create
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  xpc_dictionary_create(keys, values, count) makes a dictionary object (type XPC_TYPE_DICTIONARY, type name "dictionary") with the
+  count pairs (NULL, NULL, 0 gives an empty one; xpc_dictionary_create_empty is the same); each call gives a different
+  object. The values are retained (the caller may release them), the keys are copied. Any key is accepted: the empty string,
+  299 characters, keys that differ in case or only by a longer tail; the same key set again replaces the value (the count does not
+  grow); storing NULL with xpc_dictionary_set_value removes it. xpc_dictionary_get_count of a non-dictionary object is 0.
+returns:
+  success: "a new dictionary object (retain count 1)"
+errors: {}
+side_effects: none
+threading: "objects may be used from several threads as far as observed: not specified"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

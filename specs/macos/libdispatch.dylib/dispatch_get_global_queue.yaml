@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_get_global_queue.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_get_global_queue.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_get_global_queue
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_get_global_queue(identifier, flags) returns the shared concurrent queue for a QoS class (or an old priority), always
+  the same pointer. Labels: "com.apple.root.default-qos", "com.apple.root.user-interactive-qos", "com.apple.root.user-initiated-qos",
+  "com.apple.root.utility-qos", "com.apple.root.background-qos". Old priorities map to classes: DISPATCH_QUEUE_PRIORITY_HIGH (2) to user-initiated,
+  DEFAULT (0) and the identifier 0 to default, LOW (-2) to utility, BACKGROUND (INT16_MIN) to background. An unknown identifier (12345) and nonzero flags return
+  NULL. dispatch_queue_get_qos_class of the default queue is 0 (unspecified, relative priority 0) and of the others their class (33, 25, 17, 9); the main
+  queue's is 33. Blocks on a global queue run on worker threads, never on the main thread, concurrently (three blocks waiting for one another all ran), and
+  the queues of different classes are all usable (a block on each ran).
+returns:
+  "queue": "the global queue for the class, NULL for an unknown identifier or flags != 0"
+errors:
+  "invalid": "NULL"
+side_effects: "none"
+threading: "submission from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_after.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_after.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_after
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_after(when, queue, block) runs the block on the queue no earlier than when; it returns at once. Only lower bounds were asserted: a 100 ms
+  delay ran at 100 ms or later and within 3 s; blocks set 300, 100 and 200 ms apart ran in time order; 50 timers on a global queue all fired, none before its time
+  and none on the main thread. A time that has passed (DISPATCH_TIME_NOW, one second ago, dispatch_walltime(NULL, 0)) runs the block as soon as the queue is free: on a serial queue
+  after the earlier async block (order 1, 2). The block runs on the queue it was given (DISPATCH_CURRENT_QUEUE_LABEL). The time is a dispatch_time_t, see dispatch_time.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "queues a block for later"
+threading: "see the summary"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

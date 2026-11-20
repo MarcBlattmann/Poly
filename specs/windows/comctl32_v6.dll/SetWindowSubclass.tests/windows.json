@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "c6_subclass_chain",
+      "exe_sha256": "3590400cf2792b406921142b175407a006c3b88484fe6d1845836d4654aee856",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgYSB3aW5kb3cKb2sgU2V0V2luZG93U3ViY2xhc3MgQQpvayBTZXRXaW5kb3dTdWJjbGFzcyBCCm1lc3NhZ2UgcmVzdWx0IDExMCBvcmRlciAyMQpvayBCIHRoZW4gQQpvayB0aGUgcmVzdWx0cyBhZGQgdXAgKDAgKyAxMDAgKyAxMCkKb2sgR2V0V2luZG93U3ViY2xhc3MgQQpvayBBJ3MgcmVmZXJlbmNlIGRhdGEKb2sgR2V0V2luZG93U3ViY2xhc3MgQgpvayBCJ3MgcmVmZXJlbmNlIGRhdGEKb2sgR2V0V2luZG93U3ViY2xhc3Mgd2l0aCBhbm90aGVyIGlkCm9rIFNldFdpbmRvd1N1YmNsYXNzIEEgYWdhaW4Kb2sgbmV3IHJlZmVyZW5jZSBkYXRhCm9rIHRoZSBjaGFpbiBkaWQgbm90IGNoYW5nZQpvayBSZW1vdmVXaW5kb3dTdWJjbGFzcyBCCm9rIG9ubHkgQQpvayByZXN1bHQKb2sgUmVtb3ZlV2luZG93U3ViY2xhc3MgQiBhZ2FpbgpvayBSZW1vdmVXaW5kb3dTdWJjbGFzcyBBCm9rIG5vdGhpbmcgbGVmdApvayB0aGUgd2luZG93IHByb2NlZHVyZSBhbG9uZQpzdW1tYXJ5IDIwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok a window\nok SetWindowSubclass A\nok SetWindowSubclass B\nmessage result 110 order 21\nok B then A\nok the results add up (0 + 100 + 10)\nok GetWindowSubclass A\nok A's reference data\nok GetWindowSubclass B\nok B's reference data\nok GetWindowSubclass with another id\nok SetWindowSubclass A again\nok new reference data\nok the chain did not change\nok RemoveWindowSubclass B\nok only A\nok result\nok RemoveWindowSubclass B again\nok RemoveWindowSubclass A\nok nothing left\nok the window procedure alone\nsummary 20 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    }
+  ]
+}

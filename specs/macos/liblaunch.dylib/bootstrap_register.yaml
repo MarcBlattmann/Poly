@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/liblaunch.dylib/bootstrap_register.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in bootstrap_register.tests/macos.json.
+id: macos/api/liblaunch.dylib/bootstrap_register
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  bootstrap_register(bp, name, port) (deprecated in the SDK, but it works for an unprivileged caller and Chrome-era code may
+  still call it) registers a send right to port under name. port must be a name in the task that holds a send right or a
+  receive right; a receive right alone is accepted too (a send right is made for the server): the call succeeds and bootstrap_look_up
+  then finds it and a message sent to what it returned arrives on the receive right. A name already registered or checked in
+  by this process is BOOTSTRAP_NAME_IN_USE (1101); one held by another process is BOOTSTRAP_NOT_PRIVILEGED (1100); a port that
+  is not a name in the task (0x4321) is KERN_INVALID_RIGHT (17) and the name stays free; a bootstrap port that is no send
+  right is MACH_SEND_INVALID_DEST. The registration lasts as long as the process lives or the receive right exists: after the
+  registering process exited, or the receive right was destroyed, the name is unknown; a destroyed port's name cannot be
+  registered again (KERN_INVALID_RIGHT). Observed in a probe and left out of the tests
+  because it cannot be undone from the test: registering MACH_PORT_NULL under a free name succeeds, a look_up of the name then
+  succeeds too, and the bootstrap server keeps a record for the name (port 0x0) that outlives the process: launchctl print
+  still listed it an hour later. Registering MACH_PORT_DEAD under a held name is BOOTSTRAP_NAME_IN_USE.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  name_in_use_here: "BOOTSTRAP_NAME_IN_USE (1101): this process already holds the name"
+  name_held_elsewhere: "BOOTSTRAP_NOT_PRIVILEGED (1100)"
+  invalid_port: "KERN_INVALID_RIGHT (17): port is not a name in the task, or a dead name"
+  bad_bootstrap_port: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "the name is registered with the bootstrap server until the process exits or the receive right is destroyed"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "under a millisecond"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

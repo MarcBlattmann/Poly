@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_async_basic",
+      "source_sha256": "f522d5a0bfc82319423d9eef86d4a04fe4a26c96051b838c9c7b1c927f612b11",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3f95f02a7724d8962a40b1d2d4b6ad0bb130b43623f2b86e9132e712f5a1bf62",
+          "exit_code": 0,
+          "stdout": "ok dispatch_async returned while its block is still blocked (not run inline)\nok the block ran\nok on a thread other than the caller's\nok a captured (non __block) value is the one at submission time\nok 100 blocks on a serial queue ran in order\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1b77fb500b3696c62c817cc454bc7bd3a7f3c9a77c58f0558929cf09f1321254",
+          "exit_code": 0,
+          "stdout": "ok dispatch_async returned while its block is still blocked (not run inline)\nok the block ran\nok on a thread other than the caller's\nok a captured (non __block) value is the one at submission time\nok 100 blocks on a serial queue ran in order\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_async_nested",
+      "source_sha256": "a144c63f5eb86b072a63cbe5c3cb207280be05820054bf70daef9fa6fc17d3d4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b102f8afac95709670f02bf62d9a69400df3cb9d376278b4a677504ab004122f",
+          "exit_code": 0,
+          "stdout": "ok a block submitted from a block of the same serial queue runs after it ends\nok 8 threads submitted 250 blocks each: 2000 ran, none lost or doubled\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "843011d13fc2bebe2481fecb767dbe6b674d19aa58c98f9311e451b452f465b2",
+          "exit_code": 0,
+          "stdout": "ok a block submitted from a block of the same serial queue runs after it ends\nok 8 threads submitted 250 blocks each: 2000 ran, none lost or doubled\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

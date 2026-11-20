@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontmanagercreatefontdescriptorfromdata_dejavu",
+      "source_sha256": "79d784f0a3562ddf948017bfce7bf3002e72f3fa5cc8825e2fac57ab9e214abd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c07e0936dfc7c88e562ac966e711a77d5669277a2fee5a2d4604c75081b5ea7b",
+          "exit_code": 0,
+          "stdout": "ok reg != NULL && bold != NULL\nok d != NULL\nok attr_is(d, kCTFontNameAttribute, \"DejaVuSans\")\nok attr_is(d, kCTFontFamilyNameAttribute, \"DejaVu Sans\")\nok attr_is(d, kCTFontStyleNameAttribute, \"Book\")\nok db != NULL && attr_is(db, kCTFontNameAttribute, \"DejaVuSans-Bold\") && attr_is(db, kCTFontStyleNameAttribute, \"Bold\")\nok CTFontGetUnitsPerEm(f) == 2048\nok CTFontGetAscent(f) is 92.82\nok CTFontGetDescent(f) is 23.58\nok CTFontGetGlyphCount(f) == 6253\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0702b737d59be8805901c5d938362ba3c05b6abe6401314f407fa36ad326f58f",
+          "exit_code": 0,
+          "stdout": "ok reg != NULL && bold != NULL\nok d != NULL\nok attr_is(d, kCTFontNameAttribute, \"DejaVuSans\")\nok attr_is(d, kCTFontFamilyNameAttribute, \"DejaVu Sans\")\nok attr_is(d, kCTFontStyleNameAttribute, \"Book\")\nok db != NULL && attr_is(db, kCTFontNameAttribute, \"DejaVuSans-Bold\") && attr_is(db, kCTFontStyleNameAttribute, \"Bold\")\nok CTFontGetUnitsPerEm(f) == 2048\nok CTFontGetAscent(f) is 92.82\nok CTFontGetDescent(f) is 23.58\nok CTFontGetGlyphCount(f) == 6253\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontmanagercreatefontdescriptorfromdata_valid_font",
+      "source_sha256": "2540559b562d62df25ac24fdb0ae5dd41e10c92f1700a01a893df8ef638f7f9c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4079137794944681259a79a0471e531d84a61baec33bfd544b8b7ac3764dd85c",
+          "exit_code": 0,
+          "stdout": "ok r != NULL && CFGetTypeID(r) == CTFontDescriptorGetTypeID()\nok attr_is(r, kCTFontNameAttribute, \"PolyTest-Regular\")\nok attr_is(r, kCTFontFamilyNameAttribute, \"PolyTest\")\nok attr_is(r, kCTFontStyleNameAttribute, \"Regular\")\nok attr_is(r, kCTFontDisplayNameAttribute, \"PolyTest Regular\")\nok b != NULL && attr_is(b, kCTFontNameAttribute, \"PolyTest-Bold\") && attr_is(b, kCTFontStyleNameAttribute, \"Bold\")\nok pt_is(f, \"PolyTest-Regular\")\nok CTFontGetSize(f) is 20\nok CTFontGetAscent(f) is 16\nok CTFontGetDescent(f) is 4\nok CTFontGetUnitsPerEm(f) == 1000\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9012b58bc18ac4a5d2f19aee330b6f12b135c25e2b01cc6725aa4e8df1eaed7c",
+          "exit_code": 0,
+          "stdout": "ok r != NULL && CFGetTypeID(r) == CTFontDescriptorGetTypeID()\nok attr_is(r, kCTFontNameAttribute, \"PolyTest-Regular\")\nok attr_is(r, kCTFontFamilyNameAttribute, \"PolyTest\")\nok attr_is(r, kCTFontStyleNameAttribute, \"Regular\")\nok attr_is(r, kCTFontDisplayNameAttribute, \"PolyTest Regular\")\nok b != NULL && attr_is(b, kCTFontNameAttribute, \"PolyTest-Bold\") && attr_is(b, kCTFontStyleNameAttribute, \"Bold\")\nok pt_is(f, \"PolyTest-Regular\")\nok CTFontGetSize(f) is 20\nok CTFontGetAscent(f) is 16\nok CTFontGetDescent(f) is 4\nok CTFontGetUnitsPerEm(f) == 1000\nok !pt_is(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 20, NULL), \"PolyTest-Regular\")\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

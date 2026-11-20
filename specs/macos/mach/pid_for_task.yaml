@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/pid_for_task.yaml. Observed with C tests (raw Mach traps, tests/macos/include/poly_mtest.h; ADR 0182);
+# results per architecture in pid_for_task.tests/macos.json.
+id: macos/syscall/mach/pid_for_task
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) with raw Mach traps and no libSystem call (tests/macos/include/poly_mtest.h), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  Mach trap 46 (pid_for_task), no libSystem: x86_64 rax = 0x1000000 | 46; arm64 x16 = -46; arguments the task port, pointer to
+  the out pid. The caller's own task port gives the caller's pid; so does its name port (from task_name_for_pid), and a child's
+  name port gives the child's pid; after the child has ended, its name port gives KERN_FAILURE (5) (a value in the test).
+  A name that is no task port is KERN_FAILURE (5), not an invalid-name error: MACH_PORT_NULL, 0x1234, MACH_PORT_DEAD, a receive
+  right, the host port and a thread port. On failure the out pid is set to -1.
+returns:
+  success: "KERN_SUCCESS (0); *pid is the process id"
+errors:
+  failure: "KERN_FAILURE (5): not a task port; *pid = -1"
+side_effects: none
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

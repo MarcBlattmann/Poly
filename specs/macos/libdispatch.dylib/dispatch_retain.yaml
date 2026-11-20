@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_retain.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_retain.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_retain
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_retain(object) and dispatch_release(object) count references on a dispatch object (queue, group, semaphore, source). With dispatch_set_context(object, ctx) and dispatch_set_finalizer_f(object, function): dispatch_get_context gives back the context; the finalizer runs when the last reference is gone, with the context
+  as its argument, once; two retains and two releases leave it alive. A queue released by its creator with ten blocks pending keeps living until they have run: the finalizer ran after all ten. 8 threads x 5000 retain/release pairs: still alive; the final release finalizes once.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "changes the reference count"
+threading: "atomic; safe from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontcreateforstring_covered",
+      "source_sha256": "615ad50dfb3b317951674068512e094fd4948ca09bd8d44334a9f53d4d171801",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "dbc42d81f387b1188bb33e55a0b1a5c2b76f9c57849661b873ef44d54cff4d0f",
+          "exit_code": 0,
+          "stdout": "ok r != NULL && pt_is(r, \"PolyTest-Regular\")\nok CTFontGetSize(r) is 24\nok pt_is(CTFontCreateForString(f, s, CFRangeMake(2, 1)), \"PolyTest-Regular\")\nok pt_is(CTFontCreateForString(f, CFStringCreateWithCharacters(kCFAllocatorDefault, pair, 2), CFRangeMake(0, 2)), \"PolyTest-Regular\")\nok pt_is(CTFontCreateForString(f, s, CFRangeMake(1, 0)), \"PolyTest-Regular\")\nok pt_is(CTFontCreateForString(pt_font(1, 24), s, CFRangeMake(0, 4)), \"PolyTest-Bold\")\nok pt_is(f, \"PolyTest-Regular\")\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a2fe38578450b03ccaab7bcae05a9f4759a193cc7aea46fa5c88af0c51fd1055",
+          "exit_code": 0,
+          "stdout": "ok r != NULL && pt_is(r, \"PolyTest-Regular\")\nok CTFontGetSize(r) is 24\nok pt_is(CTFontCreateForString(f, s, CFRangeMake(2, 1)), \"PolyTest-Regular\")\nok pt_is(CTFontCreateForString(f, CFStringCreateWithCharacters(kCFAllocatorDefault, pair, 2), CFRangeMake(0, 2)), \"PolyTest-Regular\")\nok pt_is(CTFontCreateForString(f, s, CFRangeMake(1, 0)), \"PolyTest-Regular\")\nok pt_is(CTFontCreateForString(pt_font(1, 24), s, CFRangeMake(0, 4)), \"PolyTest-Bold\")\nok pt_is(f, \"PolyTest-Regular\")\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontcreateforstring_sys_fallback_names",
+      "source_sha256": "68407304158d20ca923c4a82d06247f0809c6ac67608573ef377a301c56b0207",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1de6a12f24ba8c1c21de494dcb9c155cb8f9eb66c866fce72607337457c6a6cb",
+          "exit_code": 0,
+          "stdout": "ok pt_is(for_char(p, 'z'), \"Helvetica\")\nok pt_is(for_char(p, 0x4E2D), \"PingFangSC-Regular\")\nok pt_is(for_char(p, 0x0627), \"GeezaPro\")\nok pt_is(CTFontCreateForString(p, CFStringCreateWithCharacters(kCFAllocatorDefault, emoji, 2), CFRangeMake(0, 2)), \"AppleColorEmoji\")\nok pt_is(for_char(dj, 0x4E2D), \"PingFangSC-Regular\")\nok pt_is(for_char(dj, 0x0627), \"DejaVuSans\")\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c529c07a800bf0d73fef92d3be077307f043509bd44b042db88e5061dc40410a",
+          "exit_code": 0,
+          "stdout": "ok pt_is(for_char(p, 'z'), \"Helvetica\")\nok pt_is(for_char(p, 0x4E2D), \"PingFangSC-Regular\")\nok pt_is(for_char(p, 0x0627), \"GeezaPro\")\nok pt_is(CTFontCreateForString(p, CFStringCreateWithCharacters(kCFAllocatorDefault, emoji, 2), CFRangeMake(0, 2)), \"AppleColorEmoji\")\nok pt_is(for_char(dj, 0x4E2D), \"PingFangSC-Regular\")\nok pt_is(for_char(dj, 0x0627), \"DejaVuSans\")\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

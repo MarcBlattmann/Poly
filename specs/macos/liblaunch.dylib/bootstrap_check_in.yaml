@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/liblaunch.dylib/bootstrap_check_in.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in bootstrap_check_in.tests/macos.json.
+id: macos/api/liblaunch.dylib/bootstrap_check_in
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  bootstrap_check_in(bp, name, &port) claims a service name and returns its receive right. An unprivileged caller can check in
+  any name nobody holds, including names no job declares: the call succeeds (the process becomes an "unmanaged" job holding
+  it), the empty string, spaces, slashes and 129-character names too. *port is a new receive right (type 0x20000, nothing
+  else) with a queue limit of 2 (not the default 5: a third message sent without waiting is MACH_SEND_TIMED_OUT) and the usual
+  empty status. The same process checking in the name a second time gets BOOTSTRAP_SERVICE_ACTIVE (1103) and *port is left
+  alone; another process checking in a name that is held gets BOOTSTRAP_NOT_PRIVILEGED (1100), not 1103. Once the holder has
+  exited, or the receive right was destroyed, the name can be checked in again (by the same process too). Look-ups of the
+  name from this process and from children find it (bootstrap_look_up); a message sent to what they find arrives on this
+  receive right. Registering MACH_PORT_NULL with bootstrap_register is not a way to give a name back: it leaves the name held
+  (see bootstrap_register). For jobs that declare MachServices in a launchd plist the declared name is handed to the job that
+  checks it in; that path needs a launchd job and is not covered by a test.
+returns:
+  success: "KERN_SUCCESS (0); *port is a receive right (type 0x20000), queue limit 2"
+errors:
+  name_held_here: "BOOTSTRAP_SERVICE_ACTIVE (1103): this process already checked the name in (or holds it); *port untouched"
+  name_held_elsewhere: "BOOTSTRAP_NOT_PRIVILEGED (1100): another process holds the name"
+  bad_bootstrap_port: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "a receive right is created and the name is held by this process until it exits or the right is destroyed"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "under a millisecond"
+  guarantees: "none; after a holder exits the name becomes free after a short delay"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

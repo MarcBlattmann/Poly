@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontgetcapheight_dejavu",
+      "source_sha256": "a4ba935219992e897c21b98a1dce8aac38246a6e053de9f2617a45d91dcefe8e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ed20e551b9ad32debf1cf7e45af0d4398a0e820d1633e55ca08a641491a75d0c",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetCapHeight(pt_file_font(\"DejaVuSans.ttf\", 12)) is 8.8200\nok CTFontGetCapHeight(pt_file_font(\"DejaVuSans.ttf\", 100)) is 73.5400\nok CTFontGetCapHeight(pt_file_font(\"DejaVuSans.ttf\", 200)) is 147.0800\nok CTFontGetCapHeight(pt_file_font(\"DejaVuSans-Bold.ttf\", 100)) >= 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ada4e0759978ae453bbb4ca6fd749103936704e645603de2e76f91fb9aef9609",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetCapHeight(pt_file_font(\"DejaVuSans.ttf\", 12)) is 8.8200\nok CTFontGetCapHeight(pt_file_font(\"DejaVuSans.ttf\", 100)) is 73.5400\nok CTFontGetCapHeight(pt_file_font(\"DejaVuSans.ttf\", 200)) is 147.0800\nok CTFontGetCapHeight(pt_file_font(\"DejaVuSans-Bold.ttf\", 100)) >= 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontgetcapheight_variants",
+      "source_sha256": "00df28a2118d9308a3494dbc8aacb72bad3e65c0ae5bc5baac8acbd93d583769",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ce41ce54315886ecfbc6d1885f7235015540e737a050b9dcd03d839e8f017ec3",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetCapHeight(pt_font(1, 20)) is 14.0000\nok CTFontGetCapHeight(pt_font(1, 20)) is CTFontGetCapHeight(pt_font(0, 20))\nok CTFontGetCapHeight(CTFontCreateCopyWithAttributes(pt_font(0, 10), 50, NULL, NULL)) is 35.0000\nok CTFontGetCapHeight(CTFontCreateWithFontDescriptor(pt_descriptor(0), 20, &t)) is 42.0000\nok pt_register()\nok CTFontGetCapHeight(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 40, NULL)) is 28.0000\nok CTFontGetCapHeight(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 40, NULL)) is 28.0000\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "112d590c2cbbd4db314931c3020927abfb72e5ebf3b8eee65a03fb24ed6371b9",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetCapHeight(pt_font(1, 20)) is 14.0000\nok CTFontGetCapHeight(pt_font(1, 20)) is CTFontGetCapHeight(pt_font(0, 20))\nok CTFontGetCapHeight(CTFontCreateCopyWithAttributes(pt_font(0, 10), 50, NULL, NULL)) is 35.0000\nok CTFontGetCapHeight(CTFontCreateWithFontDescriptor(pt_descriptor(0), 20, &t)) is 42.0000\nok pt_register()\nok CTFontGetCapHeight(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 40, NULL)) is 28.0000\nok CTFontGetCapHeight(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 40, NULL)) is 28.0000\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
