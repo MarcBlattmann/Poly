@@ -560,11 +560,6 @@ pub fn volatile_keys(reg: &mut Registry, now: u64) -> Result<(), NtStatus> {
     if let Some(me) = reg.find(user, POLY_USER_SID) {
         let env = make_path(reg, me, "Volatile Environment", true, now)?;
         set(reg, env, VOLATILE_ENVIRONMENT, now)?;
-        // The 32-bit view of the user's redirected classes (`RegistryDefaults.ClassesRoots.yaml`
-        // `hkcu_clsid`: a 32-bit program makes `Software\Classes\CLSID\{id}` there).
-        for sub in ["CLSID", "Interface"] {
-            make_path(reg, me, &alloc::format!("Software\\Classes\\{WOW6432_NODE}\\{sub}"), false, now)?;
-        }
     }
     // `\REGISTRY\USER\<user>_Classes`, the user's classes hive (RtlFormatCurrentUserKeyPath.yaml
     // `usable`: it opens). Poly keeps the user's classes in `<user>\Software\Classes`, so the

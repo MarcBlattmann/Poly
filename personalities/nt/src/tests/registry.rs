@@ -483,6 +483,32 @@ fn the_default_software_hive_has_the_wow6432node_keys_of_windows() {
     assert!(subkeys(&mut f, sw).iter().any(|n| n == "WOW6432Node"));
 }
 
+/// `RegistryDefaults.ClassesRoots.yaml` `hkcu_clsid`: a 32-bit program's create below the user's
+/// `Classes\CLSID` makes the user's `Classes\WOW6432Node` it goes through; and
+/// `one_key_64`: a 64-bit caller's create with `KEY_WOW64_64KEY` below `Classes\WOW6432Node`
+/// opened with it stays there.
+#[test]
+fn view_nodes_on_create() {
+    let mut f = Fake::new();
+    let user_classes =
+        alloc::format!("\\Registry\\User\\{}\\Software\\Classes", poly_registry::defaults::POLY_USER_SID);
+    assert_eq!(
+        open_key(&mut f, 0, &alloc::format!("{user_classes}\\WOW6432Node"), KEY_READ).0,
+        STATUS_OBJECT_NAME_NOT_FOUND
+    );
+    f.proc.wow64 = true;
+    let (s, h, _) = create_key(&mut f, 0, &alloc::format!("{user_classes}\\CLSID"), KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert!(key_name(&mut f, h).ends_with("\\Software\\Classes\\WOW6432Node\\CLSID"));
+    f.proc.wow64 = false;
+    let (s, node) =
+        open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Classes\\Wow6432Node", KEY_ALL_ACCESS | KEY_WOW64_64KEY);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (s, h, _) = create_key(&mut f, node, "Marker", KEY_ALL_ACCESS | KEY_WOW64_64KEY, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\Marker");
+}
+
 /// `RegistryDefaults.Wow6432Node.yaml` `one_key_64`, `software_32`: the physical registry's names
 /// for one key (links), and the 32-bit view's own reading of a leftover `Wow6432Node`.
 #[test]
