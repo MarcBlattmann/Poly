@@ -39,6 +39,7 @@ Chrome on Windows (in progress), then Chrome on macOS.
 | Our `dyld` v0 (done, ADR 0237) and a Poly-built `libSystem.B.dylib` (v0 done, ADR 0258: an SDK-linked C program runs) | 0160 | dynamically linked Mach-Os, the 66 libraries as Poly dylibs |
 | Mach IPC core (ports, rights, `mach_msg`, bootstrap) | 0161 | the 85 Mach / XPC imports, Chrome's process model |
 | arm64 hello through the interpreter and the JIT, static and through our `dyld` (done) | 0257 | arm64-only apps (not Chrome on x86) |
+| Real arm64 command-line programs on Poly's libSystem: Lua, the SQLite shell, threads, signals, `MAP_JIT` (done) | 0257 addendum | arm64-only command-line tools |
 
 After these, the areas of the map in the order Chrome's start-up meets
 them: libSystem / BSD (619 symbols) and the Objective-C and C++ runtimes

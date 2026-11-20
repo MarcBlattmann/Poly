@@ -157,3 +157,152 @@ the JIT was 31 to 48 times faster over several runs, and the whole boot 0.7 s ag
   invalidate them yet.
 - Apple's own libSystem is not run: arm64 programs link Poly's libSystem once there is one
   (ADR 0157's next step); until then only programs on our stand-in run.
+
+## Addendum (2026-11-20): real command-line programs
+
+Track `impl-a64-cli`. Real arm64 programs built from source and linked against the SDK the ordinary
+way now run on x86-64 Poly: the Lua 5.4.7 interpreter, the SQLite 3.47.2 shell, and Poly's own C
+programs with threads, signals, memory mappings and code written at run time. They load through
+Poly's dyld with Poly's own libSystem (ADR 0258) in place of Apple's, and run in the translator.
+Inputs as above, plus the C standard, POSIX and the macOS manual pages for the library functions,
+the SDK headers for every layout used (`<runetype.h>`, `<_locale.h>`, `<time.h>`, `<sys/dirent.h>`,
+`<malloc/malloc.h>`, `<pthread/pthread_impl.h>`, `<sys/signal.h>`, `<sys/_types/_ucontext.h>`,
+`<mach/arm/_structs.h>`, checked with `_Static_assert`) and the spec sheets `sigaction`, `pipe`,
+`ioctl`, `mmap`, `bsdthread_*`, `sys_sysctlbyname` and `ulock`. Lua and SQLite are downloaded at a
+pinned version and checksum by `tests/a64/cli/build.sh` and built with clang as a black box; their
+sources are not committed (THIRD_PARTY.md). No Apple binary was read or run as an oracle.
+
+### 8. libSystem for arm64
+
+Poly's libSystem is built for `aarch64-apple-darwin` too, and every library is a universal file
+with both slices (`cargo xtask libsystem` writes the fat header; poly-dyld picks the slice). What
+differs per architecture is small and in assembly: the call stubs (`svc #0x80`, the number in
+`x16`, a Mach trap negated, carry for errors), `errno`'s thread-local access, `memcpy` and its
+family, `setjmp` (on arm64 `setjmp`/`sigsetjmp(env, 1)` save the signal mask and
+`longjmp`/`siglongjmp` restore it), the variadic functions (Apple's arm64 ABI passes variadic
+arguments on the stack, one 8-byte slot each, and `va_list` is a pointer: the `printf` family and
+`sscanf` are a `mov xN, sp` and a jump) and the names the SDK gives the 64-bit `stat` and `statfs`
+calls (`$INODE64` on x86-64 only; `exports/<library>.<arch>.txt` hold the differences). Three more
+libraries join the re-exports, as Lua and SQLite need them: `libsystem_m` (poly-libm's functions,
+`fmod`, `frexp`, `ldexp` and the rounding functions exact on the bits), `libsystem_info`
+(`getpwuid`, one user) and `libcompiler_rt` (`___chkstk_darwin`, a return: a thread's stack is mapped
+whole). libsystem_c grows the stream functions on files (buffered reads, `ungetc`, `fseeko`,
+`setvbuf`, `freopen`, `tmpfile`, `popen`/`system` through `posix_spawn` with the standard
+descriptor swapped around the spawn), directories, `getcwd`, `strtod` (C syntax scanned here, the
+decimal digits converted by `core`'s correctly rounded parser, hexadecimal ones rounded here),
+`sscanf`, calendar time and `strftime` in the C locale (local time is UTC until Poly has a zone
+database), the C locale's `_DefaultRuneLocale` tables that `<ctype.h>`'s inline functions read,
+`setlocale`/`localeconv`, `strerror`, `sysconf`/`confstr`, `sigaction` (the kernel's
+`__sigaction` with Poly's trampoline, which calls the handler and then `sigreturn`), `signal`,
+`raise`, `__assert_rtn` and `malloc` zones (one zone, the default one, whose function pointers SQLite
+calls). libsystem_pthread gets real threads: `pthread_create` maps a stack and a record and calls
+`__bsdthread_create`; mutexes, condition variables, `pthread_once` and `pthread_join` wait with
+`__ulock_wait`; thread-specific values are per thread. `pthread_jit_write_protect_np` reaches the
+translator (section 11). The choices the libc sheets are to confirm are marked in the code; the
+208 coverage entries this adds are claimed, not green.
+
+### 9. The kernel: threads and more BSD calls
+
+`bsdthread_register` (the first registration wins, a second is `EINVAL`), `bsdthread_create` and
+`bsdthread_terminate` work for XNU processes. The register state of a new thread is Poly's
+contract with its own libpthread, as no sheet fixes it: the stack pointer at the caller-made stack,
+and on x86-64 `rdi` = the thread structure, `rsi` = the start function, `rdx` = its argument.
+New BSD calls without sheets yet, with their POSIX meaning: `gettimeofday`, `getrusage`, `unlink`,
+`rmdir`, `mkdir`, `access` (existence only: one user), `umask` and `fsync`; and `ioctl` as its sheet
+has it (`EBADF`, `FIOCLEX`/`FIONCLEX`, everything else `ENOTTY`: an XNU program cannot be told its
+descriptor is a terminal yet, so it reads its input as from a file).
+
+### 10. Threads in the translated process
+
+Each guest thread runs on a host thread the kernel starts at the runtime's own entry point. The
+translator's state (engine and code cache, guest memory and page flags, the bridge) is shared and
+touched only under one lock, a fair ticket lock whose waiters sleep in `__ulock_wait`: translated
+code of one guest thread runs at a time, so code invalidation and the page flags stay consistent
+without more machinery. A thread gives the lock up after every 65,536 blocks and around every call
+that goes to the kernel (the bridge keeps the call and stops the guest; the runtime makes it
+unlocked), so a call that blocks never stops the others. `bsdthread_register` and
+`bsdthread_create` are the bridge's: a new thread gets its own table at `TPIDRRO_EL0` (slot 0 its
+thread structure, slot k its copy of image k's thread-local template, from templates the kernel
+lists in the hand-off) and starts at the registered entry with x0 = thread structure, x1 = start
+function, x2 = argument. dyld's arm64 thread-local thunk now reads the calling thread's block from
+that table (a descriptor's key is its slot), so `errno` and `__thread` variables are per thread.
+Running guest threads in parallel (a code cache shared without one lock, page flags updated
+atomically) is a later step.
+
+### 11. Signals, faults and code written at run time
+
+The kernel keeps a process's actions but does not call handlers yet, and a translated thread's
+registers are the runtime's anyway, so the runtime delivers. It keeps the guest's actions and the
+blocked set (`sigaction` and `sigprocmask` are also passed on, so the kernel knows ignored and
+default actions) and delivers the signals of faults (`SIGSEGV` with `SEGV_ACCERR` and the address
+for an unmapped page, `SIGBUS` with `BUS_ADRALN` for one the protection forbids, `SIGILL`,
+`SIGTRAP`, `SIGSYS`: the sigaction sheet's codes) and those the process sends itself (`kill` to
+its own pid or 0, `raise`): the handler runs before `kill` returns, a blocked signal waits until it
+is unblocked. A handler is entered as the sheet describes, through the trampoline with (handler,
+info style, signal, siginfo, ucontext) and below a frame of `siginfo_t`, `ucontext_t` and the arm64
+`mcontext` (`__es`, `__ss`, `__ns`); `sigreturn` restores every register and the mask. Signals from
+other processes still go to the kernel (their default actions, or pending), and the blocked set is
+the process's, not each thread's.
+
+`mmap`, `munmap` and `mprotect` go to the kernel, shaped by the bridge as in section 2.
+`pthread_jit_write_protect_np` on arm64 makes Poly's machine-dependent call (`x16` = 0x80000000,
+`x3` = `"POLY"`), which the runtime answers by switching `MAP_JIT` pages between writable and
+executable in its page flags. Every way code can change already reaches the translator's
+invalidation (ADR 0239): a write to a page with translations, a `MAP_JIT` switch to write mode, an
+`mprotect` that takes execute away; `sys_icache_invalidate` has nothing to do.
+
+### 12. Speed: where the JIT spends its time
+
+`POLY_A64_PROFILE=1` makes the runtime count the instructions the interpreter runs, by kind and
+operation, and every exit from translated code by reason (a direct branch not chained yet, an
+indirect branch the cache missed, an instruction for the interpreter, a system call). On Lua's
+`bench.lua` (recursion, tables, strings, closures, floating point, a sort; QEMU TCG on the owner's
+Mac):
+
+| | before | after |
+|---|---|---|
+| instructions left to the interpreter | 265,081 | 155,527 |
+| entries into translated code | 304,266 | 146,573 |
+| indirect branches the cache missed | 50,381 | 2,161 |
+
+What changed: `RBIT`, `CLS` and `UCVTF` from a 64-bit register are translated (`Bit1` and
+`IntToFp` were the top of the profile; every instruction left to the interpreter costs a round trip
+out of translated code, which no chain can avoid); the indirect branch cache has 16,384 entries
+instead of 4,096 (most misses were collisions); and writing NZCV, which a flag-setting instruction
+does whenever a later one may leave translated code, takes 7 instructions instead of 19: `pushfq`,
+then the low 16 bits of RFLAGS index a 64 KiB table per kind (after an addition, after a
+subtraction) in the code area, none of which changes the host flags. With exits this rare, the time
+is in translated code itself (guest registers kept in memory, a bounds and flag check on every
+access); the next wins are caching guest registers in host registers and the five SIMD forms the
+profile still lists (single-lane loads, vector `SCVTF`, `USHLL`, `CMTST`, `ZIP1`). Under TCG the
+JIT took 16 to 22 times fewer cycles than the interpreter on a fifth of the script (the full script
+does not fit the interpreter's boot time); TCG timings on a shared host vary by ±20%, so the counts
+above are the reliable measure, and CI's runs on KVM print the times on real hardware.
+
+### Tests of the addendum
+
+- Host: `poly-libsystem` (ctype tables, `strtod` with hexadecimal rounding and ranges, calendar
+  conversions over ±2,000 years with ISO weeks and `strftime`, `sscanf`, buffered reads with
+  `ungetc`, `ftell`, `fseek`, `strerror`, the arm64 `va_list`); `poly-a64-xnu` (thread creation and
+  the new thread's table, deferred calls, signal frames round-tripping every register,
+  actions/masks/pending); `poly-personality-xnu` (`gettimeofday`, `ioctl`, `x1` for `pipe`);
+  poly-dyld's start code (the fifth initializer argument, the table-reading thunk); the JIT's
+  differential test generates the one-source data processing group.
+- Boot test group `macho-a64-cli` (shard `userland`): libSystem's own C test program built for
+  arm64; `lua hello.lua` (the language and its standard libraries over libSystem: string
+  formatting, `strtod`, coroutines, errors, math, files with seeks, `os.time`/`os.date`/`os.clock`);
+  an SQLite session on an in-memory database whose output must equal `session.out`; `threads.c`
+  (four threads on one mutex, a condition variable queue, `pthread_once`, per-thread `errno`,
+  `__thread` and keys, anonymous and file mappings, a `SA_SIGINFO` handler through `raise`, a
+  blocked signal delivered on unblocking, `SIGSEGV` and `SIGBUS` caught and left with
+  `siglongjmp`); `jit.c` (MAP_JIT code run, rewritten and run again, `SIGBUS` for a write in execute
+  mode, `mprotect` flips, code rewritten 200 times); Lua's benchmark under the JIT with the profile,
+  then under both engines, whose outputs must be equal.
+
+### Not yet
+
+Guest threads in parallel; signals from other processes into translated code, and per-thread
+masks; `fork`/`execve` of a translated process; a time zone database; locales other than C;
+terminals for XNU programs (`TIOCGETA`); x86-64 thread-local storage per thread in Poly's
+libSystem (x86-64 programs get threads but share `errno`); the commpage; the SIMD forms above;
+the libc sheets for the choices marked in the code.

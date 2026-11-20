@@ -50,7 +50,7 @@
 {"symbol":"__atomic_store_2","src":["macos-sdk"]},
 {"symbol":"__atomic_store_4","src":["macos-sdk"]},
 {"symbol":"__atomic_store_8","src":["macos-sdk"]},
-{"symbol":"__chkstk_darwin","src":["macos-sdk"]},
+{"symbol":"__chkstk_darwin","status":"claimed","claimed_by":"impl-a64-cli","src":["macos-sdk"]},
 {"symbol":"__clear_cache","src":["macos-sdk"]},
 {"symbol":"__clzdi2","src":["macos-sdk"]},
 {"symbol":"__clzsi2","src":["macos-sdk"]},

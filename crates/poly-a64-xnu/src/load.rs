@@ -3,9 +3,10 @@
 //!
 //! [`load`] maps every segment of every image at its address and writes its
 //! bytes, writes every fixup, maps the arm64 start code
-//! (`poly_dyld::start::ARM64_START`) with its data block, one thread-local
-//! block per image for the main thread, the main thread's TSD page and its
-//! stack, and the area the runtime places the guest's `mmap` mappings in. All of it is
+//! (`poly_dyld::start::ARM64_START`) with its data block, the main thread's
+//! table (its `TPIDRRO_EL0`: slot 0 its thread structure, slot k its block
+//! of image k's thread-local variables) and those blocks, its stack, and
+//! the area the runtime places the guest's `mmap` mappings in. All of it is
 //! readable and writable for the host; what the guest may do is in the
 //! [`Handoff`]'s regions, which the runtime turns into its page flags.
 //!
@@ -98,8 +99,8 @@ pub fn load(t: &mut dyn Target, program: &Program, args: &Args<'_>) -> Result<Ha
         return Err(e);
     }
 
-    // The system area: start code, thread-local blocks, the TSD page.
-    // The main thread's table (TPIDRRO_EL0): slot 0 its thread structure
+    // The system area: the main thread's table, the start code, the
+    // thread-local blocks. The main thread's table (TPIDRRO_EL0): slot 0 its thread structure
     // (libpthread's to fill), slot k its block of image k's thread-local
     // variables.
     let mut system = Bump { next: l.system, end: l.system_end };
