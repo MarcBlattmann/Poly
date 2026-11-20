@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/GetFileSecurityW.yaml
+id: windows/api/advapi32.dll/GetFileSecurityW
+oracle:
+  os: Windows 11 Home 26H2 (build 26300.9974), x64
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory. The tests whose names end in _std ran with poly-oracle.ps1 -Token standard (a one-time scheduled task in the interactive desktop session 1 of the same account: medium integrity, Administrators deny-only, the filtered standard token)'
+  observed_by: spec-win-remote-thread-2
+  date: '2026-11-20'
+sources: 'Observations of our own test programs on the machine above (files made in the directory of the test image; descriptors written as SDDL text and read back as SDDL text through ConvertStringSecurityDescriptorToSecurityDescriptorW and ConvertSecurityDescriptorToStringSecurityDescriptorW, with the caller''s own SIDs printed as <user> and <group>). Microsoft Learn: SetFileSecurityA/W, GetFileSecurityA/W, SECURITY_INFORMATION, Security Descriptor Control, Mandatory Integrity Control, Security Descriptor String Format, Privilege Constants, Access Rights for Files, winerror.h. No Microsoft binary was decompiled or disassembled; Wine''s and ReactOS''s sources were not read.'
+summary: Reads the owner, group, DACL, SACL and mandatory label of a file or directory by path into a caller's buffer as a self-relative security descriptor; the SECURITY_INFORMATION mask says which parts. The standard two-call buffer protocol applies.
+interface:
+  signature: BOOL GetFileSecurityW(LPCWSTR lpFileName, SECURITY_INFORMATION RequestedInformation, PSECURITY_DESCRIPTOR pSecurityDescriptor, DWORD nLength, LPDWORD lpnLengthNeeded)
+  result: TRUE, or FALSE with the last error set
+rules:
+  parts: 'the SECURITY_INFORMATION mask picks the parts: owner (1), group (2), DACL (4), SACL (8, the audit ACEs), label (0x10, the mandatory-label ACE); any combination; the descriptor that comes back holds exactly those parts (as SDDL: ''O:BA'', ''G:WD'', ''D:(A;;FA;;;BA)(A;;FR;;;WD)'', ''S:(AU;SA;FA;;;WD)'', ''S:(ML;;NW;;;ME)''; owner+group ''O:BAG:WD''; DACL+label ''D:(...)S:(ML;;NW;;;ME)''; SACL+label ''S:(AU;SA;FA;;;WD)(ML;;NW;;;ME)''; everything (0x1F) ''O:..G:..D:..S:(AU...)(ML...)''). The protected and unprotected information flags (0x80000000, 0x20000000) next to the DACL change nothing.'
+  empty_parts: a file with no SACL at all read with the SACL information (elevated administrator) gives no SACL part (empty string); a file that has only a label ACE gives 'S:' (a SACL without audit ACEs); a file without label read with the label information gives an empty string.
+  default_security: 'a new file in the directory of the test image reads back with owner BA (the elevated administrator: Administrators), its own primary group, and the DACL SYSTEM full, Administrators full, the user full; for the standard token the owner is the user itself.'
+  buffer: 'the buffer protocol: a length of 0 (any buffer, also NULL) or a length smaller than needed fails with ERROR_INSUFFICIENT_BUFFER (122) and the length needed is stored (more than 0, the same value each time, one byte short still fails); with a buffer of exactly that length the call succeeds and returns the same length; a larger buffer also succeeds and the length stored stays the length needed. The descriptor is in self-relative form (SE_SELF_RELATIVE 0x8000 set, revision 1), IsValidSecurityDescriptor is true and GetSecurityDescriptorLength equals the length. The length needed grows with the parts asked for (owner alone < owner+group+DACL; DACL alone < owner+group+DACL).'
+  null_pointers: 'a NULL pointer for the length returned: ERROR_NOACCESS (998), even with a big enough buffer; a NULL buffer with a length of 100 (not 0): ERROR_NOACCESS (998)'
+  sacl_privilege: 'the SACL, alone or inside any combination (SACL+owner, SACL+label, everything), needs the security privilege: the elevated administrator reads it, the standard token gets ERROR_PRIVILEGE_NOT_HELD (1314); owner, group, DACL, label and their combinations work for the standard token.'
+  read_control: 'reading owner, group or DACL needs READ_CONTROL: after a DACL ''(A;;0x1;;;OW)(A;;FA;;;SY)'' (the owner-rights ACE has no READ_CONTROL) the owner (Administrators, elevated) gets ERROR_ACCESS_DENIED (5) for the DACL and for the owner.'
+  paths: an extended-length path (\\?\ prefix) works.
+errors:
+  file_not_found: 'missing file: FALSE, ERROR_FILE_NOT_FOUND (2); missing directory: ERROR_PATH_NOT_FOUND (3)'
+  bad_name: 'NULL name or empty name: ERROR_INVALID_NAME (123)'
+  bad_information: 'SECURITY_INFORMATION 0, or an undefined bit alone (0x200, 0x400, 0x1000, 0x40000000): ERROR_ACCESS_DENIED (5), with a big enough buffer'
+  insufficient_buffer: ERROR_INSUFFICIENT_BUFFER (122), see buffer
+  no_access: ERROR_ACCESS_DENIED (5) without READ_CONTROL; ERROR_PRIVILEGE_NOT_HELD (1314) for the SACL without the security privilege; ERROR_NOACCESS (998) for NULL pointers (see null_pointers)
+side_effects: none
+threading: may be called from any thread
+ordering: []
+timing:
+  typical: well under a millisecond per call
+  guarantees: none
+building_tests: Rust tests (ADR 0075), one file each, run by the elevated administrator token of the SSH session, except the test whose name ends in _std (the standard token). The tests make files in the directory of the test image, prepare them with SetFileSecurityW and read them back; descriptors are shown as SDDL text through ConvertSecurityDescriptorToStringSecurityDescriptorW with the caller's own SIDs printed as <user> and <group>; lengths are compared, never printed.
+not_covered: 'Reading through handles (GetKernelObjectSecurity, GetSecurityInfo and GetNamedSecurityInfoW are other entries); files on network shares; DACLs with object ACEs; the raw bytes of the descriptor (only its form: self-relative, valid, revision 1, length).'
+tests:
+  visible: 3
+  held_out: 1
