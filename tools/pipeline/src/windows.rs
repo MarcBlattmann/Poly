@@ -35,6 +35,12 @@ pub const CORPUS_DIR: &str = "tests/windows";
 /// The support library every test links.
 pub const SUPPORT_CRATE: &str = "tests/windows/support";
 pub const TARGET: &str = "x86_64-pc-windows-msvc";
+/// The target of a 32-bit test program (ADR 0259): a source with the line [`X86_MARKER`] is built for
+/// it, as a 32-bit executable that runs under WOW64 on Windows and in Poly's compatibility mode
+/// (ADR 0186).
+pub const TARGET_X86: &str = "i686-pc-windows-msvc";
+/// The line that makes a Rust test a 32-bit program.
+pub const X86_MARKER: &str = "// poly-arch: x86";
 /// The only DLLs a test program may import from (by name): the native
 /// API, `kernel32`, the GUI's `user32` and `gdi32` (Phase 7's window,
 /// message and painting entries), `dwmapi` (the window manager's frame and
@@ -114,6 +120,12 @@ impl Source {
     /// A C++ test (`.cpp`, built by [`wincxx`]) rather than a Rust one.
     pub fn is_cpp(&self) -> bool {
         self.path.extension().is_some_and(|x| x == "cpp")
+    }
+
+    /// A 32-bit Rust test: its source has a line that is [`X86_MARKER`] (ADR 0259).
+    pub fn is_x86(&self) -> bool {
+        !self.is_cpp()
+            && std::fs::read_to_string(&self.path).is_ok_and(|text| text.lines().any(|l| l.trim_end() == X86_MARKER))
     }
 }
 
@@ -257,6 +269,9 @@ pub struct Built {
     /// neither (no card). `win poly` boots Poly with the machine it asks for ([`sound_devices`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sound: Option<String>,
+    /// `x86` for a 32-bit program ([`X86_MARKER`], ADR 0259); absent: an x64 one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arch: Option<String>,
 }
 
 /// `manifest.json` beside the executables.
@@ -289,9 +304,18 @@ impl Manifest {
 /// also `msvcrt.dll`, [`wincxx::ALLOWED_DLLS`]), with no delay-load
 /// imports. Returns its imports.
 pub fn check_image_with(bytes: &[u8], allowed: &[&str]) -> Result<BTreeMap<String, Vec<String>>> {
+    check_image_arch(bytes, allowed, false)
+}
+
+/// [`check_image_with`] for a 32-bit program (`x86`: an I386 PE32 image, ADR 0259) or an x64 one.
+pub fn check_image_arch(bytes: &[u8], allowed: &[&str], x86: bool) -> Result<BTreeMap<String, Vec<String>>> {
     let pe = poly_pe::Pe::parse(bytes).map_err(|e| format!("not a PE image: {e:?}"))?;
     let info = pe.info();
-    if info.machine() != poly_pe::machine::AMD64 || info.bits() != poly_pe::Bits::Pe32Plus {
+    if x86 {
+        if info.machine() != poly_pe::machine::I386 || info.bits() != poly_pe::Bits::Pe32 {
+            return Err("not an x86 PE32 image".into());
+        }
+    } else if info.machine() != poly_pe::machine::AMD64 || info.bits() != poly_pe::Bits::Pe32Plus {
         return Err("not an x64 PE32+ image".into());
     }
     if info.is_dll() || !info.is_executable() {
@@ -368,13 +392,18 @@ pub fn build_runtime(
         return Err("no Windows test programs to build".into());
     }
     let (cpp, rust): (Vec<Source>, Vec<Source>) = srcs.iter().cloned().partition(Source::is_cpp);
+    let (rust32, rust): (Vec<Source>, Vec<Source>) = rust.into_iter().partition(Source::is_x86);
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
     let sysroot = PathBuf::from(output_of(Command::new(&rustc).current_dir(repo).args(["--print", "sysroot"]))?);
     let version = output_of(Command::new(&rustc).current_dir(repo).arg("-V"))?;
     let win = repo.join(WIN_DIR);
     let target_dir = win.join("cargo");
+    let target_dir32 = win.join("cargo32");
     if !rust.is_empty() {
-        build_rust(repo, &win, &target_dir, &sysroot, &rust)?;
+        build_rust(repo, &win, &target_dir, &sysroot, &rust, false)?;
+    }
+    if !rust32.is_empty() {
+        build_rust(repo, &win, &target_dir32, &sysroot, &rust32, true)?;
     }
     let tools = wincxx::Tools::from_env();
     let cxx_dir = win.join("cxx");
@@ -394,13 +423,17 @@ pub fn build_runtime(
     let mut tests = Vec::new();
     for src in &srcs {
         let exe = format!("{}.exe", src.name);
+        let x86 = src.is_x86();
         let (built, allowed) = if src.is_cpp() {
             (wincxx::build_one(repo, &tools, &libs, &src.name, &src.path, &cxx_dir, runtime)?, wincxx::ALLOWED_DLLS)
+        } else if x86 {
+            (target_dir32.join(TARGET_X86).join("release").join(&exe), ALLOWED_DLLS)
         } else {
             (target_dir.join(TARGET).join("release").join(&exe), ALLOWED_DLLS)
         };
         let bytes = util::read(&built)?;
-        let imports = check_image_with(&bytes, allowed).map_err(|e| format!("{exe}: {e}"))?;
+        let imports = if x86 { check_image_arch(&bytes, allowed, true) } else { check_image_with(&bytes, allowed) }
+            .map_err(|e| format!("{exe}: {e}"))?;
         util::write(&out.join(&exe), &bytes)?;
         let sound = sound_of(&src.path, &imports);
         tests.push(Built {
@@ -414,6 +447,7 @@ pub fn build_runtime(
             session: session_of(&src.path, &src.name),
             token: token_of(&src.path, &src.name),
             sound,
+            arch: x86.then(|| "x86".to_string()),
         });
     }
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
@@ -542,15 +576,21 @@ pub fn session_kernel_args(session: Option<&str>) -> String {
 }
 
 /// The Rust tests: one generated Cargo package with a binary per test.
-fn build_rust(repo: &Path, win: &Path, target_dir: &Path, sysroot: &Path, srcs: &[Source]) -> Result<()> {
+fn build_rust(repo: &Path, win: &Path, target_dir: &Path, sysroot: &Path, srcs: &[Source], x86: bool) -> Result<()> {
     let vendor = sysroot.join("lib/rustlib/src/rust/library/vendor");
     if !vendor.is_dir() {
         return Err(format!("{} not found: the rust-src component is needed", vendor.display()));
     }
-    let gen_dir = win.join("build");
+    let gen_dir = win.join(if x86 { "build32" } else { "build" });
     util::write(&gen_dir.join("Cargo.toml"), cargo_toml(&repo.join(SUPPORT_CRATE), srcs))?;
-    let flags = rustflags(repo, sysroot).join("\u{1f}");
-    eprintln!("==> build {} Windows test programs", srcs.len());
+    let mut flags = rustflags(repo, sysroot);
+    if x86 {
+        // lld marks an x86 image without a safe handler table `NO_SEH`, and the system then
+        // refuses every frame handler in it: link a legacy image, as xtask wow64 does (ADR 0186).
+        flags.push("-Clink-arg=/safeseh:no".into());
+    }
+    let flags = flags.join("\u{1f}");
+    eprintln!("==> build {} {}Windows test programs", srcs.len(), if x86 { "32-bit " } else { "" });
     let status = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()))
         .current_dir(repo)
         .env("RUSTC_BOOTSTRAP", "1")
@@ -562,7 +602,7 @@ fn build_rust(repo: &Path, win: &Path, target_dir: &Path, sysroot: &Path, srcs: 
         .arg("--manifest-path")
         .arg(gen_dir.join("Cargo.toml"))
         .args(["-Zbuild-std=core,compiler_builtins", "-Zbuild-std-features=compiler-builtins-mem"])
-        .args(["--target", TARGET])
+        .args(["--target", if x86 { TARGET_X86 } else { TARGET }])
         .arg("--target-dir")
         .arg(target_dir)
         .arg("--offline")
@@ -1523,6 +1563,67 @@ mod tests {
     }
 
     #[test]
+    fn a_32_bit_test_has_the_marker_line_and_is_checked_as_an_x86_image() {
+        let dir = std::env::temp_dir().join(format!("poly-win-x86-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let src = |name: &str, text: &str| {
+            util::write(&dir.join(name), text).unwrap();
+            Source { name: name.trim_end_matches(".rs").into(), path: dir.join(name) }
+        };
+        assert!(
+            src(
+                "a.rs",
+                "//! t
+// poly-arch: x86
+fn main() {}
+"
+            )
+            .is_x86()
+        );
+        assert!(
+            src(
+                "b.rs",
+                "// poly-arch: x86  
+"
+            )
+            .is_x86(),
+            "trailing blanks do not matter"
+        );
+        assert!(
+            !src(
+                "c.rs",
+                "fn main() {}
+"
+            )
+            .is_x86()
+        );
+        assert!(
+            !src(
+                "d.rs",
+                "let x = \"// poly-arch: x86\";
+"
+            )
+            .is_x86(),
+            "the line is the whole line"
+        );
+        assert!(
+            !src(
+                "e.cpp",
+                "// poly-arch: x86
+"
+            )
+            .is_x86(),
+            "C++ tests are x64 only"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+        // An x64 image is not an x86 one, and check_image_with takes x64 only.
+        let x64 = image(&[("ntdll.dll", &["NtClose"])], 3);
+        assert!(check_image_arch(&x64, ALLOWED_DLLS, true).unwrap_err().contains("not an x86 PE32 image"));
+        assert!(check_image_arch(&x64, ALLOWED_DLLS, false).is_ok());
+        assert!(check_image_arch(b"MZ not really", ALLOWED_DLLS, true).is_err());
+    }
+
+    #[test]
     fn images_import_by_name_from_the_allowed_dlls_only() {
         let ok = image(&[("NTDLL.dll", &["NtClose", "NtCreateFile"]), ("kernel32.dll", &["ExitProcess"])], 3);
         let check_image = |b: &[u8]| check_image_with(b, ALLOWED_DLLS);
@@ -1640,6 +1741,7 @@ mod tests {
                 session: None,
                 token: None,
                 sound: None,
+                arch: None,
             });
         }
         let m =
