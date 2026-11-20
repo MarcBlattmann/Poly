@@ -598,6 +598,10 @@ impl BsdKernel for Thread<'_> {
         crate::random::fill(buf);
     }
 
+    fn wall_clock_ns(&self) -> u64 {
+        crate::time::realtime_ns()
+    }
+
     fn system(&self) -> bsd::sysctl::System {
         use poly_procfs::ProcSource;
         let s = fs::proc::KernelProc::default().system();
