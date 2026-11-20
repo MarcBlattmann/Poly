@@ -14,8 +14,15 @@ pub const SLBF: i16 = 0x0001;
 pub const SNBF: i16 = 0x0002;
 pub const SRD: i16 = 0x0004;
 pub const SWR: i16 = 0x0008;
+pub const SRW: i16 = 0x0010;
 pub const SEOF: i16 = 0x0020;
 pub const SERR: i16 = 0x0040;
+pub const SAPP: i16 = 0x0100;
+
+/// `setvbuf` modes (`<stdio.h>`).
+pub const IOFBF: i32 = 0;
+pub const IOLBF: i32 = 1;
+pub const IONBF: i32 = 2;
 /// `BUFSIZ` (`<_stdio.h>`).
 pub const BUFSIZ: usize = 1024;
 /// `EOF`.
@@ -101,18 +108,138 @@ pub trait Output {
     fn write(&mut self, fd: i32, bytes: &[u8]) -> Result<usize, i32>;
 }
 
-/// The output side of a stream.
+/// Where input comes from and how a descriptor moves: `read(2)` and
+/// `lseek(2)`.
+pub trait Input {
+    /// The bytes read (0 at the end), or the errno.
+    fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, i32>;
+    /// The new offset, or the errno.
+    fn seek(&mut self, fd: i32, offset: i64, whence: i32) -> Result<i64, i32>;
+}
+
+/// Bytes `ungetc` can push back before any is read again (C guarantees
+/// one).
+pub const UNGET: usize = 4;
+
+/// A stream: its output buffer and its input buffer (one of them holds
+/// bytes at a time: switching direction flushes or drops the other).
 #[derive(Debug)]
 pub struct Stream {
     pub fd: i32,
     pub mode: Mode,
     buf: [u8; BUFSIZ],
     len: usize,
+    rbuf: [u8; BUFSIZ],
+    rpos: usize,
+    rlen: usize,
+    /// Pushed-back bytes, the next to read last.
+    unget: [u8; UNGET],
+    nunget: usize,
 }
 
 impl Stream {
     pub const fn new(fd: i32, mode: Mode) -> Self {
-        Stream { fd, mode, buf: [0; BUFSIZ], len: 0 }
+        Stream { fd, mode, buf: [0; BUFSIZ], len: 0, rbuf: [0; BUFSIZ], rpos: 0, rlen: 0, unget: [0; UNGET], nunget: 0 }
+    }
+
+    /// Bytes read from the descriptor (or pushed back) that the program
+    /// has not taken yet.
+    pub fn unread(&self) -> usize {
+        self.rlen - self.rpos + self.nunget
+    }
+
+    /// Give back the unread input: the descriptor moves back over what was
+    /// read ahead (before a write, a seek or a close of a file one shares).
+    pub fn drop_input(&mut self, inp: &mut dyn Input) -> Result<(), i32> {
+        let ahead = (self.rlen - self.rpos) as i64;
+        self.rpos = 0;
+        self.rlen = 0;
+        self.nunget = 0;
+        if ahead > 0 {
+            // A pipe or terminal cannot move back; what was read ahead is lost.
+            let _ = inp.seek(self.fd, -ahead, 1);
+        }
+        Ok(())
+    }
+
+    /// The next byte, `None` at the end of the input.
+    pub fn getc(&mut self, inp: &mut dyn Input) -> Result<Option<u8>, i32> {
+        if self.nunget > 0 {
+            self.nunget -= 1;
+            return Ok(Some(self.unget[self.nunget]));
+        }
+        if self.rpos == self.rlen {
+            let n = inp.read(self.fd, &mut self.rbuf)?;
+            self.rpos = 0;
+            self.rlen = n;
+            if n == 0 {
+                return Ok(None);
+            }
+        }
+        self.rpos += 1;
+        Ok(Some(self.rbuf[self.rpos - 1]))
+    }
+
+    /// Fill `out` from the stream: the bytes read (fewer only at the end
+    /// of the input). Large reads go to the descriptor directly.
+    pub fn read(&mut self, out: &mut [u8], inp: &mut dyn Input) -> Result<usize, i32> {
+        let mut n = 0;
+        while n < out.len() && self.nunget > 0 {
+            self.nunget -= 1;
+            out[n] = self.unget[self.nunget];
+            n += 1;
+        }
+        let have = (self.rlen - self.rpos).min(out.len() - n);
+        out[n..n + have].copy_from_slice(&self.rbuf[self.rpos..self.rpos + have]);
+        self.rpos += have;
+        n += have;
+        while n < out.len() {
+            let want = out.len() - n;
+            let got = if want >= BUFSIZ {
+                inp.read(self.fd, &mut out[n..])?
+            } else {
+                let got = inp.read(self.fd, &mut self.rbuf)?;
+                self.rpos = 0;
+                self.rlen = got;
+                let take = got.min(want);
+                out[n..n + take].copy_from_slice(&self.rbuf[..take]);
+                self.rpos = take;
+                take
+            };
+            if got == 0 {
+                break;
+            }
+            n += got;
+        }
+        Ok(n)
+    }
+
+    /// `ungetc`: push `c` back; false if there is no room.
+    pub fn ungetc(&mut self, c: u8) -> bool {
+        if self.nunget == UNGET {
+            return false;
+        }
+        self.unget[self.nunget] = c;
+        self.nunget += 1;
+        true
+    }
+
+    /// `ftell`: the descriptor's offset less what was read ahead, plus
+    /// what waits to be written.
+    pub fn tell(&mut self, inp: &mut dyn Input) -> Result<i64, i32> {
+        let at = inp.seek(self.fd, 0, 1)?;
+        Ok(at - self.unread() as i64 + self.len as i64)
+    }
+
+    /// `fseek`: write out what is buffered, drop the input, move.
+    pub fn seek(&mut self, offset: i64, whence: i32, out: &mut dyn Output, inp: &mut dyn Input) -> Result<i64, i32> {
+        self.flush(out)?;
+        // A move from the current position counts from what the program saw.
+        let offset = if whence == 1 { offset - self.unread() as i64 } else { offset };
+        self.rpos = 0;
+        self.rlen = 0;
+        self.nunget = 0;
+        inp.seek(self.fd, offset, whence)
     }
 
     /// Bytes waiting in the buffer.
@@ -140,7 +267,8 @@ impl Stream {
         Self::put_all(self.fd, &self.buf[..n], out)
     }
 
-    /// `fwrite` of `bytes`.
+    /// `fwrite` of `bytes` (after [`Stream::drop_input`] if the stream was
+    /// reading).
     pub fn write(&mut self, bytes: &[u8], out: &mut dyn Output) -> Result<(), i32> {
         if self.mode == Mode::Unbuffered {
             self.flush(out)?;
@@ -239,6 +367,72 @@ mod tests {
         let total: usize = r.calls.iter().map(|c| c.1.len()).sum();
         assert_eq!(total, 3004);
         assert_eq!(r.calls[0].1, b"head");
+    }
+
+    /// A file in memory.
+    struct Mem {
+        data: Vec<u8>,
+        at: usize,
+        reads: usize,
+    }
+
+    impl Input for Mem {
+        fn read(&mut self, _fd: i32, buf: &mut [u8]) -> Result<usize, i32> {
+            self.reads += 1;
+            let n = buf.len().min(self.data.len() - self.at);
+            buf[..n].copy_from_slice(&self.data[self.at..self.at + n]);
+            self.at += n;
+            Ok(n)
+        }
+        fn seek(&mut self, _fd: i32, offset: i64, whence: i32) -> Result<i64, i32> {
+            let base = match whence {
+                0 => 0,
+                1 => self.at as i64,
+                _ => self.data.len() as i64,
+            };
+            let to = base + offset;
+            if to < 0 {
+                return Err(22);
+            }
+            self.at = to as usize;
+            Ok(to)
+        }
+    }
+
+    #[test]
+    fn reading_ungetc_tell_and_seek() {
+        let data: Vec<u8> = (0..3000u32).map(|i| (i % 251) as u8).collect();
+        let mut m = Mem { data: data.clone(), at: 0, reads: 0 };
+        let mut s = Stream::new(3, Mode::Full);
+        assert_eq!(s.getc(&mut m), Ok(Some(0)));
+        assert_eq!(m.reads, 1);
+        assert_eq!(s.tell(&mut m), Ok(1));
+        assert!(s.ungetc(b'z'));
+        assert_eq!(s.tell(&mut m), Ok(0));
+        let mut out = [0u8; 10];
+        assert_eq!(s.read(&mut out, &mut m), Ok(10));
+        assert_eq!(out[0], b'z');
+        assert_eq!(&out[1..], &data[1..10]);
+        // A large read: the rest of the buffer, then the descriptor.
+        let mut big = alloc::vec![0u8; 2500];
+        assert_eq!(s.read(&mut big, &mut m), Ok(2500));
+        assert_eq!(&big[..], &data[10..2510]);
+        assert_eq!(s.tell(&mut m), Ok(2510));
+        // Seek back from the current position, then to the end.
+        assert_eq!(s.seek(-10, 1, &mut Rec::default(), &mut m), Ok(2500));
+        assert_eq!(s.getc(&mut m), Ok(Some(data[2500])));
+        assert_eq!(s.seek(0, 2, &mut Rec::default(), &mut m), Ok(3000));
+        assert_eq!(s.getc(&mut m), Ok(None));
+        // Dropping read-ahead moves the descriptor back.
+        let mut m = Mem { data: data.clone(), at: 0, reads: 0 };
+        let mut s = Stream::new(3, Mode::Full);
+        s.getc(&mut m).unwrap();
+        s.drop_input(&mut m).unwrap();
+        assert_eq!(m.at, 1);
+        for _ in 0..UNGET {
+            assert!(s.ungetc(1));
+        }
+        assert!(!s.ungetc(1));
     }
 
     #[test]

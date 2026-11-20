@@ -23,11 +23,15 @@ use poly_libsystem::printf::{VaList, VaListTag};
 pub type CVaList = *mut VaListTag;
 #[cfg(target_arch = "aarch64")]
 pub type CVaList = *const u8;
-use poly_libsystem::stdio::{self, File, Mode, Output, Stream};
+use poly_libsystem::stdio::{self, File, Input, Mode, Output, Stream};
 use poly_libsystem::sys::errno::*;
 use poly_libsystem::{cstr, sys};
 
+mod file;
+mod misc;
+
 unsafe extern "C" {
+    fn lseek(fd: i32, offset: i64, whence: i32) -> i64;
     fn write(fd: i32, buf: *const u8, len: usize) -> isize;
     fn read(fd: i32, buf: *mut u8, len: usize) -> isize;
     fn _exit(status: i32) -> !;
@@ -44,7 +48,7 @@ unsafe extern "C" {
 
 // ---------------------------------------------------------------- stdio
 
-static mut IN: Stream = Stream::new(0, Mode::Unbuffered);
+static mut IN: Stream = Stream::new(0, Mode::Full);
 static mut OUT: Stream = Stream::new(1, Mode::Line);
 static mut ERR: Stream = Stream::new(2, Mode::Unbuffered);
 
@@ -86,6 +90,28 @@ impl Output for Fd {
     }
 }
 
+impl Input for Fd {
+    fn read(&mut self, fd: i32, buf: &mut [u8]) -> Result<usize, i32> {
+        loop {
+            // SAFETY: a plain read into the caller's buffer.
+            let n = unsafe { read(fd, buf.as_mut_ptr(), buf.len()) };
+            if n >= 0 {
+                return Ok(n as usize);
+            }
+            let e = crate::errno();
+            if e != EINTR {
+                return Err(e);
+            }
+        }
+    }
+
+    fn seek(&mut self, fd: i32, offset: i64, whence: i32) -> Result<i64, i32> {
+        // SAFETY: lseek has no memory arguments.
+        let r = unsafe { lseek(fd, offset, whence) };
+        if r < 0 { Err(crate::errno()) } else { Ok(r) }
+    }
+}
+
 /// The stream behind a `FILE`, if it is one of ours.
 ///
 /// # Safety
@@ -112,6 +138,9 @@ unsafe fn put(f: *mut File, bytes: &[u8]) -> Result<(), ()> {
             (*f).flags |= stdio::SERR;
             crate::set_errno(EBADF);
             return Err(());
+        }
+        if s.unread() > 0 {
+            let _ = s.drop_input(&mut Fd);
         }
         s.write(bytes, &mut Fd).map_err(|e| {
             (*f).flags |= stdio::SERR;
@@ -144,6 +173,9 @@ fn flush_all() -> i32 {
         if unsafe { flush(std_file(i)) }.is_err() {
             r = stdio::EOF;
         }
+    }
+    if file::flush_open() != 0 {
+        r = stdio::EOF;
     }
     r
 }
@@ -221,36 +253,39 @@ unsafe extern "C" fn puts(s: *const u8) -> i32 {
     }
 }
 
-/// One byte from `f`; output streams are flushed first.
+/// One byte from `f`; output streams are flushed first when reading from
+/// a terminal-like stream (stdin).
 ///
 /// # Safety
 /// `f` is a `FILE` pointer.
 unsafe fn get(f: *mut File) -> i32 {
-    flush_all();
     // SAFETY: the C contract.
     unsafe {
+        if f == std_file(0) {
+            flush_all();
+        }
         let Some(s) = stream(f) else {
             crate::set_errno(EBADF);
             return stdio::EOF;
         };
-        if (*f).flags & stdio::SRD == 0 {
+        if (*f).flags & (stdio::SRD | stdio::SRW) == 0 {
             (*f).flags |= stdio::SERR;
             crate::set_errno(EBADF);
             return stdio::EOF;
         }
-        let mut b = 0u8;
-        loop {
-            match read(s.fd, &mut b, 1) {
-                1 => return i32::from(b),
-                0 => {
-                    (*f).flags |= stdio::SEOF;
-                    return stdio::EOF;
-                }
-                _ if crate::errno() == EINTR => {}
-                _ => {
-                    (*f).flags |= stdio::SERR;
-                    return stdio::EOF;
-                }
+        if s.pending() > 0 && flush(f).is_err() {
+            return stdio::EOF;
+        }
+        match s.getc(&mut Fd) {
+            Ok(Some(b)) => i32::from(b),
+            Ok(None) => {
+                (*f).flags |= stdio::SEOF;
+                stdio::EOF
+            }
+            Err(e) => {
+                (*f).flags |= stdio::SERR;
+                crate::set_errno(e);
+                stdio::EOF
             }
         }
     }
