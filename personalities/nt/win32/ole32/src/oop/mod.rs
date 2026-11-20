@@ -19,6 +19,7 @@ pub(crate) mod apt;
 pub(crate) mod channel;
 pub(crate) mod entries;
 pub(crate) mod exporter;
+pub(crate) mod guard;
 pub(crate) mod marshal;
 pub(crate) mod pipe;
 pub(crate) mod proxy;
@@ -113,6 +114,9 @@ pub(crate) const IID_IINITIALIZE_SPY: Guid =
 pub(crate) const RPC_E_DISCONNECTED: Hresult = 0x8001_0108_u32 as i32;
 /// `HRESULT_FROM_WIN32(RPC_S_SERVER_UNAVAILABLE)`: the object's process is gone.
 pub(crate) const RPC_S_SERVER_UNAVAILABLE: Hresult = 0x8007_06BA_u32 as i32;
+/// `HRESULT_FROM_WIN32(RPC_S_CALL_FAILED)`: the object's process ended during the call (sheets
+/// `CoUnmarshalInterface`, `GlobalOptions.ExceptionHandling`).
+pub(crate) const RPC_S_CALL_FAILED: Hresult = 0x8007_06BE_u32 as i32;
 
 /// `IUnknown::QueryInterface` of a COM object.
 pub(crate) unsafe fn query(p: *mut c_void, iid: &Guid) -> (Hresult, *mut c_void) {
