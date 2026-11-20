@@ -124,7 +124,7 @@ fn the_launcher_opens_and_closes_with_alpines_animation() {
     s.set_now_ms(10_000);
     // Present at the start, at once.
     assert_eq!(s.current_extent().height, 48);
-    s.toggle_launcher();
+    s.hide_launcher();
     assert!(!s.launcher().is_visible());
     // Closing: shrinking for 300 ms, while the shell asks for frames.
     assert_eq!(s.next_notification_deadline(), Some(10_016));
@@ -454,7 +454,7 @@ fn the_ridge_gets_alpines_edge_over_windows() {
     assert!(edge(&fb, 640, 72), "under its body");
     assert!(!edge(&fb, 100, 26) && !edge(&fb, 640, 40), "nowhere else");
     // No surface and the pointer away from the ridge: no edge.
-    s.toggle_launcher();
+    s.hide_launcher();
     s.pointer_motion(640, 400);
     let away = render(&s);
     s.set_window_cover(&[]);
@@ -671,4 +671,34 @@ fn the_catalog_can_be_read_again_and_apps_are_found_by_id() {
     assert!(s.apps().iter().any(|a| a.name == "New App"));
     assert!(s.apps().iter().any(|a| a.window() == Some(4)));
     assert_eq!(s.apps().iter().filter(|a| a.name == "Settings").count(), 1);
+}
+
+/// ADR 0234: the launcher the desktop shows by itself (at the start, when the last window closed)
+/// stays for the hotkey, so "Windows key, type chrome, Enter" right after the start launches; one the
+/// user opened is a toggle as before.
+#[test]
+fn the_hotkey_keeps_a_launcher_the_desktop_showed_and_toggles_one_the_user_opened() {
+    let mut s = shell();
+    assert!(s.launcher().is_visible(), "shown at the start");
+    s.toggle_launcher();
+    assert!(s.launcher().is_visible(), "the hotkey keeps it");
+    for c in "pixel".chars() {
+        s.key(Key::Char(c));
+    }
+    assert_eq!(s.key(Key::Enter).map(|a| a.name), Some("Pixel Viewer".into()));
+    // Opened by the user: the hotkey closes it again.
+    s.toggle_launcher();
+    assert!(s.launcher().is_visible());
+    s.toggle_launcher();
+    assert!(!s.launcher().is_visible());
+    // Shown by the desktop again (the last window closed): kept once more.
+    s.show_launcher_unasked();
+    assert!(s.launcher().is_visible());
+    s.toggle_launcher();
+    assert!(s.launcher().is_visible());
+    // With something typed the hotkey closes it.
+    s.show_launcher_unasked();
+    s.key(Key::Char('x'));
+    s.toggle_launcher();
+    assert!(!s.launcher().is_visible());
 }
