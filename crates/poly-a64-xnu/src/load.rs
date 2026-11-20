@@ -184,6 +184,11 @@ fn start_code(
         mode,
         exit: program.exit_function().map_err(|e| e.to_string())?.unwrap_or(0),
         initializers: program.initializers(),
+        images: program
+            .images
+            .iter()
+            .map(|im| start::ImageInfo { header: im.base, slide: im.slide, path: im.path.clone() })
+            .collect(),
     }
     .to_bytes();
     let len = page_up(start::DATA_OFFSET + data.len() as u64);

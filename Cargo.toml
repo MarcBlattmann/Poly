@@ -58,6 +58,7 @@ members = [
     "crates/poly-mach",
     "crates/poly-macho",
     "crates/poly-dyld",
+    "crates/poly-libsystem",
     "crates/poly-mem",
     "crates/poly-ntobj",
     "crates/poly-overlayfs",
@@ -121,7 +122,7 @@ members = [
     "userland/poly-terminal",
     "userland/poly-wl-demo",
 ]
-exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/nt/msvc32", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
+exclude = ["kernel", "userland/native", "personalities/nt/ntdll", "personalities/xnu/libsystem", "personalities/nt/msvc32", "personalities/nt/win32", "tests/windows/support", "tools/wintrace"]
 
 [workspace.package]
 version = "0.0.1"
@@ -182,6 +183,7 @@ poly-loop = { path = "crates/poly-loop" }
 poly-mach = { path = "crates/poly-mach" }
 poly-macho = { path = "crates/poly-macho" }
 poly-dyld = { path = "crates/poly-dyld" }
+poly-libsystem = { path = "crates/poly-libsystem" }
 poly-mem = { path = "crates/poly-mem" }
 poly-ntobj = { path = "crates/poly-ntobj" }
 poly-overlayfs = { path = "crates/poly-overlayfs" }
