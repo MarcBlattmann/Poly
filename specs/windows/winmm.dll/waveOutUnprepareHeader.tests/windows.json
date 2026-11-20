@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_unprep_errors",
+      "exe_sha256": "b0e8e72f7d2d5d385aae4bf1134f5aa58c7bffcac0988e41c8976ef27c82b218",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKc2l6ZSAwID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIHNpemUgMApvayBzdGlsbCBwcmVwYXJlZApzaXplIDggPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgc2l6ZSA4Cm9rIHN0aWxsIHByZXBhcmVkCnNpemUgNDcgPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgc2l6ZSA0NwpvayBzdGlsbCBwcmVwYXJlZApudWxsIGhlYWRlciA9IE1NU1lTRVJSX0lOVkFMUEFSQU0gKDExKQpvayBudWxsIGhlYWRlcgpmbGFncyAweDIwID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIGZsYWdzIDB4MjAKb2sgZmxhZ3MgbGVmdCBhcyB0aGV5IHdlcmUKZmxhZ3MgMHgxMDAgPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgZmxhZ3MgMHgxMDAKb2sgZmxhZ3MgbGVmdCBhcyB0aGV5IHdlcmUKZmxhZ3MgMHg4MDAwMDAwMCA9IE1NU1lTRVJSX0lOVkFMUEFSQU0gKDExKQpvayBmbGFncyAweDgwMDAwMDAwCm9rIGZsYWdzIGxlZnQgYXMgdGhleSB3ZXJlCm9rIHByZXBhcmUKaGFuZGxlIDAgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgaGFuZGxlIDAKbWFkZS11cCBoYW5kbGUgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgbWFkZS11cCBoYW5kbGUKb2sgc3RpbGwgcHJlcGFyZWQKY2xvc2VkIGhhbmRsZSA9IE1NU1lTRVJSX0lOVkFMSEFORExFICg1KQpvayBjbG9zZWQgaGFuZGxlCnVucHJlcGFyZWQgaGVhZGVyLCBoYW5kbGUgMCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHVucHJlcGFyZWQgaGVhZGVyLCBoYW5kbGUgMApzdW1tYXJ5IDIwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nsize 0 = MMSYSERR_INVALPARAM (11)\nok size 0\nok still prepared\nsize 8 = MMSYSERR_INVALPARAM (11)\nok size 8\nok still prepared\nsize 47 = MMSYSERR_INVALPARAM (11)\nok size 47\nok still prepared\nnull header = MMSYSERR_INVALPARAM (11)\nok null header\nflags 0x20 = MMSYSERR_INVALPARAM (11)\nok flags 0x20\nok flags left as they were\nflags 0x100 = MMSYSERR_INVALPARAM (11)\nok flags 0x100\nok flags left as they were\nflags 0x80000000 = MMSYSERR_INVALPARAM (11)\nok flags 0x80000000\nok flags left as they were\nok prepare\nhandle 0 = MMSYSERR_INVALHANDLE (5)\nok handle 0\nmade-up handle = MMSYSERR_INVALHANDLE (5)\nok made-up handle\nok still prepared\nclosed handle = MMSYSERR_INVALHANDLE (5)\nok closed handle\nunprepared header, handle 0 = MMSYSERR_NOERROR (0)\nok unprepared header, handle 0\nsummary 20 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 184
+    },
+    {
+      "name": "wo_unprep_stillplaying",
+      "exe_sha256": "9c5f6846caeb2a0fd579803591739b13daff29e4ebcdba015cc8e5c9463ff13e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb2sgcXVldWUgYSBsb25nIGJ1ZmZlcgp1bnByZXBhcmUgd2hpbGUgcXVldWVkID0gV0FWRVJSX1NUSUxMUExBWUlORyAoMzMpCm9rIHVucHJlcGFyZSB3aGlsZSBxdWV1ZWQKb2sgZmxhZ3MgdW5jaGFuZ2VkCm9rIGRvbmUKdW5wcmVwYXJlIHdoZW4gZG9uZSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHVucHJlcGFyZSB3aGVuIGRvbmUKb2sgcXVldWUgdHdvIGJ1ZmZlcnMKdW5wcmVwYXJlIHRoZSBzZWNvbmQgd2hpbGUgcXVldWVkID0gV0FWRVJSX1NUSUxMUExBWUlORyAoMzMpCm9rIHVucHJlcGFyZSB0aGUgc2Vjb25kIHdoaWxlIHF1ZXVlZApyZXNldCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHJlc2V0CnVucHJlcGFyZSB0aGUgZmlyc3QgYWZ0ZXIgcmVzZXQgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayB1bnByZXBhcmUgdGhlIGZpcnN0IGFmdGVyIHJlc2V0CnVucHJlcGFyZSB0aGUgc2Vjb25kIGFmdGVyIHJlc2V0ID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgdW5wcmVwYXJlIHRoZSBzZWNvbmQgYWZ0ZXIgcmVzZXQKc3VtbWFyeSAxMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nok queue a long buffer\nunprepare while queued = WAVERR_STILLPLAYING (33)\nok unprepare while queued\nok flags unchanged\nok done\nunprepare when done = MMSYSERR_NOERROR (0)\nok unprepare when done\nok queue two buffers\nunprepare the second while queued = WAVERR_STILLPLAYING (33)\nok unprepare the second while queued\nreset = MMSYSERR_NOERROR (0)\nok reset\nunprepare the first after reset = MMSYSERR_NOERROR (0)\nok unprepare the first after reset\nunprepare the second after reset = MMSYSERR_NOERROR (0)\nok unprepare the second after reset\nsummary 11 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 339
+    }
+  ]
+}

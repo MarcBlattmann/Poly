@@ -120,3 +120,33 @@ still serves other programs.
   local sound switch and a QMP driver. Their logs, screenshots and the recordings are kept in the survey's
   worktree scratch (`.b2a/au-win*`, `.b2a/au-linux*`).
 - The switch itself is A0's first line.
+
+## 6. W1 status: the `waveOut` sheets (spec-win-waveout, 2026-11-20)
+
+Observed on the oracle (homeserver2 has a real sound card, so `waveOut` works from the SSH session; only silence was
+played). 19 entries under `specs/windows/winmm.dll/` (`waveOutGetNumDevs`, `GetDevCapsW/A`, `Open`, `Close`,
+`PrepareHeader`, `UnprepareHeader`, `Write`, `Pause`, `Restart`, `Reset`, `BreakLoop`, `GetPosition`, `GetVolume`,
+`SetVolume`, `GetErrorTextW/A`, `GetID`, `Message`), 74 recorded tests (about 70 % visible). Chrome imports ten of them
+(`GetNumDevs`, `Open`, `PrepareHeader`, `Write`, `Pause`, `Restart`, `Reset`, `UnprepareHeader`, `Close`, and the
+`waveIn` count); the rest are for older programs. What the sheets fix, in short:
+
+- **Callbacks.** `WOM_OPEN` and `WOM_CLOSE` are delivered synchronously, on the calling thread, before `waveOutOpen` /
+  `waveOutClose` return; `WOM_DONE` comes on another thread, once per buffer, in the order written, with
+  `WHDR_DONE` already set and `WHDR_INQUEUE` already cleared. `waveOutReset` delivers every pending `WOM_DONE` before it
+  returns. `CALLBACK_EVENT` sets the event at open, at each `WOM_DONE`, at reset and at close. Window and thread callbacks
+  are posted messages.
+- **Headers.** `PREPARED` set by prepare (clears `DONE`, keeps the loop flags); `INQUEUE` set by write; `DONE|PREPARED` when
+  played; unprepare clears only `PREPARED`; `WAVERR_UNPREPARED` / `WAVERR_STILLPLAYING` / `MMSYSERR_INVALPARAM` rules.
+- **Position** is in bytes and samples of the opened format, 0 after reset, frozen while paused; every other
+  `MMTIME` type is answered in bytes.
+- **Formats:** PCM 16 bit at any common rate, 24/32 bit, float 32 bit and `WAVE_FORMAT_EXTENSIBLE` (float and int16) are
+  accepted; the query and the real open differ for a few bad formats (`WAVERR_BADFORMAT` against `MMSYSERR_INVALPARAM`).
+- **Volume** is per process (0xFFFFFFFF at start), read back exactly; the system volume is not touched.
+- **No device** (the oracle's card disabled for the recording): `waveOutGetNumDevs` is 0 and every call that names a device,
+  the mapper included, is `MMSYSERR_BADDEVICEID` (not `MMSYSERR_NODRIVER`). This is what Chrome meets today on the desktop
+  without a sound card.
+
+To run the tests on Poly the boot needs a sound device (virtio-sound) for every test but four; those four (their first line
+says `NO SOUND DEVICE`: one each in `waveOutGetNumDevs`, `GetDevCapsW`, `Open`, `GetVolume`) need a boot **without** one.
+`win poly` and `polycheck` boot one configuration per run, so the integrator has to give them both (the two sets can be
+told apart by that first line).

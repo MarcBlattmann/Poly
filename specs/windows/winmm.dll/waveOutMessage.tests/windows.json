@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_message_unsupported",
+      "exe_sha256": "c081209907488624a118558fc8d304877d9173403070f6ba542ef4e12651e859",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKbWVzc2FnZSAweDAgPSBNTVNZU0VSUl9OT1RTVVBQT1JURUQgKDgpCm9rIG1lc3NhZ2UgMHgwCm1lc3NhZ2UgMHgxMjM0ID0gTU1TWVNFUlJfTk9UU1VQUE9SVEVEICg4KQpvayBtZXNzYWdlIDB4MTIzNAptZXNzYWdlIDB4MjAwMCA9IE1NU1lTRVJSX05PVFNVUFBPUlRFRCAoOCkKb2sgbWVzc2FnZSAweDIwMDAKbWVzc2FnZSAweDQwMDAgPSBNTVNZU0VSUl9OT1RTVVBQT1JURUQgKDgpCm9rIG1lc3NhZ2UgMHg0MDAwCmhhbmRsZSAweDEyMzQgPSBNTVNZU0VSUl9CQURERVZJQ0VJRCAoMikKb2sgaGFuZGxlIDB4MTIzNApjbG9zZWQgaGFuZGxlID0gTU1TWVNFUlJfQkFEREVWSUNFSUQgKDIpCm9rIGNsb3NlZCBoYW5kbGUKc3VtbWFyeSA3IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nmessage 0x0 = MMSYSERR_NOTSUPPORTED (8)\nok message 0x0\nmessage 0x1234 = MMSYSERR_NOTSUPPORTED (8)\nok message 0x1234\nmessage 0x2000 = MMSYSERR_NOTSUPPORTED (8)\nok message 0x2000\nmessage 0x4000 = MMSYSERR_NOTSUPPORTED (8)\nok message 0x4000\nhandle 0x1234 = MMSYSERR_BADDEVICEID (2)\nok handle 0x1234\nclosed handle = MMSYSERR_BADDEVICEID (2)\nok closed handle\nsummary 7 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 187
+    }
+  ]
+}

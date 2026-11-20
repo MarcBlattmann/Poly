@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_capsa_device0",
+      "exe_sha256": "b1566dea81dea65351af37a8de2fdd50bef7e1913c486a7a7c47087c1fa5a266",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKd2lkZSBjYXBzID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgd2lkZSBjYXBzCmFuc2kgY2FwcyA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIGFuc2kgY2FwcwpvayBXQVZFT1VUQ0FQU0EgaXMgNTIgYnl0ZXMKb2sgbWFudWZhY3R1cmVyIGlkCm9rIHByb2R1Y3QgaWQKb2sgZm9ybWF0cwpvayBjaGFubmVscwpvayBzdXBwb3J0Cm9rIG5hbWUgbm90IGVtcHR5Cm9rIHNhbWUgbmFtZSBhcyB0aGUgd2lkZSBmb3JtIChhc2NpaSBwYXJ0KQpzdW1tYXJ5IDExIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nwide caps = MMSYSERR_NOERROR (0)\nok wide caps\nansi caps = MMSYSERR_NOERROR (0)\nok ansi caps\nok WAVEOUTCAPSA is 52 bytes\nok manufacturer id\nok product id\nok formats\nok channels\nok support\nok name not empty\nok same name as the wide form (ascii part)\nsummary 11 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 80
+    },
+    {
+      "name": "wo_capsa_errors",
+      "exe_sha256": "367c4c73b801c6c1ace0ad72bb6807513df1d6ff6496218f7712fcaf5ffe5ada",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKZGV2aWNlIGNvdW50ID0gTU1TWVNFUlJfQkFEREVWSUNFSUQgKDIpCm9rIGRldmljZSBjb3VudAppZCAtMiA9IE1NU1lTRVJSX0JBRERFVklDRUlEICgyKQpvayBpZCAtMgppZCA3NyA9IE1NU1lTRVJSX0JBRERFVklDRUlEICgyKQpvayBpZCA3NwpzaXplIDAgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBzaXplIDAKc2l6ZSAwIGJ5dGVzIHdyaXR0ZW4gMApvayB3cml0ZXMgZXhhY3RseSB0aGUgc2l6ZSBhc2tlZApzaXplIDQgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBzaXplIDQKc2l6ZSA0IGJ5dGVzIHdyaXR0ZW4gNApvayB3cml0ZXMgZXhhY3RseSB0aGUgc2l6ZSBhc2tlZApzaXplIDIwID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgc2l6ZSAyMApzaXplIDIwIGJ5dGVzIHdyaXR0ZW4gMjAKb2sgd3JpdGVzIGV4YWN0bHkgdGhlIHNpemUgYXNrZWQKc2l6ZSA0OCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHNpemUgNDgKc2l6ZSA0OCBieXRlcyB3cml0dGVuIDQ4Cm9rIHdyaXRlcyBleGFjdGx5IHRoZSBzaXplIGFza2VkCnNpemUgNTIgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBzaXplIDUyCnNpemUgNTIgYnl0ZXMgd3JpdHRlbiA1MgpvayB3cml0ZXMgZXhhY3RseSB0aGUgc2l6ZSBhc2tlZApudWxsIGJ1ZmZlciA9IE1NU1lTRVJSX0lOVkFMUEFSQU0gKDExKQpvayBudWxsIGJ1ZmZlcgpzdW1tYXJ5IDE1IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\ndevice count = MMSYSERR_BADDEVICEID (2)\nok device count\nid -2 = MMSYSERR_BADDEVICEID (2)\nok id -2\nid 77 = MMSYSERR_BADDEVICEID (2)\nok id 77\nsize 0 = MMSYSERR_NOERROR (0)\nok size 0\nsize 0 bytes written 0\nok writes exactly the size asked\nsize 4 = MMSYSERR_NOERROR (0)\nok size 4\nsize 4 bytes written 4\nok writes exactly the size asked\nsize 20 = MMSYSERR_NOERROR (0)\nok size 20\nsize 20 bytes written 20\nok writes exactly the size asked\nsize 48 = MMSYSERR_NOERROR (0)\nok size 48\nsize 48 bytes written 48\nok writes exactly the size asked\nsize 52 = MMSYSERR_NOERROR (0)\nok size 52\nsize 52 bytes written 52\nok writes exactly the size asked\nnull buffer = MMSYSERR_INVALPARAM (11)\nok null buffer\nsummary 15 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 84
+    }
+  ]
+}

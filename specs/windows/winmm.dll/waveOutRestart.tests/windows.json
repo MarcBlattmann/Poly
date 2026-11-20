@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_restart_idle",
+      "exe_sha256": "a34433551e47427b8bbee0b5d2e809c177fc6da2da83a1d72c165b7bd63624a7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKcmVzdGFydCBhbiBpZGxlIGhhbmRsZSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHJlc3RhcnQgYW4gaWRsZSBoYW5kbGUKcmVzdGFydCBhZ2FpbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHJlc3RhcnQgYWdhaW4Kb2sgcXVldWUKcmVzdGFydCB3aGlsZSBwbGF5aW5nID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgcmVzdGFydCB3aGlsZSBwbGF5aW5nCm9rIGRvbmUKc3VtbWFyeSA2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nrestart an idle handle = MMSYSERR_NOERROR (0)\nok restart an idle handle\nrestart again = MMSYSERR_NOERROR (0)\nok restart again\nok queue\nrestart while playing = MMSYSERR_NOERROR (0)\nok restart while playing\nok done\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 256
+    },
+    {
+      "name": "wo_restart_resume",
+      "exe_sha256": "bef9cefe3de4ef7774f845af5726b195c7975df7b80cdf879c5ba1e6bd5f85fe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4KcGF1c2UgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBwYXVzZQpvayBxdWV1ZQpvayBxdWV1ZQpvayBub3RoaW5nIGZpbmlzaGVkIHdoaWxlIHBhdXNlZApyZXN0YXJ0ID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgcmVzdGFydApvayBib3RoIGRvbmUKcmVzdGFydCBjYWxsYmFja3MgPSAzCnJlc3RhcnQgY2IgMCBXT01fT1BFTiB0aHJlYWQ9bWFpbiBpbnN0PW9rIHAyPTAKcmVzdGFydCBjYiAxIFdPTV9ET05FIGhkcj0wIGZsYWdzPURPTkV8UFJFUEFSRUQgdGhyZWFkPW90aGVyIGluc3Q9b2sgcDI9MApyZXN0YXJ0IGNiIDIgV09NX0RPTkUgaGRyPTEgZmxhZ3M9RE9ORXxQUkVQQVJFRCB0aHJlYWQ9b3RoZXIgaW5zdD1vayBwMj0wCm9rIHR3byBXT01fRE9ORSBhZnRlciB0aGUgcmVzdGFydApvayBmaXJzdCBidWZmZXIgZmxhZ3MKb2sgc2Vjb25kIGJ1ZmZlciBmbGFncwpzdW1tYXJ5IDExIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen = MMSYSERR_NOERROR (0)\nok open\npause = MMSYSERR_NOERROR (0)\nok pause\nok queue\nok queue\nok nothing finished while paused\nrestart = MMSYSERR_NOERROR (0)\nok restart\nok both done\nrestart callbacks = 3\nrestart cb 0 WOM_OPEN thread=main inst=ok p2=0\nrestart cb 1 WOM_DONE hdr=0 flags=DONE|PREPARED thread=other inst=ok p2=0\nrestart cb 2 WOM_DONE hdr=1 flags=DONE|PREPARED thread=other inst=ok p2=0\nok two WOM_DONE after the restart\nok first buffer flags\nok second buffer flags\nsummary 11 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 590
+    }
+  ]
+}

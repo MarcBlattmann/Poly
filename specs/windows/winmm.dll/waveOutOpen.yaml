@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/winmm.dll/waveOutOpen.yaml
+id: windows/api/winmm.dll/waveOutOpen
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-waveout
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only). Microsoft Learn: "waveOutOpen function", "waveOutClose", "waveOutPrepareHeader", "waveOutUnprepareHeader", "waveOutWrite", "waveOutPause", "waveOutRestart", "waveOutReset", "waveOutBreakLoop", "waveOutGetPosition", "waveOutGetVolume", "waveOutSetVolume", "waveOutGetDevCaps", "waveOutGetNumDevs", "waveOutGetID", "waveOutGetErrorText", "waveOutMessage", "WAVEHDR", "WAVEFORMATEX", "WAVEFORMATEXTENSIBLE", "WAVEOUTCAPS", "MMTIME", "waveOutProc callback function", "Multimedia Error Codes"; constants and layouts from mmsystem.h, mmeapi.h, mmreg.h and ksmedia.h. The import names of Chrome's chrome.dll come from the survey in docs/windows/audio-plan.md. No Wine, ReactOS or Chromium source was read and no Microsoft binary was disassembled.
+summary: >
+  Opens an output device for playing wave data in a given format and returns a handle. With WAVE_FORMAT_QUERY it only asks whether the format can be played. The device is opened in shared mode: it can be opened any number of times at once, each handle with its own queue, position and callbacks. The sound device converts formats (any of the formats below plays on the one card).
+interface:
+  signature: "MMRESULT waveOutOpen(LPHWAVEOUT handle, UINT deviceId, LPCWAVEFORMATEX format, DWORD_PTR callback, DWORD_PTR instance, DWORD flags)"
+chrome: "Chrome for Windows (157) imports it statically from winmm.dll (survey, docs/windows/audio-plan.md): Chrome falls back to the waveOut API when WASAPI is not available."
+rules:
+  result: "device 0 and WAVE_MAPPER (0xFFFFFFFF) open and play. Any other id (1, 2, 0xFFFFFFFE, 0x7FFFFFFF) is MMSYSERR_BADDEVICEID and the handle variable is set to 0"
+  formats_accepted: "WAVE_FORMAT_PCM at 44100 and 48000 Hz (and 8000, 11025, 22050, 96000), mono and stereo, 16 bit; 24 and 32 bit integer at 48000 stereo; WAVE_FORMAT_IEEE_FLOAT (32 bit) and WAVE_FORMAT_EXTENSIBLE with the float sub-format (32 bit) or the PCM sub-format (16 bit), mono (mask 4) and stereo (mask 3), at 44100 and 48000 Hz. For each, the query and the real open both succeed (the query writes nothing to the handle variable). A buffer of silence of 50 ms in that format plays to its end and the position afterwards is exactly the bytes written (and the frames written for TIME_SAMPLES)"
+  formats_refused: "WAVERR_BADFORMAT (32), as a query and as an open, for a format tag that is not PCM, float or extensible (0, ADPCM 2, A-law 6, 0x55), and for an extensible format with an unknown sub-format. Three further cases differ between the query and the open: a sample width of 12 bits, three channels, a sample rate of 0, and an extensible format with more valid bits than container bits are WAVERR_BADFORMAT as a query and MMSYSERR_INVALPARAM as an open. An extensible 16 bit format with 12 valid bits passes the query and is WAVERR_BADFORMAT as an open. An extensible format with cbSize 0 and a null format pointer are MMSYSERR_INVALPARAM in both. A failed open sets the handle variable to 0 (except for a null format, which leaves it alone)"
+  query: "WAVE_FORMAT_QUERY: no handle is made and the handle variable is not written, no callback is called, a CALLBACK_EVENT event is not set, a null handle pointer is allowed (without the flag a null handle pointer is MMSYSERR_INVALPARAM), and the device is not held (opens afterwards succeed). It answers MMSYSERR_BADDEVICEID for device 1 and succeeds for the mapper"
+  other_flags: "WAVE_FORMAT_DIRECT, WAVE_ALLOWSYNC and WAVE_MAPPED are accepted; 0x10 (the default communication device flag) is MMSYSERR_INVALFLAG and leaves the handle variable alone"
+  callback_null: "CALLBACK_NULL: nothing is notified; the callback and instance arguments are ignored, junk values do no harm"
+  callback_function: "CALLBACK_FUNCTION: the callback is called as waveOutProc(handle, message, instance, param1, param2) with the instance value of the open: WOM_OPEN (0x3BB) before waveOutOpen returns, on the calling thread; WOM_DONE (0x3BD) when a buffer is finished, with param1 = the address of the WAVEHDR, on a thread of the system (not the caller's); WOM_CLOSE (0x3BC) before waveOutClose returns, on the calling thread; param2 is 0. In the WOM_DONE callback the header already has WHDR_DONE set and WHDR_INQUEUE clear (flags DONE|PREPARED). Buffers finish in the order they were written, one WOM_DONE each. The callback may call waveOutWrite and waveOutUnprepareHeader"
+  callback_event: "CALLBACK_EVENT: the callback argument is an event handle; it is set (SetEvent) when the device is opened, whenever a buffer is finished (WHDR_DONE already set) and when the device is closed; not by prepare, write or unprepare; the application resets it. Reset also sets it"
+  callback_window: "CALLBACK_WINDOW: the callback argument is a window; MM_WOM_OPEN, MM_WOM_DONE (lParam = header address) and MM_WOM_CLOSE are posted to it, in that order, wParam = the device handle, delivered when the window's thread pumps messages. A value that is not a window is MMSYSERR_INVALPARAM (the handle variable is left alone)"
+  callback_thread: "CALLBACK_THREAD: the callback argument is a thread id; the same three messages are posted to that thread's queue as thread messages (no window), wParam = the handle, lParam as above"
+  bad_callback_in_query: "in a query the callback argument is not checked, except that a CALLBACK_WINDOW value that is not a window is MMSYSERR_INVALPARAM"
+  handle: "the handles of several opens (of the same device) are different and non-zero"
+  no_device: "with no sound device, every query and every open (device 0, device 1, the mapper) is MMSYSERR_BADDEVICEID (not MMSYSERR_NODRIVER); a query leaves the handle variable alone, an open sets it to 0; no callback is made; calls with a handle that was never made (prepare, close) are MMSYSERR_INVALHANDLE"
+errors:
+  bad_device: "MMSYSERR_BADDEVICEID (2)"
+  bad_format: "WAVERR_BADFORMAT (32)"
+  invalid_parameter: "MMSYSERR_INVALPARAM (11): null format, null handle pointer, non-window with CALLBACK_WINDOW, extensible with cbSize 0, and the open-only cases above"
+  invalid_flag: "MMSYSERR_INVALFLAG (10)"
+side_effects: "a handle is allocated; the device is (shared) in use until waveOutClose; WOM_OPEN is notified"
+threading: "the handle may be used from any thread (a handle opened on one thread was prepared, written and unprepared from another); WOM_OPEN comes on the opening thread, WOM_DONE on a system thread"
+ordering: ["WOM_OPEN before waveOutOpen returns", "WOM_DONE for each buffer in the order written", "WOM_CLOSE before waveOutClose returns, after the last WOM_DONE"]
+timing:
+  typical: "returns within a few tens of milliseconds; WOM_DONE comes when the buffer's audio has been played (50 ms of audio: after about 50 ms)"
+  guarantees: none
+tests:
+  visible: 11
+  held_out: 5
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing winmm.dll, kernel32.dll (and user32.dll for the window and thread callback tests) by name, built with the pipeline's usual flags. Every test needs a wave output device: it first checks that waveOutGetNumDevs is at least 1 and fails if not. Audio data is always silence (zero samples; never 8-bit data, whose silence is not zero), so nothing is audible. Observations are return codes, header flags, booleans, counts, orders of callbacks and positions that follow from the bytes written; never handles, thread ids, addresses or times. Waiting is bounded: a buffer of 50 or 100 ms is waited for up to 5 s, and "nothing happens" checks look for 100 to 400 ms. The tests that change the volume restore it; the volume is per process, so a test that fails does not leave it changed. A few tests are the exception: they say "NO SOUND DEVICE" in their first line and must be run with no sound device present; their recording was made with the oracle's sound card disabled (the HD audio function turned off in Device Manager terms, and turned on again after the run); where such a test runs with a device it fails.
+not_covered: >
+  Machines with no sound device, except for the no-device rules named above; devices other than device 0 and the mapper; how long a buffer takes to start or the latency of any call; capture (waveIn) and MIDI. Sample widths of 8 bit and 64 bit, rates above 96000, more than two channels with an extensible format, WAVE_FORMAT_DIRECT's effect on conversion (it is accepted and the formats play).

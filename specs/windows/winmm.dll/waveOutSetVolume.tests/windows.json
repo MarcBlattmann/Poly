@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_setvol_roundtrip",
+      "exe_sha256": "decfbae76a6ed483ddf6cc039f8ba62ab302fc279250f8edb5b77b8bae9f89ba",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKc2V0IDB4NDAwMDQwMDAgYnkgaGFuZGxlID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgc2V0IDB4NDAwMDQwMDAgYnkgaGFuZGxlCnJlYWQgYmFjayBieSBoYW5kbGUgMHg0MDAwNDAwMCBieSBpZCAweDQwMDA0MDAwCm9rIHJlYWQgYmFjayBieSBoYW5kbGUKb2sgcmVhZCBiYWNrIGJ5IGRldmljZSBpZApzZXQgMHgwIGJ5IGhhbmRsZSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHNldCAweDAgYnkgaGFuZGxlCnJlYWQgYmFjayBieSBoYW5kbGUgMHgwIGJ5IGlkIDB4MApvayByZWFkIGJhY2sgYnkgaGFuZGxlCm9rIHJlYWQgYmFjayBieSBkZXZpY2UgaWQKc2V0IDB4ODAwMDIwMDAgYnkgaGFuZGxlID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgc2V0IDB4ODAwMDIwMDAgYnkgaGFuZGxlCnJlYWQgYmFjayBieSBoYW5kbGUgMHg4MDAwMjAwMCBieSBpZCAweDgwMDAyMDAwCm9rIHJlYWQgYmFjayBieSBoYW5kbGUKb2sgcmVhZCBiYWNrIGJ5IGRldmljZSBpZApzZXQgMHgxMjM0NTY3OCBieSBoYW5kbGUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBzZXQgMHgxMjM0NTY3OCBieSBoYW5kbGUKcmVhZCBiYWNrIGJ5IGhhbmRsZSAweDEyMzQ1Njc4IGJ5IGlkIDB4MTIzNDU2NzgKb2sgcmVhZCBiYWNrIGJ5IGhhbmRsZQpvayByZWFkIGJhY2sgYnkgZGV2aWNlIGlkCnNldCAweGZmZmYwMDAwIGJ5IGhhbmRsZSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHNldCAweGZmZmYwMDAwIGJ5IGhhbmRsZQpyZWFkIGJhY2sgYnkgaGFuZGxlIDB4ZmZmZjAwMDAgYnkgaWQgMHhmZmZmMDAwMApvayByZWFkIGJhY2sgYnkgaGFuZGxlCm9rIHJlYWQgYmFjayBieSBkZXZpY2UgaWQKc2V0IDB4ZmZmZiBieSBoYW5kbGUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBzZXQgMHhmZmZmIGJ5IGhhbmRsZQpyZWFkIGJhY2sgYnkgaGFuZGxlIDB4ZmZmZiBieSBpZCAweGZmZmYKb2sgcmVhZCBiYWNrIGJ5IGhhbmRsZQpvayByZWFkIGJhY2sgYnkgZGV2aWNlIGlkCnNldCAweGZmZmZmZmZmIGJ5IGhhbmRsZSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHNldCAweGZmZmZmZmZmIGJ5IGhhbmRsZQpyZWFkIGJhY2sgYnkgaGFuZGxlIDB4ZmZmZmZmZmYgYnkgaWQgMHhmZmZmZmZmZgpvayByZWFkIGJhY2sgYnkgaGFuZGxlCm9rIHJlYWQgYmFjayBieSBkZXZpY2UgaWQKc2V0IGJ5IGRldmljZSBpZCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHNldCBieSBkZXZpY2UgaWQKb2sgcmVhZCBiYWNrIGJ5IGRldmljZSBpZApvayBhIGhhbmRsZSBvcGVuZWQgbGF0ZXIgc2VlcyBpdApyZXN0b3JlID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgcmVzdG9yZQpvayByZXN0b3JlZApzdW1tYXJ5IDI3IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nset 0x40004000 by handle = MMSYSERR_NOERROR (0)\nok set 0x40004000 by handle\nread back by handle 0x40004000 by id 0x40004000\nok read back by handle\nok read back by device id\nset 0x0 by handle = MMSYSERR_NOERROR (0)\nok set 0x0 by handle\nread back by handle 0x0 by id 0x0\nok read back by handle\nok read back by device id\nset 0x80002000 by handle = MMSYSERR_NOERROR (0)\nok set 0x80002000 by handle\nread back by handle 0x80002000 by id 0x80002000\nok read back by handle\nok read back by device id\nset 0x12345678 by handle = MMSYSERR_NOERROR (0)\nok set 0x12345678 by handle\nread back by handle 0x12345678 by id 0x12345678\nok read back by handle\nok read back by device id\nset 0xffff0000 by handle = MMSYSERR_NOERROR (0)\nok set 0xffff0000 by handle\nread back by handle 0xffff0000 by id 0xffff0000\nok read back by handle\nok read back by device id\nset 0xffff by handle = MMSYSERR_NOERROR (0)\nok set 0xffff by handle\nread back by handle 0xffff by id 0xffff\nok read back by handle\nok read back by device id\nset 0xffffffff by handle = MMSYSERR_NOERROR (0)\nok set 0xffffffff by handle\nread back by handle 0xffffffff by id 0xffffffff\nok read back by handle\nok read back by device id\nset by device id = MMSYSERR_NOERROR (0)\nok set by device id\nok read back by device id\nok a handle opened later sees it\nrestore = MMSYSERR_NOERROR (0)\nok restore\nok restored\nsummary 27 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 313
+    }
+  ]
+}
