@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreText.framework/CTFontGetSymbolicTraits.yaml. Observed with C test programs linked against CoreText
+# (tests/macos/include/poly_mct.h, ADR 0182); results per architecture in CTFontGetSymbolicTraits.tests/macos.json.
+id: "macos/api/CoreText.framework/CTFontGetSymbolicTraits"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the CoreText, CoreGraphics and CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes, and the two architectures gave the same results. Tests are C programs that link CoreText (the line `poly-mac: coretext`, tests/macos/include/poly_mct.h). The results do not depend on Apple's fonts: tests use the PolyTest TrueType fonts embedded in poly_mct.h (made by tests/macos/fonts/mkfont.py) and DejaVu Sans 2.37 files the runner copies into the scratch directory (`poly-mac: fonts`); the few tests about Apple's own fonts are named sys_ and described as SYSTEM-DEPENDENT; results and output go through raw system calls"
+  observed_by: spec-macos-coretext
+  date: 2026-11-20
+summary: >
+  CTFontGetSymbolicTraits(font) gives the style bits of the font file (from the font's own style
+  flags): 0 for PolyTest Regular, kCTFontTraitBold (1<<1 = 2) for PolyTest Bold at any size and with a
+  matrix; kCTFontTraitItalic is 1<<0, monospace 1<<10. DejaVu Sans 0, Sans Bold bold, Sans Oblique
+  italic (its slant angle from the post table is -11 degrees), Sans Bold Oblique both, Sans Mono
+  monospace; the slant angle of an upright font is 0. CTFontCopyTraits(font) is a dictionary with
+  kCTFontSymbolicTrait (the same bits as a number) and kCTFontWeightTrait (a number: the bold font's
+  is greater than the regular font's). The fonts the tests bring: PolyTest Regular and Bold (units per
+  em 1000; the glyphs are boxes: A box 100..500 x 0..700, B 100..400 x 0..500, V a triangle, W two V,
+  a, g, e-acute and the accent mark U+0301 composites, .notdef a box, U+1F600 a box through a format
+  12 cmap; hhea 800/-200/line gap 100, OS/2 typo 700/-300/50, win 900/250, capHeight 700, xHeight 500,
+  a kern pair A,V -100 and V,A -80), and DejaVu Sans 2.37.
+returns:
+  success: "CTFontSymbolicTraits bit set"
+errors:
+  null_font: "NULL or invalid arguments not listed here are not supported (the process may crash)"
+side_effects: "none"
+threading: "CoreText objects are immutable once made and may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

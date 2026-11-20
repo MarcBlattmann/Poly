@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_destruct_errors",
+      "source_sha256": "81a906ff8ada823b5b3e97497cdfa445c7530a999923010f238534bd40cc2b3f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5a6bfc4eb89a19f01720eec0aa20cfc3076b8218f1e49eb4de8c4ef410522307",
+          "exit_code": 0,
+          "stdout": "ok a name that does not exist: KERN_INVALID_NAME\nok MACH_PORT_NULL: KERN_INVALID_NAME\nok MACH_PORT_DEAD: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok which stays\nok a port set: KERN_INVALID_RIGHT\nok which stays\nok a dead name: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f56750ef2f72abe8cbbca3bbef01c9bf76a6eb4e97f83363f065b4a8199aa0fb",
+          "exit_code": 0,
+          "stdout": "ok a name that does not exist: KERN_INVALID_NAME\nok MACH_PORT_NULL: KERN_INVALID_NAME\nok MACH_PORT_DEAD: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok which stays\nok a port set: KERN_INVALID_RIGHT\nok which stays\nok a dead name: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_destruct_guard",
+      "source_sha256": "7c1e9c9698947ffba29797d8ca8fa9610b632d3b4277c5e1c1be739545f355ce",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2251eb95baf8146302d7a21bcb237f5c9514fa48a99c83c34ebb13b1ea27e552",
+          "exit_code": 0,
+          "stdout": "ok the right guard: succeeds\nok a wrong guard: SIGKILL\nok no guard: SIGKILL\nok a context without a guard does not count\nok after unguard guard 0 works again\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4a873970810b752a36c07027368b08ef9cc94d922c8916722f6bce7a9505f12e",
+          "exit_code": 0,
+          "stdout": "ok the right guard: succeeds\nok a wrong guard: SIGKILL\nok no guard: SIGKILL\nok a context without a guard does not count\nok after unguard guard 0 works again\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

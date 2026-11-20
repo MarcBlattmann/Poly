@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgiq_more",
+      "source_sha256": "d7c524ad1eb9546fcf987f3b50bbdd667529e7408fdacc81f9cc5391c91154e3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3897b46abdca2d621863afce4da95cf52ac98a4391bcea0d1c9785a3e3cc6238",
+          "exit_code": 0,
+          "stdout": "value inside the save 1\nvalue after the restore 3\nvalue default quality, shouldInterpolate false 00 ff0000ff e01f00ff 1fe000ff 00ff00ff\nvalue default quality, shouldInterpolate false 01 e0001fff c71f1fff 38e01fff 1fff1fff\nvalue default quality, shouldInterpolate false 02 1f00e0ff 381fe0ff c7e0e0ff e0ffe0ff\nvalue default quality, shouldInterpolate false 03 0000ffff 1f1fffff e0e0ffff ffffffff\nvalue default quality, shouldInterpolate true 00 ff0000ff e01f00ff 1fe000ff 00ff00ff\nvalue default quality, shouldInterpolate true 01 e0001fff c71f1fff 38e01fff 1fff1fff\nvalue default quality, shouldInterpolate true 02 1f00e0ff 381fe0ff c7e0e0ff e0ffe0ff\nvalue default quality, shouldInterpolate true 03 0000ffff 1f1fffff e0e0ffff ffffffff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ed194f7a6042ca57921f9de48701a8391d1359cc3c7c29dfff218c9e746d14f9",
+          "exit_code": 0,
+          "stdout": "value inside the save 1\nvalue after the restore 3\nvalue default quality, shouldInterpolate false 00 ff0000ff e01f00ff 1fe000ff 00ff00ff\nvalue default quality, shouldInterpolate false 01 e0001fff c71f1fff 38e01fff 1fff1fff\nvalue default quality, shouldInterpolate false 02 1f00e0ff 381fe0ff c7e0e0ff e0ffe0ff\nvalue default quality, shouldInterpolate false 03 0000ffff 1f1fffff e0e0ffff ffffffff\nvalue default quality, shouldInterpolate true 00 ff0000ff e01f00ff 1fe000ff 00ff00ff\nvalue default quality, shouldInterpolate true 01 e0001fff c71f1fff 38e01fff 1fff1fff\nvalue default quality, shouldInterpolate true 02 1f00e0ff 381fe0ff c7e0e0ff e0ffe0ff\nvalue default quality, shouldInterpolate true 03 0000ffff 1f1fffff e0e0ffff ffffffff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgiq_reduce",
+      "source_sha256": "87bb8a04e6da0dd42438043d85615127735704023e5ddf4bb3a52d47812f2128",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7a18bbdd3c74717b1caa4d6ad8b1dbdfdad3a65e07c601c0a65d52b0402194c3",
+          "exit_code": 0,
+          "stdout": "value none 00 000000ff 000000ff ffffffff\nvalue none 01 000000ff 000000ff ffffffff\nvalue none 02 ffffffff ffffffff 000000ff\nvalue low 00 1e1e1eff 808080ff e1e1e1ff\nvalue low 01 808080ff 808080ff 7f7f7fff\nvalue low 02 e1e1e1ff 7f7f7fff 1e1e1eff\nvalue medium 00 787878ff 808080ff 878787ff\nvalue medium 01 808080ff 808080ff 808080ff\nvalue medium 02 878787ff 808080ff 787878ff\nvalue high 00 606060ff 808080ff 9f9f9fff\nvalue high 01 808080ff 7f7f7fff 7f7f7fff\nvalue high 02 9f9f9fff 7f7f7fff 606060ff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1094d6cac83138c55756473b0dc8615250ffbdec430a315d4d3e8ec5a0f56226",
+          "exit_code": 0,
+          "stdout": "value none 00 000000ff 000000ff ffffffff\nvalue none 01 000000ff 000000ff ffffffff\nvalue none 02 ffffffff ffffffff 000000ff\nvalue low 00 1e1e1eff 808080ff e1e1e1ff\nvalue low 01 808080ff 808080ff 7f7f7fff\nvalue low 02 e1e1e1ff 7f7f7fff 1e1e1eff\nvalue medium 00 787878ff 808080ff 878787ff\nvalue medium 01 808080ff 808080ff 808080ff\nvalue medium 02 878787ff 808080ff 787878ff\nvalue high 00 606060ff 808080ff 9f9f9fff\nvalue high 01 808080ff 7f7f7fff 7f7f7fff\nvalue high 02 9f9f9fff 7f7f7fff 606060ff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

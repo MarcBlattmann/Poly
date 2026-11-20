@@ -61,7 +61,9 @@ pub enum Kind {
     /// The record's thread is about to block on a wait queue. `a`: the queue's address (the
     /// kernel names some: `timeline: queue`); `b`: 0.
     Block = 9,
-    /// A timer tick found the record's thread running its program: `a`: the instruction pointer.
+    /// A timer tick interrupted the record's thread. `a`: the instruction pointer; `b`: 0 in its
+    /// program (user mode), else in the kernel, the interrupted function's caller (its frame's
+    /// return address; 1 when unknown).
     Sample = 10,
 }
 

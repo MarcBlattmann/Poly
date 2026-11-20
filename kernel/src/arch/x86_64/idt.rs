@@ -604,9 +604,8 @@ extern "C" fn irq_entry(frame: *mut TrapFrame) {
         // SAFETY: as above.
         let (rip, rbp) = unsafe { ((*frame).rip, (*frame).rbp) };
         crate::profile::sample(from_user, rip, || super::backtrace::stack_word(rbp.checked_add(8)?));
-        if from_user {
-            crate::timeline::sample(rip);
-        }
+        // In the kernel, the interrupted function's caller too (its frame's return address).
+        crate::timeline::sample(rip, from_user, || super::backtrace::stack_word(rbp.checked_add(8)?));
         // Shootdowns waiting for this CPU (ADR 0254): also at every tick, in case an IPI is late.
         super::tlb::service();
     }

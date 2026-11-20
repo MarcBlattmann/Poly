@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSException.initWithName%3Areason%3AuserInfo%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSException.initWithName%3Areason%3AuserInfo%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSException.initWithName:reason:userInfo:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSException initWithName:reason:userInfo:] keeps its three arguments: name, reason and userInfo
+  read back as given (reason and userInfo may be nil, they read back nil); two exceptions with equal
+  content are different objects; description is the reason when there is one and the name when there
+  is none; callStackSymbols and callStackReturnAddresses are empty arrays until the exception is
+  thrown with @throw or raise, and non-empty once caught. +exceptionWithName:reason:userInfo: is the
+  factory. The system's own exceptions have these names (the exported string constants have their own
+  names as text): an array index out of range NSRangeException (also removeObjectAtIndex: on an empty
+  array); nil in a collection, an unknown selector, a string's out-of-range substring range or
+  characterAtIndex: NSInvalidArgumentException; NSGenericException exists as a name.
+returns:
+  success: "the initialised exception"
+errors: {}
+side_effects: "none"
+threading: "objects are immutable or the class says otherwise; immutable values may be read from any thread"
+ordering: []
+timing:
+  typical: "microseconds, no system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontgetadvancesforglyphs_dejavu",
+      "source_sha256": "af8eb3d6822bc3a087edf8ac0dbf516aef7b290c687f9aae2dd2fbe2d1d142f4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bdf37cfc6f7628284e90da17dc54f833ddcee7079f29a793ab221c76f263060d",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphsForCharacters(f, chs, g, 5)\nok adv[i].width is want[i]\nok adv[i].width is want[i]\nok adv[i].width is want[i]\nok adv[i].width is want[i]\nok adv[i].width is want[i]\nok total is sum\nok a12.width is 8.21\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "777b25374410bca9e6de9bf46fc89f3606cc1d5e75fa6e2a874667dc5b5f652b",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphsForCharacters(f, chs, g, 5)\nok adv[i].width is want[i]\nok adv[i].width is want[i]\nok adv[i].width is want[i]\nok adv[i].width is want[i]\nok adv[i].width is want[i]\nok total is sum\nok a12.width is 8.21\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontgetadvancesforglyphs_polytest",
+      "source_sha256": "5b232aac7d30884a458a32392b6933bf62ed22a5d3baddbb1df0355ecc9406f8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "890049f2d670496e6b0d13a99b91993c5fec43faa53e952a5e1b85b2219df044",
+          "exit_code": 0,
+          "stdout": "ok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok total is sum\nok CTFontGetAdvancesForGlyphs(pt_font(0, 10), kCTFontOrientationHorizontal, g, a10, 2) is 6 + 5\nok a10[0].width is 6\nok CTFontGetAdvancesForGlyphs(f, kCTFontOrientationHorizontal, g, NULL, 4) is 60 + 50 + 70 + 140\nok CTFontGetAdvancesForGlyphs(f, kCTFontOrientationHorizontal, av, NULL, 2) is 130\nok CTFontGetAdvancesForGlyphs(f, kCTFontOrientationHorizontal, g, adv, 0) is 0\nsummary 22 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "aa9182de101257702db6db861bbd7024cb32d759afb07cba84b1995958785267",
+          "exit_code": 0,
+          "stdout": "ok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok adv[i].width is want[i]\nok adv[i].height is 0\nok total is sum\nok CTFontGetAdvancesForGlyphs(pt_font(0, 10), kCTFontOrientationHorizontal, g, a10, 2) is 6 + 5\nok a10[0].width is 6\nok CTFontGetAdvancesForGlyphs(f, kCTFontOrientationHorizontal, g, NULL, 4) is 60 + 50 + 70 + 140\nok CTFontGetAdvancesForGlyphs(f, kCTFontOrientationHorizontal, av, NULL, 2) is 130\nok CTFontGetAdvancesForGlyphs(f, kCTFontOrientationHorizontal, g, adv, 0) is 0\nsummary 22 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

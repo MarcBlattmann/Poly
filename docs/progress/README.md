@@ -8,7 +8,7 @@ Roadmap progress and API coverage for [Poly](../../README.md). See [docs/ROADMAP
 <p>
   <a href="../ROADMAP.md"><img alt="roadmap: 116 of 189 milestones" src="badge-roadmap.svg"></a>
   <img alt="Linux API coverage: 97.2%" src="badge-linux.svg">
-  <img alt="Windows API coverage: 1.7%" src="badge-windows.svg">
+  <img alt="Windows API coverage: 1.8%" src="badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="badge-macos.svg">
 </p>
 
@@ -34,7 +34,7 @@ Roadmap progress and API coverage for [Poly](../../README.md). See [docs/ROADMAP
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
 | Linux | 97.2% | n/a | 0 / 0 |
-| Windows | 1.7% | n/a | 0 / 0 |
+| Windows | 1.8% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | N/A by design | App-provided |
@@ -42,9 +42,9 @@ Roadmap progress and API coverage for [Poly](../../README.md). See [docs/ROADMAP
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,604 | 1,088 | 3,458 | 3,797 | 52,965 | 0 | 69,296 |
-| macOS | BSD syscalls + Mach traps | 517 | 15 | 0 | 81 | 421 | 0 | 0 |
-| macOS | framework API | 880,557 | 0 | 0 | 93 | 880,464 | 0 | 0 |
+| Windows | user-mode DLL exports | 130,607 | 1,107 | 3,457 | 3,787 | 52,960 | 0 | 69,296 |
+| macOS | BSD syscalls + Mach traps | 517 | 20 | 0 | 79 | 418 | 0 | 0 |
+| macOS | framework API | 880,557 | 0 | 0 | 522 | 880,035 | 0 | 0 |
 
 *API coverage* is green entries out of the entries that are ours to build: *app-provided* entries (libraries the application or its installer supplies, ADR 0055) are listed under *Entries* but left out of the percentages, and so are entries *not applicable by design* (calls the reference OS itself does not offer on x86-64, or that would replace the running kernel; Poly answers them as the reference does). *App-weighted* counts each API by how often the target apps call it; it is the number that tracks real progress and appears once the call tracer exists.
 

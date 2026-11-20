@@ -9,7 +9,8 @@
 #            1 = jump to the program counter with rsp at argc
 #  16  exit function (0: the raw exit system call)
 #  24  number of initializers
-#  32  the initializers, called with (argc, argv, envp, apple, 0)
+#  32  the initializers, called with (argc, argv, envp, apple, data block)
+#      (the image table libdyld reads follows them: src/start.rs)
     .text
     .globl _poly_dyld_start
 _poly_dyld_start:
@@ -37,7 +38,7 @@ _poly_dyld_start:
     movq %r14, %rsi
     movq %r15, %rdx
     movq %rbp, %rcx
-    xorl %r8d, %r8d
+    movq %rbx, %r8
     callq *%rax
     jmp 3b
 4:  cmpq $1, 8(%rbx)

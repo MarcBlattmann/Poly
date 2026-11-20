@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "xpc_connection_create_mach_service_listener",
+      "source_sha256": "e8780550c62e89db2902dfb389d80a259b7d6dd201abf2ce7a40c73adb18e423",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5dc42d6cd90c7fcf971e70f24ba8cc8b90d4de026177fac1680dce0974e283e1",
+          "exit_code": 0,
+          "stdout": "ok a connection object\nok the handler is called\nok with XPC_ERROR_CONNECTION_INVALID\nok and no connection came\nok a checked-in name does not make a listener valid\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "db13596b6dbaae1702cb55526f3ab77c9e5d618b2bdf3033330945726fac785a",
+          "exit_code": 0,
+          "stdout": "ok a connection object\nok the handler is called\nok with XPC_ERROR_CONNECTION_INVALID\nok and no connection came\nok a checked-in name does not make a listener valid\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "xpc_connection_create_mach_service_unknown",
+      "source_sha256": "ec927d8a84eef9e12ee41010f047fdef3ea9985a44b5094d04a306995bd4cb0e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ca6fefacb25037639c81f0852c513cc6b1ed4da82bbf633f2eb185bed5b2b512",
+          "exit_code": 0,
+          "stdout": "ok a connection object\nok its type is named connection\nok the handler is called\nok with an error object\nok which is XPC_ERROR_CONNECTION_INVALID\nok described as Connection invalid\nok a sync send gets the same error object\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3d5f7b6c7d7f9c70638dd77522eee25ccc8781ee240f132c629bbc39033a0b7c",
+          "exit_code": 0,
+          "stdout": "ok a connection object\nok its type is named connection\nok the handler is called\nok with an error object\nok which is XPC_ERROR_CONNECTION_INVALID\nok described as Connection invalid\nok a sync send gets the same error object\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

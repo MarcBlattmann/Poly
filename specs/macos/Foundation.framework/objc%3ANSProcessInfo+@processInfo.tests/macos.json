@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsprocessinfo_processinfo_application",
+      "source_sha256": "899ee325548358ab84920d8e9c955794906a32926c83589b18b15b8423f172ce",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "80847d48003aaa7bd9c908ef97f9c455eba9b9dbc030e58d089d7a50048ca2c2",
+          "exit_code": 0,
+          "stdout": "ok ns_is(pi.processName, \"t\")\nok pi.processIdentifier == (int)bsd3(20, 0, 0, 0).ret\nok ns_is(pi.arguments[0].lastPathComponent, \"t\")\nok done && from_thread == pi\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c3c73f277aa7eaf7567d53433af04dd0e34318144dfad9c3b0c7f39784c8ae2f",
+          "exit_code": 0,
+          "stdout": "ok ns_is(pi.processName, \"t\")\nok pi.processIdentifier == (int)bsd3(20, 0, 0, 0).ret\nok ns_is(pi.arguments[0].lastPathComponent, \"t\")\nok done && from_thread == pi\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsprocessinfo_processinfo_environment_consistency",
+      "source_sha256": "f2a3116c4f5dedb1d79bbfb437708880a3396c6d46b259320df5c40420580839",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "41a9c3709e8d0a4d67f7e26897cf1c7c5a6fab0806bca66eb3f0cc462d5ee278",
+          "exit_code": 0,
+          "stdout": "ok pi.processIdentifier == [NSProcessInfo processInfo].processIdentifier\nok [pi.processName isEqualToString:[pi.arguments[0] lastPathComponent]]\nok u.count == 10\nok pi.systemUptime > 0\nok [pi.hostName isEqualToString:[NSProcessInfo processInfo].hostName]\nok pi.physicalMemory > (1ULL << 28)\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "09d8810fbd9449dfd32a66bc767ed259c5e4ebc652e64e7bb930737b5ce30b28",
+          "exit_code": 0,
+          "stdout": "ok pi.processIdentifier == [NSProcessInfo processInfo].processIdentifier\nok [pi.processName isEqualToString:[pi.arguments[0] lastPathComponent]]\nok u.count == 10\nok pi.systemUptime > 0\nok [pi.hostName isEqualToString:[NSProcessInfo processInfo].hostName]\nok pi.physicalMemory > (1ULL << 28)\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

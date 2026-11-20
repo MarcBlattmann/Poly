@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_semaphore_create_more",
+      "source_sha256": "7ff5399c541c994401eff6cbaf84f85b14cd4d1cb5848065b1d325d9fb7e7ae7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "676862f15431905b821f75c2a779f7681fd4594709259278c8359e367b9c61b2",
+          "exit_code": 0,
+          "stdout": "ok 8 threads x 5000 increments under a semaphore of 1: 40000\nok never two threads inside\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5f9993daa5ee41b946b4358ff53d35657b8f537af1cbb84e2dfe07e442e18e69",
+          "exit_code": 0,
+          "stdout": "ok 8 threads x 5000 increments under a semaphore of 1: 40000\nok never two threads inside\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_semaphore_create_values",
+      "source_sha256": "24166450ec460a93dc49e56c153a7bd37af3148d50399c95943ad9c6fe4e0c6f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5db8b528a5883a4ab0fe6a47668d261a6da652e5f04337d049779939ec3931bd",
+          "exit_code": 0,
+          "stdout": "ok a negative initial value gives NULL\nok so does a large negative one\nok 0 gives a semaphore\nok with no tokens: a wait with DISPATCH_TIME_NOW fails (returns nonzero)\nok created with 3: exactly three waits succeed\nok created with 100000: exactly 100000 waits succeed\nok two semaphores are different objects\nok taking from one does not touch the other\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "00329edcafea5cbb0a5797e540eb9598674e82d1207a9fd6b0345a3737ffd94a",
+          "exit_code": 0,
+          "stdout": "ok a negative initial value gives NULL\nok so does a large negative one\nok 0 gives a semaphore\nok with no tokens: a wait with DISPATCH_TIME_NOW fails (returns nonzero)\nok created with 3: exactly three waits succeed\nok created with 100000: exactly 100000 waits succeed\nok two semaphores are different objects\nok taking from one does not touch the other\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

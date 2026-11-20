@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "bootstrap_register_new_name",
+      "source_sha256": "e9da350a141131d9e2aaff392283e575358b60c37afc03cf3a4b2f1423fe5cee",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d69c6fd00d41fbfc1ec1dab3847e7921a46b6c1346ab572277460f781956f58b",
+          "exit_code": 0,
+          "stdout": "ok register of a new name succeeds\nok look_up finds it\nok the right is a send right to the same port (same name here)\nok registering it again is BOOTSTRAP_NAME_IN_USE (1101)\nok another name with another port works\nok the first name still gives the first port\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "768698706c844029237af89a9076a82dcb19f771ec662ae94e57ab5fe8d974ac",
+          "exit_code": 0,
+          "stdout": "ok register of a new name succeeds\nok look_up finds it\nok the right is a send right to the same port (same name here)\nok registering it again is BOOTSTRAP_NAME_IN_USE (1101)\nok another name with another port works\nok the first name still gives the first port\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "bootstrap_register_receive_only",
+      "source_sha256": "d4ff71ffc1dec9f9a1b20c3fbf604690c4c4e8565ca6b8a3e3782f3a919812e5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "dbf6fdc78a86ec71f21c5d6e8ed5b7d829416cd5e9a12e2b947fbbbbe4530411",
+          "exit_code": 0,
+          "stdout": "value register of a receive-only port 0\nvalue look_up of it 0\nok a message sent to what was found arrives\nok on the receive right\nok after the receive right was destroyed the name is unknown\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e1882f4131a3c45f57ae8e8c056876b6d942b652be5f0e39e6a22c3bc7c72244",
+          "exit_code": 0,
+          "stdout": "value register of a receive-only port 0\nvalue look_up of it 0\nok a message sent to what was found arrives\nok on the receive right\nok after the receive right was destroyed the name is unknown\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "bootstrap_register_refused",
+      "source_sha256": "7da50ec814571df7454fef64f908d4af68952cbc30ebe82a2cd548833c5b39eb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "af1b69913fab1100d41969d05768aecad89d02b845110248ebbb57cb1a6a294a",
+          "exit_code": 0,
+          "stdout": "ok parent registers\nok child: a name the parent holds is 1100\nsummary 1 passed, 0 failed\nok the child ends with status 0\nok a name checked in by this process is 1101\nok a port name that does not exist is KERN_INVALID_RIGHT\nok and the name stays free\nok a null bootstrap port is MACH_SEND_INVALID_DEST\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "77a1634add47cc8bf22433373b3997c9c7ca10acbef1165b013a782fb35827d7",
+          "exit_code": 0,
+          "stdout": "ok parent registers\nok child: a name the parent holds is 1100\nsummary 1 passed, 0 failed\nok the child ends with status 0\nok a name checked in by this process is 1101\nok a port name that does not exist is KERN_INVALID_RIGHT\nok and the name stays free\nok a null bootstrap port is MACH_SEND_INVALID_DEST\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

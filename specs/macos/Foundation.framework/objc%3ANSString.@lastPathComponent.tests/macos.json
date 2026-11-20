@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsstring_lastpathcomponent_variants",
+      "source_sha256": "e60a96958f5e52b63dc0e79bd370407b1ceba5fdf0a55cdd1a106f40cda62f59",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2046bbe91cd571a644544af09727d398c3608df3d3a765d17cfe7ab8bbdc9d78",
+          "exit_code": 0,
+          "stdout": "ok /a/b/c.txt\nok /a/b/\nok /\nok \nok file\nok //a//\nok a/b\nok /a\nok /café/xé\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0010fc3c5b38f2c1e736c66ddc10c89553a824c07150d43f635c0e8c03b9347c",
+          "exit_code": 0,
+          "stdout": "ok /a/b/c.txt\nok /a/b/\nok /\nok \nok file\nok //a//\nok a/b\nok /a\nok /café/xé\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsstring_path_extension_and_components",
+      "source_sha256": "08a9b1ad121a03d8cc10bd74d4a0b2b1ec8104636182ca02bd74e3055fc95ef1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "41d1bc97ac99f22cb7350d8c9ab91f20370f43dba3b799662a4f02623cadf86a",
+          "exit_code": 0,
+          "stdout": "ok ns_is([@\"a.txt\" pathExtension], \"txt\")\nok ns_is([@\"a.tar.gz\" pathExtension], \"gz\")\nok ns_is([@\".hidden\" pathExtension], \"\")\nok ns_is([@\"a\" pathExtension], \"\")\nok ns_is([@\"a.\" pathExtension], \"\")\nok ns_is([@\"/d.x/f\" pathExtension], \"\")\nok ns_is([@\"/a/b/c\" stringByDeletingLastPathComponent], \"/a/b\")\nok ns_is([@\"/a\" stringByDeletingLastPathComponent], \"/\")\nok ns_is([@\"a\" stringByDeletingLastPathComponent], \"\")\nok ns_is([@\"/\" stringByDeletingLastPathComponent], \"/\")\nok ns_is([@\"a.txt\" stringByDeletingPathExtension], \"a\")\nok ns_is([@\"a\" stringByAppendingPathExtension:@\"txt\"], \"a.txt\")\nok pc.count == 4 && ns_is(pc[0], \"/\") && ns_is(pc[1], \"a\") && ns_is(pc[3], \"c\")\nok rel.count == 4 && ns_is(rel[0], \"a\") && ns_is(rel[2], \"c\") && ns_is(rel[3], \"/\")\nok ns_is([NSString pathWithComponents:@[@\"/\", @\"a\", @\"b\"]], \"/a/b\")\nok ns_is([@\"/a/./b/../c//d\" stringByStandardizingPath], \"/a/c/d\")\nok [@\"/a\" isAbsolutePath] && ![@\"a/b\" isAbsolutePath]\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2ea0f23bd788e71c34d148aee9cfd10853dd474a033b6ebd4c549edbb6f0ef47",
+          "exit_code": 0,
+          "stdout": "ok ns_is([@\"a.txt\" pathExtension], \"txt\")\nok ns_is([@\"a.tar.gz\" pathExtension], \"gz\")\nok ns_is([@\".hidden\" pathExtension], \"\")\nok ns_is([@\"a\" pathExtension], \"\")\nok ns_is([@\"a.\" pathExtension], \"\")\nok ns_is([@\"/d.x/f\" pathExtension], \"\")\nok ns_is([@\"/a/b/c\" stringByDeletingLastPathComponent], \"/a/b\")\nok ns_is([@\"/a\" stringByDeletingLastPathComponent], \"/\")\nok ns_is([@\"a\" stringByDeletingLastPathComponent], \"\")\nok ns_is([@\"/\" stringByDeletingLastPathComponent], \"/\")\nok ns_is([@\"a.txt\" stringByDeletingPathExtension], \"a\")\nok ns_is([@\"a\" stringByAppendingPathExtension:@\"txt\"], \"a.txt\")\nok pc.count == 4 && ns_is(pc[0], \"/\") && ns_is(pc[1], \"a\") && ns_is(pc[3], \"c\")\nok rel.count == 4 && ns_is(rel[0], \"a\") && ns_is(rel[2], \"c\") && ns_is(rel[3], \"/\")\nok ns_is([NSString pathWithComponents:@[@\"/\", @\"a\", @\"b\"]], \"/a/b\")\nok ns_is([@\"/a/./b/../c//d\" stringByStandardizingPath], \"/a/c/d\")\nok [@\"/a\" isAbsolutePath] && ![@\"a/b\" isAbsolutePath]\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:19:30",
+  "tests": [
+    {
+      "name": "dispatch_set_target_queue_basic",
+      "source_sha256": "ec739d15716a44ff511dce83f9ff219dabc1a70bab2f220fc08a20e3ba350e9f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0d8d33abafe0bcb1d2f125de5a59d2f0106d10d8e5e52d4c66348c8e5a2b291a",
+          "exit_code": 0,
+          "stdout": "ok two independent serial queues run blocks at the same time\nok both retargeted to one serial queue: serialised, never at the same time\nok with a NULL target again: independent\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4b2b352e9e54d6daecd7710aed6cab9812c1e0ffb80098a9c75414a581310686",
+          "exit_code": 0,
+          "stdout": "ok two independent serial queues run blocks at the same time\nok both retargeted to one serial queue: serialised, never at the same time\nok with a NULL target again: independent\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -12,7 +12,8 @@
 //            1 = jump to the program counter with sp at argc
 //  16  exit function (0: the raw exit system call)
 //  24  number of initializers
-//  32  the initializers, called with (argc, argv, envp, apple, 0)
+//  32  the initializers, called with (argc, argv, envp, apple, 0); the
+//      x86-64 start code passes the data block instead of 0 (ADR 0258)
 //
 // x19 to x26 are callee-saved (AAPCS64), so they survive every call.
     .text

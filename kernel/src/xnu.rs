@@ -36,7 +36,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use poly_abi::{Outcome, SyscallRegs};
+use poly_abi::{Outcome, RFLAGS_CF, SyscallRegs};
 use poly_dyld::{Program, start};
 use poly_personality_xnu::bsd::signal::{self, Signals};
 use poly_personality_xnu::bsd::{self, BsdKernel, errno, file};
@@ -162,6 +162,11 @@ fn map_start(memory: &Memory, program: &Program, entry: poly_dyld::Entry) -> Res
         mode,
         exit: program.exit_function().map_err(|e| e.to_string())?.unwrap_or(0),
         initializers: program.initializers(),
+        images: program
+            .images
+            .iter()
+            .map(|im| start::ImageInfo { header: im.base, slide: im.slide, path: im.path.clone() })
+            .collect(),
     }
     .to_bytes();
     let len = start::DATA_OFFSET + page_up(data.len() as u64);
@@ -200,11 +205,60 @@ fn map_start(memory: &Memory, program: &Program, entry: poly_dyld::Entry) -> Res
 pub struct XnuState {
     pub signals: SpinLock<Signals>,
     pub children: SpinLock<BTreeMap<u32, Arc<Process>>>,
+    /// The process group: 0 for the process's own pid (a group of its own).
+    pub pgid: core::sync::atomic::AtomicU32,
+    /// Ranges minherit gave `VM_INHERIT_NONE`: left out of a fork child.
+    pub no_inherit: SpinLock<alloc::vec::Vec<(u64, u64)>>,
+    /// The user and group the process runs as; `None`: root.
+    pub ids: SpinLock<Option<(u32, u32)>>,
+}
+
+impl XnuState {
+    /// minherit's inheritance for `[start, end)`: NONE is recorded, other
+    /// values clear it.
+    pub fn set_inherit(&self, start: u64, end: u64, none: bool) {
+        let mut r = self.no_inherit.lock();
+        forget_range(&mut r, start, end);
+        if none {
+            r.push((start, end));
+        }
+    }
+
+    /// The range is unmapped: what minherit said of it goes.
+    pub fn unmapped(&self, start: u64, end: u64) {
+        forget_range(&mut self.no_inherit.lock(), start, end);
+    }
+}
+
+fn forget_range(r: &mut alloc::vec::Vec<(u64, u64)>, start: u64, end: u64) {
+    let old = core::mem::take(r);
+    for (s, e) in old {
+        if s < start {
+            r.push((s, e.min(start)));
+        }
+        if e > end {
+            r.push((s.max(end), e));
+        }
+    }
 }
 
 impl Default for XnuState {
     fn default() -> Self {
-        XnuState { signals: SpinLock::new(Signals::default()), children: SpinLock::new(BTreeMap::new()) }
+        XnuState {
+            signals: SpinLock::new(Signals::default()),
+            children: SpinLock::new(BTreeMap::new()),
+            pgid: core::sync::atomic::AtomicU32::new(0),
+            no_inherit: SpinLock::new(alloc::vec::Vec::new()),
+            ids: SpinLock::new(None),
+        }
+    }
+}
+
+/// The process group of `p` (its pid unless it joined another).
+pub fn pgid_of(p: &Process) -> u32 {
+    match p.xnu.as_ref().map(|s| s.pgid.load(core::sync::atomic::Ordering::SeqCst)) {
+        Some(0) | None => p.pid,
+        Some(g) => g,
     }
 }
 
@@ -273,6 +327,11 @@ impl Thread<'_> {
 
     fn memory(&self) -> Result<Arc<Memory>, u32> {
         user::current_memory().ok_or(errno::ENOMEM)
+    }
+
+    /// Whether the process is an arm64 program (run by the translator).
+    fn arm64(&self) -> bool {
+        matches!(self.process.format, poly_binfmt::Format::MachO { arch: poly_binfmt::Arch::Aarch64, .. })
     }
 }
 
@@ -454,6 +513,7 @@ impl BsdKernel for Thread<'_> {
 
     fn mmap(&mut self, r: &bsd::MapRequest) -> Result<u64, u32> {
         let memory = self.memory()?;
+        let mut tail = None;
         let prot = Prot::from_bits(u64::from(r.prot)).ok_or(errno::EINVAL)?;
         let req = match r.file {
             None if r.shared => {
@@ -470,15 +530,36 @@ impl BsdKernel for Thread<'_> {
                     return Err(errno::EACCES);
                 }
                 let source = FileSource::of(&file).backed(r.shared && r.prot & 2 != 0);
+                let eof = file.node().attr().map(|a| a.size).unwrap_or(0);
+                tail = Some((offset, eof));
                 poly_vm::MapRequest::file(r.len, prot, FileRef::new(Arc::new(source)), offset, r.shared)
             }
         };
         let placement = if r.fixed { Placement::Fixed(r.addr) } else { Placement::Hint(r.addr) };
-        memory.map(req.at(placement)).map_err(mem_err)
+        let addr = memory.map(req.at(placement)).map_err(mem_err)?;
+        // An arm64 program's pages are 16 KiB (ADR 0257): the bytes past the
+        // end of the file up to the end of its last 16 KiB page read as zero,
+        // as on its Mac, where Poly's 4 KiB file pages would be SIGBUS. Those
+        // 4 KiB pages become zero-filled memory.
+        if let Some((offset, eof)) = tail
+            && self.arm64()
+        {
+            const SMALL: u64 = 4096;
+            const LARGE: u64 = 16384;
+            let in_file = eof.saturating_sub(offset);
+            let start = addr + in_file.div_ceil(SMALL) * SMALL;
+            let end = (addr + in_file.div_ceil(LARGE) * LARGE).min(addr + r.len.div_ceil(SMALL) * SMALL);
+            if start < end {
+                let _ = memory.map_anonymous(Placement::Fixed(start), end - start, prot);
+            }
+        }
+        Ok(addr)
     }
 
     fn munmap(&mut self, addr: u64, len: u64) -> Result<(), u32> {
-        self.memory()?.unmap(addr, len).map_err(mem_err)
+        self.memory()?.unmap(addr, len).map_err(mem_err)?;
+        self.state.unmapped(addr, addr.saturating_add(len));
+        Ok(())
     }
 
     fn page_size(&self) -> u64 {
@@ -490,7 +571,12 @@ impl BsdKernel for Thread<'_> {
     }
 
     fn ppid(&self) -> u32 {
-        self.process.ppid
+        // A process without a parent of its own is launchd's (pid 1), as
+        // on macOS; pid 1 itself has none.
+        match self.process.ppid {
+            0 if self.process.pid != 1 => 1,
+            p => p,
+        }
     }
 
     fn thread_id(&self) -> u64 {
@@ -503,7 +589,9 @@ impl BsdKernel for Thread<'_> {
     }
 
     fn process_exists(&self, pid: u32) -> bool {
-        process::find(pid).is_some_and(|p| !p.has_ended())
+        // A child that ended exists until it is waited for (the wait4 sheet:
+        // kill(pid, 0) works on a zombie).
+        process::find(pid).is_some_and(|p| !p.has_ended()) || self.is_zombie_child(pid)
     }
 
     fn random(&mut self, buf: &mut [u8]) {
@@ -514,13 +602,16 @@ impl BsdKernel for Thread<'_> {
         use poly_procfs::ProcSource;
         let s = fs::proc::KernelProc::default().system();
         let boot = crate::time::realtime_offset_ns();
+        // An arm64 program (through the translator, ADR 0257) sees an arm64
+        // Mac: 16 KiB pages, arm64, not translated.
+        let arm64 = matches!(self.process.format, poly_binfmt::Format::MachO { arch: poly_binfmt::Arch::Aarch64, .. });
         bsd::sysctl::System {
             ncpu: crate::smp::cpus_online() as u32,
             memsize: s.mem_total,
-            page_size: 4096,
+            page_size: if arm64 { 16384 } else { 4096 },
             hostname: "poly".into(),
             boottime: ((boot / 1_000_000_000) as i64, ((boot % 1_000_000_000) / 1000) as i64),
-            machine: "x86_64",
+            machine: if arm64 { "arm64" } else { "x86_64" },
             translated: false,
         }
     }
@@ -536,6 +627,10 @@ impl BsdKernel for Thread<'_> {
     }
 
     fn kill(&mut self, pid: u32, sig: u32) -> Result<(), u32> {
+        if self.is_zombie_child(pid) {
+            // A zombie takes the signal and nothing happens.
+            return Ok(());
+        }
         let target = process::find(pid).filter(|p| !p.has_ended()).ok_or(errno::ESRCH)?;
         let Some(state) = target.xnu.as_ref() else {
             // A process of another personality: the signals both name the
@@ -576,6 +671,7 @@ impl BsdKernel for Thread<'_> {
         }
         if let Some(cs) = child.xnu.as_ref() {
             *cs.signals.lock() = self.state.signals.lock().for_exec();
+            *cs.ids.lock() = *self.state.ids.lock();
         }
         let child = prepared.start().map_err(|_| errno::ENOEXEC)?;
         let pid = child.pid;
@@ -584,8 +680,236 @@ impl BsdKernel for Thread<'_> {
     }
 
     fn wait(&mut self, pid: i32, nohang: bool) -> Result<Option<(u32, bsd::ChildStatus)>, u32> {
+        self.wait_child(pid, nohang, true)
+    }
+
+    fn wait_for(&mut self, pid: i32, nohang: bool, reap: bool) -> Result<Option<(u32, bsd::ChildStatus)>, u32> {
+        self.wait_child(pid, nohang, reap)
+    }
+
+    fn mkdir(&mut self, dirfd: i32, path: &[u8], mode: u16) -> Result<(), u32> {
+        self.process.files.mkdirat(at(dirfd), path, mode).map_err(de)
+    }
+
+    fn unlink(&mut self, dirfd: i32, path: &[u8], dir: bool) -> Result<(), u32> {
+        let flags = if dir { fs::AT_REMOVEDIR } else { 0 };
+        self.process.files.unlinkat(at(dirfd), path, flags).map_err(de)
+    }
+
+    fn link(&mut self, fd1: i32, old: &[u8], fd2: i32, new: &[u8], follow: bool) -> Result<(), u32> {
+        self.process.files.linkat(at(fd1), old, at(fd2), Ok(new), follow).map_err(de)
+    }
+
+    fn symlink(&mut self, target: &[u8], dirfd: i32, path: &[u8]) -> Result<(), u32> {
+        self.process.files.symlinkat(target, at(dirfd), path).map_err(de)
+    }
+
+    fn readlink(&mut self, dirfd: i32, path: &[u8]) -> Result<alloc::vec::Vec<u8>, u32> {
+        self.process.files.readlinkat(at(dirfd), path).map_err(de)
+    }
+
+    fn rename(&mut self, fd1: i32, old: &[u8], fd2: i32, new: &[u8], how: bsd::path::RenameHow) -> Result<(), u32> {
+        let flags = poly_vfs::RenameFlags { noreplace: how.excl, exchange: how.swap };
+        self.process.files.renameat(at(fd1), old, at(fd2), Ok(new), flags).map_err(de)
+    }
+
+    fn chmod(&mut self, target: bsd::path::Target<'_>, mode: u16) -> Result<(), u32> {
+        match target {
+            bsd::path::Target::Fd(fd) => self.process.files.fchmod(fd, mode),
+            bsd::path::Target::Path { path, follow } => self.process.files.fchmodat2(fs::AT_FDCWD, path, mode, follow),
+        }
+        .map_err(de)
+    }
+
+    fn chmod_at(&mut self, dirfd: i32, path: &[u8], mode: u16, follow: bool) -> Result<(), u32> {
+        self.process.files.fchmodat2(at(dirfd), path, mode, follow).map_err(de)
+    }
+
+    fn umask(&mut self, mask: u16) -> u16 {
+        self.process.files.umask(mask)
+    }
+
+    fn mknod(&mut self, path: &[u8], mode: u32, dev: u32) -> Result<(), u32> {
+        let kind = match mode & 0o170000 {
+            0o010000 => poly_vfs::FileType::Fifo,
+            0o020000 => poly_vfs::FileType::CharDevice,
+            0o060000 => poly_vfs::FileType::BlockDevice,
+            0o140000 => poly_vfs::FileType::Socket,
+            0 | 0o100000 => poly_vfs::FileType::Regular,
+            _ => return Err(errno::EINVAL),
+        };
+        // Darwin's dev_t: major in the top 8 bits, minor in the low 24.
+        let rdev = poly_vfs::DeviceId::new(dev >> 24, dev & 0xff_ffff);
+        // Device nodes need the superuser (EPERM otherwise).
+        let may = self.process.files.cred().uid == 0;
+        self.process.files.mknodat(fs::AT_FDCWD, path, kind, (mode & 0o7777) as u16, rdev, may).map_err(de)
+    }
+
+    fn truncate(&mut self, target: bsd::path::Target<'_>, len: u64) -> Result<(), u32> {
+        match target {
+            bsd::path::Target::Fd(fd) => self.process.files.ftruncate(fd, len),
+            bsd::path::Target::Path { path, .. } => self.process.files.truncate(path, len),
+        }
+        .map_err(de)
+    }
+
+    fn xattr(&mut self, target: bsd::path::Target<'_>, op: bsd::path::XattrOp<'_>) -> Result<alloc::vec::Vec<u8>, u32> {
+        use bsd::path::XattrOp;
+        let files = &self.process.files;
+        let node = match target {
+            bsd::path::Target::Fd(fd) => {
+                let file = files.file(fd).map_err(de)?;
+                // Pipes and sockets carry no attributes (the fgetxattr sheet).
+                if matches!(file.node().kind(), Ok(poly_vfs::FileType::Fifo | poly_vfs::FileType::Socket)) {
+                    return Err(errno::EINVAL);
+                }
+                file.node().clone()
+            }
+            bsd::path::Target::Path { path, follow } => files.lookupat(fs::AT_FDCWD, path, follow).map_err(de)?,
+        };
+        let cred = files.cred();
+        // A missing attribute: ENOATTR (93), the VFS's ENODATA.
+        let e = |err: poly_vfs::Errno| if err == poly_vfs::Errno::ENODATA { bsd::path::ENOATTR } else { de(err) };
+        match op {
+            XattrOp::Get { name } => node.getxattr(&cred, name).map_err(e),
+            XattrOp::List => node.listxattr(&cred).map_err(e),
+            XattrOp::Set { name, value, create, replace } => {
+                // XATTR_CREATE / XATTR_REPLACE as the VFS's Linux flags.
+                let flags = u32::from(create) | (u32::from(replace) << 1);
+                node.setxattr(&cred, name, value, flags).map(|()| alloc::vec::Vec::new()).map_err(e)
+            }
+            XattrOp::Remove { name } => node.removexattr(&cred, name).map(|()| alloc::vec::Vec::new()).map_err(e),
+        }
+    }
+
+    fn bytes_readable(&mut self, fd: i32) -> Result<Option<usize>, u32> {
+        Ok(self.process.files.file(fd).map_err(de)?.bytes_readable())
+    }
+
+    fn pgid(&self, pid: u32) -> Result<u32, u32> {
+        if pid == 0 || pid == self.process.pid {
+            return Ok(pgid_of(self.process));
+        }
+        let p = process::find(pid).ok_or(errno::ESRCH)?;
+        Ok(pgid_of(&p))
+    }
+
+    fn set_pgid(&mut self, pid: u32, pgid: u32) -> Result<(), u32> {
+        let target = if pid == 0 || pid == self.process.pid {
+            None
+        } else {
+            Some(self.state.children.lock().get(&pid).cloned().ok_or(errno::ESRCH)?)
+        };
+        let p: &Process = target.as_deref().unwrap_or(self.process);
+        let g = if pgid == 0 { p.pid } else { pgid };
+        let state = p.xnu.as_ref().ok_or(errno::ESRCH)?;
+        state.pgid.store(if g == p.pid { 0 } else { g }, core::sync::atomic::Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn fork(&mut self) -> Result<u32, u32> {
+        let memory = self.memory()?;
+        let child_memory = memory.fork().map_err(|_| errno::ENOMEM)?;
+        // minherit(VM_INHERIT_NONE): those ranges are not in the child.
+        for (start, end) in self.state.no_inherit.lock().clone() {
+            let _ = child_memory.unmap(start, end - start);
+        }
+        let child_memory = Arc::new(child_memory);
+        let pid = process::alloc_pid();
+        let files = self.process.files.clone_for(false, false);
+        let child = Process::new_xnu_child(pid, self.process.pid, self.process.format, self.process.traced, files);
+        if let Some(cs) = child.xnu.as_ref() {
+            // The handlers and the mask, no pending signals (the fork sheet).
+            let mut signals = *self.state.signals.lock();
+            signals.pending = 0;
+            *cs.signals.lock() = signals;
+            cs.pgid.store(pgid_of(self.process), core::sync::atomic::Ordering::SeqCst);
+            *cs.ids.lock() = *self.state.ids.lock();
+        }
+        // The child returns from the call with its own pid, 1 in rdx and
+        // the carry clear.
+        let mut regs = user::registers();
+        regs.rax = u64::from(pid);
+        regs.rdx = 1;
+        regs.rflags &= !RFLAGS_CF;
+        let (fpu, _) = user::fpu_image().ok_or(errno::ENOMEM)?;
+        let hook = user::current_hook().unwrap_or(user::DEFAULT_HOOK);
+        let child = Arc::new(child);
+        let started = user::spawn_child(
+            Arc::clone(&child),
+            child_memory,
+            &regs,
+            &fpu,
+            user::fs_base(),
+            user::gs_base(),
+            hook,
+            None,
+        );
+        let (id, _) = started.map_err(|_| errno::EAGAIN)?;
+        let _ = thread::detach(id);
+        self.state.children.lock().insert(pid, child);
+        Ok(pid)
+    }
+
+    fn execve(&mut self, path: &[u8], argv: &[Vec<u8>], envp: &[Vec<u8>]) -> Result<(), u32> {
+        let prepared = prepare_child_deep(path, argv, envp, self.process).map_err(exec_errno)?;
+        let program::Prepared::Xnu { loaded, .. } = prepared else {
+            // A program of another personality: not from a Mach-O process yet.
+            return Err(errno::ENOEXEC);
+        };
+        // The point of no return: the new program's memory and registers.
+        let _old = user::replace_memory(loaded.memory);
+        let mut regs = user::registers();
+        regs.rip = loaded.entry.rip;
+        regs.rsp = loaded.entry.rsp;
+        (regs.rdi, regs.rsi, regs.rdx) = (loaded.entry.args[0], loaded.entry.args[1], loaded.entry.args[2]);
+        (regs.rax, regs.rbx, regs.rcx, regs.rbp) = (0, 0, 0, 0);
+        (regs.r8, regs.r9, regs.r10, regs.r11, regs.r12, regs.r13, regs.r14, regs.r15) = (0, 0, 0, 0, 0, 0, 0, 0);
+        regs.rflags = 0x202;
+        let _ = user::set_registers(&regs);
+        // Close-on-exec descriptors close; handlers go back to the default
+        // (the ignored signals and the mask stay).
+        for (fd, _, cloexec) in self.process.files.fd_list() {
+            if cloexec {
+                let _ = self.process.files.close(fd);
+            }
+        }
+        let reset = self.state.signals.lock().for_exec();
+        *self.state.signals.lock() = reset;
+        Ok(())
+    }
+}
+
+/// What a failed program load is as a Darwin errno.
+fn exec_errno(e: program::ExecPathError) -> u32 {
+    match e {
+        program::ExecPathError::Open(e) => de(e),
+        program::ExecPathError::Unsupported(_) => errno::ENOEXEC,
+        program::ExecPathError::Exec(e) => errno::from_linux(e.linux_errno() as u32),
+    }
+}
+
+impl Thread<'_> {
+    /// Whether `pid` is a child of the caller that ended and was not waited
+    /// for yet.
+    fn is_zombie_child(&self, pid: u32) -> bool {
+        self.state.children.lock().get(&pid).is_some_and(|p| p.has_ended())
+    }
+
+    /// Wait for the child `pid`: -1 any child, 0 one in the caller's group,
+    /// -g one in group g.
+    fn wait_child(&mut self, pid: i32, nohang: bool, reap: bool) -> Result<Option<(u32, bsd::ChildStatus)>, u32> {
+        let my_group = pgid_of(self.process);
         let matching = |c: &BTreeMap<u32, Arc<Process>>| -> Vec<Arc<Process>> {
-            c.values().filter(|p| pid == -1 || p.pid == pid as u32).cloned().collect()
+            c.values()
+                .filter(|p| match pid {
+                    -1 => true,
+                    0 => pgid_of(p) == my_group,
+                    g if g < -1 => pgid_of(p) == g.unsigned_abs(),
+                    _ => p.pid == pid as u32,
+                })
+                .cloned()
+                .collect()
         };
         if matching(&self.state.children.lock()).is_empty() {
             return Err(errno::ECHILD);
@@ -600,7 +924,9 @@ impl BsdKernel for Thread<'_> {
                 ended().ok_or(errno::EINTR)?
             }
         };
-        self.state.children.lock().remove(&child.pid);
+        if reap {
+            self.state.children.lock().remove(&child.pid);
+        }
         let status = match child.status() {
             Some(ExitStatus::Exited(c)) => bsd::ChildStatus::Exited(c),
             Some(ExitStatus::Signaled { signal, .. }) => bsd::ChildStatus::Signaled(signal),

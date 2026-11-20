@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/mach_port_set_attributes.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in mach_port_set_attributes.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/mach_port_set_attributes
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  mach_port_set_attributes(task, name, flavor, info, count) with MACH_PORT_LIMITS_INFO (3) and count 1 (or more) sets the
+  queue limit of a receive right (0 to 1024; 1025 is KERN_INVALID_VALUE (18) and changes nothing); it reads back with
+  MACH_PORT_LIMITS_INFO (count 1) and in mps_qlimit of the receive status. A fresh port has limit 5. A send to a full queue
+  with a timeout fails with MACH_SEND_TIMED_OUT (0x10000004). Lowering the limit below the number queued keeps the queued
+  messages (msgcount unchanged) and sends keep failing until the count is below the new limit; with limit 0 nothing can be
+  sent; raising it lets sends through at once. Refused: count 0 KERN_FAILURE (5); a flavor that cannot be set (999, the receive status)
+  KERN_INVALID_ARGUMENT (4); names not in the task KERN_INVALID_NAME (15); a send-only name or a port set KERN_INVALID_RIGHT (17);
+  an invalid task MACH_SEND_INVALID_DEST.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  failure: "KERN_FAILURE (5): count 0"
+  invalid_argument: "KERN_INVALID_ARGUMENT (4): flavor that cannot be set"
+  invalid_value: "KERN_INVALID_VALUE (18): limit above 1024"
+  invalid_name: "KERN_INVALID_NAME (15)"
+  invalid_right: "KERN_INVALID_RIGHT (17)"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "the queue limit changes"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

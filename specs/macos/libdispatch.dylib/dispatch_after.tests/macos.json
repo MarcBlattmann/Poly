@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_after_basic",
+      "source_sha256": "d54582189d7731c422745a48ba011c0408ca5a5b9f2dcda8a80d7eadfd0253fc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "941684eccdd7be0b5d577ad56df41cc1170ad67b6bacff3a7ade1d6f301039ba",
+          "exit_code": 0,
+          "stdout": "ok dispatch_after returns at once (the block has not run)\nok the block ran\nok not before 100 ms\nok not seconds later\nok on the queue given\nok three blocks set 300, 100 and 200 ms apart ran in time order\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5828b7d093b87aa58283a01910482e61dbe45f6028673f10cad34889abba973e",
+          "exit_code": 0,
+          "stdout": "ok dispatch_after returns at once (the block has not run)\nok the block ran\nok not before 100 ms\nok not seconds later\nok on the queue given\nok three blocks set 300, 100 and 200 ms apart ran in time order\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_after_past",
+      "source_sha256": "fe7879192912e005310191f63aa57d73f4310258d104ece6a14c244a075fc821",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8c4256110b68863d30269d730ee42449a360c1352762734c200a073f4df825fb",
+          "exit_code": 0,
+          "stdout": "ok a DISPATCH_TIME_NOW block ran\nok after the earlier async block of the serial queue\nok a time one second in the past: the block runs\nok promptly\nok dispatch_walltime(NULL, 0) (now on the wall clock): the block runs\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bf7193e8cc759747855e9fcd94a5d638a6e1f46f84d6a73dba7a979e570ed380",
+          "exit_code": 0,
+          "stdout": "ok a DISPATCH_TIME_NOW block ran\nok after the earlier async block of the serial queue\nok a time one second in the past: the block runs\nok promptly\nok dispatch_walltime(NULL, 0) (now on the wall clock): the block runs\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -69,9 +69,21 @@ impl Rect {
         Rect::new(left, top, right.saturating_sub(left), bottom.saturating_sub(top))
     }
 
-    /// The part both cover (empty if none).
+    /// The part both cover. When they do not overlap (one of them empty,
+    /// apart, or only touching), both sides of the result are zero: a
+    /// rectangle with no width but a real height would still run a row loop
+    /// over `y..bottom()`, with column offsets outside either input.
     pub fn intersect(&self, o: &Rect) -> Rect {
-        Rect::from_edges(self.x.max(o.x), self.y.max(o.y), self.right().min(o.right()), self.bottom().min(o.bottom()))
+        let r = Rect::from_edges(
+            self.x.max(o.x),
+            self.y.max(o.y),
+            self.right().min(o.right()),
+            self.bottom().min(o.bottom()),
+        );
+        if self.is_empty() || o.is_empty() || r.is_empty() {
+            return Rect::new(r.x, r.y, 0, 0);
+        }
+        r
     }
 
     /// The smallest rectangle covering both (an empty one counts for nothing).

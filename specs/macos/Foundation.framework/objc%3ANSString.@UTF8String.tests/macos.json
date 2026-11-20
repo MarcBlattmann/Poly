@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsstring_utf8string_encodes",
+      "source_sha256": "e1fda10a919b38c1a2f856e0fa31eddad1ef75ec0a0154f83f3f9069639ed69f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ea65c5f64cd1ba823864c87a04ff2da3381195da7094d079d8be324f790eb06f",
+          "exit_code": 0,
+          "stdout": "ok a != NULL && mem_eq(a, \"hello\", 6)\nok e != NULL && mem_eq(e, \"h\\xc3\\xa9llo\", 7)\nok emoji != NULL && mem_eq(emoji, \"x\\xf0\\x9f\\x98\\x80y\", 7)\nok mem_eq(euro, \"\\xe2\\x82\\xac\", 4)\nok empty != NULL && empty[0] == 0\nok ns_make(\"\").UTF8String[0] == 0\nok mem_eq(m.UTF8String, \"mutable\", 8)\nok mem_eq([[NSString stringWithFormat:@\"%d\", 12345] UTF8String], \"12345\", 6)\nok str_eq(ns_make(\"a long string, longer than any tagged short string could hold\").UTF8String, \"a long string, longer than any tagged short string could hold\")\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "df3d469cfe641908ee2a2b8909fc46fe1479c06dc6e9fa59cbb47e0f2009b195",
+          "exit_code": 0,
+          "stdout": "ok a != NULL && mem_eq(a, \"hello\", 6)\nok e != NULL && mem_eq(e, \"h\\xc3\\xa9llo\", 7)\nok emoji != NULL && mem_eq(emoji, \"x\\xf0\\x9f\\x98\\x80y\", 7)\nok mem_eq(euro, \"\\xe2\\x82\\xac\", 4)\nok empty != NULL && empty[0] == 0\nok ns_make(\"\").UTF8String[0] == 0\nok mem_eq(m.UTF8String, \"mutable\", 8)\nok mem_eq([[NSString stringWithFormat:@\"%d\", 12345] UTF8String], \"12345\", 6)\nok str_eq(ns_make(\"a long string, longer than any tagged short string could hold\").UTF8String, \"a long string, longer than any tagged short string could hold\")\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsstring_utf8string_pointer_lifetime",
+      "source_sha256": "8ff57472cfb3b7182b641e034ac5b5e2e3d674ca9aeee2af2776e775b6160788",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7bb9138b421c8152e7246772f09ea98eb966eda3a243df390754f34685af51a4",
+          "exit_code": 0,
+          "stdout": "ok mem_eq(p, \"before\", 7)\nok mem_eq(m.UTF8String, \"after the change, and a different length\", 41)\nok mem_eq(q, \"pooled-1\", 9)\nok mem_eq(outer, \"outer\", 6)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f15b37e02c374961b2eb62bc172035889649be36d99829fb97c86cea0fe082bb",
+          "exit_code": 0,
+          "stdout": "ok mem_eq(p, \"before\", 7)\nok mem_eq(m.UTF8String, \"after the change, and a different length\", 41)\nok mem_eq(q, \"pooled-1\", 9)\nok mem_eq(outer, \"outer\", 6)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -130,8 +130,9 @@ pub struct Shell {
     /// The catalog without the open windows.
     base_apps: Vec<App>,
     launcher: Launcher,
-    /// The launcher is shown because the desktop showed it (at the start, or when the last window
-    /// closed), not because the user asked: the hotkey then keeps it (ADR 0234).
+    /// The launcher is shown because the desktop showed it (when the last window closed, or at the
+    /// start of a session that asks for it), not because the user asked: the hotkey then keeps it
+    /// (ADR 0234).
     launcher_unasked: bool,
     text: Text,
     clock: String,
@@ -174,8 +175,9 @@ pub struct Shell {
 
 impl Shell {
     /// A shell on a `width` × `height` logical output with these apps and
-    /// fonts. The launcher shows at the start (an empty desktop), already
-    /// open.
+    /// fonts. The launcher is closed at the start: typing on the empty
+    /// desktop opens it with what was typed ([`Shell::type_on_desktop`]); a
+    /// session that wants it open asks ([`Shell::show_launcher_at_start`]).
     pub fn new(width: i32, height: i32, apps: Vec<App>, text: Text) -> Shell {
         let settings = Settings::default();
         let zone = settings.zone();
@@ -210,16 +212,24 @@ impl Shell {
             icons: core::cell::RefCell::new(AppIcons::default()),
             settings_window: SettingsWindow::default(),
             consent: crate::consent::Consent::default(),
-            launcher_unasked: true,
+            launcher_unasked: false,
         };
         let rows = s.room_for_rows();
         s.launcher.set_limit(rows);
-        s.launcher.show();
-        // At the start the launcher is simply there.
         s.motion.set_animate(false);
         s.sync();
         s.motion.set_animate(true);
         s
+    }
+
+    /// The launcher open at the start, as the desktop shows it by itself
+    /// (the hotkey keeps it, ADR 0234), and simply there, not sliding in:
+    /// for a session that asks for it (the compositor's `--launcher`).
+    pub fn show_launcher_at_start(&mut self) {
+        let animate = self.motion.animate();
+        self.motion.set_animate(false);
+        self.show_launcher_unasked();
+        self.motion.set_animate(animate);
     }
 
     /// Animate the surfaces (the default) or move them at once.
@@ -905,6 +915,24 @@ impl Shell {
             });
         }
         self.launcher_unasked = true;
+    }
+
+    /// A character typed on the empty desktop: the launcher opens with it in
+    /// its search, so the name typed right away finds the app (nothing is
+    /// lost before the launcher shows). The user asked for this one: the
+    /// hotkey closes it. Nothing happens while the launcher shows already
+    /// (its keys go through [`Shell::key`]).
+    pub fn type_on_desktop(&mut self, c: char) {
+        if self.launcher.is_visible() {
+            return;
+        }
+        self.panel = None;
+        self.launcher_unasked = false;
+        self.change(|s| {
+            s.launcher.show();
+            s.launcher.key(&s.apps, Key::Char(c));
+            Outcome::Changed
+        });
     }
 
     pub fn hide_launcher(&mut self) {

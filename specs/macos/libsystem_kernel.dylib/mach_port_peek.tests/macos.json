@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_peek_basic",
+      "source_sha256": "1d2890d9017871f0a1f9c747099f174f82d158bf5fd3371ef81c0f9c3711563a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e58d35d171cc16c78b4e5ca5958e925fb0a3d7f43375ba1dafb73a390b7d4685",
+          "exit_code": 0,
+          "stdout": "ok an empty queue: KERN_FAILURE\nok seqno 0 peeks the first\nok size is 24 + 8 (header and trailer)\nok peeking again gives the same message\nok seqno 2 peeks the third\nok seqno 3 is not queued: KERN_FAILURE\nok receive gets the first, nothing was removed by peeking\nok after it, seqno 0 peeks the next and says its number\nok a 64-byte message: size 72\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1a190cad8011a170d26287219769e08d76742072ddd57dce89cf591697ba8ddd",
+          "exit_code": 0,
+          "stdout": "ok an empty queue: KERN_FAILURE\nok seqno 0 peeks the first\nok size is 24 + 8 (header and trailer)\nok peeking again gives the same message\nok seqno 2 peeks the third\nok seqno 3 is not queued: KERN_FAILURE\nok receive gets the first, nothing was removed by peeking\nok after it, seqno 0 peeks the next and says its number\nok a 64-byte message: size 72\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_peek_errors",
+      "source_sha256": "421986248d7c320710edf07cbda13e5036fabfbc72ad5e65072cfb80b0b50f6f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3651202b4649461cc074bb60c311613dd8f20781a2f0751b1165d90151f9aed7",
+          "exit_code": 0,
+          "stdout": "ok a name not in the task: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok a trailer count of 0: KERN_INVALID_VALUE (18)\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ff7d71a355695d69d80321201907b929570af209878be21143ab187ac385aa8a",
+          "exit_code": 0,
+          "stdout": "ok a name not in the task: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok a trailer count of 0: KERN_INVALID_VALUE (18)\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

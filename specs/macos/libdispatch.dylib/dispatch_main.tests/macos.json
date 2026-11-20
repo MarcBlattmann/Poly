@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_main_background",
+      "source_sha256": "faa4438b69c7146ad064eacd6b5c07d069a2887f4e5593481f1d8f9921cdfc41",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f599ee44b376b4f5fe7b218cee4fbcc322cbcfeb474f5c5e558a7b12026695e6",
+          "exit_code": 0,
+          "stdout": "ok a global queue block ran off the main thread while main was in dispatch_main\nok the block it sent to the main queue runs on the main queue\nvalue ... on the process's original main thread (pthread_main_np): blocks that arrive after dispatch_main's first drain run on another thread 0\nvalue ... and its thread id is the main thread's 0\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5abd4737c35d034415308a55affa79df33248064e31e629494c1634331e3e03f",
+          "exit_code": 0,
+          "stdout": "ok a global queue block ran off the main thread while main was in dispatch_main\nok the block it sent to the main queue runs on the main queue\nvalue ... on the process's original main thread (pthread_main_np): blocks that arrive after dispatch_main's first drain run on another thread 0\nvalue ... and its thread id is the main thread's 0\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_main_timer",
+      "source_sha256": "24fa293d55d02bc02fd6bfa8fa2d8ca73cb0d5228bf926b258d7317907cfcd02",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c4477aa643c1ec1e18cbbaaae3b08f720c53cf2f130a5c0c0339d16026b04918",
+          "exit_code": 0,
+          "stdout": "ok the 50 ms timer: not early\nvalue on the original main thread (pthread_main_np) 0\nok the 200 ms timer: not early\nok on the main queue\nok after the 50 ms one\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "26ab1556aaa2b6fa087fcef30a7799dc55db30e28987003f37dd4e079bae951e",
+          "exit_code": 0,
+          "stdout": "ok the 50 ms timer: not early\nvalue on the original main thread (pthread_main_np) 0\nok the 200 ms timer: not early\nok on the main queue\nok after the 50 ms one\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
