@@ -599,6 +599,15 @@ declared the same 32-byte `MSG` and so never noticed.
   registry names and the LSA policy structures now follow the pointer size too
   (`BuildExplicitAccessWithNameW` wrote up to 16 bytes past a 32-bit entry). `msgloop32` guards
   these as well.
-- Still x64-only, but refusing rather than overrunning: `MENUITEMINFOW`/`MENUINFO` (`menu.rs` reads
-  the x64 offsets and accepts only the x64 `cbSize`), and 32-bit fail stubs such as
-  `GetScrollInfo`, `GetWindowInfo`, `GetTitleBarInfo`.
+- An audit of the other structures with pointers inside (`wow64-user32-structs`) found more x64
+  layouts in 32-bit `user32`, `kernelbase` and `comctl32`, now computed from the pointer size:
+  `MENUITEMINFOW` (48/44 bytes on x86; 32-bit sizes were refused) and `MENUINFO` (28);
+  `CreateFileW`'s `SECURITY_ATTRIBUTES` (the descriptor was read at offset 8, which is
+  `bInheritHandle` on x86); the `WNDCLASSEXW` that `comctl32` registers its classes with (an
+  80-byte one is refused by a 32-bit `user32`, so **no common control could be created in a
+  32-bit process**) and the IME windows' in `user32`; `comctl32`'s `LVITEMW`, `LVCOLUMNW`,
+  `TVINSERTSTRUCTW`, `TVITEMW` (handles sign-extended, so `TVI_ROOT` is `TVI_ROOT`), `TCITEMW`,
+  `IMAGEINFO`, `IMAGELISTDRAWPARAMS`, the `CREATESTRUCTW` its status bar reads and the
+  `ICONINFO` it trades with `user32`. `msgloop32` checks each of them (13 checks failed before).
+  Still fail stubs (in both widths): `GetScrollInfo` and the other scroll functions, `GetWindowInfo`,
+  `GetTitleBarInfo`.
