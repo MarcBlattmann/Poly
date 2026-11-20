@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "abci_dejavu",
+      "exe_sha256": "56ee52bde940ac89f1828e2ad7d096878deee04d66dce72c60cf9d110b79c2da",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "QWRkRm9udFJlc291cmNlRXhXIEZSX1BSSVZBVEU6IDEKcmVzdWx0IDEgZXJyIHVuY2hhbmdlZAogIGdseXBoIDM6IEEgMCBCIDEgQyA2NTAKICBnbHlwaCAzNjogQSAxNiBCIDEzNjggQyAxNwogIGdseXBoIDc0OiBBIDExMyBCIDEwMDEgQyAxODYKICBnbHlwaCA3NjogQSAxOTMgQiAxODQgQyAxOTIKICBnbHlwaCAxNzE6IEEgMTEzIEIgMTAzOCBDIDEwOQogIGdseXBoIDI5NDg6IEEgMCBCIDExNjcgQyAxMzYKICBnbHlwaCA4Mzg6IEEgMTEzIEIgMTEzOSBDIDk4CiAgZ2x5cGggNjkwOiBBIC02NTUgQiA0NzkgQyAxNzYKcnVuIGZyb20gZ2x5cGggMzYsIDMgZ2x5cGhzOiByZXN1bHQgMSBbKDE2LCAxMzY4LCAxNyksICgyMDEsIDEwNTksIDE0NSksICgxMTUsIDEyMDQsIDExMSksICgyMTg0NSwgMjE4NDUsIDIxODQ1KSwgKDIxODQ1LCAyMTg0NSwgMjE4NDUpLCAoMjE4NDUsIDIxODQ1LCAyMTg0NSksICgyMTg0NSwgMjE4NDUsIDIxODQ1KSwgKDIxODQ1LCAyMTg0NSwgMjE4NDUpXQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "AddFontResourceExW FR_PRIVATE: 1\nresult 1 err unchanged\n  glyph 3: A 0 B 1 C 650\n  glyph 36: A 16 B 1368 C 17\n  glyph 74: A 113 B 1001 C 186\n  glyph 76: A 193 B 184 C 192\n  glyph 171: A 113 B 1038 C 109\n  glyph 2948: A 0 B 1167 C 136\n  glyph 838: A 113 B 1139 C 98\n  glyph 690: A -655 B 479 C 176\nrun from glyph 36, 3 glyphs: result 1 [(16, 1368, 17), (201, 1059, 145), (115, 1204, 111), (21845, 21845, 21845), (21845, 21845, 21845), (21845, 21845, 21845), (21845, 21845, 21845), (21845, 21845, 21845)]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    },
+    {
+      "name": "abci_errors",
+      "exe_sha256": "4124e2a7a9c6f04c009dd2764ce1ccf4de15fbd19e3d5ad9d6fcc55fae008b5c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5kZXggMTg6IHJlc3VsdCAxIGVyciB1bmNoYW5nZWQgQSAyIEIgMTIgQyAyCmluZGV4IDE5OiByZXN1bHQgMSBlcnIgdW5jaGFuZ2VkIEEgMSBCIDggQyAxCmluZGV4IDIwOiByZXN1bHQgMSBlcnIgdW5jaGFuZ2VkIEEgMSBCIDggQyAxCmluZGV4IDEwMDogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZCBBIDEgQiA4IEMgMQppbmRleCA2NTUzNTogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZCBBIDEgQiA4IEMgMQpydW4gMTcuLjIwIHJlYWNoZXMgcGFzdCB0aGUgbGFzdCBnbHlwaDogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZCBbMywgMTIsIDgsIDgsIDIxODQ1LCAyMTg0NSwgMjE4NDUsIDIxODQ1XQpjb3VudCAwIHdpdGggYW4gYXJyYXk6IHJlc3VsdCAwIGVyciB1bmNoYW5nZWQgdW50b3VjaGVkIHRydWUKY291bnQgMCB3aXRoIG5vIGFycmF5OiByZXN1bHQgMCBlcnIgdW5jaGFuZ2VkIHVudG91Y2hlZCB0cnVlCk5VTEwgYnVmZmVyOiByZXN1bHQgMCBlcnIgdW5jaGFuZ2VkCk5VTEwgZGM6IHJlc3VsdCAwIGVyciA2Cm1hZGUtdXAgZGM6IHJlc3VsdCAwIGVyciA2CmRlbGV0ZWQgZGM6IHJlc3VsdCAwIGVyciA2CnN0b2NrIE9FTV9GSVhFRF9GT05UOiByZXN1bHQgMSBlcnIgdW5jaGFuZ2VkCnN0b2NrIFNZU1RFTV9GT05UOiByZXN1bHQgMSBlcnIgdW5jaGFuZ2VkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "index 18: result 1 err unchanged A 2 B 12 C 2\nindex 19: result 1 err unchanged A 1 B 8 C 1\nindex 20: result 1 err unchanged A 1 B 8 C 1\nindex 100: result 1 err unchanged A 1 B 8 C 1\nindex 65535: result 1 err unchanged A 1 B 8 C 1\nrun 17..20 reaches past the last glyph: result 1 err unchanged [3, 12, 8, 8, 21845, 21845, 21845, 21845]\ncount 0 with an array: result 0 err unchanged untouched true\ncount 0 with no array: result 0 err unchanged untouched true\nNULL buffer: result 0 err unchanged\nNULL dc: result 0 err 6\nmade-up dc: result 0 err 6\ndeleted dc: result 0 err 6\nstock OEM_FIXED_FONT: result 1 err unchanged\nstock SYSTEM_FONT: result 1 err unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    }
+  ]
+}

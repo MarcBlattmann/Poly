@@ -67,6 +67,18 @@ pub struct ObjectSecurity {
 /// PACKAGES` and `ALL RESTRICTED APPLICATION PACKAGES` read and execute (what `C:\Windows` gives
 /// an AppContainer on Windows: its processes load the system DLLs, ADR 0196; Poly's volumes keep no
 /// descriptors of their own, so a container reads what Everyone reads).
+/// How [`ObjectManager::replace_security_as`] keeps the DACL set on a file or key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StoreMode {
+    /// Exactly as given (`NtSetSecurityObject` without `SE_DACL_AUTO_INHERIT_REQ`).
+    Verbatim,
+    /// As explicit ACEs to which the parents' inheritable ones are added
+    /// (`SE_DACL_AUTO_INHERIT_REQ`: `SetSecurityInfo`, `SetNamedSecurityInfoW`).
+    Inherit,
+    /// As the path kept it before.
+    Keep,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DefaultSd {
     File,
@@ -416,7 +428,12 @@ impl ObjectManager {
     }
 
     /// Replace the stored descriptor of `id` (generic rights mapped).
-    pub fn replace_security(&mut self, id: ObjectId, kind: ObjectType, mut parts: Parts) {
+    pub fn replace_security(&mut self, id: ObjectId, kind: ObjectType, parts: Parts) {
+        self.replace_security_as(id, kind, parts, StoreMode::Keep);
+    }
+
+    /// [`Self::replace_security`] with how a file's DACL is kept ([`StoreMode`]).
+    pub fn replace_security_as(&mut self, id: ObjectId, kind: ObjectType, mut parts: Parts, mode: StoreMode) {
         let mapping = mapping_of(kind);
         let map = |m: u32| mapping.map(m);
         parts.dacl = parts.dacl.map(|d| map_acl(&d, &map));
@@ -424,7 +441,29 @@ impl ObjectManager {
             parts.dacl = parts.dacl.map(|d| sdops::trimmed_acl(&d));
             parts.sacl = parts.sacl.map(|a| sdops::trimmed_acl(&a));
             // A file or key: what is set is kept by path, and what the
-            // object shows is that plus what its parents pass down.
+            // object shows is that plus what its parents pass down, unless
+            // the DACL is kept as it was given (`StoreMode::Verbatim`).
+            let before = self.security.paths.get(&key);
+            let verbatim = match mode {
+                StoreMode::Verbatim => true,
+                StoreMode::Inherit => false,
+                StoreMode::Keep => before.is_some_and(|s| s.verbatim),
+            };
+            if verbatim {
+                let st = Stored {
+                    owner: parts.owner.clone(),
+                    group: parts.group.clone(),
+                    dacl: (parts.control & sd::SE_DACL_PRESENT != 0).then(|| parts.dacl.clone()),
+                    protected: parts.control & sd::SE_DACL_PROTECTED != 0,
+                    sacl: parts.sacl.clone(),
+                    verbatim: true,
+                };
+                self.security.paths.insert(key.clone(), st);
+                let which = if kind == ObjectType::Key { DefaultSd::Key } else { DefaultSd::File };
+                let eff = self.path_descriptor(which, &key, container);
+                self.security.sds.insert(id, eff.to_relative());
+                return;
+            }
             // Inheritance flags mean nothing on a file: they are dropped.
             if !container && let Some(d) = parts.dacl.take() {
                 let aces: Vec<_> = poly_security::acl::aces_in(&d)
@@ -444,6 +483,7 @@ impl ObjectManager {
                     .then(|| parts.dacl.as_deref().map(poly_security::inherit::explicit_acl)),
                 protected: parts.control & sd::SE_DACL_PROTECTED != 0,
                 sacl: parts.sacl.clone(),
+                verbatim: false,
             };
             self.security.paths.insert(key.clone(), st);
             let which = if kind == ObjectType::Key { DefaultSd::Key } else { DefaultSd::File };
@@ -508,6 +548,28 @@ impl ObjectManager {
         }
     }
 
+    /// Keep `sddl` as the descriptor of the directory at `key` (a [`path_key`]), its DACL as it is
+    /// (`Stored::verbatim`): the files already in it show the same DACL, and a new one gets its
+    /// creator's default ([`Self::created_path_security`]). The directory Windows tests run in
+    /// (`C:\PolyTests`, ADR 0185), like the scratch directory of the oracle's runner. A string
+    /// that does not parse is left out.
+    pub fn seed_verbatim_path(&mut self, key: &str, sddl_text: &str) {
+        let w: Vec<u16> = sddl_text.encode_utf16().collect();
+        let Ok(rel) = poly_security::sdstr::parse(&w) else { return };
+        let Some(parts) = Parts::from_relative(&rel) else { return };
+        let mapping = mapping_of(ObjectType::File);
+        let map = |m: u32| mapping.map(m);
+        let st = Stored {
+            owner: parts.owner.clone(),
+            group: parts.group.clone(),
+            dacl: Some(parts.dacl.as_deref().map(|d| map_acl(d, &map))),
+            protected: parts.control & sd::SE_DACL_PROTECTED != 0,
+            sacl: None,
+            verbatim: true,
+        };
+        self.security.paths.insert(key.into(), st);
+    }
+
     /// Keep `sddl` as what was set on the file or directory at `key` (a [`path_key`]) before any
     /// object of it is opened: a directory of the layout whose descriptor is not the file
     /// system's default (`C:\Windows\SystemTemp`, `specs/windows/kernel32.dll/SystemTemp.yaml`).
@@ -523,6 +585,7 @@ impl ObjectManager {
                 .then(|| parts.dacl.as_deref().map(poly_security::inherit::explicit_acl)),
             protected: parts.control & sd::SE_DACL_PROTECTED != 0,
             sacl: parts.sacl.clone(),
+            verbatim: false,
         };
         self.security.paths.insert(key.into(), st);
     }
@@ -565,6 +628,68 @@ impl ObjectManager {
     /// the descriptor of its `path` (components joined by backslashes, the
     /// volume or hive first, case folded by the caller): inherited from what
     /// was set above, else the default.
+    /// A file or directory `caller` has just made at `key` (a [`path_key`]) gets what Windows
+    /// gives a new one: its owner and group are the creator token's defaults; when its directory
+    /// passes no ACE down to it (Poly's volumes keep no descriptors of their own, or the
+    /// directory has no inheritable ACE), its DACL is the token's default DACL, kept as it is
+    /// (Learn, "Security Descriptors for New Objects"; specs/windows/advapi32.dll/
+    /// GetFileSecurityW.yaml, `default_security`). Otherwise it keeps inheriting from its
+    /// directory and only an owner other than the default is kept. Kernel-mode callers and
+    /// callers without a token change nothing.
+    pub fn created_path_security(&mut self, caller: &Caller, key: &str, container: bool) {
+        if caller.mode == Mode::Kernel || self.security.paths.contains_key(key) {
+            return;
+        }
+        let Some(token) = self.security.effective(caller.process, caller.thread).and_then(|t| self.security.token(t))
+        else {
+            return;
+        };
+        let mapping = mapping_of(ObjectType::File);
+        let map = |m: u32| mapping.map(m);
+        let own = sdops::default_descriptor(token, &map);
+        // What a directory that passes nothing down gives a new file: SYSTEM, Administrators and
+        // the creating user full access (specs/windows/advapi32.dll/GetFileSecurityW.yaml,
+        // `default_security`: the same for the elevated and the standard token).
+        let user = poly_security::sddl::to_string(&token.user);
+        let text: Vec<u16> = alloc::format!("D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;{user})").encode_utf16().collect();
+        let fresh = poly_security::sdstr::parse(&text).ok().and_then(|r| Parts::from_relative(&r)).and_then(|p| p.dacl);
+        let parent = key.rsplit_once('\\').map(|(p, _)| p);
+        let set_above = {
+            let mut prefix = String::new();
+            let mut any = false;
+            for (i, c) in parent.unwrap_or("").split('\\').enumerate() {
+                if i > 0 {
+                    prefix.push('\\');
+                }
+                prefix.push_str(c);
+                any |= self.security.paths.contains_key(&prefix);
+            }
+            any
+        };
+        let passed = set_above
+            && parent.is_some_and(|p| {
+                let pd = self.path_descriptor(DefaultSd::File, p, true);
+                !poly_security::inherit::inherited_aces(pd.dacl.as_deref(), container).is_empty()
+            });
+        let st = if passed {
+            let shown = self.path_descriptor(DefaultSd::File, key, container);
+            if shown.owner == own.owner {
+                return;
+            }
+            Stored { owner: own.owner, group: own.group, ..Stored::default() }
+        } else {
+            Stored {
+                owner: own.owner,
+                group: own.group,
+                dacl: Some(fresh.map(|d| map_acl(&d, &map)).or(own.dacl)),
+                protected: false,
+                sacl: None,
+                verbatim: true,
+            }
+        };
+        self.security.paths.insert(key.into(), st);
+    }
+
     pub fn assign_path_security(&mut self, id: ObjectId, which: DefaultSd, path: &str, container: bool) {
         let eff = self.path_descriptor(which, path, container);
         self.security.sds.insert(id, eff.to_relative());

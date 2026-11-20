@@ -69,6 +69,12 @@ pub struct ThreadRecord {
     pub exit: Option<poly_ntobj::NtStatus>,
     /// Made with `THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER` (`ThreadHideFromDebugger`).
     pub hidden: bool,
+    /// The affinity mask set for it (`ThreadAffinityMask`), kept for a thread that is not running
+    /// (created suspended, not started, ended); `None`: its process's mask.
+    pub affinity: Option<u64>,
+    /// Its ideal processor (`ThreadIdealProcessorEx`), once one was set; `None`: the one the
+    /// system picks ([`crate::threads::ideal_of`]).
+    pub ideal: Option<u8>,
 }
 
 /// The machine-wide NT state.

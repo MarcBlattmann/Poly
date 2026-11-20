@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "lkw_basic",
+      "exe_sha256": "6647cb8ce9679dfd40e291a31f7e45a34507cf056239e2cff4ffb1f97ffda3a4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmV0dXJucyB0aGUgZGVzdGluYXRpb24gdHJ1ZSB0ZXh0ICJzdGFydC1lbmQiIGxlbmd0aCA5IHVuaXQgYWZ0ZXIgdGhlIE5VTCAweGFhYWEKYWdhaW46IHJldHVybnMgdGhlIGRlc3RpbmF0aW9uIHRydWUgdGV4dCAic3RhcnQtZW5kZW5kIgplbXB0eSBzb3VyY2U6IHRleHQgInN0YXJ0LWVuZGVuZCIKZW1wdHkgZGVzdGluYXRpb246IHJldHVybnMgZGVzdGluYXRpb24gdHJ1ZSB0ZXh0ICJlbmQiIHVuaXQgYWZ0ZXIgMHg1NTU1Cm9kZCB1bml0czogWzc4LCBkODAwLCBmZmZmLCA4MCwgMCwgMF0KMzAgYXBwZW5kcyBvZiA3IHVuaXRzOiBsZW5ndGggMjEwIGxhc3QgdW5pdCBiZWZvcmUgdGhlIE5VTCAweDM2CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "returns the destination true text \"start-end\" length 9 unit after the NUL 0xaaaa\nagain: returns the destination true text \"start-endend\"\nempty source: text \"start-endend\"\nempty destination: returns destination true text \"end\" unit after 0x5555\nodd units: [78, d800, ffff, 80, 0, 0]\n30 appends of 7 units: length 210 last unit before the NUL 0x36\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}
