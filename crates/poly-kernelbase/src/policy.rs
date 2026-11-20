@@ -69,7 +69,7 @@ mod tests {
         let a = s.enter();
         let b = s.enter();
         assert_ne!(a, b);
-        assert!(a != 0 && a % 4 == 0 && a < 0x8000_0000);
+        assert!(a != 0 && a.is_multiple_of(4) && a < 0x8000_0000);
         assert_eq!(s.leave(b), Ok(()));
         assert_eq!(s.leave(a), Ok(()));
         assert_eq!(s.leave(a), Err(ERROR_INVALID_HANDLE));
