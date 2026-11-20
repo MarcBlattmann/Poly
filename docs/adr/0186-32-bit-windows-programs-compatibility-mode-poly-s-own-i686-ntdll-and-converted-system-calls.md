@@ -589,6 +589,16 @@ declared the same 32-byte `MSG` and so never noticed.
   structure it hands `user32` (the splash thread's message loops, `WINDOWPLACEMENT`,
   `MONITORINFO(EX)`, `GUITHREADINFO`, `CURSORINFO`, `WNDCLASSEXW`, `PAINTSTRUCT`, `DEVMODEW`,
   `NONCLIENTMETRICSW`, ...) and fails when one is overwritten.
+- Google's 32-bit updater then broke on a heap check (`slotsize`, `refcount` on its stack): two
+  more x64 layouts wrote past 32-bit callers' memory. `poly_security::sd` used the x64 absolute
+  `SECURITY_DESCRIPTOR` (40 bytes, pointers at 8..32) also in 32-bit processes, where it is 20
+  bytes with pointers at 4..16 (`abs_offsets`, `abs_length`); `InitializeSecurityDescriptor`
+  zeroed 40 bytes of a 20-byte descriptor, and the kernel now reads a caller's absolute
+  descriptor in the caller's width. `advapi32`'s `TRUSTEE_W` (32/20 bytes) and
+  `EXPLICIT_ACCESS_W` (48/32), `TOKEN_USER`'s SID offset, the `OBJECT_ATTRIBUTES` it builds for
+  registry names and the LSA policy structures now follow the pointer size too
+  (`BuildExplicitAccessWithNameW` wrote up to 16 bytes past a 32-bit entry). `msgloop32` guards
+  these as well.
 - Still x64-only, but refusing rather than overrunning: `MENUITEMINFOW`/`MENUINFO` (`menu.rs` reads
   the x64 offsets and accepts only the x64 `cbSize`), and 32-bit fail stubs such as
   `GetScrollInfo`, `GetWindowInfo`, `GetTitleBarInfo`.
