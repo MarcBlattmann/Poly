@@ -11,7 +11,7 @@
 //! ```text
 //!  4 GiB    program (its preferred address, above the 4 GiB __PAGEZERO)
 //!  32 GiB   libraries (poly_dyld::Options::ARM64), one after another
-//!  48 GiB   anonymous memory the runtime hands out (mmap; #390 to come)
+//!  48 GiB   where the runtime places the guest's mmap mappings
 //!  60 GiB   system area: the start code, thread-local blocks, the TSD page
 //!  ~64 GiB  the main thread's stack, growing down from `stack_top`
 //!  1 TiB    the runtime's heap, then its code area, then the hand-off block

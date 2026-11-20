@@ -47,6 +47,7 @@ fn disk() -> Disk {
         ("/bin/a64-hello-fat", format!("{BIN}/hello-fat")),
         ("/bin/a64-hello", format!("{BIN}/hello")),
         ("/bin/a64-heap", format!("{BIN}/heap")),
+        ("/bin/a64-crash", format!("{BIN}/crash")),
         ("/usr/lib/libSystem.B.dylib", format!("{BIN}/libSystem.B.dylib")),
         ("/bin/mhello-a64", format!("{DYLD}/hello_a64")),
         ("/usr/lib/poly-dyld-test/libgreet.dylib", format!("{DYLD}/libgreet_a64.dylib")),
@@ -73,37 +74,60 @@ impl Target for WindowTarget<'_> {
     }
 }
 
-/// A host with `write` (to a buffer) and nothing else.
+/// A host with `write` (to a buffer), anonymous `mmap` at a fixed address,
+/// `munmap`, `mprotect`, `getpid` and `kill` (recorded); everything else is
+/// ENOSYS.
 #[derive(Default)]
 struct Console {
     out: Vec<u8>,
     calls: Vec<u64>,
+    killed: Option<u64>,
+}
+
+fn answer(f: &mut SyscallRegs, r: Result<u64, u64>) {
+    match r {
+        Ok(v) => {
+            f.rax = v;
+            f.rflags &= !RFLAGS_CF;
+        }
+        Err(e) => {
+            f.rax = e;
+            f.rflags |= RFLAGS_CF;
+        }
+    }
 }
 
 impl Host for Console {
     fn syscall(&mut self, f: &mut SyscallRegs, _stack: [u64; 2], mem: &mut GuestMem) {
         self.calls.push(f.rax);
-        match f.rax {
+        let r = match f.rax {
             0x200_0004 if f.rdi == 1 || f.rdi == 2 => {
                 let mut buf = std::vec![0u8; f.rdx as usize];
                 if mem.peek(f.rsi, &mut buf).is_ok() {
                     self.out.extend_from_slice(&buf);
-                    f.rax = f.rdx;
-                    f.rflags &= !RFLAGS_CF;
+                    Ok(f.rdx)
                 } else {
-                    f.rax = 14;
-                    f.rflags |= RFLAGS_CF;
+                    Err(14)
                 }
             }
-            0x200_0004 => {
-                f.rax = 9;
-                f.rflags |= RFLAGS_CF;
+            0x200_0004 => Err(9),
+            // mmap: what the bridge sends is MAP_FIXED; anonymous only.
+            0x200_00c5 if f.r10 & 0x1000 == 0 && f.r8 as i32 == -1 => Err(9),
+            0x200_00c5 if f.rsi == 0 => Ok(0),
+            0x200_00c5 if f.r10 & 0x1000 != 0 && f.r10 & 0x10 != 0 => {
+                let zeros = std::vec![0u8; f.rsi as usize];
+                mem.poke(f.rdi, &zeros).map(|()| f.rdi).map_err(|_| 12)
             }
-            _ => {
-                f.rax = 78;
-                f.rflags |= RFLAGS_CF;
+            0x200_00c5 => Err(19),
+            0x200_0049 | 0x200_004a => Ok(0),
+            0x200_0014 => Ok(1),
+            0x200_0025 => {
+                self.killed = Some(f.rsi);
+                Ok(0)
             }
-        }
+            _ => Err(78),
+        };
+        answer(f, r);
     }
 }
 
@@ -299,7 +323,13 @@ fn segments_outside_the_window_are_refused() {
 fn bridge_mmap_munmap_mprotect() {
     use poly_a64::Memory;
     let layout = Layout::compact(0x1_0000_0000);
-    let h = crate::Handoff { mmap_lo: layout.mmap_lo, mmap_end: layout.mmap_end, ..Default::default() };
+    let h = crate::Handoff {
+        window_lo: layout.window_lo,
+        window_end: layout.window_end,
+        mmap_lo: layout.mmap_lo,
+        mmap_end: layout.mmap_end,
+        ..Default::default()
+    };
     let mut mem = GuestMem::new(layout.window_lo, layout.window_size());
     let mut b = Bridge::new(Console::default(), &h);
     let mut cpu = poly_a64::Cpu::new();
@@ -315,12 +345,15 @@ fn bridge_mmap_munmap_mprotect() {
     assert!(!err);
     assert_eq!(a, layout.mmap_lo);
     mem.write(a + 16383, &[7]).unwrap();
-    // Length 0 is 0; a file mapping needs the kernel (TODO #390).
+    // Length 0 is 0; a file mapping without a descriptor is EBADF (the
+    // kernel's answer).
     assert_eq!(call(&mut b, &mut mem, 197, &[0, 0, 3, 0x1002, u64::MAX, 0]), (0, false));
     assert_eq!(call(&mut b, &mut mem, 197, &[0, 4096, 1, 2, u64::MAX, 0]), (9, true));
-    // MAP_FIXED unaligned is EINVAL; outside the area ENOMEM.
-    assert_eq!(call(&mut b, &mut mem, 197, &[a + 1, 4096, 3, 0x1012, u64::MAX, 0]), (22, true));
-    assert_eq!(call(&mut b, &mut mem, 197, &[layout.window_lo, 4096, 3, 0x1012, u64::MAX, 0]), (12, true));
+    // MAP_FIXED unaligned to 16 KiB is EINVAL; outside the window ENOMEM.
+    assert_eq!(call(&mut b, &mut mem, 197, &[a + 4096, 4096, 3, 0x1012, u64::MAX, 0]), (22, true));
+    assert_eq!(call(&mut b, &mut mem, 197, &[layout.window_end, 4096, 3, 0x1012, u64::MAX, 0]), (12, true));
+    // munmap and mprotect outside the window are refused before the kernel.
+    assert_eq!(call(&mut b, &mut mem, 73, &[layout.window_end, 16384]), (22, true));
     // mprotect to read-only: writes fault; munmap: reads fault.
     assert_eq!(call(&mut b, &mut mem, 74, &[a, 16384, 1]), (0, false));
     assert!(mem.write(a, &[1]).is_err());
@@ -333,10 +366,12 @@ fn bridge_mmap_munmap_mprotect() {
     assert_eq!(call(&mut b, &mut mem, 197, &[a, 16384, 3, 0x1012, u64::MAX, 0]), (a, false));
     mem.read(a + 16383, &mut byte).unwrap();
     assert_eq!(byte, [0]);
-    // Other calls reach the host in the x86-64 convention.
-    let (_, err) = call(&mut b, &mut mem, 20, &[]);
-    assert!(err);
-    assert_eq!(b.host.calls, [0x200_0014]);
+    // Every call reached the host in the x86-64 convention, the memory
+    // calls with guest pages: mmap at the anonymous area, MAP_FIXED.
+    let (pid, err) = call(&mut b, &mut mem, 20, &[]);
+    assert_eq!((pid, err), (1, false));
+    assert_eq!(b.host.calls.last(), Some(&0x200_0014));
+    assert_eq!(b.host.calls[0], 0x200_00c5);
     // exit stops the guest with its status.
     cpu.x[16] = 1;
     cpu.x[0] = 3;
@@ -345,4 +380,34 @@ fn bridge_mmap_munmap_mprotect() {
     // Another svc immediate stops it too.
     assert_eq!(poly_a64_jit::jit::Kernel::svc(&mut b, 0x10, &mut cpu, &mut mem), Some(-1));
     assert_eq!(b.bad_svc, Some(0x10));
+}
+
+#[test]
+fn a_stopped_guest_ends_with_its_signal() {
+    use crate::run::sig;
+    let layout = Layout::compact(0x1_0000_0000);
+    let mut mem = GuestMem::new(layout.window_lo, layout.window_size());
+    mem.set_mapped(layout.window_lo, 16384, R).unwrap();
+    let fault = |addr, access| Stop::Fault(poly_a64::MemFault { addr, access, alignment: false });
+    // Unmapped: SIGSEGV; mapped but not allowed: SIGBUS.
+    assert_eq!(run::stop_signal(fault(8, poly_a64::Access::Read), &mem, None), sig::SIGSEGV);
+    assert_eq!(run::stop_signal(fault(layout.window_lo, poly_a64::Access::Write), &mem, None), sig::SIGBUS);
+    assert_eq!(run::stop_signal(Stop::Brk(1), &mem, None), sig::SIGTRAP);
+    assert_eq!(run::stop_signal(Stop::Undefined(0), &mem, None), sig::SIGILL);
+    assert_eq!(run::stop_signal(Stop::Exit(-1), &mem, Some(0x10)), sig::SIGSYS);
+    let h = crate::Handoff::default();
+    let mut b = Bridge::new(Console::default(), &h);
+    b.kill_self(sig::SIGSEGV, &mut mem);
+    assert_eq!(b.host.killed, Some(11));
+    assert_eq!(b.host.calls, [0x200_0014, 0x200_0025]);
+}
+
+#[test]
+fn a_crashing_program_stops_at_its_fault() {
+    for kind in engines() {
+        let r = run_program("/bin/a64-crash", &["/bin/a64-crash"], &[], kind);
+        assert_eq!(lines(&r.out), ["a64-crash: about to read address 8"], "{kind:?}");
+        assert_eq!(r.status, None);
+        assert!(matches!(r.stop, Stop::Fault(f) if f.addr == 8), "{kind:?}: {:?}", r.stop);
+    }
 }

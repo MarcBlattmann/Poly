@@ -5,7 +5,7 @@
 //! bytes, writes every fixup, maps the arm64 start code
 //! (`poly_dyld::start::ARM64_START`) with its data block, one thread-local
 //! block per image for the main thread, the main thread's TSD page and its
-//! stack, and the anonymous memory the runtime hands out. All of it is
+//! stack, and the area the runtime places the guest's `mmap` mappings in. All of it is
 //! readable and writable for the host; what the guest may do is in the
 //! [`Handoff`]'s regions, which the runtime turns into its page flags.
 //!
@@ -123,8 +123,9 @@ pub fn load(t: &mut dyn Target, program: &Program, args: &Args<'_>) -> Result<Ha
     }
     t.write(stack.sp, &stack.bytes)?;
 
-    // Anonymous memory for the guest's mmap: mapped for the host, given to
-    // the guest piece by piece by the runtime.
+    // The area of the guest's mmap mappings: reserved here, so nothing else
+    // the kernel maps for the process lands in it; the runtime places each
+    // mapping in it with MAP_FIXED (run::Bridge).
     t.map(l.mmap_lo, l.mmap_end - l.mmap_lo)?;
 
     let (engine, stats) = crate::handoff::settings_from_env(args.envp);

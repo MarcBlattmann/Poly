@@ -31,6 +31,9 @@ link() { # rust-lld as ld64: chained fixups and __init_offsets, macOS 13
 clang $CFLAGS -c "$here/hello_static.c" -o hello_static.o
 clang -arch arm64 -static -nostdlib -e start -Wl,-no_uuid -o "$out/hello-static" hello_static.o
 lipo -create "$out/hello-static" -output "$out/hello-fat"
+# (d) static, ends with a fault on purpose.
+clang $CFLAGS -c "$here/crash.c" -o crash.o
+clang -arch arm64 -static -nostdlib -e start -Wl,-no_uuid -o "$out/crash" crash.o
 
 # The libSystem stand-in, then (b) and (c) against it.
 clang $CFLAGS -c "$here/libsystem.c" -o libsystem.o

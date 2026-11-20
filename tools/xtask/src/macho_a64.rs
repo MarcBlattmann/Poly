@@ -16,6 +16,8 @@
 //!   thread-local variables, `malloc` on the runtime's `mmap`);
 //! - `/bin/mhello-a64`: poly-dyld's arm64 fixture (`@rpath` libgreet,
 //!   thread-local variables in two images);
+//! - `/bin/a64-crash`: reads address 8; the runtime stops it and the
+//!   process ends with SIGSEGV through `kill`;
 //! - `/bin/a64-heap 2`: malloc-heavy, under the JIT and then under the
 //!   interpreter alone; both must print what the program printed natively,
 //!   and the runtime's statistics give the speed of each.
@@ -81,6 +83,20 @@ fn in_order(program: &str, output: &str, lines: &[String]) -> Result {
 /// One boot running `/bin/<program> <args>` with `env` as the first
 /// process; it must exit with status 0.
 fn run(kernel: &Path, syms: &Arc<Symbols>, image: &Path, program: &str, args: &[&str], env: &[&str]) -> Result<Boot> {
+    run_ending(kernel, syms, image, program, args, env, "code=0")
+}
+
+/// [`run`] for a program that ends as `end` says (`code=<n>` or
+/// `signal=<n>` of its `POLY-EXIT` record).
+fn run_ending(
+    kernel: &Path,
+    syms: &Arc<Symbols>,
+    image: &Path,
+    program: &str,
+    args: &[&str],
+    env: &[&str],
+    end: &str,
+) -> Result<Boot> {
     let mut append = format!("poly.qemu_exit poly.init=/bin/{program}");
     for a in args {
         append.push_str(&format!(" poly.init.arg={a}"));
@@ -91,11 +107,12 @@ fn run(kernel: &Path, syms: &Arc<Symbols>, image: &Path, program: &str, args: &[
     let t = Instant::now();
     let b = boot_on(None, Some(image), kernel, syms, DEFAULT_MEMORY, &append, Devices::None)?;
     let started = b.output.contains(&format!("POLY-INIT: exec /bin/{program}"));
-    let exited = b.output.contains("POLY-EXIT: pid=1 code=0");
+    let record = format!("POLY-EXIT: pid=1 {end}");
+    let exited = b.output.lines().any(|l| l.trim_end().ends_with(&record));
     if b.status != Some(QEMU_SUCCESS) || !started || !exited {
         let said: Vec<&str> = b.output.lines().filter(|l| l.contains("poly-a64") || l.contains("init:")).collect();
         return Err(format!(
-            "/bin/{program}: started {started}, exit status 0 {exited}, QEMU status {:?} ({})",
+            "/bin/{program}: started {started}, ended with {end} {exited}, QEMU status {:?} ({})",
             b.status,
             said.join("; ")
         ));
@@ -131,6 +148,7 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         ("a64-hello-fat", read(&format!("{BIN}/hello-fat"))?),
         ("a64-hello", read(&format!("{BIN}/hello"))?),
         ("a64-heap", read(&format!("{BIN}/heap"))?),
+        ("a64-crash", read(&format!("{BIN}/crash"))?),
         ("mhello-a64", read(&format!("{DYLD}/hello_a64"))?),
     ];
     let programs: Vec<(&str, &[u8])> = files.iter().map(|(n, f)| (*n, f.as_slice())).collect();
@@ -161,6 +179,15 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     eprintln!("==> boot test: poly-dyld's arm64 fixture (@rpath dylib, thread-local variables in two images)");
     let b = run(kernel, syms, &image, "mhello-a64", &[], &[])?;
     in_order("mhello-a64", &b.output, &MHELLO_LINES.iter().map(|l| l.to_string()).collect::<Vec<_>>())?;
+
+    eprintln!("==> boot test: an arm64 program that reads address 8 ends with SIGSEGV");
+    let b = run_ending(kernel, syms, &image, "a64-crash", &[], &[], "signal=11")?;
+    let lines = ["a64-crash: about to read address 8", "poly-a64: /bin/a64-crash: stopped at pc"].map(String::from);
+    in_order("a64-crash", &b.output, &lines)?;
+    // Ended by kill(getpid(), SIGSEGV), not by the runtime's fallback fault.
+    if let Some(line) = b.output.lines().find(|l| l.contains("user: pid 1 thread")) {
+        return Err(format!("/bin/a64-crash: the runtime faulted instead of being killed: {line}"));
+    }
 
     let want = String::from_utf8(read(&format!("{BIN}/heap-2.out"))?).map_err(|e| e.to_string())?;
     let want: Vec<String> = want.lines().map(String::from).collect();

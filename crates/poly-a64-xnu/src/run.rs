@@ -1,5 +1,5 @@
 //! The runtime's side of a translated process: the guest from a hand-off,
-//! the run loop, and the guest's system calls.
+//! the run loop, the guest's system calls, and how a guest that stops ends.
 //!
 //! [`Bridge`] is the translator's [`Kernel`]: a guest's `svc #0x80` comes
 //! here with the call in `x16`. Calls go to the XNU personality through
@@ -8,14 +8,24 @@
 //! one copy of every call and does not know the caller was translated.
 //! Guest addresses are host addresses, so pointer arguments need no change.
 //!
-//! Kept here are the calls that change the guest's memory, because the
-//! window's page flags must follow them: `mmap`, `munmap` and `mprotect`
-//! work on the window alone, `mmap` handing out pages of the anonymous area
-//! the kernel mapped at exec. TODO(#390): once the XNU BSD layer (PR #390,
-//! ADR 0246) has `mmap`, `munmap` and `mprotect` in the kernel, forward them
-//! (with addresses inside the window) and update the flags from the result;
-//! file mappings come with that. `exit` is reported to the runtime, which
-//! prints its statistics and then makes the call.
+//! The calls that change the guest's memory go to the kernel too, but the
+//! bridge shapes them first, because guest memory must stay in the window
+//! and the window's page flags must follow it (the kernel's BSD layer, ADR
+//! 0246, places a mapping wherever it likes and knows 4 KiB pages):
+//!
+//! - `mmap` without `MAP_FIXED` gets an address in the window's anonymous
+//!   area from the bridge, and the kernel maps there with `MAP_FIXED`;
+//!   `MAP_FIXED` must land in the window. Lengths and file offsets are in
+//!   16 KiB guest pages (an unaligned offset is that many bytes into a
+//!   guest page, as the mmap sheet says).
+//! - The host protection asked of the kernel is the guest's read and write
+//!   bits (never execute: guest code is only read); the guest's own
+//!   protection, execute included, goes into the page flags. `MAP_JIT`
+//!   memory is readable and writable for the host in both of its modes.
+//! - `munmap` and `mprotect` must stay in the window.
+//!
+//! `exit` is reported to the runtime, which prints its statistics and then
+//! makes the call.
 
 use alloc::format;
 use alloc::string::String;
@@ -29,22 +39,34 @@ use poly_personality_xnu::arm64::{self, SVC_IMM};
 
 use crate::handoff::{EngineKind, Handoff};
 
-/// BSD call numbers the bridge keeps (`sys/syscall.h`).
+/// BSD call numbers (`sys/syscall.h`).
 pub mod sys {
     pub const EXIT: u64 = 1;
+    pub const GETPID: u64 = 20;
+    pub const KILL: u64 = 37;
     pub const MUNMAP: u64 = 73;
     pub const MPROTECT: u64 = 74;
     pub const MMAP: u64 = 197;
 }
 
+/// The x86-64 frame's class 2 (BSD) in the top byte of `rax`.
+const BSD: u64 = 2 << 24;
+
 /// `sys/mman.h`.
 const MAP_FIXED: u64 = 0x10;
 const MAP_ANON: u64 = 0x1000;
 /// Darwin errno values (`sys/errno.h`).
-const EBADF: u64 = 9;
 const ENOMEM: u64 = 12;
 const EINVAL: u64 = 22;
-const ENOSYS: u64 = 78;
+
+/// Signal numbers (`sys/signal.h`).
+pub mod sig {
+    pub const SIGILL: u32 = 4;
+    pub const SIGTRAP: u32 = 5;
+    pub const SIGBUS: u32 = 10;
+    pub const SIGSEGV: u32 = 11;
+    pub const SIGSYS: u32 = 12;
+}
 
 /// Where the runtime sends the guest's system calls.
 pub trait Host {
@@ -60,9 +82,11 @@ pub trait Host {
 #[derive(Debug)]
 pub struct Bridge<H> {
     pub host: H,
+    /// The window.
+    window_lo: u64,
+    window_end: u64,
     /// The next free page of the anonymous area and its end.
     mmap_next: u64,
-    mmap_lo: u64,
     mmap_end: u64,
     /// The guest called `exit` with this status.
     pub exit: Option<i32>,
@@ -72,12 +96,17 @@ pub struct Bridge<H> {
     pub calls: u64,
 }
 
+fn page_up(x: u64) -> Option<u64> {
+    Some(x.checked_add(PAGE_SIZE - 1)? & !(PAGE_SIZE - 1))
+}
+
 impl<H: Host> Bridge<H> {
     pub fn new(host: H, h: &Handoff) -> Bridge<H> {
         Bridge {
             host,
+            window_lo: h.window_lo,
+            window_end: h.window_end,
             mmap_next: h.mmap_lo,
-            mmap_lo: h.mmap_lo,
             mmap_end: h.mmap_end,
             exit: None,
             bad_svc: None,
@@ -85,56 +114,73 @@ impl<H: Host> Bridge<H> {
         }
     }
 
-    /// `mmap` of anonymous memory in the window.
+    fn in_window(&self, addr: u64, len: u64) -> bool {
+        addr >= self.window_lo && addr.checked_add(len).is_some_and(|e| e <= self.window_end)
+    }
+
+    /// One BSD call to the host: `Ok(rax)` or `Err(errno)`.
+    fn bsd(&mut self, number: u64, args: [u64; 6], mem: &mut GuestMem) -> Result<u64, u64> {
+        let [rdi, rsi, rdx, r10, r8, r9] = args;
+        let mut f = SyscallRegs { rax: BSD | number, rdi, rsi, rdx, r10, r8, r9, rflags: 0, rsp: 0 };
+        self.host.syscall(&mut f, [0, 0], mem);
+        if f.rflags & RFLAGS_CF != 0 { Err(f.rax) } else { Ok(f.rax) }
+    }
+
     fn mmap(&mut self, a: &[u64; 31], mem: &mut GuestMem) -> Result<u64, u64> {
-        let (addr, len, prot, flags, fd) = (a[0], a[1], a[2], a[3], a[4] as i32);
-        if len == 0 {
-            return Ok(0);
+        let (addr, len, prot, flags, fd, offset) = (a[0], a[1], a[2], a[3], a[4], a[5]);
+        let anon = flags & MAP_ANON != 0;
+        if len == 0 || (len as i64) < 0 {
+            // The kernel's answers: 0, or the descriptor's and length's errors.
+            return self.bsd(sys::MMAP, [addr, len, prot, flags, fd, offset], mem);
         }
-        if flags & MAP_ANON == 0 {
-            // TODO(#390): file mappings go to the kernel's mmap.
-            return Err(if fd == -1 { EBADF } else { ENOSYS });
-        }
-        if len > 1 << 46 {
-            return Err(ENOMEM);
-        }
-        let len = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let skew = if anon { 0 } else { offset % PAGE_SIZE };
+        let total = len.checked_add(skew).and_then(page_up).filter(|&t| t <= 1 << 46).ok_or(ENOMEM)?;
         let at = if flags & MAP_FIXED != 0 {
             if !addr.is_multiple_of(PAGE_SIZE) {
                 return Err(EINVAL);
             }
-            // Only the anonymous area has host pages behind it.
-            if addr < self.mmap_lo || addr.checked_add(len).is_none_or(|e| e > self.mmap_end) {
+            if !self.in_window(addr, total) {
                 return Err(ENOMEM);
             }
             addr
         } else {
             let at = self.mmap_next;
-            if at.checked_add(len).is_none_or(|e| e > self.mmap_end) {
+            if at.checked_add(total).is_none_or(|e| e > self.mmap_end) {
                 return Err(ENOMEM);
             }
-            self.mmap_next = at + len;
             at
         };
+        let jit = flags & u64::from(MAP_JIT) != 0;
+        let host_prot = if jit { u64::from(R | W) } else { prot & u64::from(R | W) };
+        let host_flags = (flags & !u64::from(MAP_JIT)) | MAP_FIXED;
+        let got = self.bsd(sys::MMAP, [at, total, host_prot, host_flags, fd, offset - skew], mem)?;
+        if got != at {
+            return Err(ENOMEM);
+        }
+        if flags & MAP_FIXED == 0 {
+            self.mmap_next = at + total;
+        }
         let guest_prot = (prot as u8) & (R | W | X);
-        let done = if flags & MAP_FIXED != 0 || flags & u64::from(MAP_JIT) != 0 {
-            // Replaced memory reads as zero again; JIT pages follow the
-            // thread's write-protect mode.
-            mem.map(at, len, guest_prot, (flags as u32) & MAP_JIT)
+        let marked = if jit {
+            mem.map(at, total, guest_prot, MAP_JIT)
         } else {
-            // A fresh part of the area: the kernel mapped it zero-filled.
-            mem.set_mapped(at, len, guest_prot)
+            // The kernel's fresh mapping holds zeros or the file.
+            mem.set_mapped(at, total, guest_prot)
         };
-        done.map_err(|_| ENOMEM)?;
-        Ok(at)
+        marked.map_err(|_| ENOMEM)?;
+        Ok(at + skew)
     }
 
     fn munmap(&mut self, a: &[u64; 31], mem: &mut GuestMem) -> Result<u64, u64> {
         let (addr, len) = (a[0], a[1]);
-        if !addr.is_multiple_of(PAGE_SIZE) || len == 0 {
+        if !addr.is_multiple_of(PAGE_SIZE) || len == 0 || (len as i64) < 0 {
             return Err(EINVAL);
         }
-        let len = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let len = page_up(len).ok_or(EINVAL)?;
+        if !self.in_window(addr, len) {
+            return Err(EINVAL);
+        }
+        self.bsd(sys::MUNMAP, [addr, len, 0, 0, 0, 0], mem)?;
         mem.unmap(addr, len).map_err(|_| EINVAL)?;
         Ok(0)
     }
@@ -144,9 +190,28 @@ impl<H: Host> Bridge<H> {
         if !addr.is_multiple_of(PAGE_SIZE) {
             return Err(EINVAL);
         }
-        let len = (len + PAGE_SIZE - 1) & !(PAGE_SIZE - 1);
+        let len = page_up(len).ok_or(EINVAL)?;
+        if !self.in_window(addr, len) {
+            return Err(ENOMEM);
+        }
+        // The kernel checks the mapping (a shared file opened read-only
+        // cannot become writable); JIT pages keep their host protection.
+        let jit = mem.page_flags(addr) & poly_a64_jit::mem::JIT != 0;
+        if !jit {
+            self.bsd(sys::MPROTECT, [addr, len, prot & u64::from(R | W), 0, 0, 0], mem)?;
+        }
         mem.protect(addr, len, (prot as u8) & (R | W | X)).map_err(|_| ENOMEM)?;
         Ok(0)
+    }
+
+    /// End the process with `signal`, as the kernel would end a native
+    /// program that faulted: `kill(getpid(), signal)`. Returns only if the
+    /// signal did not end it (the guest catches or ignores it: running the
+    /// guest's handler in translated code comes with signal frames).
+    pub fn kill_self(&mut self, signal: u32, mem: &mut GuestMem) {
+        if let Ok(pid) = self.bsd(sys::GETPID, [0; 6], mem) {
+            let _ = self.bsd(sys::KILL, [pid, u64::from(signal), 0, 0, 0, 0], mem);
+        }
     }
 }
 
@@ -220,6 +285,20 @@ pub fn stop_message(path: &str, stop: Stop, cpu: &Cpu, bad_svc: Option<u16>) -> 
         (Stop::Budget, _) => String::from("the budget"),
     };
     format!("poly-a64: {path}: stopped at pc {:#x}: {what}\n", cpu.pc)
+}
+
+/// The signal a guest that stopped other than by `exit` ends with: SIGSEGV
+/// for an access to an unmapped page, SIGBUS for one the protection
+/// forbids (`poly_personality_xnu::kernel::fault_signal`), SIGTRAP for
+/// `brk`, SIGILL for an undefined or untranslated instruction, SIGSYS for
+/// an `svc` that is not `#0x80`.
+pub fn stop_signal(stop: Stop, mem: &GuestMem, bad_svc: Option<u16>) -> u32 {
+    match (stop, bad_svc) {
+        (_, Some(_)) => sig::SIGSYS,
+        (Stop::Fault(f), _) => poly_personality_xnu::kernel::fault_signal(mem.page_flags(f.addr) != 0),
+        (Stop::Brk(_), _) => sig::SIGTRAP,
+        _ => sig::SIGILL,
+    }
 }
 
 /// The statistics line: the engine, its counters, the system calls and the

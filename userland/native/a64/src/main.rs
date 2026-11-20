@@ -159,11 +159,12 @@ extern "C" fn start(handoff: u64) -> ! {
         exit(status);
     }
     say(&run::stop_message(&h.path, stop, &cpu, bridge.bad_svc));
-    // TODO(#390): deliver the signal (SIGSEGV, SIGBUS, SIGILL, SIGTRAP) to
-    // a handler the guest set with sigaction, or end the process with it,
-    // once the XNU BSD layer (PR #390, ADR 0246) has signals. Until then the
-    // runtime faults on purpose, so the process ends abnormally rather than
-    // with an exit status the guest never chose.
+    // The process ends with the signal a native program would get
+    // (SIGSEGV, SIGBUS, SIGILL, SIGTRAP, SIGSYS).
+    bridge.kill_self(run::stop_signal(stop, &mem, bridge.bad_svc), &mut mem);
+    // The guest catches or ignores it: its handler cannot run in translated
+    // code yet (signal frames come next), so the runtime faults on purpose
+    // and the process still ends abnormally.
     // SAFETY: ud2 raises #UD, which ends this process.
     unsafe { core::arch::asm!("ud2", options(noreturn)) }
 }

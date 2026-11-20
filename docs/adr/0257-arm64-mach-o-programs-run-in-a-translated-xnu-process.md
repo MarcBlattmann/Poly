@@ -48,13 +48,23 @@ back with `arm64::from_frame`. The XNU personality sees exactly what an x86-64 M
 would send and does not know the caller was translated. Guest addresses are host addresses
 (the program is mapped where it was linked), so pointer arguments need no change.
 
-Kept in the runtime are only the calls that change guest memory, because the guest window's
-page flags must follow them: `mmap` (anonymous memory, handed out from an area the kernel maps
-at exec), `munmap` and `mprotect`; and `exit`, which the runtime reports first (statistics) and
-then makes. **Until #390:** the XNU BSD layer (PR #390, ADR 0246) brings `mmap`, `munmap` and
-`mprotect` to the kernel; the runtime then forwards them with addresses inside the window and
-updates its flags from the result, and file mappings come with that. The runtime's stub answers
-file mappings with `ENOSYS` (`EBADF` for descriptor -1, as the sheet says).
+The calls that change guest memory go to the kernel too (the BSD layer of ADR 0246), but the
+runtime shapes them first, because guest memory must stay in the window and the window's page
+flags must follow it:
+
+- `mmap` without `MAP_FIXED` gets an address in the window's anonymous area from the runtime,
+  and the kernel maps there with `MAP_FIXED`; a `MAP_FIXED` mapping must land in the window.
+  Lengths and file offsets are counted in 16 KiB guest pages (the kernel's are 4 KiB): an
+  unaligned file offset gives an address that many bytes into a 16 KiB page, as the mmap sheet
+  says for arm64.
+- The host protection asked of the kernel is the guest's read and write bits, never execute
+  (guest code is only read by the translator), so the kernel's checks (a shared mapping of a
+  read-only file cannot be writable) still apply; the guest's own protection, execute included,
+  goes into the page flags. `MAP_JIT` memory is readable and writable for the host in both of
+  its modes, which only the page flags tell apart.
+- `munmap` and `mprotect` must stay in the window; the kernel does them, then the flags follow.
+
+`exit` is reported to the runtime first (its statistics), then made.
 
 ### 3. The guest window
 
@@ -96,40 +106,49 @@ kernel argument `poly.init.env=NAME=value` sets the first program's environment 
 ### 7. Guest stops
 
 A fault, `brk`, an undefined or untranslated instruction, or an `svc` other than `#0x80` stops
-the guest; the runtime prints where and why, then ends the process with a fault of its own
-(`ud2`), so its parent sees an abnormal end rather than an exit status the guest never chose.
-**Until #390:** signals (SIGSEGV, SIGBUS, SIGILL, SIGTRAP) to a guest handler set with
-`sigaction`, or ending the process with that signal.
+the guest. The runtime prints where and why, then ends the process the way the kernel ends a
+native program: `kill(getpid(), signal)` with SIGSEGV for an unmapped page, SIGBUS for one the
+protection forbids (`fault_signal`), SIGTRAP for `brk`, SIGILL for an instruction, SIGSYS for
+the `svc`. A guest that catches or ignores the signal cannot run its handler yet (signal frames
+in translated code come later), so the runtime then faults on purpose and the process still ends
+abnormally.
 
 ## Tests
 
 - `crates/poly-a64-xnu` (every host): the hand-off block (round trip, damaged blocks), the
   layout, the settings, `runnable_cpu`, the regions' protections, the start contract, and the
-  test programs loaded with `load` and run through `Bridge` with a host that answers `write`:
-  under the interpreter everywhere and under the JIT on x86-64 hosts. The `mmap` stub's cases
-  (length 0, file mappings, `MAP_FIXED` unaligned and outside the area, `mprotect` to
-  read-only, `munmap`, a fixed mapping over an unmapped page reading zero).
+  test programs loaded with `load` and run through `Bridge` with a host that answers `write`,
+  `mmap`, `munmap`, `mprotect`, `getpid` and `kill` as the kernel does: under the interpreter
+  everywhere and under the JIT on x86-64 hosts. The memory calls' shaping (length 0, a file
+  mapping without a descriptor, `MAP_FIXED` unaligned and outside the window, `mprotect` to
+  read-only, `munmap`, a fixed mapping over an unmapped page reading zero) and the signal of
+  each kind of stop.
 - `tests/a64/xnu`: our C sources, built by `build.sh` on a Mac and committed: (a)
   `hello-static`, `write` and `exit` with the carry flag and `EBADF` of a failed call, also as
   `hello-fat` (a universal file with only the arm64 slice); (b) `hello`, dynamically linked
   against `libsystem.c`, our stand-in for libSystem (initializers, thread-local variables,
-  `malloc`, `argc`/`argv`/`envp`/`apple`); (c) `heap`, malloc-heavy (a hash table of strings
+  `malloc`, `argc`/`argv`/`envp`/`apple`); (d) `crash`, which reads address 8; (c) `heap`,
+  malloc-heavy (a hash table of strings
   with `realloc`, half freed per round, a merge sort), whose expected output is the same source
   built for the Mac with its own C library (it prints nothing that depends on addresses).
-- Boot test group `macho-a64` (shard `userland`): the five programs (plus poly-dyld's
-  `hello_a64` with its `@rpath` libgreet) as the first process on Poly; `heap 2` under the JIT
-  and under the interpreter alone, both printing the native output.
+- Boot test group `macho-a64` (shard `userland`): the programs (plus poly-dyld's `hello_a64`
+  with its `@rpath` libgreet) as the first process on Poly; `crash` must end with signal 11
+  through `kill`, not through the runtime's fallback fault; `heap 2` under the JIT and under the
+  interpreter alone, both printing the native output.
 
 On the owner's Mac under QEMU TCG (an M1 Pro running x86-64 by emulation), `heap 2` (15.3
 million guest instructions) took 0.19 billion time stamp counter cycles under the JIT (236
 blocks, 33 instructions left to the interpreter) and 7.6 to 9.4 billion under the interpreter:
-the JIT was 37 to 48 times faster, and the whole boot 0.7 s against about 8 s.
+the JIT was 31 to 48 times faster over several runs, and the whole boot 0.7 s against 7 to
+10 s.
 
 ## Not in this change
 
+- Signal handlers in translated code: a signal frame on the guest stack in the arm64 layout,
+  `sigreturn`, and asynchronous signals at an instruction boundary of the run loop.
 - Threads: `bsdthread_create` needs one `Engine` and `Cpu` per guest thread in the runtime,
   each with its TSD page and thread-local blocks, and a kernel thread per guest thread.
-- Signals into translated code, `fork`/`execve` of a translated process.
+- `fork`/`execve` of a translated process.
 - The commpage: arm64 macOS user space reads one at a fixed address; neither its address nor its
   layout is in the public SDK, so it needs a spec sheet before Poly maps one.
 - The machine-dependent call (`x16` = `0x80000000`) for the thread pointer, `MAP_JIT`'s

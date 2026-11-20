@@ -8,6 +8,7 @@ programs link `libsystem.c`, a stand-in for libSystem of ours, never Apple's.
 | File | What |
 |---|---|
 | `bin/hello-static` | (a) static (`LC_UNIXTHREAD`): `write`, `exit`, the carry flag and `EBADF` |
+| `bin/crash` | (d) static: reads address 8, ends with SIGSEGV |
 | `bin/hello-fat` | the same as a universal file with only its arm64 slice |
 | `bin/libSystem.B.dylib` | the stand-in: `exit`, `poly_write`, `malloc` on `mmap`, string functions |
 | `bin/hello` | (b) dynamically linked: initializers, thread-local variables, `malloc` |

@@ -25,8 +25,8 @@
 //! - [`run`]: the runtime's side: the guest's memory and registers from a
 //!   hand-off, and its system calls ([`run::Bridge`]): almost all of them go
 //!   to the kernel unchanged in the x86-64 convention, so the XNU
-//!   personality has one copy of every call; the memory calls the guest
-//!   window has to know about are kept here.
+//!   personality has one copy of every call; the memory calls are shaped
+//!   to keep guest memory in the window and its page flags current.
 //!
 //! Clean room (CLEAN_ROOM.md): the Arm Architecture Reference Manual,
 //! Apple's public arm64 calling convention, the macOS SDK's headers for

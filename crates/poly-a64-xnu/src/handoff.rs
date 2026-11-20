@@ -47,7 +47,7 @@ pub struct Handoff {
     /// The window (see [`crate::layout`]).
     pub window_lo: u64,
     pub window_end: u64,
-    /// The anonymous memory the runtime hands out to the guest.
+    /// Where the runtime places the guest's `mmap` mappings.
     pub mmap_lo: u64,
     pub mmap_end: u64,
     /// The runtime's own heap and code area.
