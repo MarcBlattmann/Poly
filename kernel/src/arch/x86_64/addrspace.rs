@@ -237,6 +237,13 @@ impl Mapping {
 /// Whether CR4.PCIDE is set.
 static PCID: AtomicBool = AtomicBool::new(false);
 
+/// Whether the kernel turns PCIDs on when the CPU has them. Off for now: with PCIDs (QEMU `-cpu host`,
+/// the desktop's default since ADR 0255) the kernel heap was corrupted soon after the compositor
+/// started (a page fault at address 0 in `poly_pagecache::Index::run`); the same tree runs clean with
+/// `-cpu host,-pcid` and `qemu64`. Every CR3 load flushes the TLB without them. Turned back on with
+/// the fix of that bug.
+pub const USE_PCIDS: bool = false;
+
 /// PCIDs handed out on each CPU, 1 to `PCIDS - 1` (0 is the kernel's).
 const PCIDS: usize = percpu::PCIDS;
 
