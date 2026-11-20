@@ -1164,16 +1164,15 @@ pub extern "system" fn IsZoomed(hwnd: H) -> i32 {
 }
 
 /// `GetShellWindow`: "the handle of the Shell's desktop window. If no Shell process is present,
-/// the return value is NULL" (Learn). Poly's desktop is its own shell, not a Windows shell
-/// process with a window in this session: NULL. (Chrome delay-loads the function when it starts;
-/// ADR 0155, step 9. Doc-derived.)
+/// the return value is NULL" (Learn). win32k's shell window of the interactive session, which
+/// answers as the shell stand-in's (`explorer.exe`, ADR 0222) once it runs; NULL in session 0
+/// (CreateProcessWithTokenW.yaml `shell_token`).
 #[unsafe(no_mangle)]
 pub extern "system" fn GetShellWindow() -> H {
-    // The interactive session has windows of another process (the shell's): the lowest of them is
-    // the shell window (GetKeyboardLayout.yaml `other_threads`). None in session 0.
-    let desktop = u::desktop(&SYS);
-    let Reply::Relatives { children, .. } = call(Request::Relatives { hwnd: desktop }) else { return 0 };
-    children.into_iter().rev().find(|&c| info(c as H).is_some_and(|i| i.pid >= 0xFFFF_FFF0)).map_or(0, |c| c as H)
+    match call(Request::ShellWindow {}) {
+        Reply::Handle { hwnd } => hwnd as H,
+        _ => 0,
+    }
 }
 
 #[unsafe(no_mangle)]

@@ -368,6 +368,9 @@ pub struct Wm {
     system_dpi: u32,
     /// The monitor's DPI now: the system DPI until the scale changes (ADR 0231).
     monitor_dpi: u32,
+    /// The session's shell process (`explorer.exe`'s stand-in, ADR 0222) and its thread: the
+    /// shell window answers as theirs (`Wm::shell_window`).
+    shell_owner: Option<Key>,
     /// Which processes have looked at, or blocked on, an empty queue (ADR 0245).
     input_idle: crate::idle::InputIdle,
 }
@@ -438,6 +441,7 @@ impl Wm {
             thread_dpi: BTreeMap::new(),
             system_dpi: 96,
             monitor_dpi: 96,
+            shell_owner: None,
             input_idle: crate::idle::InputIdle::default(),
         };
         // Index 0 is never a window.
@@ -670,10 +674,11 @@ impl Wm {
         let class = self.classes[w.class].as_ref();
         let (ox, oy) = self.parent_origin(h);
         let shift = |r: Rect| Rect::new(r.left + ox, r.top + oy, r.right + ox, r.bottom + oy);
+        let (pid, tid) = self.reported_thread(h, w.thread);
         Some(WinInfo {
             hwnd: h,
-            pid: w.thread.0,
-            tid: w.thread.1,
+            pid,
+            tid,
             style: w.style,
             ex_style: w.ex_style,
             window: shift(w.window_rel),
@@ -2076,6 +2081,9 @@ impl Wm {
     /// A process ended: its threads' state and its classes go.
     pub fn process_exited(&mut self, pid: u32, fx: &mut Effects) {
         self.clip.process_gone(pid);
+        if self.shell_owner.is_some_and(|k| k.0 == pid) {
+            self.shell_owner = None;
+        }
         self.input_idle.forget(pid);
         let threads: Vec<u32> = self.queues.keys().filter(|k| k.0 == pid).map(|k| k.1).collect();
         for t in threads {
@@ -2394,9 +2402,12 @@ impl Wm {
                 Reply::Handle { hwnd: h }
             }
             Request::TrackMouse { hwnd, flags, hover } => self.track_mouse(ctx, hwnd, flags, hover, fx),
-            Request::ThreadHasWindows { tid } => {
-                Reply::Bool { value: tid != 0 && self.slots.iter().flatten().any(|w| w.thread.1 == tid) }
-            }
+            Request::ThreadHasWindows { tid } => Reply::Bool {
+                value: tid != 0
+                    && (self.slots.iter().flatten().any(|w| w.thread.1 == tid)
+                        || self.shell_owner.is_some_and(|k| k.1 == tid) && self.shell_window() != 0),
+            },
+            Request::ShellWindow {} => Reply::Handle { hwnd: self.shell_window() },
             Request::RegisterMessage { name } => {
                 // Learn: the string is at most 255 characters; the number is in 0xC000..=0xFFFF.
                 // Over that: ERROR_MORE_DATA; the empty string and "#1234" (an integer atom) give
@@ -2563,6 +2574,42 @@ mod tests {
             }
             r => panic!("{r:?}"),
         }
+    }
+
+    /// The shell window (`GetShellWindow`): none in session 0; in the interactive session the
+    /// lowest window of another process, which answers as the shell process once the kernel names
+    /// it (and stops when that process ends); messages to it still run in their sender.
+    #[test]
+    fn the_shell_window_answers_as_the_shell_process() {
+        let mut wm = Wm::new();
+        let shell = |wm: &mut Wm| match wm.handle(A, Request::ShellWindow {}, &mut Effects::default()) {
+            Reply::Handle { hwnd } => hwnd,
+            r => panic!("{r:?}"),
+        };
+        assert_eq!(shell(&mut wm), 0, "session 0: no shell window");
+        wm.set_display(crate::metrics::Display::INTERACTIVE);
+        let h = shell(&mut wm);
+        assert!(h != 0 && wm.is_foreign(h));
+        let before = wm.info(h).unwrap();
+        assert!(input::foreign((before.pid, before.tid)));
+        let has_windows = |wm: &mut Wm, tid: u32| {
+            matches!(
+                wm.handle(A, Request::ThreadHasWindows { tid }, &mut Effects::default()),
+                Reply::Bool { value: true }
+            )
+        };
+        assert!(!has_windows(&mut wm, 77));
+        wm.set_shell_process(40, 77);
+        let i = wm.info(h).unwrap();
+        assert_eq!((i.pid, i.tid), (40, 77));
+        assert!(has_windows(&mut wm, 77));
+        assert!(matches!(
+            wm.handle(A, Request::SendStart { hwnd: u64::from(h), msg: 0x0010, w: 0, l: 0 }, &mut Effects::default()),
+            Reply::SameThread { .. }
+        ));
+        wm.process_exited(40, &mut Effects::default());
+        let after = wm.info(h).unwrap();
+        assert_eq!((after.pid, after.tid), (before.pid, before.tid));
     }
 
     /// The thread's IME windows after its top-level window is destroyed (GetWindow.yaml `ime_windows`):

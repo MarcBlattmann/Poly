@@ -99,6 +99,7 @@ pub fn spawn_as<K: NtKernel>(
         Ok((id, obj, desktop))
     })?;
     let req = ProcessCreate {
+        parent: None,
         image: section,
         params,
         process_access: poly_ntobj::access::PROCESS_ALL_ACCESS,

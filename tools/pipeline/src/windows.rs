@@ -848,19 +848,23 @@ fn decode(field: &Option<String>) -> Result<Option<Vec<u8>>> {
 /// `ntdll.dll` share a volume device as on Windows, where a program and the
 /// system directory are usually on the same volume (ADR 0185).
 pub const TEST_DIR: &str = "/nt/c/PolyTests";
-/// The test executable on Poly (`C:\PolyTests\test-binary.exe`).
-pub const TEST_EXE: &str = "/nt/c/PolyTests/test-binary.exe";
-
-/// Kernel arguments: the test-run protocol (ADR 0027) plus the
-/// observation file, which the kernel reports as standard output
-/// (`POLY-OUT: fd=1`) when the program has ended.
-pub fn poly_kernel_args() -> String {
-    format!("{} poly.test.stdout={TEST_DIR}/{OUTPUT_FILE}", poly::kernel_args_for(TEST_EXE))
+/// The test executable on Poly: `C:\PolyTests\<name>.exe`, under the name it had on Windows, so
+/// that what a test sees of its own image name (a child's report of its parent's image, as in
+/// ShellDispatch.ShellExecute's tests) is what the recording saw.
+pub fn test_exe(exe: &str) -> String {
+    format!("{TEST_DIR}/{exe}")
 }
 
-/// A test's run from Poly's serial log. The executable is [`TEST_EXE`]
-/// (`/nt/c/PolyTests/test-binary.exe` in the initramfs), which Poly's NT
-/// personality names `C:\PolyTests\test-binary.exe`, so the observation file is
+/// Kernel arguments: the test-run protocol (ADR 0027) for executable `exe` (`<name>.exe`) plus the
+/// observation file, which the kernel reports as standard output (`POLY-OUT: fd=1`) when the
+/// program has ended.
+pub fn poly_kernel_args(exe: &str) -> String {
+    format!("{} poly.test.stdout={TEST_DIR}/{OUTPUT_FILE}", poly::kernel_args_for(&test_exe(exe)))
+}
+
+/// A test's run from Poly's serial log. The executable is [`test_exe`]
+/// (`/nt/c/PolyTests/<name>.exe` in the initramfs), which Poly's NT
+/// personality names `C:\PolyTests\<name>.exe`, so the observation file is
 /// `/nt/c/PolyTests/poly-test.out`.
 pub fn parse_poly_serial(name: &str, log: &str, exe_sha256: &str, timed_out: bool) -> Result<RunResult> {
     let mut r = RunResult {
@@ -1015,10 +1019,10 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
         let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
-        let image = poly::initramfs_at(TEST_EXE, &bytes, &fonts)?;
+        let image = poly::initramfs_at(&test_exe(&t.exe), &bytes, &fonts)?;
         let args = format!(
             "{}{}{}",
-            poly_kernel_args(),
+            poly_kernel_args(&t.exe),
             session_kernel_args(t.session.as_deref()),
             token_kernel_args(t.token.as_deref())
         );
@@ -1677,8 +1681,8 @@ mod tests {
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", true).unwrap().status, "timeout");
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", false).unwrap().status, "error");
         assert!(parse_poly_serial("t", "POLY-INIT: exec /x\nPOLY-OUT: fd=1 hex=zz\n", "", false).is_err());
-        assert!(poly_kernel_args().contains(" poly.init=/nt/c/PolyTests/test-binary.exe "));
-        assert!(poly_kernel_args().ends_with(" poly.test.stdout=/nt/c/PolyTests/poly-test.out"));
+        assert!(poly_kernel_args("nt_a.exe").contains(" poly.init=/nt/c/PolyTests/nt_a.exe "));
+        assert!(poly_kernel_args("nt_a.exe").ends_with(" poly.test.stdout=/nt/c/PolyTests/poly-test.out"));
     }
 
     #[test]
