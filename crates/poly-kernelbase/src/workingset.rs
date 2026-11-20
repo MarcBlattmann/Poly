@@ -172,9 +172,88 @@ pub fn ws_ex_attributes(valid: bool, protection: u32, shared: bool, locked: bool
     a
 }
 
+/// The pages a process locked with `VirtualLock` (Learn: "VirtualLock", "VirtualUnlock"), kept
+/// by `kernelbase` for its own process: `K32QueryWorkingSetEx` reports them locked
+/// (`specs/windows/kernel32.dll/K32QueryWorkingSetEx.yaml`, rule `lock`). Page numbers (address
+/// / 4096), sorted, each once.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LockedPages {
+    pages: alloc::vec::Vec<u64>,
+}
+
+/// The pages `[address, address + size)` touches (Learn: the range is all pages that contain one
+/// or more bytes of it); `size` 0 is none.
+pub fn pages_of(address: u64, size: u64) -> core::ops::Range<u64> {
+    if size == 0 {
+        return 0..0;
+    }
+    let first = address / 4096;
+    let last = address.saturating_add(size - 1) / 4096;
+    first..last + 1
+}
+
+impl LockedPages {
+    pub const fn new() -> LockedPages {
+        LockedPages { pages: alloc::vec::Vec::new() }
+    }
+
+    /// Lock every page of the range (locking a locked page again is no error).
+    pub fn lock(&mut self, pages: core::ops::Range<u64>) {
+        for p in pages {
+            if let Err(i) = self.pages.binary_search(&p) {
+                self.pages.insert(i, p);
+            }
+        }
+    }
+
+    /// Unlock the range: whether every page was locked (Learn, "VirtualUnlock": pages that are
+    /// not locked make the call fail with `ERROR_NOT_LOCKED`; the locked ones are unlocked all the
+    /// same).
+    pub fn unlock(&mut self, pages: core::ops::Range<u64>) -> bool {
+        let mut all = true;
+        for p in pages {
+            match self.pages.binary_search(&p) {
+                Ok(i) => {
+                    self.pages.remove(i);
+                }
+                Err(_) => all = false,
+            }
+        }
+        all
+    }
+
+    /// Forget the range (the memory was released).
+    pub fn forget(&mut self, pages: core::ops::Range<u64>) {
+        self.pages.retain(|p| !pages.contains(p));
+    }
+
+    pub fn is_locked(&self, address: u64) -> bool {
+        self.pages.binary_search(&(address / 4096)).is_ok()
+    }
+}
+
+/// The `locked` bit of `PSAPI_WORKING_SET_EX_BLOCK` (bit 22).
+pub const WS_EX_LOCKED: u64 = 1 << 22;
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn locked_pages() {
+        let mut l = LockedPages::new();
+        assert_eq!(pages_of(0x1000, 0), 0..0);
+        assert_eq!(pages_of(0x1FFF, 2), 1..3);
+        l.lock(pages_of(0x3000, 0x1000));
+        l.lock(pages_of(0x3123, 1));
+        assert!(l.is_locked(0x3000) && l.is_locked(0x3FFF) && !l.is_locked(0x4000));
+        assert!(!l.unlock(pages_of(0x3000, 0x2000)), "the second page was not locked");
+        assert!(!l.is_locked(0x3000));
+        l.lock(pages_of(0x5000, 0x3000));
+        l.forget(pages_of(0x6000, 0x1000));
+        assert!(l.is_locked(0x5000) && !l.is_locked(0x6000) && l.is_locked(0x7000));
+        assert!(l.unlock(pages_of(0x7000, 0x10)));
+    }
 
     const ALL: u64 = u64::MAX;
     const MIB: u64 = 1 << 20;

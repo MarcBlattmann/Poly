@@ -183,15 +183,46 @@ pub unsafe extern "system" fn GetProcessShutdownParameters(level: *mut u32, flag
 }
 
 /// `ProcessIdToSessionId(dwProcessId, pSessionId)`: "Retrieves the Remote Desktop Services
-/// session associated with a specified process" (Learn). Poly has one session: every process
-/// is in the caller's (`PEB.SessionId`, PEB + 0x2C0, `winternl.h`). Doc-derived.
+/// session associated with a specified process" (Learn). The caller's own is its `PEB.SessionId`
+/// (PEB + 0x2C0, `winternl.h`); another process's comes from the kernel (`ProcessSessionInformation`
+/// through a handle with `PROCESS_QUERY_LIMITED_INFORMATION`). An id no process has is
+/// `ERROR_INVALID_PARAMETER` (`specs/windows/kernel32.dll/WTSGetActiveConsoleSessionId.yaml`,
+/// rule `bad_pid`); a child is in its parent's session (rule `child`).
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn ProcessIdToSessionId(_process_id: u32, session: *mut u32) -> i32 {
+pub unsafe extern "system" fn ProcessIdToSessionId(process_id: u32, session: *mut u32) -> i32 {
     if session.is_null() {
         return fail(ERROR_INVALID_PARAMETER, FALSE);
     }
-    // SAFETY: the PEB is mapped; the caller's out-pointer.
-    unsafe { session.write_unaligned(((peb() + 0x2C0) as *const u32).read()) };
+    if process_id == crate::process::GetCurrentProcessId() {
+        // SAFETY: the PEB is mapped; the caller's out-pointer.
+        unsafe { session.write_unaligned(((peb() + 0x2C0) as *const u32).read()) };
+        return TRUE;
+    }
+    /// `PROCESS_QUERY_LIMITED_INFORMATION` (`winnt.h`); `ProcessSessionInformation` (`winternl.h`).
+    const QUERY_LIMITED: u32 = 0x1000;
+    const PROCESS_SESSION_INFORMATION: u32 = 24;
+    // OpenProcess sets the last error when there is no such process.
+    let h = crate::iocp::OpenProcess(QUERY_LIMITED, 0, process_id);
+    if h == 0 {
+        return FALSE;
+    }
+    let mut value = 0u32;
+    // SAFETY: a process handle of ours and a 4-byte buffer.
+    let st = unsafe {
+        crate::nt::NtQueryInformationProcess(
+            h,
+            PROCESS_SESSION_INFORMATION,
+            (&mut value as *mut u32).cast(),
+            4,
+            core::ptr::null_mut(),
+        )
+    };
+    crate::file::CloseHandle(h);
+    if !st.is_success() {
+        return fail_status(st, FALSE);
+    }
+    // SAFETY: the caller's out-pointer.
+    unsafe { session.write_unaligned(value) };
     TRUE
 }
 

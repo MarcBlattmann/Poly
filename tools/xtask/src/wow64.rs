@@ -71,6 +71,11 @@ pub const SYSTEM_MODULES: &[&str] = &[
     "msimg32.dll",
 ];
 
+/// The 32-bit system programs (installed in `SysWOW64` with the DLLs), built from the Win32
+/// workspace's crates of these names: a 32-bit program finds a 32-bit `cmd.exe` there
+/// (`specs/windows/shlwapi.dll/AssocQueryStringW.yaml`, rule `shellexecute_app_paths`).
+pub const SYSTEM_PROGRAMS: &[&str] = &["cmd.exe"];
+
 /// Every module of the set, in the cache under these names.
 pub fn modules() -> impl Iterator<Item = &'static str> {
     CORE_MODULES.iter().chain(SYSTEM_MODULES).copied()
@@ -95,7 +100,11 @@ const NTDLL_REQUIRED: &[&str] = &[
 
 /// Every file the cache holds.
 fn outputs() -> Vec<String> {
-    modules().map(|m| m.to_string()).chain(PROGRAMS.iter().map(|p| format!("{p}.exe"))).collect()
+    modules()
+        .chain(SYSTEM_PROGRAMS.iter().copied())
+        .map(|m| m.to_string())
+        .chain(PROGRAMS.iter().map(|p| format!("{p}.exe")))
+        .collect()
 }
 
 /// `cargo xtask wow64 [--cache-key]`: make sure the cached modules are up to date (building
@@ -227,6 +236,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             .map(|d| format!("personalities/nt/{d}"))
             .collect();
     start.extend(SYSTEM_MODULES.iter().map(|m| format!("personalities/nt/win32/{}", m.trim_end_matches(".dll"))));
+    start.extend(SYSTEM_PROGRAMS.iter().map(|m| format!("personalities/nt/win32/{}", m.trim_end_matches(".exe"))));
     let start: Vec<&str> = start.iter().map(String::as_str).collect();
     let files = crate::ntdll::inputs_from(
         root,
@@ -343,6 +353,7 @@ fn build(root: &Path, target: &Path) -> Result<PathBuf> {
     let packages: Vec<&str> = ["kernelbase", "kernel32", "win32u", "gdi32", "user32"]
         .into_iter()
         .chain(SYSTEM_MODULES.iter().map(|m| m.trim_end_matches(".dll")))
+        .chain(SYSTEM_PROGRAMS.iter().map(|m| m.trim_end_matches(".exe")))
         .collect();
     step(
         "build the i686 Win32 modules (kernelbase, kernel32, the GUI and the other system DLLs)",
@@ -362,6 +373,7 @@ fn build(root: &Path, target: &Path) -> Result<PathBuf> {
     let rel = |t: &Path, f: &str| t.join(TARGET).join("release").join(f);
     let copies = std::iter::once((rel(&ntdll_target, "ntdll.dll"), "ntdll.dll".to_string()))
         .chain(modules().filter(|m| *m != "ntdll.dll").map(|m| (rel(&win32_target, m), m.to_string())))
+        .chain(SYSTEM_PROGRAMS.iter().map(|m| (rel(&win32_target, m), m.to_string())))
         .chain(PROGRAMS.iter().map(|p| (rel(&programs_target, &format!("{p}.exe")), format!("{p}.exe"))));
     for (from, to) in copies {
         std::fs::copy(&from, out.join(&to)).map_err(|e| format!("{}: {e}", from.display()))?;
@@ -482,6 +494,19 @@ fn verify(dir: &Path) -> Result {
             return Err(format!("the i686 {m} exports the decorated name {bad}"));
         }
     }
+    for m in SYSTEM_PROGRAMS {
+        let bytes = read(&dir.join(m))?;
+        let pe = parse(m, &bytes)?;
+        for (dll, names) in imports(m, &pe)? {
+            if !set.contains(&dll.as_str()) {
+                return Err(format!("the i686 {m} imports {dll}, which is not one of our 32-bit modules"));
+            }
+            let bad: Vec<&String> = names.iter().filter(|n| n.contains('@')).collect();
+            if !bad.is_empty() {
+                return Err(format!("the i686 {m} imports decorated names from {dll}: {bad:?}"));
+            }
+        }
+    }
     for p in PROGRAMS {
         let file = format!("{p}.exe");
         let bytes = read(&dir.join(&file))?;
@@ -500,8 +525,7 @@ fn verify(dir: &Path) -> Result {
 /// without `import_name_type = "undecorated"`) or a name `kernel32.dll` does not export would
 /// otherwise only fail when a program starts ("process start failed (0xc0000139)").
 fn verify_imports(dir: &Path) -> Result {
-    let files: Vec<String> =
-        modules().map(|m| m.to_string()).chain(PROGRAMS.iter().map(|p| format!("{p}.exe"))).collect();
+    let files = outputs();
     let mut exports = std::collections::BTreeMap::new();
     for m in modules() {
         let bytes = read(&dir.join(m))?;

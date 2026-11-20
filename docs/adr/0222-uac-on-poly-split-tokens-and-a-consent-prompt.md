@@ -243,3 +243,30 @@ rather than pop anything.
 
 So a 32-bit program loads like a 64-bit one, and the serial log names the first function it
 really needs. A name gets its slots in the table when a program reaches it.
+
+## Addendum: B0's held-out fixes (2026-11-20)
+
+The re-green round left four B0 entries whose visible tests pass and whose held-out test fails.
+Re-reading their sheets against probes of my own on Poly (the held-out tests were not used):
+
+- **`VirtualLock` and `VirtualUnlock`** were fail-only exports, so the `lock` rule of
+  `K32QueryWorkingSetEx` could not hold. `kernelbase` now keeps the process's locked pages
+  (`poly_kernelbase::workingset::LockedPages`):
+  - `VirtualLock` touches each page, which makes it valid, and records it.
+  - `K32QueryWorkingSetEx` sets bit 22 for the caller's own valid locked pages.
+  - `VirtualUnlock` fails with `ERROR_NOT_LOCKED` for a page that was not locked (Learn).
+  - `VirtualFree` forgets freed pages.
+  - Poly keeps every page in memory anyway, so locking changes nothing else.
+- **`ProcessIdToSessionId`** answered every process id with the caller's own session. Now another
+  process's session comes from the kernel (`ProcessSessionInformation`, which reads the target
+  process's token rather than the caller's PEB). An id no process has fails with
+  `ERROR_INVALID_PARAMETER` (`WTSGetActiveConsoleSessionId.yaml`, `bad_pid`).
+- **`ShellExecuteExW`** looks a bare program name that is not found up in
+  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\<name>`, never in the user's key
+  (`AssocQueryStringW.yaml`, `shellexecute_app_paths`).
+- **The 32-bit `cmd.exe`:** `cargo xtask wow64` builds `cmd.exe` for i686 too (`SYSTEM_PROGRAMS`),
+  and the layout installs it in `SysWOW64` with the 32-bit DLLs. The same rule starts
+  `C:\Windows\SysWOW64\cmd.exe` by its full path.
+- **`CreateProcessAsUserW`:** every rule the visible tests do not cover was probed and matches the
+  sheet: names, environment, errors, suspended, process information, inheritance and handle
+  lists, the job broker and breakaway. No change.
