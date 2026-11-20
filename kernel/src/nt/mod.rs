@@ -851,6 +851,9 @@ fn make_state(slot: &mut Option<NtState>) {
     state.sys.ntdll32 = NTDLL32;
     // The logon the programs run in (ADR 0222).
     state.sys.logon = *LOGON.lock();
+    // The system's commit limit (ADR 0250): RAM less the frames the kernel keeps for itself.
+    let total = crate::frames::FRAMES.lock().as_ref().map_or(0, |f| f.total_frames());
+    state.sys.commit_limit = total.saturating_sub(crate::frames::reserve()) * 4096;
     state.sys.consent.hook = *UAC_ANSWER.lock();
     // The Windows folders on C: and the registry values that follow
     // them (ADR 0073), before file I/O attaches C:.
@@ -1777,6 +1780,40 @@ pub(super) fn start_first_thread(process: &Arc<Process>, memory: &Arc<Memory>, s
 }
 
 pub use sched::wait_while_suspended;
+
+/// The pages each NT process holds of its own (resident less page cache and shared pages: what
+/// ending it would free), for the out-of-memory policy (ADR 0250).
+pub fn own_pages() -> Vec<(u32, u64)> {
+    io::memories()
+        .into_iter()
+        .map(|(pid, memory)| {
+            let (resident, cached, shared) = memory.page_counts();
+            (pid, resident.saturating_sub(cached + shared))
+        })
+        .collect()
+}
+
+/// The path of NT process `pid`'s executable below its volume, for logs.
+pub fn image_of(pid: u32) -> Option<String> {
+    with_existing(|s| {
+        s.processes
+            .get(&ProcessId(pid))
+            .and_then(|p| p.image_name.as_ref())
+            .map(|(_, path)| String::from_utf16_lossy(path))
+    })
+    .flatten()
+}
+
+/// The system's commit charge and its limit (ADR 0250), if the NT state is there.
+pub fn commit() -> Option<(u64, u64)> {
+    with_existing(|s| (s.sys.commit_total, s.sys.commit_limit))
+}
+
+/// End NT process `pid` because memory ran out (ADR 0250, `crate::oom`): as `NtTerminateProcess`
+/// with `STATUS_NO_MEMORY`.
+pub fn terminate_for_memory(pid: u32) -> Result<(), NtStatus> {
+    sched::terminate_process_by_id(ProcessId(pid), poly_ntobj::status::STATUS_NO_MEMORY)
+}
 
 /// Translate a thread's [`ExitStatus`] to the `NTSTATUS` its object reports.
 fn exit_to_nt(status: ExitStatus) -> NtStatus {

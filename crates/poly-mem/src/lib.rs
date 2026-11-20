@@ -13,6 +13,7 @@
 
 mod buddy;
 mod direct_map;
+pub mod pressure;
 mod stack_area;
 
 pub use buddy::{BuddyAllocator, FreeError, MAX_ORDER, MetadataTooSmall, RangeError};

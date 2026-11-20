@@ -16,6 +16,10 @@ pub use poly_wayland::compose::paint::mix;
 /// Fill `r` (inside `clip`) with `rgb` at coverage `alpha`.
 pub fn fill(fb: &mut dyn Framebuffer, clip: Rect, r: Rect, rgb: u32, alpha: u8) {
     let r = r.intersect(&clip).intersect(&Rect::new(0, 0, fb.width() as i32, fb.height() as i32));
+    // Nothing of it on the screen (a long text's end beyond the right edge): its width is negative.
+    if r.is_empty() {
+        return;
+    }
     for y in r.y..r.bottom() {
         let row = &mut fb.row_mut(y as u32)[r.x as usize..r.right() as usize];
         if alpha == 255 {
@@ -533,6 +537,16 @@ impl TextRenderer for TitleFont {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_rectangle_beyond_the_screen_draws_nothing() {
+        // The launcher's long query: text that starts right of the screen's right edge.
+        let mut fb = poly_wayland::compose::MemoryFramebuffer::new(20, 10);
+        let all = Rect::new(0, 0, 20, 10);
+        super::fill(&mut fb, all, Rect::new(34, 2, 8, 4), 0x123456, 255);
+        super::fill(&mut fb, all, Rect::new(-30, 2, 8, 4), 0x123456, 128);
+        assert!(fb.pixels().iter().all(|&p| p & 0x00ff_ffff != 0x123456));
+    }
+
     use super::*;
     use poly_wayland::compose::MemoryFramebuffer;
 
