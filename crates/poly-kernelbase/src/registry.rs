@@ -202,6 +202,21 @@ pub const fn both_views(sam: u32) -> bool {
     sam & KEY_WOW64_RES == KEY_WOW64_RES
 }
 
+/// The access of a key `RegCreateKeyExW` makes on the way to the last one: what the caller may
+/// get (`MAXIMUM_ALLOWED`) in the view `sam` asks for, so every level is in the same view.
+pub const fn level_access(sam: u32) -> u32 {
+    MAXIMUM_ALLOWED | (sam & KEY_WOW64_RES)
+}
+
+/// The access a 32-bit process creates a key with below `HKEY_CLASSES_ROOT` or below a key
+/// opened through it (`RegCreateKeyExW.yaml` `hkcr`): the key is made in the 32-bit view
+/// whatever the bit, except that a key opened with `KEY_WOW64_64KEY` (`opened_native`) and a
+/// create with `KEY_WOW64_64KEY` make the native key. `HKEY_CLASSES_ROOT` itself counts as
+/// opened with no bit. (Opening and deleting follow the bits as below `HKEY_LOCAL_MACHINE`.)
+pub const fn classes_create_access(sam: u32, opened_native: bool) -> u32 {
+    if opened_native && sam & KEY_WOW64_RES == KEY_WOW64_64KEY { sam } else { (sam & !KEY_WOW64_RES) | KEY_WOW64_32KEY }
+}
+
 /// The components of a subkey path, without empty ones (a leading,
 /// trailing or doubled backslash is ignored; to be confirmed by the spec
 /// agent).
@@ -470,6 +485,18 @@ mod tests {
         assert!(both_views(KEY_READ | KEY_WOW64_32KEY | KEY_WOW64_64KEY));
         assert!(!both_views(KEY_READ | KEY_WOW64_32KEY));
         assert!(!both_views(KEY_READ));
+        // The levels on the way keep the view (`RegCreateKeyExW.yaml` `from_the_root`).
+        assert_eq!(level_access(KEY_ALL_ACCESS | KEY_WOW64_64KEY), MAXIMUM_ALLOWED | KEY_WOW64_64KEY);
+        assert_eq!(level_access(KEY_ALL_ACCESS), MAXIMUM_ALLOWED);
+        // Below HKEY_CLASSES_ROOT a 32-bit process makes 32-bit keys, except 64 below 64.
+        let x86 = KEY_ALL_ACCESS | KEY_WOW64_32KEY;
+        for bit in [0, KEY_WOW64_32KEY, KEY_WOW64_64KEY] {
+            assert_eq!(classes_create_access(KEY_ALL_ACCESS | bit, false), x86);
+        }
+        assert_eq!(classes_create_access(KEY_ALL_ACCESS, true), x86);
+        assert_eq!(classes_create_access(KEY_ALL_ACCESS | KEY_WOW64_32KEY, true), x86);
+        let native = KEY_ALL_ACCESS | KEY_WOW64_64KEY;
+        assert_eq!(classes_create_access(native, true), native);
     }
 
     #[test]

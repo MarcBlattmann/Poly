@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d45892328ab7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:26:42Z",
+  "tests": [
+    {
+      "name": "cnet_wf_b",
+      "exe_sha256": "b91ff4ed351e655016e819d66ce37c6f5d9087b9cefdf57ca9f5afe2fdd969fe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d3JpdGUgNSBieXRlcywgcm9vbSBpbiB0aGUgcGlwZTogcmV0dXJuZWQgeWVzIChlcnJvciAwKSwgY291bnQgd3JpdHRlbiA1CnRoZSBzZXJ2ZXIgcmVhZHMgaXQ6IHJldHVybmVkIHllcyAoZXJyb3IgMCksIGNvdW50IDUsIGJ5dGVzIFsxMDQsIDEwMSwgMTA4LCAxMDgsIDExMV0Kd3JpdGUgNjQgS2lCIGludG8gYSA0IEtpQiBwaXBlOiByZXR1cm5lZCBubyAoZXJyb3IgOTk3KSwgY291bnQgMCwgZXZlbnQgc2lnbmFsbGVkIG5vCndyaXRlIHdpdGggbm8gT1ZFUkxBUFBFRCBvbiBhbiBvdmVybGFwcGVkIGhhbmRsZTogcmV0dXJuZWQgeWVzIChlcnJvciAwKSwgY291bnQgMQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "write 5 bytes, room in the pipe: returned yes (error 0), count written 5\nthe server reads it: returned yes (error 0), count 5, bytes [104, 101, 108, 108, 111]\nwrite 64 KiB into a 4 KiB pipe: returned no (error 997), count 0, event signalled no\nwrite with no OVERLAPPED on an overlapped handle: returned yes (error 0), count 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "cnet_wf_c",
+      "exe_sha256": "a61454049e7782d5d01d63b776e1009e20073a1577d9c8df0ebaf6abc35c8d5b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWZ0ZXIgaXQ6IGV2ZW50IHNpZ25hbGxlZCB5ZXMsIEludGVybmFsIDB4MCwgSW50ZXJuYWxIaWdoIDUKd3JpdGUgMCBieXRlczogcmV0dXJuZWQgeWVzIChlcnJvciAwKSwgY291bnQgMCwgZXZlbnQgc2lnbmFsbGVkIHllcwphZnRlciB0aGUgcmVhZGVyIGRyYWluZWQgdGhlIHBpcGU6IGV2ZW50IHNpZ25hbGxlZCB5ZXMsIHRvdGFsIHJlYWQgNjU1MzYKd3JpdGUgYWZ0ZXIgdGhlIG90aGVyIGVuZCBjbG9zZWQ6IHJldHVybmVkIG5vIChlcnJvciAyMzIpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "after it: event signalled yes, Internal 0x0, InternalHigh 5\nwrite 0 bytes: returned yes (error 0), count 0, event signalled yes\nafter the reader drained the pipe: event signalled yes, total read 65536\nwrite after the other end closed: returned no (error 232)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    }
+  ]
+}

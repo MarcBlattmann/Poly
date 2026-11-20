@@ -3,7 +3,7 @@
 //! API-set contracts (written by `build.rs` from
 //! `poly_kernelbase::advapi::ADVAPI32_FORWARDS`), as Learn's API locations
 //! describe. What it implements itself are the functions whose locations
-//! name no `kernelbase` contract: `RegDeleteKeyW/A`, the SID string
+//! name no `kernelbase` contract: `RegDeleteKeyW/A`, `RegCreateKeyW/A`, `RegOpenKeyW/A`, the SID string
 //! conversions (`sddl.h`), `GetUserNameW/A` and the privilege-name lookups.
 
 #![no_std]
@@ -32,6 +32,32 @@ unsafe extern "system" {
     fn SetLastError(error: u32);
     fn RegDeleteKeyExW(hkey: Handle, sub: *const u16, sam: u32, reserved: u32) -> u32;
     fn RegDeleteKeyExA(hkey: Handle, sub: *const u8, sam: u32, reserved: u32) -> u32;
+    #[allow(clippy::too_many_arguments)]
+    fn RegCreateKeyExW(
+        hkey: Handle,
+        sub: *const u16,
+        reserved: u32,
+        class: *mut u16,
+        options: u32,
+        sam: u32,
+        security: *const u8,
+        out: *mut Handle,
+        disposition: *mut u32,
+    ) -> u32;
+    #[allow(clippy::too_many_arguments)]
+    fn RegCreateKeyExA(
+        hkey: Handle,
+        sub: *const u8,
+        reserved: u32,
+        class: *mut u8,
+        options: u32,
+        sam: u32,
+        security: *const u8,
+        out: *mut Handle,
+        disposition: *mut u32,
+    ) -> u32;
+    fn RegOpenKeyExW(hkey: Handle, sub: *const u16, options: u32, sam: u32, out: *mut Handle) -> u32;
+    fn RegOpenKeyExA(hkey: Handle, sub: *const u8, options: u32, sam: u32, out: *mut Handle) -> u32;
     fn GetTokenInformation(token: Handle, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> i32;
     fn CreateFileW(
         name: *const u16,
@@ -261,6 +287,79 @@ pub unsafe extern "system" fn RegDeleteKeyW(hkey: Handle, sub: *const u16) -> u3
 pub unsafe extern "system" fn RegDeleteKeyA(hkey: Handle, sub: *const u8) -> u32 {
     // SAFETY: the caller's arguments.
     unsafe { RegDeleteKeyExA(hkey, sub, 0, 0) }
+}
+
+/// `MAXIMUM_ALLOWED` (`winnt.h`): the 16-bit-compatible `RegCreateKey` and `RegOpenKey` take no
+/// access, so the key gets what its descriptor allows, and no view bit: the key is in the view
+/// of `hKey` (`RegCreateKeyW.yaml`, `RegOpenKeyW.yaml`).
+const MAXIMUM_ALLOWED: u32 = 0x0200_0000;
+
+/// Whether a subkey argument is null or empty: `RegCreateKey` and `RegOpenKey` then return
+/// `hKey` itself (Learn: "If this parameter is NULL or a pointer to an empty string, the
+/// function returns the same handle that was passed in").
+///
+/// # Safety
+/// `sub` is null or a NUL-terminated string.
+unsafe fn no_subkey<T: Copy + Default + PartialEq>(sub: *const T) -> bool {
+    // SAFETY: the caller's string, at least its first unit.
+    sub.is_null() || unsafe { sub.read() } == T::default()
+}
+
+/// `hKey` itself in `*out`.
+fn same_key(hkey: Handle, out: *mut Handle) -> u32 {
+    if out.is_null() {
+        return ERROR_INVALID_PARAMETER;
+    }
+    // SAFETY: the caller's variable, checked non-null.
+    unsafe { out.write(hkey) };
+    0
+}
+
+/// `RegCreateKeyW(hKey, lpSubKey, phkResult)` (Learn): `RegCreateKeyExW` with no class, no
+/// options and no view choice.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegCreateKeyW(hkey: Handle, sub: *const u16, out: *mut Handle) -> u32 {
+    // SAFETY: the caller's string.
+    if unsafe { no_subkey(sub) } {
+        return same_key(hkey, out);
+    }
+    let none = core::ptr::null_mut();
+    // SAFETY: the caller's arguments; the rest are null.
+    unsafe { RegCreateKeyExW(hkey, sub, 0, none, 0, MAXIMUM_ALLOWED, core::ptr::null(), out, none.cast()) }
+}
+
+/// `RegCreateKeyA`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegCreateKeyA(hkey: Handle, sub: *const u8, out: *mut Handle) -> u32 {
+    // SAFETY: the caller's string.
+    if unsafe { no_subkey(sub) } {
+        return same_key(hkey, out);
+    }
+    let none = core::ptr::null_mut();
+    // SAFETY: the caller's arguments; the rest are null.
+    unsafe { RegCreateKeyExA(hkey, sub, 0, none, 0, MAXIMUM_ALLOWED, core::ptr::null(), out, none.cast()) }
+}
+
+/// `RegOpenKeyW(hKey, lpSubKey, phkResult)` (Learn): `RegOpenKeyExW` with no view choice.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegOpenKeyW(hkey: Handle, sub: *const u16, out: *mut Handle) -> u32 {
+    // SAFETY: the caller's string.
+    if unsafe { no_subkey(sub) } {
+        return same_key(hkey, out);
+    }
+    // SAFETY: the caller's arguments.
+    unsafe { RegOpenKeyExW(hkey, sub, 0, MAXIMUM_ALLOWED, out) }
+}
+
+/// `RegOpenKeyA`.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegOpenKeyA(hkey: Handle, sub: *const u8, out: *mut Handle) -> u32 {
+    // SAFETY: the caller's string.
+    if unsafe { no_subkey(sub) } {
+        return same_key(hkey, out);
+    }
+    // SAFETY: the caller's arguments.
+    unsafe { RegOpenKeyExA(hkey, sub, 0, MAXIMUM_ALLOWED, out) }
 }
 
 // ----- SID strings ------------------------------------------------------------------------

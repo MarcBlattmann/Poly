@@ -42,7 +42,7 @@ Roadmap progress and API coverage for [Poly](../../README.md). See [docs/ROADMAP
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,607 | 1,107 | 3,457 | 3,787 | 52,960 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,616 | 1,107 | 3,457 | 3,796 | 52,960 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 20 | 0 | 79 | 418 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 522 | 880,035 | 0 | 0 |
 
@@ -55,6 +55,7 @@ Seeded from (names only):
 - `macos-objc-api`: Objective-C classes, protocols, methods and properties of the macOS SDK frameworks, by name, from clang -extract-api symbol graphs of the public headers (ADR 0187) @ `macOS SDK 27.0 (26A425)`
 - `macos-sdk`: macOS SDK .tbd stubs (exported symbols and Objective-C classes) @ `macOS SDK 27.0 (26A425)`
 - `macos-swift-interface`: Public Swift API of the macOS SDK modules, by name, from the .swiftinterface files (ADR 0187) @ `macOS SDK 27.0 (26A425)`
+- `ms-learn-chrome-net`: Microsoft Learn Winsock, I/O completion port, overlapped I/O, named pipe and thread pool wait reference, and the observed call trace of Chrome for Testing's network service on Windows (names, counts and first-call order): what Chrome's network stack does per page load, observed by the spec agent spec-win-chrome-setup @ `Windows 11 26H2 build 26300.9974`
 - `ms-learn-commctrl`: Microsoft Learn common controls reference and the public SDK header commctrl.h: the window classes of comctl32 and their messages and notifications (entries named by class, version 5.82) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-d3d11`: Microsoft Learn Direct3D 11, DXGI and DirectComposition reference and the public SDK headers d3d11*.h, dxgi*.h, dcomp.h, dxcore*.h: the COM interfaces and methods of d3d11.dll, dxgi.dll, dcomp.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-dwrite`: Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`

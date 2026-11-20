@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/AddrInfoLists.yaml
+id: windows/api/ws2_32.dll/AddrInfoLists
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory; the loopback and the internet were available"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above, and the observed call trace of Chrome for Testing 157 (its network service, headless, github.com and bbc.com, specs/windows/apps/chrome/traces/net-*.trace.json: function names, counts and first-call order only). Microsoft Learn: getaddrinfo, freeaddrinfo, addrinfo, WSAGetLastError. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  freeaddrinfo releases the list getaddrinfo returned (17 calls per page load of the network service); NULL is accepted; a failed getaddrinfo leaves the result pointer NULL.
+interface:
+  signature: "void freeaddrinfo(PADDRINFOA)"
+rules:
+  list: "getaddrinfo(\"127.0.0.1\", \"443\", {family AF_INET, socktype SOCK_STREAM}): 0 and a list whose first entry has address length 16, family 2, socktype 1 and port 443; freeaddrinfo(list) returns nothing and leaves WSAGetLastError 0."
+  null: "freeaddrinfo(NULL) returns without a fault and without an error."
+  failure: "getaddrinfo of a name that does not exist (no-such-host.invalid): 11001 (WSAHOST_NOT_FOUND) and the result pointer is set to NULL."
+  any_family: "getaddrinfo(\"localhost\", \"80\", family 0, SOCK_STREAM): 0 and at least one entry; freeaddrinfo of it is allowed."
+errors:
+  not_found: "WSAHOST_NOT_FOUND (11001)"
+side_effects: "none outside the test's own handles"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except the waits named in the rules"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), the same program three times (cnet_free, cnet_free_b, cnet_free_c): each makes every call and writes every third observation line (the first line is the first file's, the second the second file's, and so on), so each program is complete and the three together give the whole list. Each declares what it calls from Learn's prototypes; observations are return values, error codes, counts and relations, never handles, addresses, ports or times.
+not_covered: >
+  freeing a list twice or one not made by getaddrinfo (undefined), getaddrinfoW and GetAddrInfoExW (Chrome 157 does not call them), the number of entries (machine dependent).
