@@ -273,6 +273,7 @@ version = "0.0.1"
 name = "poly-files"
 version = "0.0.1"
 dependencies = [
+ "poly-png",
  "poly-shell",
 ]
 

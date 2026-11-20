@@ -169,6 +169,7 @@ pub mod act {
     pub const COPY_PATH: u32 = 16;
     pub const REFRESH: u32 = 17;
     pub const UNINSTALL: u32 = 18;
+    pub const EXTRACT: u32 = 19;
 }
 
 /// The window's rectangles for a `w` × `h` window, logical.
@@ -670,6 +671,9 @@ impl FilesApp {
                 let wrapper = poly_rt::env::var(poly_shell::apps::APP_USER_VAR);
                 self.run(&poly_shell::apps::opener_argv(wrapper, &argv))
             }
+            Ok(Open::NoApp { mime }) if mime == poly_files::zip::MIME && !self.in_trash() && !self.in_apps() => {
+                self.extract_paths(&[String::from(path)]);
+            }
             Ok(Open::NoApp { mime }) if mime.starts_with("text/") || mime == "application/x-shellscript" => {
                 // Text without an app for it: the terminal's editor.
                 let argv: Vec<String> =
@@ -736,6 +740,85 @@ impl FilesApp {
         };
         let argv: Vec<String> = alloc::vec![poly_shell::apps::TERMINAL.into(), "--dir".into(), dir];
         self.run(&argv);
+    }
+
+    fn is_zip(e: &Entry) -> bool {
+        !e.is_dir() && e.mime == poly_files::zip::MIME
+    }
+
+    fn selected_zips(&self) -> Vec<String> {
+        if self.in_trash() || self.in_apps() {
+            return Vec::new();
+        }
+        let selected: Vec<String> =
+            self.browser.selected_entries().into_iter().filter(|e| Self::is_zip(e)).map(|e| e.path.clone()).collect();
+        if !selected.is_empty() {
+            return selected;
+        }
+        self.browser.cursor_entry().filter(|e| Self::is_zip(e)).map(|e| alloc::vec![e.path.clone()]).unwrap_or_default()
+    }
+
+    /// Extract the selected ZIP archive(s) into the current folder.
+    pub fn extract_selected(&mut self) {
+        let paths = self.selected_zips();
+        if !paths.is_empty() {
+            self.extract_paths(&paths);
+        }
+    }
+
+    fn extract_paths(&mut self, paths: &[String]) {
+        if self.in_trash() || self.in_apps() || paths.is_empty() {
+            return;
+        }
+        let cwd = String::from(self.browser.cwd());
+        let mut extracted = Vec::new();
+        let mut last_err: Option<String> = None;
+        for path in paths {
+            let zip_name = poly_files::path::file_name(path);
+            let dest_parent = poly_files::path::parent(path).unwrap_or(&cwd);
+            match poly_files::zip::extract(&*self.fs, path, dest_parent) {
+                Ok(report) => {
+                    poly_rt::println!(
+                        "poly-files: extracted {path} -> {} ({} files, {} bytes)",
+                        report.dest,
+                        report.files,
+                        report.bytes
+                    );
+                    extracted.push((String::from(zip_name), report));
+                }
+                Err(e) => {
+                    last_err = Some(format!("{zip_name}: {}", e.message()));
+                }
+            }
+        }
+        if !extracted.is_empty() {
+            if !cwd.is_empty() {
+                self.reload();
+                if let Some((_, last)) = extracted.last() {
+                    self.browser.select_name(&last.name);
+                    self.reveal_cursor();
+                }
+            }
+            self.status = match last_err {
+                Some(err) => err,
+                None if extracted.len() == 1 => {
+                    let (zip_name, report) = &extracted[0];
+                    if report.files == 0 {
+                        format!("Extracted {zip_name} to {}", report.name)
+                    } else {
+                        format!(
+                            "Extracted {zip_name} to {} ({} file{})",
+                            report.name,
+                            report.files,
+                            if report.files == 1 { "" } else { "s" }
+                        )
+                    }
+                }
+                None => format!("Extracted {} archives", extracted.len()),
+            };
+        } else if let Some(err) = last_err {
+            self.status = err;
+        }
     }
 
     fn set_clip(&mut self, op: ClipOp, cx: &mut Cx) {
@@ -916,6 +999,7 @@ impl FilesApp {
     pub fn act(&mut self, id: u32, cx: &mut Cx) {
         match id {
             act::OPEN => self.open_selected(),
+            act::EXTRACT => self.extract_selected(),
             act::UNINSTALL => self.uninstall_selected(),
             act::OPEN_TERMINAL => self.open_terminal(),
             act::CUT => self.set_clip(ClipOp::Cut, cx),
@@ -985,8 +1069,11 @@ impl FilesApp {
                 MenuItem::new(act::EMPTY_TRASH, "Empty Trash", "", !self.browser.is_empty()),
             ]
         } else if on_item {
-            alloc::vec![
-                MenuItem::new(act::OPEN, "Open", "Enter", true),
+            let mut items = alloc::vec![MenuItem::new(act::OPEN, "Open", "Enter", true)];
+            if !self.selected_zips().is_empty() {
+                items.push(MenuItem::new(act::EXTRACT, "Extract Here", "", true));
+            }
+            items.extend([
                 MenuItem::new(act::OPEN_TERMINAL, "Open in Terminal", "", true),
                 MenuItem::separator(),
                 MenuItem::new(act::CUT, "Cut", "Ctrl+X", true),
@@ -996,7 +1083,8 @@ impl FilesApp {
                 MenuItem::separator(),
                 MenuItem::new(act::RENAME, "Rename", "F2", n == 1),
                 MenuItem::new(act::TRASH, "Move to Trash", "Delete", true),
-            ]
+            ]);
+            items
         } else {
             alloc::vec![
                 MenuItem::new(act::NEW_FOLDER, "New folder", "Ctrl+Shift+N", true),

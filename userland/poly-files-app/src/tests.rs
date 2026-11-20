@@ -809,3 +809,86 @@ fn applications_draw_each_apps_own_icon_in_both_views() {
     s.app.draw(&mut fb2, &ui2, true);
     assert_eq!(s.app.status_line(), "5 of 5 selected");
 }
+
+/// Build a tiny stored ZIP archive for UI tests.
+fn make_stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut zip = Vec::new();
+    let mut offsets = Vec::with_capacity(entries.len());
+    for &(name, data) in entries {
+        let crc = poly_files::zip::crc32(data);
+        offsets.push(zip.len() as u32);
+        zip.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
+        zip.extend_from_slice(&[20, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        zip.extend_from_slice(&crc.to_le_bytes());
+        zip.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        zip.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        zip.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        zip.extend_from_slice(&0u16.to_le_bytes());
+        zip.extend_from_slice(name.as_bytes());
+        zip.extend_from_slice(data);
+    }
+    let cd_start = zip.len() as u32;
+    for (&(name, data), off) in entries.iter().zip(offsets) {
+        let crc = poly_files::zip::crc32(data);
+        zip.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
+        zip.extend_from_slice(&[20, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        zip.extend_from_slice(&crc.to_le_bytes());
+        zip.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        zip.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        zip.extend_from_slice(&(name.len() as u16).to_le_bytes());
+        zip.extend_from_slice(&[0; 12]);
+        zip.extend_from_slice(&off.to_le_bytes());
+        zip.extend_from_slice(name.as_bytes());
+    }
+    let cd_size = zip.len() as u32 - cd_start;
+    zip.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+    zip.extend_from_slice(&[0, 0, 0, 0]);
+    zip.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+    zip.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+    zip.extend_from_slice(&cd_size.to_le_bytes());
+    zip.extend_from_slice(&cd_start.to_le_bytes());
+    zip.extend_from_slice(&0u16.to_le_bytes());
+    zip
+}
+
+#[test]
+fn zip_files_extract_from_context_menu_and_double_click() {
+    let mut s = setup();
+    let archive = make_stored_zip(&[("readme.txt", b"hello zip"), ("sub/data.txt", b"123")]);
+    std::fs::write(s.root.join("home/m/archive.zip"), &archive).unwrap();
+    std::fs::write(s.root.join("home/m/corrupt.zip"), b"not a zip").unwrap();
+    s.app.go("/home/m");
+
+    let mut cx = Cx::default();
+    // Right-clicking a non-ZIP file does not offer Extract Here.
+    let notes_idx = names(&s.app).iter().position(|n| n == "notes.txt").unwrap();
+    let r = s.app.item_rect(notes_idx);
+    s.app.event(button(poly_app::BTN_RIGHT, r.x + 20, r.y + 10, 1), &mut cx);
+    let menu = s.app.menu.take().expect("notes menu");
+    assert!(!menu.items.iter().any(|i| i.id == act::EXTRACT));
+
+    // Right-clicking a ZIP file offers Extract Here and extracts it.
+    let zip_idx = names(&s.app).iter().position(|n| n == "archive.zip").unwrap();
+    let r = s.app.item_rect(zip_idx);
+    s.app.event(button(poly_app::BTN_RIGHT, r.x + 20, r.y + 10, 1), &mut cx);
+    let menu = s.app.menu.take().expect("zip menu");
+    assert!(menu.items.iter().any(|i| i.id == act::EXTRACT && i.label == "Extract Here"));
+
+    s.app.act(act::EXTRACT, &mut cx);
+    assert_eq!(s.app.status, "Extracted archive.zip to archive (2 files)");
+    assert_eq!(std::fs::read_to_string(s.root.join("home/m/archive/readme.txt")).unwrap(), "hello zip");
+    assert_eq!(std::fs::read_to_string(s.root.join("home/m/archive/sub/data.txt")).unwrap(), "123");
+    assert_eq!(s.app.browser.cursor_entry().map(|e| e.name.as_str()), Some("archive"));
+
+    // Double-clicking / pressing Enter on the same ZIP extracts to "archive 2".
+    s.app.browser.select_name("archive.zip");
+    key(&mut s.app, Some(Key::Enter), None, Mods::default());
+    assert_eq!(s.app.status, "Extracted archive.zip to archive 2 (2 files)");
+    assert_eq!(std::fs::read_to_string(s.root.join("home/m/archive 2/readme.txt")).unwrap(), "hello zip");
+
+    // Corrupt ZIP shows an error and leaves no folder behind.
+    s.app.browser.select_name("corrupt.zip");
+    s.app.act(act::EXTRACT, &mut cx);
+    assert_eq!(s.app.status, "corrupt.zip: Not a valid ZIP archive");
+    assert!(!s.root.join("home/m/corrupt").exists());
+}
