@@ -226,6 +226,24 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [ ] Installer, disk encryption, updates
 - [ ] **Milestone:** Poly runs as the only OS on one real laptop for a full workday
 
+## Phase 12: Desktop choice and the lean OS installer
+
+Planned, not current (owner request, 2026-11-20). The user picks Poly's own desktop (the default),
+GNOME or KDE Plasma at install time and at login. The detailed plan and the survey behind these items
+are in `docs/desktop-sessions-plan.md`. The survey found that Debian's Mutter already runs as a window
+on Poly's desktop, and that weston on Poly's DRM/KMS gets as far as input.
+
+- [ ] udev for foreign desktops: the kernel's uevent netlink socket, `/sys/class/input` and its attributes, Debian's `systemd-udevd` filling the udev database (weston on DRM with keyboard and mouse, boot test)
+- [ ] Seat and VT semantics: `/dev/tty0` and more VTs, VT switching ioctls, DRM master handed over and taken back on a switch, the DRM cursor (weston and sway on stock seatd)
+- [ ] Login plumbing in the Debian base: the system D-Bus, a logind (elogind or systemd-logind), cgroup v2, PAM sessions and polkit (KWin and Mutter start on DRM from a logind session)
+- [ ] A minimal KDE Plasma session starts on Poly (with PipeWire, the XDG desktop portals and a NetworkManager stand-in where it needs them)
+- [ ] A minimal GNOME session starts on Poly (with `systemd --user` or its replacement, and the same services)
+- [ ] Session choice: Poly's own login screen lists the users and the installed sessions (Poly is the default, GNOME, KDE Plasma); switching is a log-out, never a reinstall; desktops are added and removed from Settings
+- [ ] Windows (and later macOS) apps under a foreign desktop: a bridge shows each window as a Wayland window of GNOME's or Plasma's compositor, with input, focus, popups and its frame
+- [ ] Poly's features under a foreign desktop: launcher entries for Windows apps, Poly's installer opens `.deb`/`.rpm`/AppImage/`.exe`/`.msi` from the foreign file manager, notifications and tray icons through D-Bus
+- [ ] The lean OS installer in six steps: language and keyboard, disk, user, desktop (Poly / GNOME / KDE Plasma), default browser, done (on Phase 11's installer)
+- [ ] **Milestone:** the same Poly install logs into Poly's desktop, GNOME and KDE Plasma in turn, and Windows and Linux apps run in each
+
 ## Ongoing (every phase)
 
 - Security hardening and fuzzing of every parser and syscall
