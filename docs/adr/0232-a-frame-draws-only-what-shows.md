@@ -137,3 +137,36 @@ in flight and is a protocol-visible change (`wl_buffer.release` comes later); th
 memory another process owns and could change after a misbehaving client's early reuse, at every
 redraw instead of once; and the formats would have to be converted while drawing. All that for at
 most 0.7 ms of a 13 ms frame.
+
+## Addendum: a window without a redirection surface shows only its composition (2026-11-20, track `chrome-paint-4`)
+
+The QA round of 2026-11-20 found two white areas in Chrome for Windows: the first start showed a
+plain white window before the toolbar, and resizing outward showed white in the new area until
+Chrome repainted. Chrome's top-level window has `WS_EX_NOREDIRECTIONBITMAP`
+(`specs/windows/apps/chrome/s3-windows.md`) and shows its pictures through DirectComposition swap
+chains (ADR 0224). Learn ("Extended Window Styles"): such a window "does not render to a redirection
+surface. This is for windows that do not have visible content or that use mechanisms other than
+surfaces to provide their visual." Poly gave it a surface like any other window: it started white
+(`BLANK`), and the one erase such a window gets (`CreateWindowExW.yaml` `noredirect`) filled it with
+the class's background brush, so the window was white until its swap chain's first frame, and a
+resize grew the white surface before the frame of the new size came.
+
+5. **A window without a redirection surface shows only what composition gives it.** Its surface is
+   premultiplied (`Argb8888`) from the start and starts transparent; what GDI draws into it (the
+   erase, `WM_PAINT`, a child's commit) is accepted and dropped, with no damage. Its swap chains'
+   layers (ADR 0224, 0225) are unchanged. Before the first frame, and where a grown window is not yet
+   covered by a frame, what is below the window shows.
+
+Measured as above (`tools/qa` on branch `chrome-qa-2`, polyd with KVM, 2560x1600 at 200 %; the
+driver's `white` command: the share of pure white pixels in a region, a screendump every 30–40 ms),
+`main` and this change in the same hour:
+
+| Chrome for Windows | `main` | After |
+|---|---|---|
+| First start: plain white window before the first frame | 4.6 s (white from 8.1 s to 12.7 s after Enter; frame at 12.9 s) | **none** (frame at 13.6 s) |
+| Outward resize, held: the new area's tab strip plain white | 363 ms, 304 ms | **0 ms** (wallpaper, then the frame) |
+
+A flip-model swap chain of another 4-byte format than `B8G8R8A8` still reaches its window through
+GDI (`d3d11` `swap.rs`, `show`), so in such a window it is no longer shown. Chrome's swap chains
+are `B8G8R8A8`, and the formats of other sizes were never shown that way; none other is known.
+Handing those over too (a converted copy into the section) is for when a program needs it.
