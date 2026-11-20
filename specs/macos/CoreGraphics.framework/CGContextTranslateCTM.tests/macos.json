@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgtr_more",
+      "source_sha256": "ced3814d8a8a64ee10560c6173305e44dbea456f570c2b96ad39e362aec6d46f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "06ef8df1e66b8449dab02507318c675d53fe468768e923d26783af11fb10c146",
+          "exit_code": 0,
+          "stdout": "value user to device a 4000000000000000\nvalue user to device d c000000000000000\nvalue user to device tx 4008000000000000\nvalue user to device ty 4018000000000000\nvalue (1,1) in device space x 4014000000000000\nvalue (1,1) in device space y 4010000000000000\nvalue device (9,4) in user space x 4008000000000000\nvalue device (9,4) in user space y 3ff0000000000000\nvalue rect (1,1,2,1) in device space x 4014000000000000\nvalue y 4000000000000000\nvalue w 4010000000000000\nvalue h 4000000000000000\nvalue size (1,1) in device space w 4000000000000000\nvalue h c000000000000000\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2677794f796b3c93eb8696b9735380889e3169d484fc67a18ae5be41305674f0",
+          "exit_code": 0,
+          "stdout": "value user to device a 4000000000000000\nvalue user to device d c000000000000000\nvalue user to device tx 4008000000000000\nvalue user to device ty 4018000000000000\nvalue (1,1) in device space x 4014000000000000\nvalue (1,1) in device space y 4010000000000000\nvalue device (9,4) in user space x 4008000000000000\nvalue device (9,4) in user space y 3ff0000000000000\nvalue rect (1,1,2,1) in device space x 4014000000000000\nvalue y 4000000000000000\nvalue w 4010000000000000\nvalue h 4000000000000000\nvalue size (1,1) in device space w 4000000000000000\nvalue h c000000000000000\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

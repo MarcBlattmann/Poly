@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgarc_path",
+      "source_sha256": "786d1f024809e9d748b7d03c0b6bd2f6ac507eff0785b1df7675cf1ff3484eb4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "63a96aaa3481cf34284337b89a444235248b4fc408a12a9f4732664822646c3c",
+          "exit_code": 0,
+          "stdout": "value arc 0 .. pi/2 counterclockwise \nvalue element 00 move \nvalue   x 402e000000000000\nvalue   y 4024000000000000\nvalue element 01 curve \nvalue   x 402e000000000000\nvalue   y 402985d95568b497\nvalue   x 402985d95568b497\nvalue   y 402e000000000000\nvalue   x 4024000000000000\nvalue   y 402e000000000000\nvalue current point x 4024000000000000\nvalue current point y 402e000000000000\nvalue bounding box x 4024000000000000\nvalue bounding box y 4024000000000000\nvalue bounding box w 4014000000000000\nvalue bounding box h 4014000000000000\nvalue arc 0 .. pi clockwise (flag 1), radius 1 at the origin \nvalue element 00 move \nvalue   x 3ff0000000000000\nvalue   y bcb1a62633145c07\nvalue element 01 curve \nvalue   x 3fefffffffffffff\nvalue   y bfe1ac51114f0eb1\nvalue   x 3fe1ac51114f0ead\nvalue   y bff0000000000001\nvalue   x bcb1a62633145c07\nvalue   y bff0000000000000\nvalue element 02 curve \nvalue   x bfe1ac51114f0eb1\nvalue   y bfefffffffffffff\nvalue   x bff0000000000001\nvalue   y bfe1ac51114f0ead\nvalue   x bff0000000000000\nvalue   y 3cb1a62633145c07\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "20f1125e66292506552699fa09a91d89744097ac1110b3129fb30e71e5182f81",
+          "exit_code": 0,
+          "stdout": "value arc 0 .. pi/2 counterclockwise \nvalue element 00 move \nvalue   x 402e000000000000\nvalue   y 4024000000000000\nvalue element 01 curve \nvalue   x 402e000000000000\nvalue   y 402985d95568b497\nvalue   x 402985d95568b497\nvalue   y 402e000000000000\nvalue   x 4024000000000000\nvalue   y 402e000000000000\nvalue current point x 4024000000000000\nvalue current point y 402e000000000000\nvalue bounding box x 4024000000000000\nvalue bounding box y 4024000000000000\nvalue bounding box w 4014000000000000\nvalue bounding box h 4014000000000000\nvalue arc 0 .. pi clockwise (flag 1), radius 1 at the origin \nvalue element 00 move \nvalue   x 3ff0000000000000\nvalue   y bcb1a62633145c07\nvalue element 01 curve \nvalue   x 3fefffffffffffff\nvalue   y bfe1ac51114f0eb1\nvalue   x 3fe1ac51114f0ead\nvalue   y bff0000000000001\nvalue   x bcb1a62633145c07\nvalue   y bff0000000000000\nvalue element 02 curve \nvalue   x bfe1ac51114f0eb1\nvalue   y bfefffffffffffff\nvalue   x bff0000000000001\nvalue   y bfe1ac51114f0ead\nvalue   x bff0000000000000\nvalue   y 3cb1a62633145c07\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

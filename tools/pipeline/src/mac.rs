@@ -87,6 +87,32 @@ pub fn is_corefoundation_symbol(name: &str) -> bool {
     ["_CF", "_kCF", "___CF", "___kCF"].iter().any(|p| name.starts_with(p))
 }
 
+/// The CoreGraphics framework's install name: what a test about CoreGraphics's
+/// own functions may load besides libSystem and CoreFoundation.
+pub const COREGRAPHICS_DYLIB: &str = "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics";
+
+/// A test about CoreGraphics says so with this line (same place as the other
+/// directives); it is linked with `-framework CoreGraphics -framework
+/// CoreFoundation` and may import CoreGraphics's own symbols (`CG...`, `kCG...`)
+/// and CoreFoundation's, nothing else (`tests/macos/include/poly_mcg.h`). Its
+/// output still goes through raw system calls.
+pub const COREGRAPHICS_DIRECTIVE: &str = "poly-mac: coregraphics";
+
+/// Whether `source` carries [`COREGRAPHICS_DIRECTIVE`] in a comment line among
+/// its first 30 lines.
+pub fn uses_coregraphics(source: &str) -> bool {
+    source.lines().take(30).any(|l| {
+        let l = l.trim_start();
+        (l.starts_with("//") || l.starts_with('*') || l.starts_with("/*")) && l.contains(COREGRAPHICS_DIRECTIVE)
+    })
+}
+
+/// Whether an imported symbol (with its leading `_`) is one of CoreGraphics's
+/// or CoreFoundation's.
+pub fn is_coregraphics_symbol(name: &str) -> bool {
+    is_corefoundation_symbol(name) || ["_CG", "_kCG", "___CG", "___kCG"].iter().any(|p| name.starts_with(p))
+}
+
 /// The Foundation framework's install name and the Objective-C runtime's:
 /// what a test about Foundation may load besides libSystem and CoreFoundation.
 pub const FOUNDATION_DYLIB: &str = "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation";
@@ -146,12 +172,16 @@ pub enum Imports {
     CoreFoundation,
     /// Foundation's, CoreFoundation's and the Objective-C runtime's ([`FOUNDATION_DIRECTIVE`]).
     Foundation,
+    /// CoreGraphics's and CoreFoundation's ([`COREGRAPHICS_DIRECTIVE`]).
+    CoreGraphics,
 }
 
 impl Imports {
     pub fn of_source(source: &str) -> Imports {
         if uses_foundation(source) {
             Imports::Foundation
+        } else if uses_coregraphics(source) {
+            Imports::CoreGraphics
         } else if uses_corefoundation(source) {
             Imports::CoreFoundation
         } else if uses_libsystem(source) {
@@ -317,7 +347,9 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
     let dylibs: Vec<String> = m.dylibs().map(|d| d.name.to_string()).collect();
     let allowed = |d: &str| {
         ALLOWED_DYLIBS.contains(&d)
-            || (matches!(imports_kind, Imports::CoreFoundation | Imports::Foundation) && d == COREFOUNDATION_DYLIB)
+            || (matches!(imports_kind, Imports::CoreFoundation | Imports::Foundation | Imports::CoreGraphics)
+                && d == COREFOUNDATION_DYLIB)
+            || (imports_kind == Imports::CoreGraphics && d == COREGRAPHICS_DYLIB)
             || (imports_kind == Imports::Foundation && (d == FOUNDATION_DYLIB || d == OBJC_DYLIB))
     };
     if let Some(d) = dylibs.iter().find(|d| !allowed(d)) {
@@ -334,6 +366,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
             Imports::Raw | Imports::LibSystem => {}
             Imports::CoreFoundation => imports.retain(|i| !is_corefoundation_symbol(i)),
             Imports::Foundation => imports.retain(|i| !is_foundation_symbol(i)),
+            Imports::CoreGraphics => imports.retain(|i| !is_coregraphics_symbol(i)),
         }
         if !imports.is_empty() {
             return Err(format!(
@@ -343,6 +376,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
                     Imports::Raw | Imports::LibSystem => "",
                     Imports::CoreFoundation => " but CoreFoundation's own symbols",
                     Imports::Foundation => " but those of Foundation, CoreFoundation and the Objective-C runtime",
+                    Imports::CoreGraphics => " but CoreGraphics's and CoreFoundation's own symbols",
                 }
             ));
         }
@@ -427,6 +461,9 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
                 }
                 Imports::Foundation => {
                     cc.args(["-x", "objective-c", arc_flag, "-framework", "Foundation"]);
+                }
+                Imports::CoreGraphics => {
+                    cc.args(["-framework", "CoreGraphics", "-framework", "CoreFoundation"]);
                 }
             }
             let o = cc
@@ -997,6 +1034,21 @@ mod tests {
         assert!(uses_libsystem("// poly-mac: libsystem\n"));
         assert!(!uses_libsystem("int main(void) { return 0; }\n"));
         assert!(!uses_libsystem("const char *s = \"poly-mac: libsystem\";\n"));
+    }
+
+    #[test]
+    fn the_coregraphics_directive_is_found_in_comments_only() {
+        assert!(uses_coregraphics("/* x\n * poly-mac: coregraphics\n */\nint main(void) { return 0; }\n"));
+        assert!(uses_coregraphics("// poly-mac: coregraphics\n"));
+        assert!(!uses_coregraphics("int main(void) { return 0; }\n"));
+        assert!(!uses_coregraphics("const char *s = \"poly-mac: coregraphics\";\n"));
+        assert_eq!(Imports::of_source("// poly-mac: coregraphics\n"), Imports::CoreGraphics);
+        for name in ["_CGContextFillRect", "_kCGColorSpaceSRGB", "_CFRelease", "___CGBitmapContextCreate"] {
+            assert!(is_coregraphics_symbol(name), "{name}");
+        }
+        for name in ["_getpid", "_NSLog", "_objc_msgSend", "_CTLineCreate"] {
+            assert!(!is_coregraphics_symbol(name), "{name}");
+        }
     }
 
     #[test]

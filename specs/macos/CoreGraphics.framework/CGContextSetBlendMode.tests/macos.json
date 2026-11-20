@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgblend_more",
+      "source_sha256": "6cda6ed9f81fd8d015645b95425f6ebdbb62f9b6d5e277fdc23a598e9bac5ecd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fd2dda193e54462cb800759f0dd8dfe60acf4f81db35da6f20cabb9bbdc17462",
+          "exit_code": 0,
+          "stdout": "value multiply 00 855231ff 3e3d2eff cc6633ff\nvalue screen 00 d4948fff dbc2ebff cc6633ff\nvalue copy 00 8c7f8cff 4d99e6ff cc6633ff\nvalue clear 00 66331a80 00000000 cc6633ff\nvalue source in 00 8c7f8dff 4d99e6ff cc6633ff\nvalue destination out 00 66331a80 00000000 cc6633ff\nvalue an image drawn with multiply 333326ff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "203c606f5cead02321f37f85acb3431566cbf6dc89eb53d2368a53effbd1bc70",
+          "exit_code": 0,
+          "stdout": "value multiply 00 855231ff 3e3d2eff cc6633ff\nvalue screen 00 d4948fff dbc2ebff cc6633ff\nvalue copy 00 8c7f8cff 4d99e6ff cc6633ff\nvalue clear 00 66331a80 00000000 cc6633ff\nvalue source in 00 8c7f8dff 4d99e6ff cc6633ff\nvalue destination out 00 66331a80 00000000 cc6633ff\nvalue an image drawn with multiply 333326ff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgblend_values",
+      "source_sha256": "ee43268795cd19ef5b5943fecd7b2ea7ac23976c65e48861c1998a0624531def",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "793b1b425ad5dd844d24044588a54483a365480ad650384ef0d5413f1b761859",
+          "exit_code": 0,
+          "stdout": "value kCGBlendModeNormal 0\nvalue Multiply 1\nvalue Screen 2\nvalue Overlay 3\nvalue Darken 4\nvalue Lighten 5\nvalue ColorDodge 6\nvalue ColorBurn 7\nvalue SoftLight 8\nvalue HardLight 9\nvalue Difference 10\nvalue Exclusion 11\nvalue Hue 12\nvalue Saturation 13\nvalue Color 14\nvalue Luminosity 15\nvalue Clear 16\nvalue Copy 17\nvalue SourceIn 18\nvalue SourceOut 19\nvalue SourceAtop 20\nvalue DestinationOver 21\nvalue DestinationIn 22\nvalue DestinationOut 23\nvalue DestinationAtop 24\nvalue XOR 25\nvalue PlusDarker 26\nvalue PlusLighter 27\nvalue the default mode is normal: 50% red over opaque blue 80007fff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d586ff31a1d7f48dfcff0a055d5fa4fd4295840545a21f1c875c8a709db4929f",
+          "exit_code": 0,
+          "stdout": "value kCGBlendModeNormal 0\nvalue Multiply 1\nvalue Screen 2\nvalue Overlay 3\nvalue Darken 4\nvalue Lighten 5\nvalue ColorDodge 6\nvalue ColorBurn 7\nvalue SoftLight 8\nvalue HardLight 9\nvalue Difference 10\nvalue Exclusion 11\nvalue Hue 12\nvalue Saturation 13\nvalue Color 14\nvalue Luminosity 15\nvalue Clear 16\nvalue Copy 17\nvalue SourceIn 18\nvalue SourceOut 19\nvalue SourceAtop 20\nvalue DestinationOver 21\nvalue DestinationIn 22\nvalue DestinationOut 23\nvalue DestinationAtop 24\nvalue XOR 25\nvalue PlusDarker 26\nvalue PlusLighter 27\nvalue the default mode is normal: 50% red over opaque blue 80007fff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

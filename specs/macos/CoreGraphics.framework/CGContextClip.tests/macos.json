@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgclipp_path",
+      "source_sha256": "167963422e637929d38fb547177857664ad09506ab2d9fe5b40d065ee349985f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "44ba5e6c7a3c0f22c0957430f80325760e9d3228b960cf346ef131e4c897638f",
+          "exit_code": 0,
+          "stdout": "value a fill clipped by a circle (1,1,8,8) 00 00 00 00 00 00 00 00 00 00 00\nvalue a fill clipped by a circle (1,1,8,8) 01 00 00 26 ae f2 f2 ae 26 00 00\nvalue a fill clipped by a circle (1,1,8,8) 02 00 26 ef ff ff ff ff ef 26 00\nvalue a fill clipped by a circle (1,1,8,8) 03 00 ae ff ff ff ff ff ff ae 00\nvalue a fill clipped by a circle (1,1,8,8) 04 00 f2 ff ff ff ff ff ff f2 00\nvalue a fill clipped by a circle (1,1,8,8) 05 00 f2 ff ff ff ff ff ff f2 00\nvalue a fill clipped by a circle (1,1,8,8) 06 00 ae ff ff ff ff ff ff ae 00\nvalue a fill clipped by a circle (1,1,8,8) 07 00 26 ef ff ff ff ff ef 26 00\nvalue a fill clipped by a circle (1,1,8,8) 08 00 00 26 ae f2 f2 ae 26 00 00\nvalue a fill clipped by a circle (1,1,8,8) 09 00 00 00 00 00 00 00 00 00 00\nvalue EOClip of nested rects: a frame 00 00 00 00 00 00 00 00 00 00 00\nvalue EOClip of nested rects: a frame 01 00 ff ff ff ff ff ff ff ff 00\nvalue EOClip of nested rects: a frame 02 00 ff ff ff ff ff ff ff ff 00\nvalue EOClip of nested rects: a frame 03 00 ff ff 00 00 00 00 ff ff 00\nvalue EOClip of nested rects: a frame 04 00 ff ff 00 00 00 00 ff ff 00\nvalue EOClip of nested rects: a frame 05 00 ff ff 00 00 00 00 ff ff 00\nvalue EOClip of nested rects: a frame 06 00 ff ff 00 00 00 00 ff ff 00\nvalue EOClip of nested rects: a frame 07 00 ff ff ff ff ff ff ff ff 00\nvalue EOClip of nested rects: a frame 08 00 ff ff ff ff ff ff ff ff 00\nvalue EOClip of nested rects: a frame 09 00 00 00 00 00 00 00 00 00 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 00 00 00 00 00 00 00 00 00 00 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 01 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 02 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 03 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 04 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 05 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 06 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 07 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 08 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 09 00 00 00 00 00 00 00 00 00 00\nok after Clip the current path is empty\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3c7ca1a14a5a251093738e2183ffdc0efc07ebae8bcc82976d07f62b4c19300b",
+          "exit_code": 0,
+          "stdout": "value a fill clipped by a circle (1,1,8,8) 00 00 00 00 00 00 00 00 00 00 00\nvalue a fill clipped by a circle (1,1,8,8) 01 00 00 26 ae f2 f2 ae 26 00 00\nvalue a fill clipped by a circle (1,1,8,8) 02 00 26 ef ff ff ff ff ef 26 00\nvalue a fill clipped by a circle (1,1,8,8) 03 00 ae ff ff ff ff ff ff ae 00\nvalue a fill clipped by a circle (1,1,8,8) 04 00 f2 ff ff ff ff ff ff f2 00\nvalue a fill clipped by a circle (1,1,8,8) 05 00 f2 ff ff ff ff ff ff f2 00\nvalue a fill clipped by a circle (1,1,8,8) 06 00 ae ff ff ff ff ff ff ae 00\nvalue a fill clipped by a circle (1,1,8,8) 07 00 26 ef ff ff ff ff ef 26 00\nvalue a fill clipped by a circle (1,1,8,8) 08 00 00 26 ae f2 f2 ae 26 00 00\nvalue a fill clipped by a circle (1,1,8,8) 09 00 00 00 00 00 00 00 00 00 00\nvalue EOClip of nested rects: a frame 00 00 00 00 00 00 00 00 00 00 00\nvalue EOClip of nested rects: a frame 01 00 ff ff ff ff ff ff ff ff 00\nvalue EOClip of nested rects: a frame 02 00 ff ff ff ff ff ff ff ff 00\nvalue EOClip of nested rects: a frame 03 00 ff ff 00 00 00 00 ff ff 00\nvalue EOClip of nested rects: a frame 04 00 ff ff 00 00 00 00 ff ff 00\nvalue EOClip of nested rects: a frame 05 00 ff ff 00 00 00 00 ff ff 00\nvalue EOClip of nested rects: a frame 06 00 ff ff 00 00 00 00 ff ff 00\nvalue EOClip of nested rects: a frame 07 00 ff ff ff ff ff ff ff ff 00\nvalue EOClip of nested rects: a frame 08 00 ff ff ff ff ff ff ff ff 00\nvalue EOClip of nested rects: a frame 09 00 00 00 00 00 00 00 00 00 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 00 00 00 00 00 00 00 00 00 00 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 01 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 02 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 03 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 04 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 05 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 06 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 07 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 08 00 ff ff ff ff ff ff ff ff 00\nvalue Clip (nonzero) of the same nested rects (same direction): so 09 00 00 00 00 00 00 00 00 00 00\nok after Clip the current path is empty\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
