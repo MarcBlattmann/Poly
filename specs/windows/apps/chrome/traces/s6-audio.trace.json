@@ -1,0 +1,890 @@
+{
+ "format": "poly-comtrace/1",
+ "stage": "s6-audio",
+ "recorded": {
+  "app": {
+   "name": "Chrome for Testing",
+   "version": "157.0.8103.38",
+   "channel": "Stable",
+   "platform": "win64",
+   "url": "https://storage.googleapis.com/chrome-for-testing-public/157.0.8103.38/win64/chrome-win64.zip",
+   "zip_sha256": "ae0deef27d449e1d7529df7705d609bab102de48464da13567ed3dd2ee1a0586"
+  },
+  "system": {
+   "machine": "homeserver2 (oracle)",
+   "os": "Windows 11 Home 26H2, build 26300.9974",
+   "sound": "one render endpoint (a sound card), the default device"
+  },
+  "command": "chrome.exe --no-sandbox --autoplay-policy=no-user-gesture-required <tone page>: a Web Audio oscillator (gain 0.0005), suspend() after 6 s, resume() after 9 s, close() after 13 s",
+  "how": "COM wrapper registered as the in-process server of CLSID_MMDeviceEnumerator (docs/windows/wasapi-trace.md): every interface from the audio interfaces is wrapped, each method call logged and forwarded",
+  "runs": 3,
+  "kept": "the calls of each thread in order (the order between threads is a race), arguments that are pointers dropped, object numbers in creation order, the render loop collapsed to its pattern and the sets of values it showed",
+  "not_seen": "calls through interfaces that are not wrapped, Windows' notifications into Chrome's own objects, a sandboxed audio process (it reads the system's registration, not the wrapper's), calls through ActivateAudioInterfaceAsync (none seen)"
+ },
+ "processes": {
+  "audio.mojom.AudioService": [
+   {
+    "stable_over_runs": true,
+    "runs": 3,
+    "calls": {
+     "T1": [
+      {
+       "thread": "T1",
+       "call": "COM.DllGetClassObject",
+       "object": 0
+      },
+      {
+       "thread": "T1",
+       "call": "COM.CLASSFACTORY.CreateInstance",
+       "object": 0
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.QueryInterface",
+       "object": 1,
+       "args": "riid=IMMDeviceEnumerator",
+       "result": "S_OK",
+       "new": "IMMDeviceEnumerator#2"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.RegisterEndpointNotificationCallback",
+       "object": 2,
+       "args": "client=set",
+       "result": "S_OK"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.EnumAudioEndpoints",
+       "object": 2,
+       "args": "dataFlow=0 stateMask=0x1",
+       "result": "S_OK",
+       "new": "IMMDeviceCollection#3"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceCollection.GetCount",
+       "object": 3,
+       "result": "S_OK",
+       "outs": "count=1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDefaultAudioEndpoint",
+       "object": 2,
+       "args": "dataFlow=0(eRender) role=0(eConsole)",
+       "result": "S_OK",
+       "new": "IMMDevice#4"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 4,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetId",
+       "object": 4,
+       "result": "S_OK",
+       "outs": "id=\"{0.0.0.00000000}.{<endpoint guid>}\""
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDevice",
+       "object": 2,
+       "args": "id=\"{0.0.0.00000000}.{<endpoint guid>}\"",
+       "result": "S_OK",
+       "new": "IMMDevice#5"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 5,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.Activate",
+       "object": 5,
+       "args": "iid=IAudioClient clsctx=0x1 params=NULL",
+       "result": "S_OK",
+       "new": "IAudioClient#6"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetMixFormat",
+       "object": 6,
+       "result": "S_OK",
+       "outs": "mixFormat={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.QueryInterface",
+       "object": 6,
+       "args": "riid=IAudioClient3",
+       "result": "S_OK",
+       "new": "IAudioClient3#7"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient3.GetSharedModeEnginePeriod",
+       "object": 7,
+       "args": "format={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}",
+       "result": "S_OK",
+       "outs": "default=480 fundamental=480 min=480 max=480"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.EnumAudioEndpoints",
+       "object": 2,
+       "args": "dataFlow=0 stateMask=0x1",
+       "result": "S_OK",
+       "new": "IMMDeviceCollection#8"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceCollection.GetCount",
+       "object": 8,
+       "result": "S_OK",
+       "outs": "count=1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDefaultAudioEndpoint",
+       "object": 2,
+       "args": "dataFlow=0(eRender) role=0(eConsole)",
+       "result": "S_OK",
+       "new": "IMMDevice#9"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 9,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetId",
+       "object": 9,
+       "result": "S_OK",
+       "outs": "id=\"{0.0.0.00000000}.{<endpoint guid>}\""
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDevice",
+       "object": 2,
+       "args": "id=\"{0.0.0.00000000}.{<endpoint guid>}\"",
+       "result": "S_OK",
+       "new": "IMMDevice#10"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 10,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.Activate",
+       "object": 10,
+       "args": "iid=IAudioClient clsctx=0x1 params=NULL",
+       "result": "S_OK",
+       "new": "IAudioClient#11"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetMixFormat",
+       "object": 11,
+       "result": "S_OK",
+       "outs": "mixFormat={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.QueryInterface",
+       "object": 11,
+       "args": "riid=IAudioClient3",
+       "result": "S_OK",
+       "new": "IAudioClient3#12"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient3.GetSharedModeEnginePeriod",
+       "object": 12,
+       "args": "format={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}",
+       "result": "S_OK",
+       "outs": "default=480 fundamental=480 min=480 max=480"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDefaultAudioEndpoint",
+       "object": 2,
+       "args": "dataFlow=0(eRender) role=0(eConsole)",
+       "result": "S_OK",
+       "new": "IMMDevice#13"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 13,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetId",
+       "object": 13,
+       "result": "S_OK",
+       "outs": "id=\"{0.0.0.00000000}.{<endpoint guid>}\""
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDefaultAudioEndpoint",
+       "object": 2,
+       "args": "dataFlow=0(eRender) role=2(eCommunications)",
+       "result": "S_OK",
+       "new": "IMMDevice#14"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 14,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetId",
+       "object": 14,
+       "result": "S_OK",
+       "outs": "id=\"{0.0.0.00000000}.{<endpoint guid>}\""
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDefaultAudioEndpoint",
+       "object": 2,
+       "args": "dataFlow=0(eRender) role=0(eConsole)",
+       "result": "S_OK",
+       "new": "IMMDevice#15"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 15,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetId",
+       "object": 15,
+       "result": "S_OK",
+       "outs": "id=\"{0.0.0.00000000}.{<endpoint guid>}\""
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDevice",
+       "object": 2,
+       "args": "id=\"{0.0.0.00000000}.{<endpoint guid>}\"",
+       "result": "S_OK",
+       "new": "IMMDevice#16"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 16,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.Activate",
+       "object": 16,
+       "args": "iid=IAudioClient clsctx=0x1 params=NULL",
+       "result": "S_OK",
+       "new": "IAudioClient#17"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetMixFormat",
+       "object": 17,
+       "result": "S_OK",
+       "outs": "mixFormat={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.QueryInterface",
+       "object": 17,
+       "args": "riid=IAudioClient3",
+       "result": "S_OK",
+       "new": "IAudioClient3#18"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient3.GetSharedModeEnginePeriod",
+       "object": 18,
+       "args": "format={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}",
+       "result": "S_OK",
+       "outs": "default=480 fundamental=480 min=480 max=480"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDefaultAudioEndpoint",
+       "object": 2,
+       "args": "dataFlow=0(eRender) role=0(eConsole)",
+       "result": "S_OK",
+       "new": "IMMDevice#19"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 19,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetId",
+       "object": 19,
+       "result": "S_OK",
+       "outs": "id=\"{0.0.0.00000000}.{<endpoint guid>}\""
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDevice",
+       "object": 2,
+       "args": "id=\"{0.0.0.00000000}.{<endpoint guid>}\"",
+       "result": "S_OK",
+       "new": "IMMDevice#20"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 20,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.Activate",
+       "object": 20,
+       "args": "iid=IAudioClient clsctx=0x1 params=NULL",
+       "result": "S_OK",
+       "new": "IAudioClient#21"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetMixFormat",
+       "object": 21,
+       "result": "S_OK",
+       "outs": "mixFormat={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.QueryInterface",
+       "object": 21,
+       "args": "riid=IAudioClient3",
+       "result": "S_OK",
+       "new": "IAudioClient3#22"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient3.GetSharedModeEnginePeriod",
+       "object": 22,
+       "args": "format={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}",
+       "result": "S_OK",
+       "outs": "default=480 fundamental=480 min=480 max=480"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDevice",
+       "object": 2,
+       "args": "id=\"{0.0.0.00000000}.{<endpoint guid>}\"",
+       "result": "S_OK",
+       "new": "IMMDevice#23"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 23,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.Activate",
+       "object": 23,
+       "args": "iid=IAudioClient clsctx=0x1 params=NULL",
+       "result": "S_OK",
+       "new": "IAudioClient#24"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDevice",
+       "object": 2,
+       "args": "id=\"{0.0.0.00000000}.{<endpoint guid>}\"",
+       "result": "S_OK",
+       "new": "IMMDevice#25"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 25,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.Activate",
+       "object": 25,
+       "args": "iid=IAudioClient clsctx=0x1 params=NULL",
+       "result": "S_OK",
+       "new": "IAudioClient#26"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetMixFormat",
+       "object": 26,
+       "result": "S_OK",
+       "outs": "mixFormat={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.IsFormatSupported",
+       "object": 24,
+       "args": "shareMode=0 format={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}",
+       "result": "S_OK"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.Initialize",
+       "object": 24,
+       "args": "shareMode=0(SHARED) streamFlags=0x40000(EVENTCALLBACK) bufferDuration=0 periodicity=0 format={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT} sessionGuid=NULL",
+       "result": "S_OK"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.SetEventHandle",
+       "object": 24,
+       "args": "event=set",
+       "result": "S_OK"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetBufferSize",
+       "object": 24,
+       "result": "S_OK",
+       "outs": "bufferFrames=1056"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetStreamLatency",
+       "object": 24,
+       "result": "S_OK",
+       "outs": "latency=0"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetDevicePeriod",
+       "object": 24,
+       "result": "S_OK",
+       "outs": "default=100000 min=30000"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetService",
+       "object": 24,
+       "args": "riid=IAudioRenderClient",
+       "result": "S_OK",
+       "new": "IAudioRenderClient#27"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetService",
+       "object": 24,
+       "args": "riid=IAudioClock",
+       "result": "S_OK",
+       "new": "IAudioClock#28"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetService",
+       "object": 24,
+       "args": "riid=IAudioSessionControl",
+       "result": "S_OK",
+       "new": "IAudioSessionControl#29"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioSessionControl.RegisterAudioSessionNotification",
+       "object": 29,
+       "result": "S_OK"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetBufferSize",
+       "object": 24,
+       "result": "S_OK",
+       "outs": "bufferFrames=1056"
+      },
+      {
+       "loop": "render",
+       "thread": "T1",
+       "calls": [
+        "IAudioClient.GetCurrentPadding",
+        "IAudioClock.GetPosition",
+        "IAudioRenderClient.GetBuffer",
+        "IAudioRenderClient.ReleaseBuffer"
+       ],
+       "padding": [
+        0
+       ],
+       "getbuffer_frames": [
+        1056
+       ],
+       "release_flags": [
+        "0x2"
+       ]
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.Start",
+       "object": 24,
+       "result": "S_OK"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.Stop",
+       "object": 24,
+       "result": "S_OK"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.Reset",
+       "object": 24,
+       "result": "S_OK"
+      },
+      {
+       "loop": "render",
+       "thread": "T1",
+       "calls": [
+        "IAudioClient.GetCurrentPadding",
+        "IAudioClock.GetPosition",
+        "IAudioRenderClient.GetBuffer",
+        "IAudioRenderClient.ReleaseBuffer"
+       ],
+       "padding": [
+        0
+       ],
+       "getbuffer_frames": [],
+       "release_flags": []
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.EnumAudioEndpoints",
+       "object": 2,
+       "args": "dataFlow=0 stateMask=0x1",
+       "result": "S_OK",
+       "new": "IMMDeviceCollection#30"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceCollection.GetCount",
+       "object": 30,
+       "result": "S_OK",
+       "outs": "count=1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDefaultAudioEndpoint",
+       "object": 2,
+       "args": "dataFlow=0(eRender) role=0(eConsole)",
+       "result": "S_OK",
+       "new": "IMMDevice#31"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 31,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetId",
+       "object": 31,
+       "result": "S_OK",
+       "outs": "id=\"{0.0.0.00000000}.{<endpoint guid>}\""
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDevice",
+       "object": 2,
+       "args": "id=\"{0.0.0.00000000}.{<endpoint guid>}\"",
+       "result": "S_OK",
+       "new": "IMMDevice#32"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 32,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.Activate",
+       "object": 32,
+       "args": "iid=IAudioClient clsctx=0x1 params=NULL",
+       "result": "S_OK",
+       "new": "IAudioClient#33"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetMixFormat",
+       "object": 33,
+       "result": "S_OK",
+       "outs": "mixFormat={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.QueryInterface",
+       "object": 33,
+       "args": "riid=IAudioClient3",
+       "result": "S_OK",
+       "new": "IAudioClient3#34"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient3.GetSharedModeEnginePeriod",
+       "object": 34,
+       "args": "format={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}",
+       "result": "S_OK",
+       "outs": "default=480 fundamental=480 min=480 max=480"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDefaultAudioEndpoint",
+       "object": 2,
+       "args": "dataFlow=0(eRender) role=0(eConsole)",
+       "result": "S_OK",
+       "new": "IMMDevice#35"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 35,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetId",
+       "object": 35,
+       "result": "S_OK",
+       "outs": "id=\"{0.0.0.00000000}.{<endpoint guid>}\""
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.GetDevice",
+       "object": 2,
+       "args": "id=\"{0.0.0.00000000}.{<endpoint guid>}\"",
+       "result": "S_OK",
+       "new": "IMMDevice#36"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.GetState",
+       "object": 36,
+       "result": "S_OK",
+       "outs": "state=0x1"
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDevice.Activate",
+       "object": 36,
+       "args": "iid=IAudioClient clsctx=0x1 params=NULL",
+       "result": "S_OK",
+       "new": "IAudioClient#37"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetMixFormat",
+       "object": 37,
+       "result": "S_OK",
+       "outs": "mixFormat={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.QueryInterface",
+       "object": 37,
+       "args": "riid=IAudioClient3",
+       "result": "S_OK",
+       "new": "IAudioClient3#38"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient3.GetSharedModeEnginePeriod",
+       "object": 38,
+       "args": "format={tag=0xfffe ch=2 rate=48000 avg=384000 align=8 bits=32 cb=22 valid=32 mask=0x3 sub=KSDATAFORMAT_SUBTYPE_IEEE_FLOAT}",
+       "result": "S_OK",
+       "outs": "default=480 fundamental=480 min=480 max=480"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.GetBufferSize",
+       "object": 24,
+       "result": "S_OK",
+       "outs": "bufferFrames=1056"
+      },
+      {
+       "loop": "render",
+       "thread": "T1",
+       "calls": [
+        "IAudioClient.GetCurrentPadding",
+        "IAudioClock.GetPosition",
+        "IAudioRenderClient.GetBuffer",
+        "IAudioRenderClient.ReleaseBuffer"
+       ],
+       "padding": [
+        0
+       ],
+       "getbuffer_frames": [
+        1056
+       ],
+       "release_flags": [
+        "0x2"
+       ]
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.Start",
+       "object": 24,
+       "result": "S_OK"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.Stop",
+       "object": 24,
+       "result": "S_OK"
+      },
+      {
+       "thread": "T1",
+       "call": "IAudioClient.Reset",
+       "object": 24,
+       "result": "S_OK"
+      },
+      {
+       "loop": "render",
+       "thread": "T1",
+       "calls": [
+        "IAudioClient.GetCurrentPadding",
+        "IAudioClock.GetPosition",
+        "IAudioRenderClient.GetBuffer",
+        "IAudioRenderClient.ReleaseBuffer"
+       ],
+       "padding": [
+        0
+       ],
+       "getbuffer_frames": [],
+       "release_flags": []
+      }
+     ],
+     "T2": [
+      {
+       "thread": "T2",
+       "call": "IAudioClock.GetFrequency",
+       "object": 28,
+       "result": "S_OK",
+       "outs": "frequency=384000"
+      },
+      {
+       "loop": "render",
+       "thread": "T2",
+       "calls": [
+        "IAudioClient.GetCurrentPadding",
+        "IAudioClock.GetPosition",
+        "IAudioRenderClient.GetBuffer",
+        "IAudioRenderClient.ReleaseBuffer"
+       ],
+       "padding": [
+        0,
+        480,
+        576,
+        960
+       ],
+       "getbuffer_frames": [
+        480
+       ],
+       "release_flags": [
+        "0x0"
+       ]
+      }
+     ],
+     "T3": [
+      {
+       "thread": "T3",
+       "call": "IAudioClock.GetFrequency",
+       "object": 28,
+       "result": "S_OK",
+       "outs": "frequency=384000"
+      },
+      {
+       "loop": "render",
+       "thread": "T3",
+       "calls": [
+        "IAudioClient.GetCurrentPadding",
+        "IAudioClock.GetPosition",
+        "IAudioRenderClient.GetBuffer",
+        "IAudioRenderClient.ReleaseBuffer"
+       ],
+       "padding": [
+        96,
+        576,
+        1056
+       ],
+       "getbuffer_frames": [
+        480
+       ],
+       "release_flags": [
+        "0x0"
+       ]
+      }
+     ]
+    }
+   }
+  ],
+  "browser": [
+   {
+    "stable_over_runs": true,
+    "runs": 3,
+    "calls": {
+     "T1": [
+      {
+       "thread": "T1",
+       "call": "COM.DllGetClassObject",
+       "object": 0
+      },
+      {
+       "thread": "T1",
+       "call": "COM.CLASSFACTORY.CreateInstance",
+       "object": 0
+      },
+      {
+       "thread": "T1",
+       "call": "IMMDeviceEnumerator.QueryInterface",
+       "object": 1,
+       "args": "riid=IMMDeviceEnumerator",
+       "result": "S_OK",
+       "new": "IMMDeviceEnumerator#2"
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

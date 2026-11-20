@@ -325,11 +325,6 @@ poly_win32_rt::fail_exports!(
         WriteConsoleOutputW,
         WritePrivateProfileStringW,
         WriteTapemark,
-        lstrcatW,
-        lstrcpyA,
-        lstrcpyW,
-        lstrcpynA,
-        lstrcpynW,
     ]
 );
 

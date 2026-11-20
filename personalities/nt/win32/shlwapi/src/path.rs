@@ -297,3 +297,28 @@ pub unsafe extern "system" fn PathRemoveBackslashW(path: *mut u16) -> *mut u16 {
         path.add(v.len().saturating_sub(1))
     }
 }
+
+#[cfg_attr(target_arch = "x86", link(name = "kernelbase", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernelbase", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn GetFileAttributesW(name: *const u16) -> u32;
+    fn GetFileAttributesA(name: *const u8) -> u32;
+}
+
+/// `INVALID_FILE_ATTRIBUTES` (`fileapi.h`).
+const INVALID_FILE_ATTRIBUTES: u32 = u32::MAX;
+
+/// `PathFileExistsW` (Learn): TRUE when the file or directory `path` exists (its attributes can be
+/// read), FALSE otherwise and for a NULL path. Windows apps survey batch W1 (Notepad++); no sheet yet.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PathFileExistsW(path: *const u16) -> i32 {
+    // SAFETY: the caller's NUL-terminated path.
+    i32::from(!path.is_null() && unsafe { GetFileAttributesW(path) } != INVALID_FILE_ATTRIBUTES)
+}
+
+/// `PathFileExistsA`: as `PathFileExistsW` for an ANSI path.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn PathFileExistsA(path: *const u8) -> i32 {
+    // SAFETY: the caller's NUL-terminated path.
+    i32::from(!path.is_null() && unsafe { GetFileAttributesA(path) } != INVALID_FILE_ATTRIBUTES)
+}
