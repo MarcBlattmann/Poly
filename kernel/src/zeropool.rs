@@ -29,8 +29,6 @@ static LEN: AtomicUsize = AtomicUsize::new(0);
 /// Frames taken from the pool and frames zeroed into it since boot (`/proc`-style statistics).
 static TAKEN: AtomicU64 = AtomicU64::new(0);
 static ZEROED: AtomicU64 = AtomicU64::new(0);
-/// TEMP-AB (prezeroed-pages, removed before the PR): the pool in use (Scroll Lock switches).
-pub static TEMP_AB: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(true);
 
 /// Size the pool for this machine. Call once, after the frame allocator and its reserve are set.
 pub fn init() {
@@ -57,7 +55,6 @@ fn allocator_free() -> u64 {
 pub fn wants() -> bool {
     let capacity = CAPACITY.load(Ordering::Relaxed);
     capacity != 0
-        && TEMP_AB.load(Ordering::Relaxed)
         && len() < capacity
         && !crate::ktest::running()
         && policy::may_refill(allocator_free(), len(), capacity, frames::low_watermark())
@@ -99,7 +96,7 @@ pub fn refill_one() -> bool {
 /// A zeroed frame from the pool for user memory or the page cache, if it has one and the reserve
 /// rule lets user memory have it (`floor`: `frames::user_floor`).
 pub fn take(floor: u64) -> Option<u64> {
-    if len() == 0 || !TEMP_AB.load(Ordering::Relaxed) {
+    if len() == 0 {
         return None;
     }
     let free = allocator_free();

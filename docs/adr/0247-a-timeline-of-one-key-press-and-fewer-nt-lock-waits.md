@@ -147,8 +147,9 @@ slowest keys take 0.1–0.9 s. Over their windows (key to frame), summed over th
   the two A/B sessions, whose caches never made the walk show up.
 
 **Viz's software composite (about 7 ms a frame).** Its samples while typing: 44 % `chrome.dll`
-(Skia), 46 % kernel, 7 % Poly's `d3d11.dll`. The kernel part: page faults zero-filling fresh pages
-(28 %), `NtFreeVirtualMemory`/`NtAllocateVirtualMemory` (25 %: buffers freed and committed again
+(Skia), 46 % kernel, 7 % Poly's `d3d11.dll`. The kernel part: kernel time outside system calls
+(28 %: the system-call entry path, page-fault handling and interrupts; zero-filling fresh pages is a small part
+of it, ADR 0263), `NtFreeVirtualMemory`/`NtAllocateVirtualMemory` (25 %: buffers freed and committed again
 every frame), `NtWriteFile` (24 %, mostly waking the reader). Poly's present path (the copy of the
 dirty rectangles, `PolyUserPresentBuffer`) is a few per cent: no cheap win there; the candidate is
 the memory churn (keeping pages of a recommitted range, a pool of zeroed frames), a change of its
