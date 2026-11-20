@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontgetboundingrectsforglyphs_dejavu",
+      "source_sha256": "9fbc0ae16e2d6b4d54d41b6dff0f11490d128a3877add5e6c073b248a262b416",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c17a93328a68f36ce0cd19c37e45759c324a14b96607d2be04f9a84bd6f36257",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphsForCharacters(f, chs, g, 4)\nok r[0].origin.x is 0.78\nok r[0].origin.y is 0\nok r[0].size.width is 66.80\nok r[0].size.height is 72.90\nok r[1].size.width is 66.80\nok r[2].origin.x is 6.01\nok r[2].origin.y is -1.42\nok r[2].size.width is 46.19\nok r[2].size.height is 57.42\nok r[3].size.width is 0\nok r[3].size.height is 0\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "23b94359b50d85b2e1adac29cdff3fbc62853baa7b5d1912127748edbb048052",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphsForCharacters(f, chs, g, 4)\nok r[0].origin.x is 0.78\nok r[0].origin.y is 0\nok r[0].size.width is 66.80\nok r[0].size.height is 72.90\nok r[1].size.width is 66.80\nok r[2].origin.x is 6.01\nok r[2].origin.y is -1.42\nok r[2].size.width is 46.19\nok r[2].size.height is 57.42\nok r[3].size.width is 0\nok r[3].size.height is 0\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontgetboundingrectsforglyphs_variants",
+      "source_sha256": "a276a39a781f98b654f1b482869d29a6b5fa80a84aa283ded91065bc81a4c8cb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ede099f8579c8642f0e9ebe87b5f4e453136a4b8a7b792bcde88a8a3713594e9",
+          "exit_code": 0,
+          "stdout": "ok u.origin.x is 5\nok u.origin.y is -20\nok u.size.width is 45\nok u.size.height is 90\nok z.size.width is 0\nok z.size.height is 0\nok r10.origin.x is 1\nok r10.size.width is 4\nok r10.size.height is 7\nok rb.size.width is 46\nok rd.size.width is 40\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "398a20519c06e316ce371913b3633424b5cb0fd82d5f8a3b6288751b8ddb4014",
+          "exit_code": 0,
+          "stdout": "ok u.origin.x is 5\nok u.origin.y is -20\nok u.size.width is 45\nok u.size.height is 90\nok z.size.width is 0\nok z.size.height is 0\nok r10.origin.x is 1\nok r10.size.width is 4\nok r10.size.height is 7\nok rb.size.width is 46\nok rd.size.width is 40\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

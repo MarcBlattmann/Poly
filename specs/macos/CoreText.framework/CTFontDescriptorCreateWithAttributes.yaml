@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreText.framework/CTFontDescriptorCreateWithAttributes.yaml. Observed with C test programs linked against CoreText
+# (tests/macos/include/poly_mct.h, ADR 0182); results per architecture in CTFontDescriptorCreateWithAttributes.tests/macos.json.
+id: "macos/api/CoreText.framework/CTFontDescriptorCreateWithAttributes"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the CoreText, CoreGraphics and CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes, and the two architectures gave the same results. Tests are C programs that link CoreText (the line `poly-mac: coretext`, tests/macos/include/poly_mct.h). The results do not depend on Apple's fonts: tests use the PolyTest TrueType fonts embedded in poly_mct.h (made by tests/macos/fonts/mkfont.py) and DejaVu Sans 2.37 files the runner copies into the scratch directory (`poly-mac: fonts`); the few tests about Apple's own fonts are named sys_ and described as SYSTEM-DEPENDENT; results and output go through raw system calls"
+  observed_by: spec-macos-coretext
+  date: 2026-11-20
+summary: >
+  CTFontDescriptorCreateWithAttributes(dictionary) makes a descriptor of the given attributes; it
+  never fails (an empty dictionary gives a usable descriptor that creates the default font).
+  CTFontDescriptorCopyAttribute(d, key) gives back what was set (kCTFontNameAttribute 'PolyTest-Bold';
+  the size attribute as a number) and, for an attribute that was not set, what the font the descriptor
+  matches has (the family 'PolyTest' of a name-only descriptor; the file URL; the style name); an
+  attribute that means nothing for it (an unknown key, the size when none was given) is NULL.
+  CTFontDescriptorCreateMatchingFontDescriptor(d, NULL) returns the descriptor of the best font known
+  to the process (registered fonts included) with that name, family and traits, or NULL when none
+  matches ('NoSuchFontZzzQq'); CreateMatchingFontDescriptors gives an array of them (1 for an exact
+  PostScript name). A font made from the descriptor with CTFontCreateWithFontDescriptor is the
+  matching one: a name attribute 'PolyTest-Bold' gives PolyTest-Bold; a family attribute 'PolyTest'
+  alone the regular face; the family together with kCTFontTraitsAttribute holding kCTFontSymbolicTrait
+  = kCTFontBoldTrait the bold face; a descriptor that matches nothing gives the default font (not
+  PolyTest). The size attribute is the font's size when the size argument of
+  CTFontCreateWithFontDescriptor is 0 (25 for a 25 attribute); an argument that is not 0 wins; with no
+  size attribute a size of 0 gives 12. The attributes dictionary is used as given, not copied:
+  changing a mutable dictionary after creating the descriptor changes the descriptor (tests make one
+  dictionary per descriptor). Needs the font registered (CTFontManagerRegisterFontsForURL) to match a
+  name.
+returns:
+  success: "a new CTFontDescriptor"
+errors:
+  unknown_attribute_copy: "NULL"
+  no_match: "CreateMatchingFontDescriptor gives NULL"
+side_effects: "none"
+threading: "CoreText objects are immutable once made and may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

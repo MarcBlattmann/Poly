@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctlinegettypographicbounds_dejavu",
+      "source_sha256": "4a06033d87b9dbc25de6f50ffb37893230a2ec611407ee2e7913120ef64ee43d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "53f747ea194c6a717c6e923b1efe81a0cd885b75d7a799e7536956a8053f1bad",
+          "exit_code": 0,
+          "stdout": "ok CTLineGetTypographicBounds(pt_line(\"Hello, World\", f), &a, &d, &l) is 603.61\nok a is 92.82\nok d is 23.58\nok l is 0\nok CTLineGetTypographicBounds(pt_line(\"AV\", f), NULL, NULL, NULL) is 130.42\nok CTLineGetTypographicBounds(pt_line(\"Hello, World\", pt_file_font(\"DejaVuSans.ttf\", 12)), NULL, NULL, NULL) is 603.61 * 0.12\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3159630183b66a97a72d9de8e8625a7837e8eb41f1de4b70b578bb43c0b6bb5d",
+          "exit_code": 0,
+          "stdout": "ok CTLineGetTypographicBounds(pt_line(\"Hello, World\", f), &a, &d, &l) is 603.61\nok a is 92.82\nok d is 23.58\nok l is 0\nok CTLineGetTypographicBounds(pt_line(\"AV\", f), NULL, NULL, NULL) is 130.42\nok CTLineGetTypographicBounds(pt_line(\"Hello, World\", pt_file_font(\"DejaVuSans.ttf\", 12)), NULL, NULL, NULL) is 603.61 * 0.12\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctlinegettypographicbounds_widths",
+      "source_sha256": "0e084cb116de57119619b234be292f2da22aeb148b500b31b56392c645247032",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a1c104a018473175f60c815861a63e9e49b945f429dd8bff8f1e429b7eeba7fb",
+          "exit_code": 0,
+          "stdout": "ok CTLineGetTypographicBounds(pt_line(\"AB\", f), &a, &d, &l) is 110\nok a is 80\nok d is 20\nok l is 10\nok CTLineGetTypographicBounds(pt_line(\"A\", f), NULL, NULL, NULL) is 60\nok CTLineGetTypographicBounds(pt_line(\"AV\", f), NULL, NULL, NULL) is 120\nok CTLineGetTypographicBounds(pt_line(\"VA\", f), NULL, NULL, NULL) is 122\nok CTLineGetTypographicBounds(pt_line(\"AVA\", f), NULL, NULL, NULL) is 172\nok CTLineGetTypographicBounds(pt_line(\"A A\", f), NULL, NULL, NULL) is 150\nok CTLineGetTypographicBounds(pt_line(\"BB\", f), NULL, NULL, NULL) is 100\nok CTLineGetTypographicBounds(pt_line(\"\", f), &ea, &ed, &el) is 0\nok ea is 0\nok ed is 0\nok el is 0\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1cccc1f2ff73b7bb21d9c100af2c4d489f7ec9836ba61f659b30e5d088ab256c",
+          "exit_code": 0,
+          "stdout": "ok CTLineGetTypographicBounds(pt_line(\"AB\", f), &a, &d, &l) is 110\nok a is 80\nok d is 20\nok l is 10\nok CTLineGetTypographicBounds(pt_line(\"A\", f), NULL, NULL, NULL) is 60\nok CTLineGetTypographicBounds(pt_line(\"AV\", f), NULL, NULL, NULL) is 120\nok CTLineGetTypographicBounds(pt_line(\"VA\", f), NULL, NULL, NULL) is 122\nok CTLineGetTypographicBounds(pt_line(\"AVA\", f), NULL, NULL, NULL) is 172\nok CTLineGetTypographicBounds(pt_line(\"A A\", f), NULL, NULL, NULL) is 150\nok CTLineGetTypographicBounds(pt_line(\"BB\", f), NULL, NULL, NULL) is 100\nok CTLineGetTypographicBounds(pt_line(\"\", f), &ea, &ed, &el) is 0\nok ea is 0\nok ed is 0\nok el is 0\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

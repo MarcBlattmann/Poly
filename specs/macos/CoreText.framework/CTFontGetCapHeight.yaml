@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreText.framework/CTFontGetCapHeight.yaml. Observed with C test programs linked against CoreText
+# (tests/macos/include/poly_mct.h, ADR 0182); results per architecture in CTFontGetCapHeight.tests/macos.json.
+id: "macos/api/CoreText.framework/CTFontGetCapHeight"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the CoreText, CoreGraphics and CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes, and the two architectures gave the same results. Tests are C programs that link CoreText (the line `poly-mac: coretext`, tests/macos/include/poly_mct.h). The results do not depend on Apple's fonts: tests use the PolyTest TrueType fonts embedded in poly_mct.h (made by tests/macos/fonts/mkfont.py) and DejaVu Sans 2.37 files the runner copies into the scratch directory (`poly-mac: fonts`); the few tests about Apple's own fonts are named sys_ and described as SYSTEM-DEPENDENT; results and output go through raw system calls"
+  observed_by: spec-macos-coretext
+  date: 2026-11-20
+summary: >
+  CTFontGetCapHeight gives the cap height in points: for the PolyTest font it is 0.7 times the size,
+  taken from the OS/2 sCapHeight (700 units); at sizes 10, 12, 16, 100, 1000 it is 7, 8.4, 11.2, 70,
+  700, with the default size 0 (12) 8.4; the value is a double that is not rounded to whole units
+  (fractional sizes give fractional values, 10.5 gives 7.35). The bold font gives the same, a copy at
+  another size follows the size (50 gives 35), a font matrix with a y scale s multiplies it by s (the
+  x scale is not used), and fonts found by name give the same as those made from data. For DejaVu Sans
+  2.37 at size 12 it is 8.82 and at 100 73.54 (the font's own table values over 2048 times the size).
+  The fonts the tests bring: PolyTest Regular and Bold (units per em 1000; the glyphs are boxes: A box
+  100..500 x 0..700, B 100..400 x 0..500, V a triangle, W two V, a, g, e-acute and the accent mark
+  U+0301 composites, .notdef a box, U+1F600 a box through a format 12 cmap; hhea 800/-200/line gap
+  100, OS/2 typo 700/-300/50, win 900/250, capHeight 700, xHeight 500, a kern pair A,V -100 and V,A
+  -80), and DejaVu Sans 2.37.
+returns:
+  success: "the value as CGFloat (double)"
+errors:
+  null_font: "NULL or invalid arguments not listed here are not supported (the process may crash)"
+side_effects: "none"
+threading: "CoreText objects are immutable once made and may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

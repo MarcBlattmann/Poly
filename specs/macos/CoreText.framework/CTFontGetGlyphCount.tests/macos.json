@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontgetglyphcount_counts",
+      "source_sha256": "556455b1748a682d3d2702af86efda6c67645b60f043298abde4228776dec9d8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0036050157e0864d4ee259bf89bcba9c62a7b0c199379141c97598c8104381ef",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphCount(pt_font(0, 10)) == 12\nok CTFontGetGlyphCount(pt_font(0, 1000)) == 12\nok CTFontGetGlyphCount(pt_font(1, 20)) == 12\nok CTFontGetGlyphCount(CTFontCreateCopyWithAttributes(pt_font(0, 10), 50, NULL, NULL)) == 12\nok CTFontGetGlyphCount(CTFontCreateWithFontDescriptor(pt_descriptor(0), 20, &t)) == 12\nok CTFontCreatePathForGlyph(f, last[0], NULL) != NULL\nok CTFontCreatePathForGlyph(f, past[0], NULL) == NULL\nok CTFontGetAdvancesForGlyphs(f, kCTFontOrientationHorizontal, last, &a, 1) is 80\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "990b86ece5c9f805bf5c0efe25311c1e253a6b3ac646a0b6ba6e0b417ba6be08",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphCount(pt_font(0, 10)) == 12\nok CTFontGetGlyphCount(pt_font(0, 1000)) == 12\nok CTFontGetGlyphCount(pt_font(1, 20)) == 12\nok CTFontGetGlyphCount(CTFontCreateCopyWithAttributes(pt_font(0, 10), 50, NULL, NULL)) == 12\nok CTFontGetGlyphCount(CTFontCreateWithFontDescriptor(pt_descriptor(0), 20, &t)) == 12\nok CTFontCreatePathForGlyph(f, last[0], NULL) != NULL\nok CTFontCreatePathForGlyph(f, past[0], NULL) == NULL\nok CTFontGetAdvancesForGlyphs(f, kCTFontOrientationHorizontal, last, &a, 1) is 80\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontgetglyphcount_dejavu",
+      "source_sha256": "1382756923d9603bbca686f0f8c480db57978cb1f4e2f3296339e3d9753f1ad6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d37972e312b3477c794c8aa128d1c374266da8dc0f120a217d06869f460f376c",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphCount(pt_file_font(\"DejaVuSans.ttf\", 12)) == 6253\nok CTFontGetGlyphCount(pt_file_font(\"DejaVuSans.ttf\", 400)) == 6253\nok CTFontGetGlyphCount(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)) == CTFontGetGlyphCount(pt_file_font(\"DejaVuSans-Bold.ttf\", 99))\nok CTFontGetGlyphCount(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)) == 6196\nok CTFontGetGlyphCount(pt_file_font(\"DejaVuSansMono.ttf\", 12)) == 3377\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d238f82fc438c5894248df418fa2d650d7ec2756092d809373690170fba3e5c8",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetGlyphCount(pt_file_font(\"DejaVuSans.ttf\", 12)) == 6253\nok CTFontGetGlyphCount(pt_file_font(\"DejaVuSans.ttf\", 400)) == 6253\nok CTFontGetGlyphCount(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)) == CTFontGetGlyphCount(pt_file_font(\"DejaVuSans-Bold.ttf\", 99))\nok CTFontGetGlyphCount(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)) == 6196\nok CTFontGetGlyphCount(pt_file_font(\"DejaVuSansMono.ttf\", 12)) == 3377\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

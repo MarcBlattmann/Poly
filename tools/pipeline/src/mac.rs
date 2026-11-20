@@ -135,6 +135,90 @@ pub fn is_foundation_symbol(name: &str) -> bool {
             .any(|p| name.starts_with(p))
 }
 
+/// The CoreGraphics and CoreText frameworks' install names.
+pub const COREGRAPHICS_DYLIB: &str = "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics";
+pub const CORETEXT_DYLIB: &str = "/System/Library/Frameworks/CoreText.framework/Versions/A/CoreText";
+
+/// A test about CoreText says so with this line; it is then linked with
+/// `-framework CoreText -framework CoreGraphics -framework CoreFoundation` and
+/// may import CoreText's, CoreGraphics' and CoreFoundation's own symbols (`CT...`,
+/// `kCT...`, `CG...`, `kCG...`, `CF...`) and nothing else
+/// (`tests/macos/include/poly_mct.h`).
+pub const CORETEXT_DIRECTIVE: &str = "poly-mac: coretext";
+
+/// Whether `source` carries [`CORETEXT_DIRECTIVE`] in a comment line among
+/// its first 30 lines.
+pub fn uses_coretext(source: &str) -> bool {
+    source.lines().take(30).any(|l| {
+        let l = l.trim_start();
+        (l.starts_with("//") || l.starts_with('*') || l.starts_with("/*")) && l.contains(CORETEXT_DIRECTIVE)
+    })
+}
+
+/// Whether an imported symbol is one a CoreText test may use: CoreText's,
+/// CoreGraphics' or CoreFoundation's.
+pub fn is_coretext_symbol(name: &str) -> bool {
+    is_corefoundation_symbol(name) || ["_CT", "_kCT", "_CG", "_kCG"].iter().any(|p| name.starts_with(p))
+}
+
+/// A test that needs font files says so with `poly-mac: fonts NAME.ttf ...`
+/// (in a comment among its first 30 lines); the runner puts those files, found in
+/// `$POLY_FONT_DIR` or the `dejavu-*` directory of `target/fonts` (`cargo xtask fonts
+/// fetch`), in the test's scratch directory under their names. The names are plain file
+/// names ending in `.ttf`.
+pub const FONTS_DIRECTIVE: &str = "poly-mac: fonts";
+
+/// The font file names a test asks for with [`FONTS_DIRECTIVE`].
+pub fn font_files(source: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for l in source.lines().take(30) {
+        let t = l.trim_start();
+        if !(t.starts_with("//") || t.starts_with('*') || t.starts_with("/*")) {
+            continue;
+        }
+        if let Some(i) = t.find(FONTS_DIRECTIVE) {
+            for w in t[i + FONTS_DIRECTIVE.len()..].split_whitespace() {
+                let w = w.trim_end_matches("*/");
+                let ok = w.ends_with(".ttf")
+                    && w.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
+                    && !w.starts_with('.');
+                if ok && !out.iter().any(|o| o == w) {
+                    out.push(w.to_string());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Where the font files live: `$POLY_FONT_DIR`, else the newest `dejavu-*`
+/// directory of `target/fonts` in the repository or in the main checkout of
+/// the same repository (worktrees share the main checkout's fonts).
+pub fn font_dir(repo: &Path) -> Option<PathBuf> {
+    if let Some(d) = std::env::var_os("POLY_FONT_DIR") {
+        return Some(PathBuf::from(d));
+    }
+    let mut roots = vec![repo.to_path_buf()];
+    if let Ok(common) = util::git_text(repo, &["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        && let Some(main) = Path::new(&common).parent()
+    {
+        roots.push(main.to_path_buf());
+    }
+    for root in roots {
+        let Ok(rd) = std::fs::read_dir(root.join("target/fonts")) else { continue };
+        let mut dirs: Vec<PathBuf> = rd
+            .flatten()
+            .map(|e| e.path())
+            .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("dejavu-")))
+            .collect();
+        dirs.sort();
+        if let Some(d) = dirs.pop() {
+            return Some(d);
+        }
+    }
+    None
+}
+
 /// What a test may link and import besides libSystem.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Imports {
@@ -146,12 +230,16 @@ pub enum Imports {
     CoreFoundation,
     /// Foundation's, CoreFoundation's and the Objective-C runtime's ([`FOUNDATION_DIRECTIVE`]).
     Foundation,
+    /// CoreText's, CoreGraphics' and CoreFoundation's ([`CORETEXT_DIRECTIVE`]).
+    CoreText,
 }
 
 impl Imports {
     pub fn of_source(source: &str) -> Imports {
         if uses_foundation(source) {
             Imports::Foundation
+        } else if uses_coretext(source) {
+            Imports::CoreText
         } else if uses_corefoundation(source) {
             Imports::CoreFoundation
         } else if uses_libsystem(source) {
@@ -317,7 +405,9 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
     let dylibs: Vec<String> = m.dylibs().map(|d| d.name.to_string()).collect();
     let allowed = |d: &str| {
         ALLOWED_DYLIBS.contains(&d)
-            || (matches!(imports_kind, Imports::CoreFoundation | Imports::Foundation) && d == COREFOUNDATION_DYLIB)
+            || (matches!(imports_kind, Imports::CoreFoundation | Imports::Foundation | Imports::CoreText)
+                && d == COREFOUNDATION_DYLIB)
+            || (imports_kind == Imports::CoreText && (d == CORETEXT_DYLIB || d == COREGRAPHICS_DYLIB))
             || (imports_kind == Imports::Foundation && (d == FOUNDATION_DYLIB || d == OBJC_DYLIB))
     };
     if let Some(d) = dylibs.iter().find(|d| !allowed(d)) {
@@ -334,6 +424,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
             Imports::Raw | Imports::LibSystem => {}
             Imports::CoreFoundation => imports.retain(|i| !is_corefoundation_symbol(i)),
             Imports::Foundation => imports.retain(|i| !is_foundation_symbol(i)),
+            Imports::CoreText => imports.retain(|i| !is_coretext_symbol(i)),
         }
         if !imports.is_empty() {
             return Err(format!(
@@ -343,6 +434,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
                     Imports::Raw | Imports::LibSystem => "",
                     Imports::CoreFoundation => " but CoreFoundation's own symbols",
                     Imports::Foundation => " but those of Foundation, CoreFoundation and the Objective-C runtime",
+                    Imports::CoreText => " but those of CoreText, CoreGraphics and CoreFoundation",
                 }
             ));
         }
@@ -361,6 +453,9 @@ pub struct BuiltTest {
     pub source_sha256: String,
     /// Architecture -> SHA-256 of the executable.
     pub executables: BTreeMap<String, String>,
+    /// Font files the test asked for ([`FONTS_DIRECTIVE`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fonts: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -428,6 +523,9 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
                 Imports::Foundation => {
                     cc.args(["-x", "objective-c", arc_flag, "-framework", "Foundation"]);
                 }
+                Imports::CoreText => {
+                    cc.args(["-framework", "CoreText", "-framework", "CoreGraphics", "-framework", "CoreFoundation"]);
+                }
             }
             let o = cc
                 .arg(format!("-ffile-prefix-map={}=.", repo.display()))
@@ -455,6 +553,7 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
             source: display_path(repo, &s.path),
             source_sha256: sha256::hex(&util::read(&s.path)?),
             executables,
+            fonts: font_files(&source_text),
         });
     }
     let m = BuildManifest {
@@ -709,10 +808,10 @@ fn signal_of(_status: std::process::ExitStatus) -> Option<i32> {
     None
 }
 
-/// Run `exe` once in a fresh, empty `scratch` directory (its current
-/// directory), with an empty environment, stdin at end of file and a
-/// timeout.
-pub fn run_once(exe: &Path, scratch: &Path, timeout: Duration) -> Observation {
+/// Run `exe` once in a fresh, empty `scratch` directory (its current directory)
+/// with `files` (name, source path) copied into it first, an empty environment,
+/// stdin at end of file and a timeout.
+pub fn run_once_with(exe: &Path, scratch: &Path, timeout: Duration, files: &[(String, PathBuf)]) -> Observation {
     use std::io::Read;
     use std::process::Stdio;
     let fail = |status: &str, reason: String| Observation {
@@ -728,6 +827,12 @@ pub fn run_once(exe: &Path, scratch: &Path, timeout: Duration) -> Observation {
     }
     if let Err(e) = util::create_dir(scratch) {
         return fail("error", e);
+    }
+    for (name, src) in files {
+        if let Err(e) = std::fs::copy(src, scratch.join(name)) {
+            let _ = std::fs::remove_dir_all(scratch);
+            return fail("error", format!("could not copy {} into the scratch directory: {e}", src.display()));
+        }
     }
     let child = Command::new(exe)
         .env_clear()
@@ -806,6 +911,23 @@ pub fn run(repo: &Path, bin_dir: &Path, runs: u32, timeout: Duration) -> Result<
     let mut tests = Vec::new();
     for t in &m.tests {
         let mut results = BTreeMap::new();
+        let mut files = Vec::new();
+        if !t.fonts.is_empty() {
+            let dir = font_dir(repo).ok_or_else(|| {
+                format!(
+                    "{} needs font files ({}) but none were found: run `cargo xtask fonts fetch` or set POLY_FONT_DIR",
+                    t.name,
+                    t.fonts.join(", ")
+                )
+            })?;
+            for f in &t.fonts {
+                let p = dir.join(f);
+                if !p.is_file() {
+                    return Err(format!("{}: font file {} not found in {}", t.name, f, dir.display()));
+                }
+                files.push((f.clone(), p));
+            }
+        }
         for arch in ARCHES {
             let exe = bin_dir.join(arch).join(&t.name);
             let sha = t.executables.get(arch).cloned();
@@ -814,7 +936,7 @@ pub fn run(repo: &Path, bin_dir: &Path, runs: u32, timeout: Duration) -> Result<
             }
             let mut observations = Vec::new();
             for i in 0..runs {
-                let o = run_once(&exe, &scratch_root.join(format!("{}-{arch}-{i}", t.name)), timeout);
+                let o = run_once_with(&exe, &scratch_root.join(format!("{}-{arch}-{i}", t.name)), timeout, &files);
                 let unavailable = o.status == "unavailable";
                 observations.push(o);
                 if unavailable {
@@ -1014,6 +1136,27 @@ mod tests {
     }
 
     #[test]
+    fn the_coretext_directive_symbols_and_fonts() {
+        assert_eq!(Imports::of_source("/* poly-mac: coretext */\n"), Imports::CoreText);
+        assert_eq!(Imports::of_source("// poly-mac: corefoundation\n"), Imports::CoreFoundation);
+        for name in [
+            "_CTFontCreateWithName",
+            "_kCTFontAttributeName",
+            "_CGBitmapContextCreate",
+            "_kCGColorSpaceGenericGrayGamma2_2",
+            "_CFRetain",
+        ] {
+            assert!(is_coretext_symbol(name), "{name}");
+        }
+        for name in ["_getpid", "_NSLog", "_objc_msgSend"] {
+            assert!(!is_coretext_symbol(name), "{name}");
+        }
+        let src = "/* poly-mac: coretext\n * poly-mac: fonts DejaVuSans.ttf DejaVuSans-Bold.ttf */\n// poly-mac: fonts ../evil.ttf x.otf DejaVuSans.ttf\nint x;\n";
+        assert_eq!(font_files(src), ["DejaVuSans.ttf", "DejaVuSans-Bold.ttf"]);
+        assert!(font_files("const char *s = \"poly-mac: fonts a.ttf\";\n").is_empty());
+    }
+
+    #[test]
     fn the_foundation_directive_and_symbols() {
         assert_eq!(Imports::of_source("/* poly-mac: foundation */\n"), Imports::Foundation);
         assert_eq!(Imports::of_source("// poly-mac: corefoundation\n"), Imports::CoreFoundation);
@@ -1114,7 +1257,7 @@ mod tests {
         let m = build(&crate::repo_root(), &base.join("bin8"), &sources_in(&impure).unwrap()).unwrap();
         assert_eq!(m.tests[0].executables.len(), 2);
         // The arm64 program runs here and passes its (empty) checks.
-        let o = run_once(&base.join("bin/arm64/pure_one"), &base.join("scratch"), Duration::from_secs(10));
+        let o = run_once_with(&base.join("bin/arm64/pure_one"), &base.join("scratch"), Duration::from_secs(10), &[]);
         assert_eq!((o.status.as_str(), o.exit_code), ("ran", Some(0)), "{o:?}");
         assert_eq!(o.stdout, b"summary 0 passed, 0 failed\n");
         assert!(!base.join("scratch").exists());
