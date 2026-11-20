@@ -25,6 +25,14 @@ pub mod kern {
     pub const KERN_TERMINATED: u32 = 37;
     pub const KERN_NOT_WAITING: u32 = 48;
     pub const KERN_OPERATION_TIMED_OUT: u32 = 49;
+    /// `MIG_TYPE_ERROR` (`mach/mig_errors.h`): the client's type check
+    /// failed.
+    pub const MIG_TYPE_ERROR: u32 = -300i32 as u32;
+    /// Not a Mach value: Poly's mark for a port guard violation, which ends
+    /// the calling process with SIGKILL instead of returning (the
+    /// mach_port_guard and mach_port_destruct sheets). Never reaches a
+    /// program.
+    pub const POLY_GUARD_VIOLATION: u32 = 0x504f_4b49;
 }
 
 /// Port names, rights and types (`mach/port.h`).
@@ -49,6 +57,68 @@ pub mod port {
     pub const MACH_PORT_UREFS_MAX: u32 = 0xffff;
     /// `MACH_PORT_QLIMIT_DEFAULT` (`MACH_PORT_QLIMIT_BASIC`).
     pub const MACH_PORT_QLIMIT_DEFAULT: usize = 5;
+    /// `MACH_PORT_QLIMIT_MAX` (`MACH_PORT_QLIMIT_LARGE`).
+    pub const MACH_PORT_QLIMIT_MAX: u32 = 1024;
+
+    /// `mach_port_flavor_t` values.
+    pub const MACH_PORT_LIMITS_INFO: u32 = 1;
+    pub const MACH_PORT_RECEIVE_STATUS: u32 = 2;
+    pub const MACH_PORT_DNREQUESTS_SIZE: u32 = 3;
+    /// `MACH_PORT_RECEIVE_STATUS_COUNT`: the words of `mach_port_status_t`.
+    pub const MACH_PORT_RECEIVE_STATUS_COUNT: u32 = 10;
+
+    /// `mach_port_options_t` flags (`MPO_*`).
+    pub const MPO_CONTEXT_AS_GUARD: u32 = 0x01;
+    pub const MPO_QLIMIT: u32 = 0x02;
+    pub const MPO_INSERT_SEND_RIGHT: u32 = 0x10;
+    pub const MPO_STRICT: u32 = 0x20;
+}
+
+/// Notification message ids (`mach/notify.h`).
+pub mod notify {
+    pub const MACH_NOTIFY_PORT_DELETED: u32 = 0o101;
+    pub const MACH_NOTIFY_PORT_DESTROYED: u32 = 0o105;
+    pub const MACH_NOTIFY_NO_SENDERS: u32 = 0o106;
+    pub const MACH_NOTIFY_SEND_ONCE: u32 = 0o107;
+    pub const MACH_NOTIFY_DEAD_NAME: u32 = 0o110;
+}
+
+/// The bootstrap server (`servers/bootstrap_defs.h` for the results).
+///
+/// The messages are Poly's own: Poly's libSystem is the only client, and
+/// Apple's protocol with launchd is not public. A request is sent to the
+/// bootstrap port with a send-once reply right; its body is an NDR record,
+/// the name's length in bytes and the name (padded to 4 bytes). `REGISTER`
+/// is complex: one port descriptor (the send right registered) before the
+/// NDR record. The reply's id is the request's plus 100: for `CHECK_IN`
+/// and `LOOK_UP` one port descriptor (the right, or none), then an NDR
+/// record and the result; for `REGISTER` an NDR record and the result.
+pub mod bootstrap {
+    pub const BOOTSTRAP_CHECK_IN: u32 = 0x504f_4200;
+    pub const BOOTSTRAP_LOOK_UP: u32 = 0x504f_4201;
+    pub const BOOTSTRAP_REGISTER: u32 = 0x504f_4202;
+
+    pub const BOOTSTRAP_SUCCESS: u32 = 0;
+    pub const BOOTSTRAP_NOT_PRIVILEGED: u32 = 1100;
+    pub const BOOTSTRAP_NAME_IN_USE: u32 = 1101;
+    pub const BOOTSTRAP_UNKNOWN_SERVICE: u32 = 1102;
+    pub const BOOTSTRAP_SERVICE_ACTIVE: u32 = 1103;
+    pub const BOOTSTRAP_BAD_COUNT: u32 = 1104;
+    pub const BOOTSTRAP_NO_MEMORY: u32 = 1105;
+
+    /// The queue limit of a port bootstrap_check_in makes (the sheet).
+    pub const CHECK_IN_QLIMIT: usize = 2;
+    /// The longest service name Poly keeps.
+    pub const NAME_MAX: usize = 1024;
+}
+
+/// Task special ports (`mach/task_special_ports.h`).
+pub mod special {
+    pub const TASK_KERNEL_PORT: u32 = 1;
+    pub const TASK_HOST_PORT: u32 = 2;
+    pub const TASK_NAME_PORT: u32 = 3;
+    pub const TASK_BOOTSTRAP_PORT: u32 = 4;
+    pub const TASK_MAX_SPECIAL_PORT: u32 = 11;
 }
 
 /// Messages (`mach/message.h`).
@@ -147,6 +217,10 @@ pub mod trap {
     pub const MACH_PORT_MOD_REFS: u64 = 19;
     pub const MACH_PORT_MOVE_MEMBER: u64 = 20;
     pub const MACH_PORT_INSERT_RIGHT: u64 = 21;
+    pub const MACH_PORT_INSERT_MEMBER: u64 = 22;
+    pub const MACH_PORT_EXTRACT_MEMBER: u64 = 23;
+    pub const MACH_PORT_CONSTRUCT: u64 = 24;
+    pub const MACH_PORT_DESTRUCT: u64 = 25;
     pub const MACH_REPLY_PORT: u64 = 26;
     pub const THREAD_SELF: u64 = 27;
     pub const TASK_SELF: u64 = 28;
@@ -159,7 +233,14 @@ pub mod trap {
     pub const SEMAPHORE_WAIT_SIGNAL: u64 = 37;
     pub const SEMAPHORE_TIMEDWAIT: u64 = 38;
     pub const SEMAPHORE_TIMEDWAIT_SIGNAL: u64 = 39;
+    pub const MACH_PORT_GET_ATTRIBUTES: u64 = 40;
+    pub const MACH_PORT_GUARD: u64 = 41;
+    pub const MACH_PORT_UNGUARD: u64 = 42;
+    pub const TASK_NAME_FOR_PID: u64 = 44;
+    pub const TASK_FOR_PID: u64 = 45;
+    pub const PID_FOR_TASK: u64 = 46;
     pub const MACH_PORT_TYPE: u64 = 76;
+    pub const MACH_PORT_REQUEST_NOTIFICATION: u64 = 77;
     pub const MACH_TIMEBASE_INFO: u64 = 89;
     pub const MACH_WAIT_UNTIL: u64 = 90;
 }

@@ -138,6 +138,15 @@ pub struct ThreadStart {
     pub flags: u32,
 }
 
+/// Another process, as task_name_for_pid sees it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Peer {
+    /// It runs (it has not exited; a zombie does not run).
+    pub running: bool,
+    /// It is the caller's parent or one of its children.
+    pub related: bool,
+}
+
 pub trait XnuKernel {
     fn task(&self) -> TaskId;
     fn thread(&self) -> ThreadId;
@@ -208,6 +217,12 @@ pub trait XnuKernel {
     fn thread_entry_registered(&self) -> bool;
     /// Start a thread at the registered entry point; its pthread address.
     fn create_thread(&mut self, start: ThreadStart) -> Result<u64, u32>;
+
+    /// The process `pid`, if there is one.
+    fn peer(&self, pid: i32) -> Option<Peer> {
+        let _ = pid;
+        None
+    }
 
     /// The calling thread's user registers as it entered the kernel (for
     /// thread_get_state of itself); `None` where the kernel cannot say.
