@@ -405,6 +405,7 @@ fn run_first(
     }
     // The record goes out before the program's first instruction runs.
     testrun::init(path);
+    crate::timeline::name_process(prepared.process().pid, &args.iter().fold(String::from(path), |l, a| l + " " + a));
     let process = prepared.start()?;
     let status = if init { crate::testinit::wait(&process) } else { process.wait() };
     Ok((process.pid, status))

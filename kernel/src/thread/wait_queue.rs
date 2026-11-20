@@ -39,6 +39,7 @@ impl WaitQueue {
                 if ready() {
                     return;
                 }
+                crate::timeline::blocking_on(self as *const WaitQueue as u64);
                 // SAFETY: THREADS is locked.
                 let q = unsafe { &mut *self.0.get() };
                 t.sched.block_current(this_cpu(), q).expect("an idle thread cannot sleep")
@@ -70,6 +71,7 @@ impl WaitQueue {
                 }
                 t.timeouts[me] = Some(Timeout { deadline: deadline_ns, queue: self as *const WaitQueue as usize });
                 NEXT_WAKE.fetch_min(deadline_ns, SeqCst);
+                crate::timeline::blocking_on(self as *const WaitQueue as u64);
                 // SAFETY: THREADS is locked.
                 let q = unsafe { &mut *self.0.get() };
                 t.sched.block_current(this_cpu(), q).expect("an idle thread cannot sleep")
@@ -84,7 +86,11 @@ impl WaitQueue {
         let (woke, kicks) = {
             let mut t = THREADS.lock();
             // SAFETY: THREADS is locked.
-            let woke = t.sched.wake_one(unsafe { &mut *self.0.get() }).is_some();
+            let woke = t.sched.wake_one(unsafe { &mut *self.0.get() });
+            if let Some(id) = woke {
+                crate::timeline::woke(super::ident_of(&t, id));
+            }
+            let woke = woke.is_some();
             (woke, t.sched.take_kicks())
         };
         kick(kicks);
@@ -97,7 +103,12 @@ impl WaitQueue {
         let (n, kicks) = {
             let mut t = THREADS.lock();
             // SAFETY: THREADS is locked.
-            let n = t.sched.wake_all(unsafe { &mut *self.0.get() });
+            let q = unsafe { &mut *self.0.get() };
+            let mut n = 0;
+            while let Some(id) = t.sched.wake_one(q) {
+                crate::timeline::woke(super::ident_of(&t, id));
+                n += 1;
+            }
             (n, t.sched.take_kicks())
         };
         kick(kicks);

@@ -48,6 +48,7 @@ mod testinit;
 mod testrun;
 mod thread;
 mod time;
+mod timeline;
 mod tty;
 mod user;
 mod vdso;
@@ -163,6 +164,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     keyboard::refresh_leds();
     display::init(&boot);
     profile::init(&boot);
+    timeline::init(&boot);
     fs::init(&boot, initrd);
     // /dev/dri on the virtio GPU the display found (ADR 0108).
     drm::init(&boot);

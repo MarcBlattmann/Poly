@@ -34,7 +34,7 @@ use crate::thread::{self, WaitQueue};
 use crate::user::Memory;
 use alloc::collections::BTreeMap;
 use alloc::sync::{Arc, Weak};
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use poly_ntobj::ProcessId;
 use poly_personality_nt::io::{IoState, default_volumes};
 use poly_personality_nt::system::NtSystem;
@@ -56,6 +56,26 @@ static WORKERS: Mutex<BTreeMap<u32, Arc<Worker>>> = Mutex::new(BTreeMap::new());
 /// to user mode only after its status block is written. Taken before the
 /// NT lock and never while holding it.
 static DRAINING: Mutex<()> = Mutex::new(());
+
+/// Completions popped from the queue and not yet delivered (memory written, waiters woken). Raised
+/// under the NT lock in the same look that pops, so a look that finds the queue empty and this
+/// at 0 knows every completion queued before it was delivered (ADR 0247).
+static IN_DELIVERY: AtomicUsize = AtomicUsize::new(0);
+
+/// Per thread (by slot): the thread queued an I/O completion in its current system call, so it
+/// waits for every delivery before it returns ([`after_call`]).
+static OWES_DRAIN: [AtomicBool; crate::thread::MAX_THREADS] =
+    [const { AtomicBool::new(false) }; crate::thread::MAX_THREADS];
+
+/// The current thread queued a completion (under the NT lock, [`super::with`]).
+pub(super) fn owe_drain() {
+    OWES_DRAIN[crate::thread::current().slot()].store(true, Ordering::Relaxed);
+}
+
+/// [`DRAINING`]'s queue, for the timeline.
+pub(super) fn draining_queue() -> u64 {
+    DRAINING.queue_address()
+}
 
 /// Put the VFS into the NT namespace (`\Device\HarddiskVolume<N>`, `\??\C:`,
 /// `\??\Z:`, `\Device\PolyPipe`). Called once, when the NT state is made.
@@ -92,11 +112,20 @@ pub(super) fn unregister(pid: u32) {
 /// After an NT system call (or anything else that may have queued or
 /// completed requests): wake the workers with work, deliver completions.
 pub(super) fn after_call() {
-    let kicks = with(|s| s.sys.io.take_kicks());
+    let (kicks, queued) = with(|s| (s.sys.io.take_kicks(), s.sys.io.has_completions()));
     for dev in kicks {
         kick(dev);
     }
-    drain();
+    // A call that queued a completion delivers it, or waits until the thread delivering it is
+    // done, before it returns: its status block is written by then. Any other call only helps
+    // while no thread is delivering, and never waits: [`DRAINING`] on every call put every NT
+    // thread of every process in one queue (ADR 0247).
+    let owed = OWES_DRAIN[crate::thread::current().slot()].swap(false, Ordering::Relaxed);
+    if owed {
+        drain();
+    } else if queued && let Some(serial) = DRAINING.try_lock() {
+        deliver_all(serial);
+    }
     kill_pending();
 }
 
@@ -157,8 +186,18 @@ fn worker_main(arg: usize) -> usize {
 
 /// Deliver every queued completion.
 pub(super) fn drain() {
-    let _serial = DRAINING.lock();
-    while let Some(c) = with(|s| s.sys.io.pop_completion()) {
+    deliver_all(DRAINING.lock());
+}
+
+/// [`drain`]'s work, with [`DRAINING`] held.
+fn deliver_all(_serial: crate::sync::MutexGuard<'_, ()>) {
+    while let Some(c) = with(|s| {
+        let c = s.sys.io.pop_completion();
+        if c.is_some() {
+            IN_DELIVERY.fetch_add(1, Ordering::SeqCst);
+        }
+        c
+    }) {
         let memory = MEMORY.lock().get(&c.process.0).and_then(Weak::upgrade);
         if let Some(m) = &memory {
             if let Some((addr, data)) = &c.data
@@ -190,6 +229,7 @@ pub(super) fn drain() {
         if let Some((thread, apc)) = apc {
             let _ = sched::queue_apc(thread, apc);
         }
+        IN_DELIVERY.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
