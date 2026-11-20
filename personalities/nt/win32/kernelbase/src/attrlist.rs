@@ -125,6 +125,8 @@ pub struct Parsed {
     pub jobs: Vec<usize>,
     /// `PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES`: the caller's `SECURITY_CAPABILITIES` (ADR 0196).
     pub security_capabilities: Option<usize>,
+    /// `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`: the handle of the process the child is made a child of.
+    pub parent: Option<usize>,
 }
 
 /// The attributes `CreateProcessW` uses, read from `list`.
@@ -150,6 +152,13 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
                     .collect()
             };
             match attribute {
+                // `lpValue` points at the handle (Learn, "UpdateProcThreadAttribute").
+                PARENT_PROCESS => {
+                    if value == 0 {
+                        return Err(ERROR_INVALID_PARAMETER);
+                    }
+                    out.parent = Some((value as *const usize).read_unaligned());
+                }
                 HANDLE_LIST => out.handle_list = Some(words()),
                 JOB_LIST => out.jobs = words(),
                 SECURITY_CAPABILITIES => {

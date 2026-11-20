@@ -7,6 +7,7 @@
 resolver = "3"
 members = [
     "crates/poly-a64",
+    "crates/poly-a64-jit",
     "crates/poly-abi",
     "crates/poly-acpi",
     "crates/poly-audio",
@@ -130,6 +131,7 @@ rust-version = "1.97"
 
 [workspace.dependencies]
 poly-a64 = { path = "crates/poly-a64" }
+poly-a64-jit = { path = "crates/poly-a64-jit" }
 poly-abi = { path = "crates/poly-abi" }
 poly-acpi = { path = "crates/poly-acpi" }
 poly-audio = { path = "crates/poly-audio" }

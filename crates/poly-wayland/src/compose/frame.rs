@@ -24,6 +24,11 @@ use super::{Rect, Scale};
 pub const TITLE_HEIGHT: i32 = 24;
 /// The border's width on every side.
 pub const BORDER: i32 = 1;
+/// How far beyond the visible border a frame still takes the pointer for resizing (invisible,
+/// as Windows' sizing border is): border and reach together are 8 logical pixels, Windows'
+/// sizing border of an overlapped window at 96 DPI (`SM_CXFRAME` + `SM_CXPADDEDBORDER`, 4 + 4)
+/// and 16 pixels at 200 % (Windows: 13 at 192 DPI). ADR 0234.
+pub const RESIZE_REACH: i32 = 7;
 /// The side of the title bar's buttons (close, maximize, minimize).
 pub const CLOSE_SIZE: i32 = 16;
 /// Space before the title and around the close button.

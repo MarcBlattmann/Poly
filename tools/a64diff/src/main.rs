@@ -12,6 +12,9 @@
 //! a64diff run [NAME...]             tests/a64/*.s: build, run both, compare output
 //! a64diff fuzz [--seed N] [--blocks N] [--family NAME] [--keep DIR]
 //!                                   generated one-instruction blocks with random state
+//! a64diff native [--seed N] [--blocks N] [--family NAME] [--keep DIR] [--verbose N]
+//!                                   the same blocks on the host's own arm64 CPU
+//!                                   (an Apple silicon Mac) instead of qemu
 //! ```
 //!
 //! On a host that is not Linux it prints that and exits successfully, so it
@@ -24,6 +27,7 @@
 
 mod elf;
 mod fuzz;
+mod native;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -133,6 +137,16 @@ impl Tools {
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("native") {
+        return match parse_native(&args[1..]).and_then(|o| native::run(&o)) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::from(1),
+            Err(e) => {
+                eprintln!("a64diff: {e}");
+                ExitCode::from(2)
+            }
+        };
+    }
     if !cfg!(target_os = "linux") {
         println!("a64diff needs Linux (qemu-aarch64 user mode and a static arm64 linker); skipping on this host.");
         return ExitCode::SUCCESS;
@@ -270,6 +284,23 @@ fn parse_fuzz(args: &[String]) -> Result<FuzzOpts, String> {
     Ok(o)
 }
 
+fn parse_native(args: &[String]) -> Result<native::Opts, String> {
+    let mut o = native::Opts { seed: 1, blocks: 4000, family: None, keep: None, verbose: 0 };
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        let mut val = || it.next().cloned().ok_or(format!("{a} needs a value"));
+        match a.as_str() {
+            "--seed" => o.seed = val()?.parse().map_err(|e| format!("--seed: {e}"))?,
+            "--blocks" => o.blocks = val()?.parse().map_err(|e| format!("--blocks: {e}"))?,
+            "--family" => o.family = Some(val()?),
+            "--keep" => o.keep = Some(PathBuf::from(val()?)),
+            "--verbose" => o.verbose = val()?.parse().map_err(|e| format!("--verbose: {e}"))?,
+            _ => return Err(format!("unknown option {a}")),
+        }
+    }
+    Ok(o)
+}
+
 fn words_of(b: &[u8]) -> Vec<u64> {
     b.chunks_exact(8).map(|c| u64::from_le_bytes(c.try_into().unwrap())).collect()
 }
@@ -292,7 +323,7 @@ fn subset_program(cases: &[(Case, State)], tags: &[u32], idx: &[usize]) -> Strin
         .map(|&i| {
             let (c, s) = &cases[i];
             (
-                Case { family: c.family, setup: c.setup.clone(), body: c.body.clone() },
+                Case { family: c.family, base5: c.base5, setup: c.setup.clone(), body: c.body.clone() },
                 State { x: s.x, sp: s.sp, nzcv: s.nzcv, fpcr: s.fpcr, v: s.v, window: s.window },
             )
         })

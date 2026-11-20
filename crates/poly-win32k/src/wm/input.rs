@@ -543,6 +543,34 @@ impl Wm {
         self.fg_return = self.keeper;
     }
 
+    /// The shell window (`GetShellWindow`): in the interactive session, the lowest window of
+    /// another process on the desktop (GetKeyboardLayout.yaml `other_threads`: a thread of the
+    /// shell); none in session 0. Messages to it run in their sender as for the other stand-in
+    /// windows, but once the kernel has started the shell process (`explorer.exe`, ADR 0222) the
+    /// window answers as that process's and thread's (`GetWindowThreadProcessId`): a program finds
+    /// the shell's process and its token through it (CreateProcessWithTokenW.yaml `shell_token`,
+    /// ShellDispatch.ShellExecute.yaml `caller_facts`).
+    pub fn shell_window(&self) -> u32 {
+        if self.keeper == 0 {
+            return 0;
+        }
+        let Some(d) = self.get(u64::from(self.desktop)) else { return 0 };
+        d.children.iter().rev().copied().find(|&c| self.is_foreign(c)).unwrap_or(0)
+    }
+
+    /// The shell process's id and the thread its window answers as (`Wm::shell_window`).
+    pub fn set_shell_process(&mut self, pid: u32, tid: u32) {
+        self.shell_owner = Some((pid, tid));
+    }
+
+    /// The process and thread window `h` (of thread `thread`) answers as.
+    pub(super) fn reported_thread(&self, h: u32, thread: Key) -> Key {
+        match self.shell_owner {
+            Some(owner) if foreign(thread) && h == self.shell_window() => owner,
+            _ => thread,
+        }
+    }
+
     /// A window of another process, on top of its band.
     fn add_foreign(&mut self, key: Key, class: usize, style: u32, ex: u32, rect: Rect) -> u32 {
         let mut k = Window::new(key, class, style, rect);
