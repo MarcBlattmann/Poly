@@ -1,6 +1,6 @@
 [package]
 name = "mmdevapi"
-description = "Our mmdevapi.dll (audio plan W2): the home of the audio endpoint classes (MMDeviceEnumerator), a scaffold until W2's sheets fill it"
+description = "Our mmdevapi.dll (audio plan W2): WASAPI shared-mode render (the device enumerator, the render endpoint, the audio client and its services) on Poly's audio device"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,6 +12,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 poly-win32-rt = { path = "../rt" }
+poly-com = { path = "../../../../crates/poly-com" }
+poly-kernelbase = { path = "../../../../crates/poly-kernelbase" }
+poly-audio = { path = "../../../../crates/poly-audio" }
 
 [lints]
 workspace = true

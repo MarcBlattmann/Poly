@@ -17,7 +17,11 @@ const S_FALSE: i32 = 1;
 
 /// `DllGetClassObject` (Learn): no class is served yet; the out pointer is cleared.
 #[unsafe(no_mangle)]
-pub unsafe extern "system" fn DllGetClassObject(_clsid: *const c_void, _iid: *const c_void, out: *mut *mut c_void) -> i32 {
+pub unsafe extern "system" fn DllGetClassObject(
+    _clsid: *const c_void,
+    _iid: *const c_void,
+    out: *mut *mut c_void,
+) -> i32 {
     if out.is_null() {
         return E_POINTER;
     }

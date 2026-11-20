@@ -85,8 +85,8 @@ the personality share one definition:
 - A program sees only what Poly's DLLs give it; the device is not a Windows interface and no Windows program
   should open it itself.
 - One more client kind in the server: its lock order is the card's lock, then a stream's.
-- **Played means played by the device.** The mixer runs several device periods ahead of the speaker (four of 20 ms
-  on virtio-sound). A stream's frames count as played when the device finished the period they went out in: each
+- **Played means played by the device.** The mixer runs several device periods ahead of the speaker (six of 10 ms
+  since [ADR 0259](0259-wasapi-an-engine-per-client-on-10-ms-device-periods.md); four of 20 ms before). A stream's frames count as played when the device finished the period they went out in: each
   stream notes its frames per period in flight, and the server credits them as the device frees periods (all of
   them when it stops). `queued` stays the ring's occupancy (written and not yet taken), so a writer sees room as
   soon as the mixer took frames. A first version counted frames when the mixer took them; `waveOut`'s sheets

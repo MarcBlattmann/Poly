@@ -314,6 +314,9 @@ dependencies = [
 name = "mmdevapi"
 version = "0.0.1"
 dependencies = [
+ "poly-audio",
+ "poly-com",
+ "poly-kernelbase",
  "poly-win32-rt",
 ]
 

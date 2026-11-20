@@ -446,14 +446,16 @@ fn session_of(source: &Path, name: &str) -> Option<String> {
 
 /// What a test needs of the machine's sound (ADR 0244): `none` when its first line says
 /// `NO SOUND DEVICE`; `card` when it imports a `winmm.dll` sound function (`waveOut*`,
-/// `waveIn*`, `midi*`, `mixer*`, `PlaySound*`: the oracle has a sound card); else nothing.
+/// `waveIn*`, `midi*`, `mixer*`, `PlaySound*`) or is a test of a `mmdevapi.dll` sheet (WASAPI, which
+/// it reaches through `CoCreateInstance`; the oracle has a sound card); else nothing.
 pub fn sound_of(source: &Path, imports: &BTreeMap<String, Vec<String>>) -> Option<String> {
     let first = std::fs::read_to_string(source).ok()?.lines().next().map(str::to_string).unwrap_or_default();
     if first.contains("NO SOUND DEVICE") {
         return Some("none".into());
     }
     let sound = |n: &String| ["waveOut", "waveIn", "midi", "mixer", "PlaySound"].iter().any(|p| n.starts_with(p));
-    imports.get("winmm.dll").is_some_and(|names| names.iter().any(sound)).then(|| "card".into())
+    let wasapi = source.ancestors().any(|d| d.file_name().is_some_and(|n| n.eq_ignore_ascii_case("mmdevapi.dll")));
+    (wasapi || imports.get("winmm.dll").is_some_and(|names| names.iter().any(sound))).then(|| "card".into())
 }
 
 /// QEMU's arguments for a test's sound ([`sound_of`]): for `card`, a sound card whose output goes
@@ -1842,6 +1844,16 @@ mod tests {
         assert_eq!(sound_of(&plain, &wave).as_deref(), Some("card"));
         assert_eq!(sound_of(&plain, &timer), None);
         assert_eq!(sound_of(&plain, &BTreeMap::new()), None);
+        let sheet = dir.join("mmdevapi.dll").join("IMMDevice.tests");
+        std::fs::create_dir_all(&sheet).unwrap();
+        let wasapi = sheet.join("ws.rs");
+        std::fs::write(
+            &wasapi,
+            "//! IMMDevice: activates a client.
+",
+        )
+        .unwrap();
+        assert_eq!(sound_of(&wasapi, &BTreeMap::new()).as_deref(), Some("card"));
         std::fs::remove_dir_all(&dir).ok();
         assert!(sound_devices(None, true).is_empty());
         assert!(sound_devices(Some("none"), true).is_empty());
