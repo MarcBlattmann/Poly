@@ -1,9 +1,11 @@
 //! Security descriptors (`winnt.h`).
 //!
-//! The absolute form, `SECURITY_DESCRIPTOR`, on x64: `Revision` (byte),
-//! `Sbz1`, `Control` (word), then four pointers at 8, 16, 24 and 32 —
-//! `Owner`, `Group`, `Sacl`, `Dacl` — 40 bytes
-//! (`SECURITY_DESCRIPTOR_MIN_LENGTH`). The self-relative form,
+//! The absolute form, `SECURITY_DESCRIPTOR`: `Revision` (byte), `Sbz1`,
+//! `Control` (word), then four pointers — `Owner`, `Group`, `Sacl`, `Dacl` —
+//! at 8, 16, 24 and 32 on x64 (40 bytes, `SECURITY_DESCRIPTOR_MIN_LENGTH`)
+//! and at 4, 8, 12 and 16 in a 32-bit process (20 bytes): the pointers are
+//! aligned to their own size ([`abs_offsets`]). A 32-bit `kernelbase` with the
+//! x64 offsets wrote 40 bytes into a caller's 20 (`wow64-gui-overrun`). The self-relative form,
 //! `SECURITY_DESCRIPTOR_RELATIVE`, has `SE_SELF_RELATIVE` in its control
 //! and four `DWORD` offsets from its start at 4, 8, 12 and 16 (0: absent),
 //! 20 bytes, followed by the parts: `MakeSelfRelativeSD` writes the SACL, the
@@ -21,15 +23,28 @@ use alloc::vec::Vec;
 
 /// `SECURITY_DESCRIPTOR_REVISION`.
 pub const SECURITY_DESCRIPTOR_REVISION: u8 = 1;
-/// `SECURITY_DESCRIPTOR_MIN_LENGTH` (`sizeof(SECURITY_DESCRIPTOR)`, x64).
-pub const SECURITY_DESCRIPTOR_MIN_LENGTH: usize = 40;
+/// The bytes of a pointer in the process this code runs in.
+const PTR: usize = core::mem::size_of::<usize>();
+/// `SECURITY_DESCRIPTOR_MIN_LENGTH` (`sizeof(SECURITY_DESCRIPTOR)`): 40 on x64, 20 on x86.
+pub const SECURITY_DESCRIPTOR_MIN_LENGTH: usize = abs_length(PTR);
 /// `sizeof(SECURITY_DESCRIPTOR_RELATIVE)`.
 pub const RELATIVE_HEADER: usize = 20;
-/// Offsets of the absolute form's pointers.
-pub const ABS_OWNER: usize = 8;
-pub const ABS_GROUP: usize = 16;
-pub const ABS_SACL: usize = 24;
-pub const ABS_DACL: usize = 32;
+/// Offsets of the absolute form's pointers in this process (8, 16, 24, 32 on x64; 4, 8, 12, 16 on x86).
+pub const ABS_OWNER: usize = abs_offsets(PTR)[0];
+pub const ABS_GROUP: usize = abs_offsets(PTR)[1];
+pub const ABS_SACL: usize = abs_offsets(PTR)[2];
+pub const ABS_DACL: usize = abs_offsets(PTR)[3];
+
+/// The offsets of `Owner`, `Group`, `Sacl` and `Dacl` in an absolute descriptor of a process
+/// whose pointers are `ptr` bytes (4 or 8): the 4-byte header, then the pointers aligned to their size.
+pub const fn abs_offsets(ptr: usize) -> [usize; 4] {
+    [ptr, 2 * ptr, 3 * ptr, 4 * ptr]
+}
+
+/// `sizeof(SECURITY_DESCRIPTOR)` in a process whose pointers are `ptr` bytes.
+pub const fn abs_length(ptr: usize) -> usize {
+    5 * ptr
+}
 /// Offsets of the self-relative form's offsets.
 pub const REL_OWNER: usize = 4;
 pub const REL_GROUP: usize = 8;
@@ -177,7 +192,7 @@ impl SdPtr {
 /// `InitializeSecurityDescriptor` / `RtlCreateSecurityDescriptor`.
 ///
 /// # Safety
-/// 40 bytes at `sd` are writable.
+/// [`SECURITY_DESCRIPTOR_MIN_LENGTH`] bytes at `sd` are writable.
 pub unsafe fn create(sd: SdPtr, revision: u32) -> SecResult<()> {
     if revision != u32::from(SECURITY_DESCRIPTOR_REVISION) {
         return Err(SecErr::UnknownRevision);
@@ -644,6 +659,17 @@ pub unsafe fn make_absolute(
 
 #[cfg(test)]
 mod tests {
+
+    /// `winnt.h`: an absolute descriptor is 40 bytes on x64 (pointers at 8, 16, 24, 32) and 20 in
+    /// a 32-bit process (at 4, 8, 12, 16).
+    #[test]
+    fn the_absolute_layout_follows_the_pointer_size() {
+        assert_eq!((abs_length(8), abs_offsets(8)), (40, [8, 16, 24, 32]));
+        assert_eq!((abs_length(4), abs_offsets(4)), (20, [4, 8, 12, 16]));
+        assert_eq!(SECURITY_DESCRIPTOR_MIN_LENGTH, abs_length(core::mem::size_of::<usize>()));
+        assert_eq!([ABS_OWNER, ABS_GROUP, ABS_SACL, ABS_DACL], abs_offsets(core::mem::size_of::<usize>()));
+    }
+
     use super::*;
     use crate::sid::{builtin, local_system, world};
 

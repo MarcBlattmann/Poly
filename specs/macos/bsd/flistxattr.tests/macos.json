@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "flistx_basic",
+      "source_sha256": "afa9766218eb84a7d97a18c691d887f63fefe0a2a9f729e4b3b4157961e567b4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1c17c76db538c5cd4376d0f22d2bdcfab6bea4b8eededfb0abcc6e18b11f54c3",
+          "exit_code": 0,
+          "stdout": "ok a new file\nok has no attributes of its own\nok two names: user.alpha|user.beta in byte order\nok a NULL buffer gives the byte count of the full list\nok a buffer of exactly that size works\nok one byte short is ERANGE\nok a bad descriptor is EBADF\nok option 1 is EINVAL for the descriptor form\nok an unwritable buffer is EFAULT\nok a removal through the path shows in the list\nok a read-only descriptor lists too\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

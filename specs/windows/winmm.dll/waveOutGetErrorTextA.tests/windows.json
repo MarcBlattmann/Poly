@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_errtexta_codes",
+      "exe_sha256": "4d4f2ecc7134b43d9edb65aeaba0a08b36bee369e9bed445ef286f5f323ef043",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGV4dCBvZiAwID0gTU1TWVNFUlJfTk9FUlJPUiAiVGhlIHNwZWNpZmllZCBjb21tYW5kIHdhcyBjYXJyaWVkIG91dC4iCm9rIHdpZGUgcmVzdWx0Cm9rIGFuc2kgcmVzdWx0Cm9rIHNhbWUgdGV4dCBhcyB0aGUgd2lkZSBmb3JtCnRleHQgb2YgMiA9IE1NU1lTRVJSX05PRVJST1IgIkEgZGV2aWNlIElEIGhhcyBiZWVuIHVzZWQgdGhhdCBpcyBvdXQgb2YgcmFuZ2UgZm9yIHlvdXIgc3lzdGVtLiIKb2sgd2lkZSByZXN1bHQKb2sgYW5zaSByZXN1bHQKb2sgc2FtZSB0ZXh0IGFzIHRoZSB3aWRlIGZvcm0KdGV4dCBvZiA1ID0gTU1TWVNFUlJfTk9FUlJPUiAiVGhlIHNwZWNpZmllZCBkZXZpY2UgaGFuZGxlIGlzIGludmFsaWQuIgpvayB3aWRlIHJlc3VsdApvayBhbnNpIHJlc3VsdApvayBzYW1lIHRleHQgYXMgdGhlIHdpZGUgZm9ybQp0ZXh0IG9mIDExID0gTU1TWVNFUlJfTk9FUlJPUiAiQW4gaW52YWxpZCBwYXJhbWV0ZXIgd2FzIHBhc3NlZCB0byBhIHN5c3RlbSBmdW5jdGlvbi4iCm9rIHdpZGUgcmVzdWx0Cm9rIGFuc2kgcmVzdWx0Cm9rIHNhbWUgdGV4dCBhcyB0aGUgd2lkZSBmb3JtCnRleHQgb2YgMzIgPSBNTVNZU0VSUl9OT0VSUk9SICJUaGUgc3BlY2lmaWVkIGZvcm1hdCBpcyBub3Qgc3VwcG9ydGVkIG9yIGNhbm5vdCBiZSB0cmFuc2xhdGVkLiAgIgpvayB3aWRlIHJlc3VsdApvayBhbnNpIHJlc3VsdApvayBzYW1lIHRleHQgYXMgdGhlIHdpZGUgZm9ybQp0ZXh0IG9mIDMzID0gTU1TWVNFUlJfTk9FUlJPUiAiQ2Fubm90IHBlcmZvcm0gdGhpcyBvcGVyYXRpb24gd2hpbGUgbWVkaWEgZGF0YSBpcyBzdGlsbCBwbGF5aW5nLiIKb2sgd2lkZSByZXN1bHQKb2sgYW5zaSByZXN1bHQKb2sgc2FtZSB0ZXh0IGFzIHRoZSB3aWRlIGZvcm0KdGV4dCBvZiAzNCA9IE1NU1lTRVJSX05PRVJST1IgIlRoZSB3YXZlIGhlYWRlciB3YXMgbm90IHByZXBhcmVkLiAgVXNlIHRoZSBQcmVwYXJlIGZ1bmN0aW9uIHRvIHAiCm9rIHdpZGUgcmVzdWx0Cm9rIGFuc2kgcmVzdWx0Cm9rIHNhbWUgdGV4dCBhcyB0aGUgd2lkZSBmb3JtCmNvZGUgMjEgPSBNTVNZU0VSUl9CQURFUlJOVU0gKDkpCm9rIGNvZGUgMjEKb2sgdGhlIGJ1ZmZlciBob2xkcyBhbiBlbXB0eSBzdHJpbmcKc2l6ZSA2ID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgc2l6ZSA2CmN1dCB0ZXh0ICJDYW5ubyIKb2sgY3V0IHRvIGZpdmUgY2hhcmFjdGVycyBhbmQgYSB6ZXJvCm51bGwgYnVmZmVyID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIG51bGwgYnVmZmVyCnN1bW1hcnkgMjYgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "text of 0 = MMSYSERR_NOERROR \"The specified command was carried out.\"\nok wide result\nok ansi result\nok same text as the wide form\ntext of 2 = MMSYSERR_NOERROR \"A device ID has been used that is out of range for your system.\"\nok wide result\nok ansi result\nok same text as the wide form\ntext of 5 = MMSYSERR_NOERROR \"The specified device handle is invalid.\"\nok wide result\nok ansi result\nok same text as the wide form\ntext of 11 = MMSYSERR_NOERROR \"An invalid parameter was passed to a system function.\"\nok wide result\nok ansi result\nok same text as the wide form\ntext of 32 = MMSYSERR_NOERROR \"The specified format is not supported or cannot be translated.  \"\nok wide result\nok ansi result\nok same text as the wide form\ntext of 33 = MMSYSERR_NOERROR \"Cannot perform this operation while media data is still playing.\"\nok wide result\nok ansi result\nok same text as the wide form\ntext of 34 = MMSYSERR_NOERROR \"The wave header was not prepared.  Use the Prepare function to p\"\nok wide result\nok ansi result\nok same text as the wide form\ncode 21 = MMSYSERR_BADERRNUM (9)\nok code 21\nok the buffer holds an empty string\nsize 6 = MMSYSERR_NOERROR (0)\nok size 6\ncut text \"Canno\"\nok cut to five characters and a zero\nnull buffer = MMSYSERR_INVALPARAM (11)\nok null buffer\nsummary 26 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

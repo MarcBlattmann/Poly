@@ -118,6 +118,26 @@ pub fn leds(dev: usize) -> u64 {
 /// Device `dev` reports `events` (each type, code, value), which happened
 /// at `time_ns`. Interrupt handlers may call this.
 pub fn report_at(dev: usize, time_ns: u64, events: &[(u16, u16, i32)]) {
+    // The timeline's Pause key freezes it and reaches no program (ADR 0247).
+    if crate::timeline::input(events) {
+        let mut rest = [(0u16, 0u16, 0i32); 64];
+        let mut n = 0;
+        for &e in events {
+            if !(e.0 == 1 && e.1 == 119) && n < rest.len() {
+                rest[n] = e;
+                n += 1;
+            }
+        }
+        if rest[..n].iter().all(|e| e.0 == 0) {
+            return;
+        }
+        return deliver_report(dev, time_ns, &rest[..n]);
+    }
+    deliver_report(dev, time_ns, events);
+}
+
+/// [`report_at`]'s work.
+fn deliver_report(dev: usize, time_ns: u64, events: &[(u16, u16, i32)]) {
     let (d, armed) = {
         let mut h = HUB.lock();
         let before = NEXT_REPEAT.load(SeqCst);

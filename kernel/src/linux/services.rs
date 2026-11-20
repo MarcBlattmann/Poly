@@ -386,6 +386,18 @@ impl LinuxKernel for Thread<'_> {
 
     fn mmap(&mut self, r: &MapRequest) -> Result<u64, Errno> {
         let memory = self.memory()?;
+        // proc(5), `overcommit_memory` 0 (the default heuristic): "obvious overcommits of address
+        // space are refused". A writable private anonymous mapping bigger than all of RAM can
+        // never be backed (Poly has no swap): ENOMEM (ADR 0250). Without write access, or with
+        // MAP_NORESERVE, nothing is charged, as on Linux.
+        if matches!(r.backing, Backing::Anonymous)
+            && !r.shared
+            && r.prot.writable()
+            && !r.hints.no_reserve
+            && r.len / 4096 > crate::frames::FRAMES.lock().as_ref().map_or(u64::MAX, |f| f.total_frames())
+        {
+            return Err(Errno::ENOMEM);
+        }
         let prot = vm_prot(r.prot);
         let req = match r.backing {
             // Shared anonymous memory is a shared mapping of an object of

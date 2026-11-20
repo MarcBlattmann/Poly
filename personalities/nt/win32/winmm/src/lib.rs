@@ -1,4 +1,5 @@
-//! Our `winmm.dll` (ADR 0155): the timer functions Chrome calls at start-up. `timeGetTime` is
+//! Our `winmm.dll` (ADR 0155): the timer functions Chrome calls at start-up, and wave output
+//! (`waveOut*`, [`wave`]) on Poly's audio device (ADR 0244). `timeGetTime` is
 //! the milliseconds since the system started (the same clock as `GetTickCount`, but 1 ms
 //! resolution) and wraps like a `DWORD`; `timeBeginPeriod` and `timeEndPeriod` accept any period
 //! from 1 ms (Learn: both return `TIMERR_NOERROR` on success). The logic is
@@ -6,6 +7,8 @@
 
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
+
+extern crate alloc;
 
 use poly_kernelbase::winmm;
 use poly_win32_rt as _;
@@ -103,3 +106,4 @@ pub extern "system" fn winmm_main(_module: *mut u8, reason: u32, _reserved: *mut
 }
 
 mod apps;
+mod wave;

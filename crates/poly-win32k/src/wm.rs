@@ -80,6 +80,12 @@ const POINTER_MESSAGES: &[u32] = &[
 /// 0xFFFF, where none is).
 pub const DESKTOP_SET_POS: u32 = 0x5059_0001;
 
+/// The height of an overlapped window made with `CW_USEDEFAULT` for its size and position, from
+/// the height of the work area (both in the caller's units; ADR 0231).
+pub fn default_height(work_height: i32) -> i32 {
+    work_height * 3 / 4 - 21
+}
+
 /// The sender of the desktop's requests: no thread (process 0 is the
 /// system's desktop, thread 0 none of it).
 const DESKTOP_SENDER: Key = (SYSTEM_DESKTOP_PID, 0);
@@ -362,6 +368,11 @@ pub struct Wm {
     system_dpi: u32,
     /// The monitor's DPI now: the system DPI until the scale changes (ADR 0231).
     monitor_dpi: u32,
+    /// The session's shell process (`explorer.exe`'s stand-in, ADR 0222) and its thread: the
+    /// shell window answers as theirs (`Wm::shell_window`).
+    shell_owner: Option<Key>,
+    /// Which processes have looked at, or blocked on, an empty queue (ADR 0245).
+    input_idle: crate::idle::InputIdle,
 }
 
 impl Default for Wm {
@@ -430,6 +441,8 @@ impl Wm {
             thread_dpi: BTreeMap::new(),
             system_dpi: 96,
             monitor_dpi: 96,
+            shell_owner: None,
+            input_idle: crate::idle::InputIdle::default(),
         };
         // Index 0 is never a window.
         wm.slots.push(None);
@@ -661,10 +674,11 @@ impl Wm {
         let class = self.classes[w.class].as_ref();
         let (ox, oy) = self.parent_origin(h);
         let shift = |r: Rect| Rect::new(r.left + ox, r.top + oy, r.right + ox, r.bottom + oy);
+        let (pid, tid) = self.reported_thread(h, w.thread);
         Some(WinInfo {
             hwnd: h,
-            pid: w.thread.0,
-            tid: w.thread.1,
+            pid,
+            tid,
             style: w.style,
             ex_style: w.ex_style,
             window: shift(w.window_rel),
@@ -877,21 +891,29 @@ impl Wm {
         let (mut x, mut y, mut cx, mut cy) = (s.x, s.y, s.cx, s.cy);
         let default_size = overlapped && s.cx == CW_USEDEFAULT;
         if overlapped {
+            // In the caller's units (ADR 0231): with a default position the default size is 3/4 of
+            // the screen's width and 3/4 of the work area's height less 21 as the caller reads them
+            // (CreateWindowExW.yaml `cw_usedefault`: 768x555 on a 1024x768 screen;
+            // GetWindowRect.yaml `at_200_units`: 960x543 unaware, 1920x1107 aware at 200 %).
+            let u = self.units_of(ctx.key());
+            let screen_w = u.to_caller(self.screen.0);
+            let work_h = u.to_caller(self.display.work.bottom) - u.to_caller(self.display.work.top);
             let default_pos = x == CW_USEDEFAULT;
             if default_pos {
                 let step = 26 * (self.cascade % 8);
                 self.cascade += 1;
-                x = step;
-                y = step;
+                x = u.to_phys(step);
+                y = u.to_phys(step);
             }
             if cx == CW_USEDEFAULT {
-                if default_pos {
-                    cx = self.screen.0 * 3 / 4;
-                    cy = self.screen.1 * 3 / 4 - 21;
+                let (cx_c, cy_c) = if default_pos {
+                    (screen_w * 3 / 4, default_height(work_h))
                 } else {
-                    cx = self.screen.0 * 3 / 4 - x.max(0) / 2;
-                    cy = self.screen.1 * 3 / 4 - y.max(0) / 2;
-                }
+                    let (xc, yc) = (u.to_caller(x), u.to_caller(y));
+                    (screen_w * 3 / 4 - xc.max(0) / 2, u.to_caller(self.screen.1) * 3 / 4 - yc.max(0) / 2)
+                };
+                cx = u.to_phys(cx_c);
+                cy = u.to_phys(cy_c);
             }
         } else {
             if x == CW_USEDEFAULT {
@@ -1355,11 +1377,17 @@ impl Wm {
             parent as u32
         };
         let Some(pw) = self.get(u64::from(p)) else { return Reply::Handle { hwnd: 0 } };
+        // The class the caller can see (its own or a system one), else one another process
+        // registered: a search finds other processes' windows by their class too (Learn,
+        // "FindWindowW"; ADR 0231: a test finds the window of the copy of itself it started).
         let class_atom = match &class {
             None => None,
             Some(c) => match self.find_class(ctx.pid, c) {
                 Some(i) => Some(self.classes[i].as_ref().map_or(0, |c| c.atom)),
-                None => return Reply::Handle { hwnd: 0 },
+                None => match self.find_class_anywhere(c) {
+                    Some(atom) => Some(atom),
+                    None => return Reply::Handle { hwnd: 0 },
+                },
             },
         };
         let title = title.map(|t| upcase(&t));
@@ -1405,6 +1433,17 @@ impl Wm {
             return Reply::Handle { hwnd: c };
         }
         Reply::Handle { hwnd: 0 }
+    }
+
+    /// The atom of a class of that name or atom that any process registered.
+    fn find_class_anywhere(&self, class: &ClassRef) -> Option<u16> {
+        self.classes.iter().flatten().find_map(|c| {
+            let hit = match class {
+                ClassRef::Atom { atom } => c.atom == *atom,
+                ClassRef::Name { name } => upcase(&c.name) == upcase(name),
+            };
+            hit.then_some(c.atom)
+        })
     }
 
     fn get_window(&self, hwnd: u64, cmd: u32) -> Reply {
@@ -2042,6 +2081,10 @@ impl Wm {
     /// A process ended: its threads' state and its classes go.
     pub fn process_exited(&mut self, pid: u32, fx: &mut Effects) {
         self.clip.process_gone(pid);
+        if self.shell_owner.is_some_and(|k| k.0 == pid) {
+            self.shell_owner = None;
+        }
+        self.input_idle.forget(pid);
         let threads: Vec<u32> = self.queues.keys().filter(|k| k.0 == pid).map(|k| k.1).collect();
         for t in threads {
             self.thread_exited(pid, t, fx);
@@ -2359,9 +2402,12 @@ impl Wm {
                 Reply::Handle { hwnd: h }
             }
             Request::TrackMouse { hwnd, flags, hover } => self.track_mouse(ctx, hwnd, flags, hover, fx),
-            Request::ThreadHasWindows { tid } => {
-                Reply::Bool { value: tid != 0 && self.slots.iter().flatten().any(|w| w.thread.1 == tid) }
-            }
+            Request::ThreadHasWindows { tid } => Reply::Bool {
+                value: tid != 0
+                    && (self.slots.iter().flatten().any(|w| w.thread.1 == tid)
+                        || self.shell_owner.is_some_and(|k| k.1 == tid) && self.shell_window() != 0),
+            },
+            Request::ShellWindow {} => Reply::Handle { hwnd: self.shell_window() },
             Request::RegisterMessage { name } => {
                 // Learn: the string is at most 255 characters; the number is in 0xC000..=0xFFFF.
                 // Over that: ERROR_MORE_DATA; the empty string and "#1234" (an integer atom) give
@@ -2404,6 +2450,11 @@ impl Wm {
             }
             Request::Reply { result } => Reply::Bool { value: self.reply(ctx, result, fx) },
             Request::InSend {} => Reply::Bool { value: !self.queue(ctx.key()).receiving.is_empty() },
+            Request::InputIdle { blocking } => {
+                self.input_idle.note(ctx.pid, blocking);
+                Reply::Ok {}
+            }
+            Request::IdleState { pid } => Reply::Value { value: u64::from(self.input_idle.state(pid)) },
             Request::QueueStatus { flags, clear } => {
                 let key = ctx.key();
                 self.refresh_timers(key, ctx.now);
@@ -2523,6 +2574,42 @@ mod tests {
             }
             r => panic!("{r:?}"),
         }
+    }
+
+    /// The shell window (`GetShellWindow`): none in session 0; in the interactive session the
+    /// lowest window of another process, which answers as the shell process once the kernel names
+    /// it (and stops when that process ends); messages to it still run in their sender.
+    #[test]
+    fn the_shell_window_answers_as_the_shell_process() {
+        let mut wm = Wm::new();
+        let shell = |wm: &mut Wm| match wm.handle(A, Request::ShellWindow {}, &mut Effects::default()) {
+            Reply::Handle { hwnd } => hwnd,
+            r => panic!("{r:?}"),
+        };
+        assert_eq!(shell(&mut wm), 0, "session 0: no shell window");
+        wm.set_display(crate::metrics::Display::INTERACTIVE);
+        let h = shell(&mut wm);
+        assert!(h != 0 && wm.is_foreign(h));
+        let before = wm.info(h).unwrap();
+        assert!(input::foreign((before.pid, before.tid)));
+        let has_windows = |wm: &mut Wm, tid: u32| {
+            matches!(
+                wm.handle(A, Request::ThreadHasWindows { tid }, &mut Effects::default()),
+                Reply::Bool { value: true }
+            )
+        };
+        assert!(!has_windows(&mut wm, 77));
+        wm.set_shell_process(40, 77);
+        let i = wm.info(h).unwrap();
+        assert_eq!((i.pid, i.tid), (40, 77));
+        assert!(has_windows(&mut wm, 77));
+        assert!(matches!(
+            wm.handle(A, Request::SendStart { hwnd: u64::from(h), msg: 0x0010, w: 0, l: 0 }, &mut Effects::default()),
+            Reply::SameThread { .. }
+        ));
+        wm.process_exited(40, &mut Effects::default());
+        let after = wm.info(h).unwrap();
+        assert_eq!((after.pid, after.tid), (before.pid, before.tid));
     }
 
     /// The thread's IME windows after its top-level window is destroyed (GetWindow.yaml `ime_windows`):

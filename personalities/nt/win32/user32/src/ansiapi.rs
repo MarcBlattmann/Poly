@@ -335,8 +335,8 @@ pub unsafe extern "system" fn GetMessageA(msg: *mut CMsg, hwnd: H, min: u32, max
     // SAFETY: as `GetMessageW`.
     let r = unsafe { super::GetMessageW(msg, hwnd, min, max) };
     if r != -1 && r != 0 && !msg.is_null() {
-        // SAFETY: the caller's MSG.
-        unsafe { *msg = narrowed(*msg) };
+        // SAFETY: the caller's MSG, in its own size.
+        unsafe { poly_win32k::user::put_msg(msg, &narrowed(poly_win32k::user::get_msg(msg))) };
     }
     r
 }
@@ -346,8 +346,8 @@ pub unsafe extern "system" fn PeekMessageA(msg: *mut CMsg, hwnd: H, min: u32, ma
     // SAFETY: as `PeekMessageW`.
     let r = unsafe { super::PeekMessageW(msg, hwnd, min, max, remove) };
     if r != 0 && !msg.is_null() {
-        // SAFETY: the caller's MSG.
-        unsafe { *msg = narrowed(*msg) };
+        // SAFETY: the caller's MSG, in its own size.
+        unsafe { poly_win32k::user::put_msg(msg, &narrowed(poly_win32k::user::get_msg(msg))) };
     }
     r
 }
@@ -357,8 +357,8 @@ pub unsafe extern "system" fn DispatchMessageA(msg: *const CMsg) -> isize {
     if msg.is_null() {
         return 0;
     }
-    // SAFETY: the caller's MSG.
-    let mut m = unsafe { *msg };
+    // SAFETY: the caller's MSG, read in its own size.
+    let mut m = unsafe { poly_win32k::user::get_msg(msg) };
     if matches!(m.message, ansi::WM_CHAR | ansi::WM_DEADCHAR | ansi::WM_SYSCHAR | ansi::WM_SYSDEADCHAR) {
         m.w = ansi::enter(m.hwnd, Form::Ansi, Form::Wide, m.message, m.w, m.l as isize).w;
     }

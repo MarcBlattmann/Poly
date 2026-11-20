@@ -40,7 +40,7 @@ pub fn set_fault_origin(pc: u64, fp: u64) {
 }
 
 /// Kernel thread stacks the walker may follow, at most one per thread slot.
-pub const THREAD_STACK_SLOTS: usize = 512;
+pub const THREAD_STACK_SLOTS: usize = 4096;
 
 /// Each slot is one word, so the panic path can never see half an update:
 /// the page-aligned base of the stack ORed with its length in pages

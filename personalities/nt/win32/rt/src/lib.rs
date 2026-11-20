@@ -113,6 +113,43 @@ unsafe extern "system" {
     fn NtTerminateProcess(process: isize, status: u32) -> u32;
 }
 
+/// What the kernel's `PolyDebugPrint` takes as a thread's name for the timeline (ADR 0247) instead
+/// of a line to print: this prefix, the thread id in decimal, a space, the name in UTF-8.
+pub const TIMELINE_NAME_PREFIX: &[u8] = b"\x1ftimeline-name ";
+
+/// Tell the kernel's timeline the name thread `tid` was given (`SetThreadDescription`). The kernel
+/// keeps it only while `poly.debug.timeline` runs and never prints it otherwise.
+pub fn timeline_thread_name(tid: u32, name: &[u16]) {
+    let mut buf = [0u8; 160];
+    let mut n = TIMELINE_NAME_PREFIX.len();
+    buf[..n].copy_from_slice(TIMELINE_NAME_PREFIX);
+    let mut digits = [0u8; 10];
+    let mut d = 0;
+    let mut v = tid;
+    loop {
+        digits[d] = b'0' + (v % 10) as u8;
+        d += 1;
+        v /= 10;
+        if v == 0 {
+            break;
+        }
+    }
+    for i in (0..d).rev() {
+        buf[n] = digits[i];
+        n += 1;
+    }
+    buf[n] = b' ';
+    n += 1;
+    for c in char::decode_utf16(name.iter().copied()).map(|c| c.unwrap_or(char::REPLACEMENT_CHARACTER)) {
+        if n + c.len_utf8() > buf.len() {
+            break;
+        }
+        n += c.encode_utf8(&mut buf[n..]).len();
+    }
+    // SAFETY: the service reads `n` bytes of `buf`.
+    unsafe { PolyDebugPrint(buf.as_ptr(), n) };
+}
+
 /// The bytes a 32-bit `stdcall` function pops (`x86_signatures.txt`, ADR 0186 and 0222): the
 /// table and its lookup are `poly-stubs`'s, the same file compiled here.
 #[path = "../../../../../crates/poly-stubs/src/x86slots.rs"]

@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "bulk_buffer",
+      "source_sha256": "b186ed5baea34f648a033a745fc191d0f2ccba5ff776908b933d7569082c1e18",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9d859c65daf7525d3d9dfcd9199ae252e6445a13a2ea1b192ae688ab10009ac6",
+          "exit_code": 0,
+          "stdout": "ok a buffer smaller than one record is ERANGE\nvalue a buffer of 39 bytes: errno 0\nvalue its result 1\nok a buffer of 40 bytes holds one record of 40 bytes\nok three entries through 90-byte buffers: 3 entries in total\nok in two calls (two records of 40 fit in 90, then one)\nok 100 files through 512-byte buffers: 100 records\nok each name once\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "bulk_records",
+      "source_sha256": "f4ec0857c4f73611e2320a0beef2bb502556955326355665f4edef1d2740c677",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "574e6a155277eb841146b38e80446d54bfeeed1c3288f7ac675975726fa78b84",
+          "exit_code": 0,
+          "stdout": "ok four records (no . and ..)\nok all four names are there: aa, bb, sub, ln\nok every record length is a multiple of 8\nok file records: length 48 (name 3 bytes), VREG, data length, returned set 0x80000009 / file 0x200\nvalue the total bytes of the four records 184\nok a second call: the directory is exhausted, 0\nok a new descriptor starts again; names only: four records of 40 bytes\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

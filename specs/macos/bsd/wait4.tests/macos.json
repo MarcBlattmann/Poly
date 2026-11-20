@@ -10,8 +10,23 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 20:07:17",
   "tests": [
+    {
+      "name": "wait4_selection",
+      "source_sha256": "32023e60bd9bb4eb01fc07f23c041d1fd825fb90493a172fb3d470a360af7d65",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a2cf4bffd46b78d7c0ddaa5b256feccaa873295a3646c0851b06ab3fb8989063",
+          "exit_code": 0,
+          "stdout": "ok pid > 0 waits for that child: b with status 2\nok a zombie exists until waited for: kill(a, 0) works\nok b is gone now: ECHILD\nok pid -1: one of the others\nok and the remaining one\nok both were returned, none twice\nok kill of a reaped child is ESRCH\nok no children left: ECHILD\nok pid 0: a child in the caller's group\nok pid -pgid: a child of that group\nok pid 0 does not match a child that left the group: ECHILD\nok pid -pgid of the child's own group finds it\nok an unwritable rusage pointer is EFAULT\nok the child is still there after the refused call and is reaped now\nok the rusage was filled in: ru_utime seconds is small (< 5)\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
     {
       "name": "wait4_signals",
       "source_sha256": "e95d7a72a0bdb927165c3909ffdd1ff88cd6b5a0c1d65f0b4190d439aaf457df",

@@ -205,6 +205,14 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     k.enter_syscall(number);
     let started = crate::profile::enabled().then(|| (crate::time::now_ns(), crate::profile::enter(number as u32 + 1)));
     let outcome = Linux::dispatch_with(&mut k, regs);
+    // prctl(PR_SET_NAME): the thread's name for the timeline (ADR 0247).
+    if number == 157 && args[0] == 15 && regs.rax == 0 && crate::timeline::on() {
+        let comm = process.linux.as_ref().map(|l| l.with(|s| s.thread(tid as i32).comm));
+        if let Some(comm) = comm {
+            let len = comm.iter().position(|&b| b == 0).unwrap_or(comm.len());
+            crate::timeline::name_thread(process.pid, tid, &alloc::string::String::from_utf8_lossy(&comm[..len]));
+        }
+    }
     if let Some((t, before)) = started {
         crate::profile::leave(before);
         crate::profile::syscall(number, crate::time::now_ns().saturating_sub(t));

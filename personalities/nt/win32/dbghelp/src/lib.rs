@@ -106,6 +106,34 @@ pub unsafe extern "system" fn SymGetModuleInfo64(_process: isize, _address: u64,
     no(ERROR_MOD_NOT_FOUND)
 }
 
+/// `ImageNtHeader(Base)` (Learn; the layouts of `winnt.h`): the `IMAGE_NT_HEADERS` of the PE
+/// image (mapped as an image or as a file) at `base`: `base` plus the DOS header's `e_lfanew`
+/// (offset 0x3C), when the image starts with "MZ" and the headers with "PE\0\0"; NULL otherwise.
+/// Notepad++ reads a plugin's machine through it before loading the plugin (Windows apps survey,
+/// batch W1; no sheet yet).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn ImageNtHeader(base: *const u8) -> *const u8 {
+    if base.is_null() {
+        return core::ptr::null();
+    }
+    // SAFETY: the caller's mapped image: its DOS header (64 bytes) is readable.
+    let (mz, lfanew) = unsafe {
+        (core::ptr::read_unaligned(base as *const u16), core::ptr::read_unaligned(base.add(0x3C) as *const u32))
+    };
+    // The NT headers follow the 64-byte DOS header; an offset beyond 256 MiB is taken as damage
+    // rather than read.
+    if mz != 0x5A4D || !(0x40..0x1000_0000).contains(&lfanew) {
+        return core::ptr::null();
+    }
+    // SAFETY: the NT headers' offset the image's DOS header gives.
+    let nt = unsafe { base.add(lfanew as usize) };
+    // SAFETY: as above: the image's own headers.
+    if unsafe { core::ptr::read_unaligned(nt as *const u32) } != 0x0000_4550 {
+        return core::ptr::null();
+    }
+    nt
+}
+
 /// `SymGetModuleBase64(hProcess, qwAddr)`: 0, no module.
 #[unsafe(no_mangle)]
 pub extern "system" fn SymGetModuleBase64(_process: isize, _address: u64) -> u64 {

@@ -566,3 +566,39 @@ Delphi unit to see "no DOM" without crashing. After it: the `oleaut32` `Var*` fu
 ### The C runtime
 
 Not started in this stage; the blockers of stage 3 stand (setjmp/longjmp, `LegacyInfo`, `FILE`, `va_list`, start-up).
+
+## Addendum (2026-11-20): structures in their 32-bit size (`wow64-gui-overrun`)
+
+Google's 32-bit Chrome installer failed its stack cookie check (`0xc0000409`, parameter 2) right
+after its splash thread's `PeekMessageW` returned `WM_QUIT`. `user32` wrote its internal
+`CMsg` whole into the caller's `MSG`: 32 bytes, while `winuser.h`'s `MSG` is 28 bytes on x86
+(`lPrivate` exists only under `_MAC`; on x64 the field lies in the 48-byte structure's tail
+padding). The 4 extra bytes landed on the cookie behind the loop's `MSG`. Poly's own `gui32`
+declared the same 32-byte `MSG` and so never noticed.
+
+- `poly_win32k::user::{put_msg, get_msg}` copy exactly `MSG_BYTES` (28 on x86, 48 on x64) into
+  and out of a caller's `MSG`; `GetMessage*`, `PeekMessage*`, `DispatchMessage*`,
+  `TranslateMessage`, `TranslateAcceleratorW` and `IsDialogMessage*` use them. A 32-bit `MSG`
+  has no room for a `VK_PACKET`'s UTF-16 unit, so `user32` keeps the last one each thread
+  retrieved for `TranslateMessage`.
+- `GetCursorInfo` accepts the 32-bit `CURSORINFO` (20 bytes) and `SendInput` the 32-bit `INPUT`
+  (28 bytes, its union at offset 4); both demanded the x64 sizes and always failed in 32-bit
+  processes.
+- `tests/windows/wow64/msgloop32.rs` (kernel test
+  `nt_wow64_user32_writes_no_more_than_the_32_bit_structures`) puts a guard word behind every
+  structure it hands `user32` (the splash thread's message loops, `WINDOWPLACEMENT`,
+  `MONITORINFO(EX)`, `GUITHREADINFO`, `CURSORINFO`, `WNDCLASSEXW`, `PAINTSTRUCT`, `DEVMODEW`,
+  `NONCLIENTMETRICSW`, ...) and fails when one is overwritten.
+- Google's 32-bit updater then broke on a heap check (`slotsize`, `refcount` on its stack): two
+  more x64 layouts wrote past 32-bit callers' memory. `poly_security::sd` used the x64 absolute
+  `SECURITY_DESCRIPTOR` (40 bytes, pointers at 8..32) also in 32-bit processes, where it is 20
+  bytes with pointers at 4..16 (`abs_offsets`, `abs_length`); `InitializeSecurityDescriptor`
+  zeroed 40 bytes of a 20-byte descriptor, and the kernel now reads a caller's absolute
+  descriptor in the caller's width. `advapi32`'s `TRUSTEE_W` (32/20 bytes) and
+  `EXPLICIT_ACCESS_W` (48/32), `TOKEN_USER`'s SID offset, the `OBJECT_ATTRIBUTES` it builds for
+  registry names and the LSA policy structures now follow the pointer size too
+  (`BuildExplicitAccessWithNameW` wrote up to 16 bytes past a 32-bit entry). `msgloop32` guards
+  these as well.
+- Still x64-only, but refusing rather than overrunning: `MENUITEMINFOW`/`MENUINFO` (`menu.rs` reads
+  the x64 offsets and accepts only the x64 `cbSize`), and 32-bit fail stubs such as
+  `GetScrollInfo`, `GetWindowInfo`, `GetTitleBarInfo`.

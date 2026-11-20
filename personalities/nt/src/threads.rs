@@ -77,35 +77,103 @@ pub(crate) fn thread_of_any<K: NtKernel>(k: &mut K, h: Handle, rights: &[u32]) -
     Err(denied)
 }
 
-/// `NtCreateThreadEx(ThreadHandle*, DesiredAccess, ObjectAttributes*,
-/// ProcessHandle, StartRoutine, Argument, CreateFlags, ZeroBits, StackSize,
-/// MaximumStackSize, AttributeList)`. Only the calling process is a valid
-/// target for now (cross-process creation is `STATUS_NOT_IMPLEMENTED` until
-/// the ntdll milestone).
+/// The access a new thread's handle gets for `DesiredAccess` (specs/windows/ntdll.dll/
+/// NtCreateThreadEx.yaml, `desired_access`): generic rights mapped with the thread type's
+/// mapping, `MAXIMUM_ALLOWED` as all access, rights outside the thread's and
+/// `ACCESS_SYSTEM_SECURITY` dropped, and the limited rights that come with the full ones
+/// (`THREAD_QUERY_INFORMATION` brings `THREAD_QUERY_LIMITED_INFORMATION`,
+/// `THREAD_SET_INFORMATION` `THREAD_SET_LIMITED_INFORMATION` and `THREAD_SUSPEND_RESUME`
+/// `THREAD_RESUME`: 0x2 gives 0x1002, 0x1F03FF gives 0x1F1FFF, `GENERIC_READ` 0x20848).
+pub fn thread_access(desired: u32) -> u32 {
+    use poly_ntobj::access::*;
+    let mut a = ObjectType::Thread.generic_mapping().map(desired);
+    if a & MAXIMUM_ALLOWED != 0 {
+        a |= THREAD_ALL_ACCESS;
+    }
+    a &= THREAD_ALL_ACCESS | ACCESS_SYSTEM_SECURITY;
+    if a & THREAD_QUERY_INFORMATION != 0 {
+        a |= THREAD_QUERY_LIMITED_INFORMATION;
+    }
+    if a & THREAD_SET_INFORMATION != 0 {
+        a |= THREAD_SET_LIMITED_INFORMATION;
+    }
+    if a & THREAD_SUSPEND_RESUME != 0 {
+        a |= THREAD_RESUME;
+    }
+    a
+}
+
+/// `NtCreateThreadEx(ThreadHandle*, DesiredAccess, ObjectAttributes*, ProcessHandle,
+/// StartRoutine, Argument, CreateFlags, ZeroBits, StackSize, MaximumStackSize, AttributeList)`
+/// (specs/windows/ntdll.dll/NtCreateThreadEx.yaml): a thread in the process the handle names, the
+/// caller's own or another (`CreateRemoteThread`).
+///
+/// - The process handle needs exactly `PROCESS_CREATE_THREAD`; an event or thread handle is
+///   `STATUS_OBJECT_TYPE_MISMATCH`, a process that has ended `STATUS_PROCESS_IS_TERMINATING`.
+///   A 32-bit caller cannot make a thread in a 64-bit process (`STATUS_ACCESS_DENIED`).
+/// - `DesiredAccess` 0 is `STATUS_ACCESS_DENIED`; others give [`thread_access`].
+/// - `CreateFlags`: 0x1 suspended, 0x2 no `DLL_THREAD_ATTACH`/`DETACH`, 0x4 hidden from
+///   debuggers; 0x8, 0x10, 0x20 and 0x40 are accepted and change nothing Poly shows; any other
+///   bit is `STATUS_INVALID_PARAMETER_7`.
+/// - `StackSize` and `MaximumStackSize`: [`crate::exec::stack_sizes`]. `ZeroBits` is ignored.
+/// - `OBJ_INHERIT` in the object attributes makes the handle inheritable; their descriptor is the
+///   thread object's.
+/// - An attribute list must be at least a header and one attribute (`TotalLength` 40); its
+///   attributes are not used.
+/// - A `ThreadHandle` that cannot be written is `STATUS_ACCESS_VIOLATION` and no thread is made.
 pub fn create_thread_ex<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let out = abi::arg(k, regs, 0)?;
     let access = abi::arg(k, regs, 1)? as u32;
+    let attributes_at = abi::arg(k, regs, 2)?;
     let process = Handle(abi::arg(k, regs, 3)?);
     let start_routine = abi::arg(k, regs, 4)?;
     let argument = abi::arg(k, regs, 5)?;
     let flags = abi::arg(k, regs, 6)? as u32;
     let stack_commit = abi::arg(k, regs, 8)?;
     let stack_reserve = abi::arg(k, regs, 9)?;
+    let attribute_list = abi::arg(k, regs, 10)?;
     let pid = process_of(k, process, PROCESS_CREATE_THREAD)?;
-    if pid != k.caller().process {
-        return Err(STATUS_NOT_IMPLEMENTED);
+    let own = pid == k.caller().process;
+    if !own {
+        if k.with_state(|sys, _, _| sys.process_exits.contains_key(&pid)) {
+            return Err(STATUS_PROCESS_IS_TERMINATING);
+        }
+        let caller_wow64 = k.with_state(|_, p, _| p.wow64);
+        let target_wow64 = k.with_process(pid, |_, p, _| p.wow64).ok_or(STATUS_PROCESS_IS_TERMINATING)?;
+        if caller_wow64 && !target_wow64 {
+            return Err(STATUS_ACCESS_DENIED);
+        }
     }
-    // `ObjectAttributes` (`lpThreadAttributes`): the descriptor of the new thread object.
-    let attributes_at = abi::arg(k, regs, 2)?;
-    let security = abi::read_attributes(k, attributes_at)?.security;
+    if access == 0 {
+        return Err(STATUS_ACCESS_DENIED);
+    }
+    if flags & !THREAD_CREATE_FLAGS_KNOWN != 0 {
+        return Err(STATUS_INVALID_PARAMETER_7);
+    }
+    if attribute_list != 0 && abi::read_u64(k, attribute_list)? < PS_ATTRIBUTE_LIST_MINIMUM {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    // Both sizes must be roundable (all ones is not).
+    crate::exec::stack_sizes(0, 0x1000, stack_commit, stack_reserve)?;
+    // `ObjectAttributes` (`lpThreadAttributes`): the descriptor of the new thread object, and
+    // whether the handle is inherited.
+    let attributes = abi::read_attributes(k, attributes_at)?;
+    // Where the handle goes must be writable before the thread exists.
+    if out == 0 || abi::write_u64(k, out, 0).is_err() {
+        return Err(STATUS_ACCESS_VIOLATION);
+    }
     let req = ThreadCreate {
-        security,
+        process: (!own).then_some(pid),
+        security: attributes.security,
+        inherit: attributes.attributes & poly_ntobj::OBJ_INHERIT != 0,
         start_routine,
         argument,
         stack_reserve,
         stack_commit,
         suspended: flags & THREAD_CREATE_FLAGS_CREATE_SUSPENDED != 0,
-        desired_access: if access == 0 { poly_ntobj::access::THREAD_ALL_ACCESS } else { access },
+        skip_attach: flags & THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH != 0,
+        hide_from_debugger: flags & THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER != 0,
+        desired_access: thread_access(access),
     };
     let created = k.create_thread(req)?;
     return_handle(k, out, created.handle)?;
@@ -208,6 +276,11 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     };
     let attributes = abi::arg(k, regs, 10)?;
     let extra = read_create_attributes(k, attributes)?;
+    // `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`: a handle with `PROCESS_CREATE_PROCESS` (Learn).
+    let parent = match extra.parent {
+        Some(h) => Some(process_of(k, h, poly_ntobj::access::PROCESS_CREATE_PROCESS)?),
+        None => None,
+    };
     // The descriptors of the new process and thread objects (`lpProcessAttributes`,
     // `lpThreadAttributes`).
     let (process_at, thread_at) = (abi::arg(k, regs, 4)?, abi::arg(k, regs, 5)?);
@@ -239,6 +312,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         error_mode: extra.error_mode,
         process_security,
         thread_security,
+        parent,
     };
     let created = k.create_process(req)?;
     return_handle(k, process_out, created.process)?;
@@ -253,7 +327,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
 /// list (`value` points at `size` bytes of handles), 2 the mitigation policy
 /// (`value` points at the two 64-bit words, `size` 8 or 16), 3 the job list (as the handle list),
 /// 4 the breakaway request, 5 the creator's error mode (the 32-bit `value`), 6 the child
-/// process policy (`value` is the 32-bit value).
+/// process policy (`value` is the 32-bit value), 7 the parent process (`value` is the handle).
 #[derive(Default)]
 struct CreateAttributes {
     handle_list: Option<Vec<Handle>>,
@@ -266,6 +340,8 @@ struct CreateAttributes {
     breakaway: bool,
     /// The creator's error mode (`SetErrorMode`), which the child starts with.
     error_mode: u32,
+    /// `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`'s handle.
+    parent: Option<Handle>,
 }
 
 impl CreateAttributes {
@@ -308,6 +384,7 @@ fn read_create_attributes<K: NtKernel>(k: &mut K, at: u64) -> Result<CreateAttri
             3 => out.jobs = list(k)?,
             4 => out.breakaway = value != 0,
             5 => out.error_mode = value as u32,
+            7 => out.parent = Some(Handle(value)),
             _ => {}
         }
     }
@@ -464,6 +541,11 @@ pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
 /// (minimum, maximum, flags) to a handle with a query right. The same layout for 32- and 64-bit
 /// callers, so the WOW64 thunk passes it through.
 pub const PROCESS_POLY_WORKING_SET: u32 = 0x1002;
+/// Poly's own process information class for the subsystem of a process's executable
+/// (`IMAGE_SUBSYSTEM_*` as a `u32`: 2 GUI, 3 console), to a handle with a query right:
+/// `WaitForInputIdle` and `ShellExecuteEx`'s `SEE_MASK_WAITFORINPUTIDLE` tell console programs
+/// from GUI ones by it (ADR 0245). The same layout for 32- and 64-bit callers.
+pub const PROCESS_POLY_SUBSYSTEM: u32 = 0x1003;
 /// `PROCESS_SET_QUOTA` (`winnt.h`).
 const PROCESS_SET_QUOTA: u32 = 0x0100;
 
@@ -668,9 +750,18 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
         // AffinityMask.
         21 => reply(k, buf, length, ret, &1u64.to_le_bytes()),
         // SessionInformation: the session id of the PEB.
+        // SessionInformation: the caller's from its PEB; another process's is its primary token's
+        // session, which its PEB was written from (`security::write_session_id`).
         24 => {
-            let (peb, off) = k.with_state(|_, proc, _| (proc.peb, proc.layout().peb_session_id));
-            let session = abi::read_u32(k, peb + off).unwrap_or(0);
+            let session = if pid == k.caller().process {
+                let (peb, off) = k.with_state(|_, proc, _| (proc.peb, proc.layout().peb_session_id));
+                abi::read_u32(k, peb + off).unwrap_or(0)
+            } else {
+                k.with_state(|sys, _, _| {
+                    let security = &sys.objects.security;
+                    security.process_token(pid).and_then(|id| security.token(id)).map_or(0, |t| t.session)
+                })
+            };
             reply(k, buf, length, ret, &le32(session))
         }
         PROCESS_WOW64_INFORMATION => {
@@ -734,6 +825,17 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
             let c = k.memory_counters(pid).unwrap_or_default();
             reply(k, buf, length, ret, &c.bytes()[..length as usize])
         }
+        PROCESS_POLY_SUBSYSTEM => {
+            if length != 4 {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            let subsystem = if pid == k.caller().process {
+                k.with_state(|_, proc, _| proc.subsystem)
+            } else {
+                k.with_process(pid, |_, proc, _| proc.subsystem).ok_or(STATUS_PROCESS_IS_TERMINATING)?
+            };
+            reply(k, buf, length, ret, &le32(u32::from(subsystem)))
+        }
         PROCESS_POLY_WORKING_SET => {
             if length != 24 {
                 return Err(STATUS_INFO_LENGTH_MISMATCH);
@@ -775,16 +877,33 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
                 _ => &[QUERY, LIMITED],
             };
             let tid = t(k, rights)?;
-            let (exit, teb, pid, start, priority) = k.with_state(|_sys, proc, _| {
+            // A thread of another process (a remote thread, a child's first thread) is read in
+            // that process, or from its record once the process has gone.
+            let record = k.with_state(|sys, _, _| sys.thread_records.get(&tid).copied());
+            let owner = record.map_or(k.caller().process, |r| r.process);
+            let read = |_sys: &mut crate::system::NtSystem,
+                        proc: &mut crate::system::NtProcess,
+                        _: &mut dyn crate::backend::Backend| {
                 let th = proc.thread(tid);
                 (
-                    proc.thread_exit_status(tid).unwrap_or(STATUS_PENDING),
+                    record.and_then(|r| r.exit).or(proc.thread_exit_status(tid)).unwrap_or(STATUS_PENDING),
                     th.map_or(0, |t| t.teb),
                     proc.pid,
                     th.map_or(0, |t| t.start),
                     th.map_or(0, |t| t.base_priority),
                 )
-            });
+            };
+            let (exit, teb, pid, start, priority) = if owner == k.caller().process {
+                k.with_state(read)
+            } else {
+                k.with_process(owner, read).unwrap_or((
+                    record.and_then(|r| r.exit).unwrap_or(STATUS_PENDING),
+                    0,
+                    owner,
+                    0,
+                    0,
+                ))
+            };
             let affinity = k.thread_affinity(tid).unwrap_or(0);
             match class {
                 THREAD_BASIC_INFORMATION => {
@@ -827,10 +946,20 @@ pub fn query_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> R
             abi::write_opt_u32(k, ret, 8)?;
             Ok(STATUS_SUCCESS)
         }
+        // ThreadHideFromDebugger: one BOOLEAN, 1 for a thread made with
+        // THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER (specs/windows/ntdll.dll/NtCreateThreadEx.yaml).
+        17 => {
+            if length != 1 {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            let tid = t(k, &[QUERY, LIMITED])?;
+            let hidden = k.with_state(|sys, _, _| sys.thread_records.get(&tid).is_some_and(|r| r.hidden));
+            reply(k, buf, length, ret, &[u8::from(hidden)])
+        }
         21 | 29 | 34 => Err(STATUS_ACCESS_DENIED),
         26 => Err(STATUS_ACCESS_VIOLATION),
         37 => Err(STATUS_INVALID_PARAMETER),
-        11 | 12 | 14 | 16 | 17 | 18 | 20 | 22 | 24 | 25 | 32 | 33 | 35 | 36 | 40 | 42 | 43 => {
+        11 | 12 | 14 | 16 | 18 | 20 | 22 | 24 | 25 | 32 | 33 | 35 | 36 | 40 | 42 | 43 => {
             Err(STATUS_INFO_LENGTH_MISMATCH)
         }
         _ => Err(STATUS_INVALID_INFO_CLASS),

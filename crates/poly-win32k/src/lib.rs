@@ -60,6 +60,7 @@ pub mod frame;
 pub mod guic;
 pub mod hooks;
 pub mod icofile;
+pub mod idle;
 pub mod ime;
 pub mod kbd;
 pub mod kbdlist;

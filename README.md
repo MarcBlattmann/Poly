@@ -119,7 +119,7 @@ itself as on Windows; see
 <p>
   <a href="docs/ROADMAP.md"><img alt="roadmap: 113 of 171 milestones" src="docs/progress/badge-roadmap.svg"></a>
   <img alt="Linux API coverage: 97.2%" src="docs/progress/badge-linux.svg">
-  <img alt="Windows API coverage: 1.6%" src="docs/progress/badge-windows.svg">
+  <img alt="Windows API coverage: 1.7%" src="docs/progress/badge-windows.svg">
   <img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg">
 </p>
 
@@ -145,7 +145,7 @@ itself as on Windows; see
 | OS | API coverage | App-weighted | Traces passing |
 |---|---:|---:|---:|
 | Linux | 97.2% | n/a | 0 / 0 |
-| Windows | 1.6% | n/a | 0 / 0 |
+| Windows | 1.7% | n/a | 0 / 0 |
 | macOS | 0.0% | n/a | 0 / 0 |
 
 | OS | Layer | Entries | Green | Stub | Claimed | Missing | N/A by design | App-provided |
@@ -153,8 +153,8 @@ itself as on Windows; see
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,581 | 1,038 | 3,498 | 3,755 | 52,994 | 0 | 69,296 |
-| macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 75 | 442 | 0 | 0 |
+| Windows | user-mode DLL exports | 130,594 | 1,086 | 3,474 | 3,750 | 52,988 | 0 | 69,296 |
+| macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 96 | 421 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 
 *API coverage* is green entries out of the entries that are ours to build: *app-provided* entries (libraries the application or its installer supplies, ADR 0055) are listed under *Entries* but left out of the percentages, and so are entries *not applicable by design* (calls the reference OS itself does not offer on x86-64, or that would replace the running kernel; Poly answers them as the reference does). *App-weighted* counts each API by how often the target apps call it; it is the number that tracks real progress and appears once the call tracer exists.
@@ -170,6 +170,7 @@ Seeded from (names only):
 - `ms-learn-d3d11`: Microsoft Learn Direct3D 11, DXGI and DirectComposition reference and the public SDK headers d3d11*.h, dxgi*.h, dcomp.h, dxcore*.h: the COM interfaces and methods of d3d11.dll, dxgi.dll, dcomp.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-dwrite`: Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-eventlog`: Microsoft Learn event logging reference (event sources, EVENTLOGRECORD, the EventLog registry keys) as Chrome's setup.exe uses it, observed by the spec agents (spec-win-chrome-setup); entries named by behaviour @ `Windows 11 25H2 build 26200.9974`
+- `ms-learn-input-idle`: Microsoft Learn WaitForInputIdle, ShellExecuteEx (SEE_MASK_WAITFORINPUTIDLE) and the message-queue functions that make a process 'idle for input': what the oracle does for console and GUI processes (entries named by function, the ShellExecuteEx mask by dotted name) @ `Windows 11 build 26300.9974`
 - `ms-learn-netfw`: Microsoft Learn Windows Firewall with Advanced Security API (netfw.h: INetFwPolicy2, INetFwRules, INetFwRule) as Chrome's setup.exe uses it to add its inbound mDNS rule, observed by the spec agents (spec-win-chrome-setup); entries named by class @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-setup-files`: Microsoft Learn file, process and snapshot reference (winbase.h, fileapi.h, tlhelp32.h) for what Chrome's own setup.exe calls, observed by the spec agent spec-win-chrome-setup (docs/windows/chrome-setup-plan.md); entries named by function or behaviour @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-shell-download`: Microsoft Learn and the public SDK headers shobjidl_core.h, shellapi.h, shlobj_core.h, fileapi.h, winbase.h: the COM interfaces and methods Chrome's download path uses in shell32.dll, comdlg32.dll (entries named Interface.Method) and the kernel32.dll functions beside them @ `Windows SDK 10.0.26100.0`
@@ -180,6 +181,7 @@ Seeded from (names only):
 - `ms-learn-volume`: Microsoft Learn volume management and CreateFile reference (opening a volume as \\.\C: or \??\C:), observed by the spec agents (spec-win-elevation); entries named by operation @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-winuser`: Microsoft Learn window messages and system commands of user32 (winuser.h): behaviour that is not an export, entries named by message or command (WM_NCHITTEST, WM_ENTERSIZEMOVE, WM_MOUSEHWHEEL, SC_MAXIMIZE; spec-win-input) @ `Windows SDK 10.0.26100.0`
 - `poly-adr-0132`: Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents @ `ADR 0132`
+- `windows-audio-w2`: The COM audio interfaces of mmdevapi and audioses that Chrome for Windows calls for shared-mode output (device enumerator, devices, IAudioClient, render client, clock, session control), found by a COM-level trace of Chrome on the Windows oracle (spec-win-wasapi); names from Microsoft Learn, mmdeviceapi.h, audioclient.h and audiopolicy.h @ `Windows 11 26H2 build 26300.9974`
 - `windows-com-state`: COM state of a thread and process observed by spec agents on the Windows oracle where Chrome's browser process reaches it (TEB.ReservedForOle, the global interface table, BITS); the names come from Microsoft Learn, objidl.h and bits.h (spec-com-ole-tls) @ `Windows 11 25H2 build 26200.9974`
 - `windows-export-probe`: Exported names of Windows 11 system DLLs (kernelbase.dll, userenv.dll) found by spec agents on the oracle where Chrome's sandbox set-up reaches them; names only (spec-chrome-win-s2b) @ `Windows 11 25H2 build 26200.9974`
 - `windows-typelib-file`: The binary type-library file (.tlb and the TYPELIB resource of an exe or dll) as ITypeLib and ITypeInfo read it, by black-box observation of files written with CreateTypeLib2 and of the updater's own libraries (docs/windows/typelib-file-format.md; spec-win-typelib-format) @ `Windows 11 25H2 build 26200.9974`

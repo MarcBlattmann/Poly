@@ -390,6 +390,11 @@ pub const STATE_FILE: &str = "poly-desktop-state.img";
 /// frames, composing, presenting, taking clients' pixels, key press to frame), on Chromium's disk
 /// too, whose compositor takes its arguments from a file.
 ///
+/// The guest has a sound card played through the host's speakers (`hostaudio`): virtio-sound
+/// (else Intel HDA) on `dsound` (Windows), `pa` (Linux) or `coreaudio` (macOS). `--no-sound` leaves
+/// it out; `--record-sound=FILE` (or `--record-sound FILE`) writes what the guest played to a WAV
+/// file instead. A host whose audio cannot start still boots, with a card that plays into nothing.
+///
 /// `--build-only` builds everything and stops before the boot.
 pub fn command(args: &[String]) -> Result {
     let ready = prepare(args)?;
@@ -422,6 +427,8 @@ pub struct Prepared {
     extra: Vec<String>,
     /// `--memory=` and `--cpus=` (ADR 0141).
     resources: crate::resources::Resources,
+    /// The sound card and where it plays (`None`: `--no-sound`).
+    sound: Option<crate::hostaudio::Plan>,
 }
 
 /// The options of [`command`] read, and everything built for the boot: the
@@ -460,11 +467,21 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
         },
     };
     let scale = scale_text(percent);
-    let mut extra: Vec<String> = args.iter().filter(|a| !a.starts_with("--")).cloned().collect();
+    let mut extra: Vec<String> = args
+        .iter()
+        .enumerate()
+        .filter(|&(i, a)| !a.starts_with("--") && !crate::hostaudio::is_record_file(args, i))
+        .map(|(_, a)| a.clone())
+        .collect();
+    let sound = crate::hostaudio::for_desktop("qemu-system-x86_64", args)?;
     // `--compositor-stats`: the compositor reports frame, copy and key-to-frame times (ADR 0224).
     let stats = args.iter().any(|a| a == "--compositor-stats");
     if stats && !chromium {
         extra.push("poly.init.arg=--stats".to_string());
+    }
+    // And the kernel what showing the frames costs (ADR 0243).
+    if stats {
+        extra.push("poly.drm.stats".to_string());
     }
     let state = root().join("target").join(STATE_FILE);
     // What the compositor is asked on Chromium's disk, where its first
@@ -519,6 +536,7 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
         qmp_port,
         extra,
         resources,
+        sound,
     })
 }
 
@@ -537,6 +555,7 @@ pub fn boot(p: Prepared) -> Result {
         qmp_port,
         extra,
         resources,
+        sound,
     } = p;
     // The compositor's `--scale` wins over the saved settings' scale (which
     // a run at another scale may have saved): asked for, or the host's when
@@ -597,6 +616,13 @@ pub fn boot(p: Prepared) -> Result {
         cmd.args(super::rootdisk::drive_args(disk));
     }
     cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
+    match &sound {
+        Some(plan) => {
+            cmd.args(plan.qemu_args());
+            eprintln!("==> {}", plan.describe());
+        }
+        None => eprintln!("==> no sound card (--no-sound)"),
+    }
     if chrome_win {
         cmd.args(crate::net::nic_args(None, false));
         eprintln!(
@@ -1140,6 +1166,17 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     thread::sleep(Duration::from_millis(500));
     d.wait("session bus on unix:path=", 1)?;
 
+    // The owner's way to start an app (ADR 0234): the Windows key, then the name, then Enter. The
+    // launcher the desktop shows at the start stays for the key (it used to close, and the typing
+    // went nowhere); the name typed next goes into it, Enter starts the app below.
+    let hidden_before = count(&lines, LAUNCHER_HIDDEN);
+    d.type_text(&["meta_l"])?;
+    thread::sleep(Duration::from_millis(1000));
+    expect(
+        "the Windows key keeps the launcher shown at the start",
+        count(&lines, LAUNCHER_HIDDEN) == hidden_before && d.shot("windows-key-at-start")?.pixel(900, 40) == RIDGE,
+    )?;
+
     // A no-window app must return to the launcher after its child exits.
     let launchers_shown = count(&lines, LAUNCHER_SHOWN);
     d.type_text(&["s", "e", "n", "d"])?;
@@ -1152,6 +1189,14 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     thread::sleep(Duration::from_millis(1000));
     let img = d.shot("notification-return")?;
     expect("the launcher returned after notify-send", img.pixel(900, 40) == RIDGE)?;
+    // Shown again by the desktop: the Windows key keeps it this time too (ADR 0234).
+    let hidden_before = count(&lines, LAUNCHER_HIDDEN);
+    d.type_text(&["meta_l"])?;
+    thread::sleep(Duration::from_millis(1000));
+    expect(
+        "the Windows key keeps the launcher the desktop showed again",
+        count(&lines, LAUNCHER_HIDDEN) == hidden_before,
+    )?;
 
     // 1. The demo window, maximized with the frame's middle button.
     d.type_text(&["d", "e", "m", "o"])?;

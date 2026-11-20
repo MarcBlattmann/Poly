@@ -87,6 +87,7 @@ pub const USER32_EXPORTS: &[&str] = &[
     "ShowWindow",
     "TranslateMessage",
     "UnregisterClassW",
+    "WaitForInputIdle",
     "WaitMessage",
     "GetKeyState",
     "GetAsyncKeyState",

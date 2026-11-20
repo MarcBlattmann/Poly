@@ -18,6 +18,13 @@ pub const CHILD_PROCESS_POLICY: usize = 0x0002_000E;
 /// `PROC_THREAD_ATTRIBUTE_COMPONENT_FILTER` (`winbase.h`, number 0x1A): accepted, nothing in the child shows it.
 pub const COMPONENT_FILTER: usize = 0x0002_001A;
 
+/// `PROC_THREAD_ATTRIBUTE_GROUP_AFFINITY` (`winbase.h`): a `GROUP_AFFINITY` for the new thread.
+pub const GROUP_AFFINITY: usize = 0x0003_0003;
+/// `PROC_THREAD_ATTRIBUTE_IDEAL_PROCESSOR` (`winbase.h`): a `PROCESSOR_NUMBER`.
+pub const IDEAL_PROCESSOR: usize = 0x0003_0005;
+/// `PROC_THREAD_ATTRIBUTE_THREAD` (`winbase.h`): the bit of the attributes that are a thread's.
+const THREAD_ATTRIBUTE: usize = 0x0001_0000;
+
 /// The header and one record.
 const HEADER: usize = 8;
 const RECORD: usize = 3 * core::mem::size_of::<usize>();
@@ -74,6 +81,10 @@ pub unsafe extern "system" fn UpdateProcThreadAttribute(
         HANDLE_LIST | JOB_LIST => Some(size != 0 && size % core::mem::size_of::<usize>() == 0),
         MITIGATION_POLICY => Some(size == 4 || size == 8 || size == 16),
         CHILD_PROCESS_POLICY | COMPONENT_FILTER => Some(size == 4),
+        // GROUP_AFFINITY (`winnt.h`): a KAFFINITY, the group and three reserved WORDs.
+        GROUP_AFFINITY => Some(size == core::mem::size_of::<usize>() + 8),
+        // PROCESSOR_NUMBER (`winnt.h`): a WORD group, a BYTE number, a reserved BYTE.
+        IDEAL_PROCESSOR => Some(size == 4),
         // SECURITY_CAPABILITIES (`winnt.h`): two pointers and two DWORDs (24 bytes, 16 in a 32-bit process).
         SECURITY_CAPABILITIES => Some(size == 2 * core::mem::size_of::<usize>() + 8),
         _ => None,
@@ -125,6 +136,8 @@ pub struct Parsed {
     pub jobs: Vec<usize>,
     /// `PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES`: the caller's `SECURITY_CAPABILITIES` (ADR 0196).
     pub security_capabilities: Option<usize>,
+    /// `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`: the handle of the process the child is made a child of.
+    pub parent: Option<usize>,
 }
 
 /// The attributes `CreateProcessW` uses, read from `list`.
@@ -150,6 +163,13 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
                     .collect()
             };
             match attribute {
+                // `lpValue` points at the handle (Learn, "UpdateProcThreadAttribute").
+                PARENT_PROCESS => {
+                    if value == 0 {
+                        return Err(ERROR_INVALID_PARAMETER);
+                    }
+                    out.parent = Some((value as *const usize).read_unaligned());
+                }
                 HANDLE_LIST => out.handle_list = Some(words()),
                 JOB_LIST => out.jobs = words(),
                 SECURITY_CAPABILITIES => {
@@ -180,6 +200,41 @@ pub unsafe fn parse(list: *const u8) -> Result<Parsed, u32> {
                     out.child_policy = Some((value as *const u32).read_unaligned());
                 }
                 _ => {}
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// What a list asks `CreateRemoteThreadEx` for: the group affinity's mask, if given.
+#[derive(Default)]
+pub struct ThreadParsed {
+    pub affinity: Option<usize>,
+}
+
+/// The thread attributes of `list` (specs/windows/kernel32.dll/CreateRemoteThreadEx.yaml): an
+/// empty or all-zero list is fine, the ideal processor and the group affinity are taken, and a
+/// process attribute is `ERROR_INVALID_PARAMETER`.
+///
+/// # Safety
+/// `list` is null or a list made by [`InitializeProcThreadAttributeList`] (or zeroed memory)
+/// whose values are still valid.
+pub unsafe fn parse_thread(list: *const u8) -> Result<ThreadParsed, u32> {
+    let mut out = ThreadParsed::default();
+    if list.is_null() {
+        return Ok(out);
+    }
+    // SAFETY: as the contract says.
+    unsafe {
+        let count = (list as *const u32).add(1).read() as usize;
+        let records = list.add(HEADER) as *const usize;
+        for i in 0..count {
+            let (attribute, value) = (records.add(i * 3).read(), records.add(i * 3 + 2).read());
+            if attribute & THREAD_ATTRIBUTE == 0 {
+                return Err(ERROR_INVALID_PARAMETER);
+            }
+            if attribute == GROUP_AFFINITY && value != 0 {
+                out.affinity = Some((value as *const usize).read_unaligned());
             }
         }
     }

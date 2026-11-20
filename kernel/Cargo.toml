@@ -35,6 +35,7 @@ poly-drm = { path = "../crates/poly-drm" }
 poly-irq = { path = "../crates/poly-irq" }
 poly-line = { path = "../crates/poly-line" }
 poly-logline = { path = "../crates/poly-logline" }
+poly-timeline = { path = "../crates/poly-timeline" }
 poly-fuse = { path = "../crates/poly-fuse" }
 poly-loop = { path = "../crates/poly-loop" }
 poly-overlayfs = { path = "../crates/poly-overlayfs" }

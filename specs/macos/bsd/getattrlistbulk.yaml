@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/getattrlistbulk.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# getattrlistbulk.tests/macos.json.
+id: macos/syscall/bsd/getattrlistbulk
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-19
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 461,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 461, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear.
+  getattrlistbulk(dirfd, attrlist, buffer, size, options) reads attributes
+  of the entries of the directory a descriptor refers to, as many whole
+  records as fit, and returns their number (0 once the directory is
+  exhausted and for an empty directory); "." and ".." are not listed; a
+  new descriptor starts again. attrlist is the 20-byte struct of
+  getattrlist (bitmap count 5, then common, volume, directory, file, fork
+  bitmaps). ATTR_CMN_RETURNED_ATTRS (0x80000000) must be requested,
+  otherwise EINVAL (22); ATTR_CMN_FULLPATH (0x08000000) is EINVAL. A
+  record is: u32 total length (a multiple of 8), the returned attribute
+  set (5 u32 words, from byte 4), then the attributes in bitmap order
+  packed without alignment padding: ATTR_CMN_NAME (0x1) an attrreference
+  {i32 offset from itself, u32 length including the NUL} whose characters
+  follow the fixed part, ATTR_CMN_OBJTYPE (0x8) a u32 (VREG 1, VDIR 2,
+  VLNK 5), ATTR_FILE_DATALENGTH (0x200) 8 bytes, present only for files
+  and links (a directory's record is shorter and its returned set has no
+  file attribute); ATTR_DIR_LINKCOUNT (dirattr 1) is returned only for
+  directories. Links are not followed: a link reports VLNK and the length
+  of its target path. A record of a short name with only the name
+  attribute takes 40 bytes (4 + 20 + 8 + name, rounded up to 8); a buffer
+  smaller than the first record is ERANGE (34); a buffer that holds two
+  records returns two and the next call continues; 100 files read through
+  512-byte buffers are listed once each. A descriptor of a file is ENOTDIR
+  (20), one not open EBADF (9), a NULL attribute list EFAULT (14).
+returns:
+  success: "the number of records stored; 0 when the directory is exhausted"
+errors:
+  bad_attrs: "EINVAL (22) no RETURNED_ATTRS or FULLPATH"
+  small_buffer: "ERANGE (34)"
+  not_dir: "ENOTDIR (20)"
+  bad_fd: "EBADF (9)"
+  bad_pointer: "EFAULT (14)"
+side_effects: "the directory descriptor's read position advances"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

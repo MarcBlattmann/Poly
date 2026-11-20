@@ -99,7 +99,9 @@ fn check_commit(sys: &NtSystem, proc: &NtProcess, charge: u64) -> Result<()> {
     }
     let used = proc.vm.private_committed_bytes();
     let over = |limit: u64| charge > limit || used.saturating_add(charge) > limit;
-    if over(SYSTEM_COMMIT_LIMIT) {
+    // The system's commit charge stays within its limit (ADR 0250): RAM less the kernel's, so a
+    // commit fails before the frames for committed pages run out.
+    if over(SYSTEM_COMMIT_LIMIT) || sys.commit_total.saturating_add(charge) > sys.commit_limit {
         return Err(STATUS_COMMITMENT_LIMIT);
     }
     for &cookie in sys.jobs.jobs_of(proc.pid) {
@@ -137,9 +139,14 @@ pub fn allocate<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> 
                 check_commit(sys, proc, proc.vm.commit_charge(base, size, at))?;
             }
         }
+        // What the call commits newly of private memory, for the system's charge.
+        let before = proc.vm.committed_in(base, size);
         let r = proc.vm.allocate(b, base, size, zero_bits, alloc_type as u32, protect as u32)?;
         if alloc_type as u32 & MEM_COMMIT != 0 {
             section::record_section_commit(sys, proc, r.0, r.1);
+            let charged = proc.vm.committed_in(r.0, r.1).saturating_sub(before);
+            proc.commit_charged += charged;
+            sys.commit_total += charged;
         }
         Ok(r)
     })?;
@@ -153,8 +160,15 @@ pub fn free<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let [process, base_ptr, size_ptr, free_type] = abi::args::<K, 4>(k, regs)?;
     let base = abi::read_u64(k, base_ptr)?;
     let size = abi::read_u64(k, size_ptr)?;
-    let (base, size) =
-        on_process(k, process, PROCESS_VM_OPERATION, |_, proc, b| proc.vm.free(b, base, size, free_type as u32))?;
+    let (base, size) = on_process(k, process, PROCESS_VM_OPERATION, |sys, proc, b| {
+        let committed = proc.vm.committed_in(base, size);
+        let r = proc.vm.free(b, base, size, free_type as u32)?;
+        // The committed pages it gave back leave the system's charge (ADR 0250).
+        let freed = committed.saturating_sub(proc.vm.committed_in(base, size)).min(proc.commit_charged);
+        proc.commit_charged -= freed;
+        sys.commit_total = sys.commit_total.saturating_sub(freed);
+        Ok(r)
+    })?;
     abi::write_u64(k, base_ptr, base)?;
     abi::write_u64(k, size_ptr, size)?;
     Ok(STATUS_SUCCESS)

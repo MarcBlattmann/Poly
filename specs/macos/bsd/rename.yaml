@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/rename.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# rename.tests/macos.json.
+id: macos/syscall/bsd/rename
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-19
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 128,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 128, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. rename(from, to)
+  renames a file, directory or symbolic link (a link itself, not its
+  target) and returns 0. An existing file at the destination is replaced
+  atomically and the destination takes the source's inode and content; a
+  directory replaces an empty directory (ENOTEMPTY 66 when it is not
+  empty); a file over a directory is EISDIR (21), a directory over a file
+  ENOTDIR (20); a name to itself, or onto another hard link of the same
+  file, does nothing and returns 0 (both names stay); descriptors opened
+  before follow the file; a directory moves with its contents. On this
+  case-insensitive, case-preserving file system a rename that changes only
+  the case of a name works and changes the stored case (the listing shows
+  the new case, the inode is unchanged); any spelling of the old name
+  finds the file; renaming another file onto a different spelling of an
+  existing name replaces it and the destination entry keeps its stored
+  spelling. Errors: missing source ENOENT (2); missing destination
+  directory ENOENT; a path through a file ENOTDIR; an empty name ENOENT; a
+  directory into itself or its own subdirectory EINVAL (22); "." as source
+  or destination EINVAL; a destination directory without write permission
+  EACCES (13); unreadable path EFAULT (14); a trailing slash on a name
+  that is a file (source or destination) ENOTDIR, on a name that does not
+  exist ENOENT; names of 255 bytes work, 256 bytes is ENAMETOOLONG (63).
+returns:
+  success: "0"
+errors:
+  missing: "ENOENT (2)"
+  not_dir: "ENOTDIR (20)"
+  is_dir: "EISDIR (21)"
+  not_empty: "ENOTEMPTY (66)"
+  into_itself: "EINVAL (22)"
+  access: "EACCES (13)"
+  bad_pointer: "EFAULT (14)"
+  too_long: "ENAMETOOLONG (63)"
+side_effects: "a name changes; an existing destination is replaced"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

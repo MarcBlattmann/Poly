@@ -6,7 +6,9 @@
 //! Before a class object is handed out, the client is checked against the `LaunchPermission` of the
 //! class's `AppID` (B2c, sheet `AppID.Security`).
 //!
-//! `ole32` starts it on demand; it runs until the machine stops. The decisions are
+//! It starts when `ole32` first needs it, by the kernel and as LocalSystem in session 0
+//! (`PolyStartSystemProcess`, ADR 0235), and runs until the machine stops; the servers it starts
+//! run as the client that activates them. The decisions are
 //! `poly_com::activation::Activator`'s (host-tested); this file is the pipe, the threads, starting
 //! programs and services, and waiting. Functions from Microsoft Learn (prototypes) and the SDK
 //! headers named beside the constants.
@@ -71,18 +73,6 @@ unsafe extern "system" {
     fn GetTickCount64() -> u64;
     fn OpenProcess(access: u32, inherit: i32, pid: u32) -> Handle;
     fn WaitForSingleObject(h: Handle, ms: u32) -> u32;
-    fn CreateProcessW(
-        app: *const u16,
-        cmd: *mut u16,
-        process_security: *const c_void,
-        thread_security: *const c_void,
-        inherit: i32,
-        flags: u32,
-        env: *const c_void,
-        dir: *const u16,
-        startup: *const StartupInfo,
-        info: *mut ProcessInformation,
-    ) -> i32;
     fn ExpandEnvironmentStringsW(src: *const u16, dst: *mut u16, size: u32) -> u32;
     fn LoadLibraryW(name: *const u16) -> usize;
     fn GetProcAddress(module: usize, name: *const u8) -> usize;
@@ -120,6 +110,19 @@ unsafe extern "system" {
         len: *mut u32,
     ) -> i32;
     fn RegCloseKey(key: isize) -> i32;
+    fn CreateProcessAsUserW(
+        token: Handle,
+        app: *const u16,
+        cmd: *mut u16,
+        process_security: *const c_void,
+        thread_security: *const c_void,
+        inherit: i32,
+        flags: u32,
+        env: *const c_void,
+        dir: *const u16,
+        startup: *const StartupInfo,
+        info: *mut ProcessInformation,
+    ) -> i32;
 }
 
 /// `STARTUPINFOW`.
@@ -157,8 +160,16 @@ const RPC_E_DISCONNECTED: Hresult = 0x8001_0108_u32 as i32;
 const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
 const ERROR_ACCESS_DENIED: u32 = 5;
 const ERROR_INVALID_PARAMETER: u32 = 87;
-/// `SYNCHRONIZE`.
+/// `SYNCHRONIZE`; `PROCESS_QUERY_LIMITED_INFORMATION` (`winnt.h`).
 const SYNCHRONIZE: u32 = 0x0010_0000;
+const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+/// `TOKEN_DUPLICATE`, `TOKEN_QUERY`, `MAXIMUM_ALLOWED` (`winnt.h`); `SecurityImpersonation` and
+/// `TokenPrimary` (`SECURITY_IMPERSONATION_LEVEL`, `TOKEN_TYPE`).
+const TOKEN_DUPLICATE: u32 = 0x0002;
+const TOKEN_QUERY: u32 = 0x0008;
+const MAXIMUM_ALLOWED: u32 = 0x0200_0000;
+const SECURITY_IMPERSONATION: u32 = 2;
+const TOKEN_PRIMARY: u32 = 1;
 /// `HKEY_LOCAL_MACHINE`, `KEY_READ`.
 const HKLM: isize = 0x8000_0002_u32 as i32 as isize;
 const KEY_READ: u32 = 0x2_0019;
@@ -306,8 +317,44 @@ fn key_exists(path: &str) -> bool {
     true
 }
 
-/// Start `cmd` as a process.
-fn run(cmd: &str) -> Result<(), Hresult> {
+/// A primary token of client process `pid` (from the activation pipe): the servers this process
+/// starts for a client run as the client (ADR 0235; this process is LocalSystem, Windows' DCOM
+/// launcher starts a server as the user that activates it). `None` when the client is gone.
+fn client_token(pid: u32) -> Option<Handle> {
+    if pid == 0 {
+        return None;
+    }
+    // SAFETY: plain calls; every handle opened here is closed here except the token returned.
+    unsafe {
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process == 0 {
+            return None;
+        }
+        let mut token: Handle = 0;
+        let opened = OpenProcessToken(process, TOKEN_DUPLICATE | TOKEN_QUERY, &mut token) != 0;
+        CloseHandle(process);
+        if !opened {
+            return None;
+        }
+        let mut primary: Handle = 0;
+        let ok = DuplicateTokenEx(
+            token,
+            MAXIMUM_ALLOWED,
+            core::ptr::null(),
+            SECURITY_IMPERSONATION,
+            TOKEN_PRIMARY,
+            &mut primary,
+        ) != 0;
+        CloseHandle(token);
+        ok.then_some(primary)
+    }
+}
+
+/// Start `cmd` as a process of client process `client`.
+fn run(cmd: &str, client: u32) -> Result<(), Hresult> {
+    let Some(token) = client_token(client) else {
+        return Err(CO_E_SERVER_EXEC_FAILURE);
+    };
     let mut c = wide(cmd);
     let si = StartupInfo {
         cb: core::mem::size_of::<StartupInfo>() as u32,
@@ -322,9 +369,10 @@ fn run(cmd: &str) -> Result<(), Hresult> {
         std: [0; 3],
     };
     let mut pi = ProcessInformation { process: 0, thread: 0, pid: 0, tid: 0 };
-    // SAFETY: a mutable NUL-terminated command line and live structures.
+    // SAFETY: a mutable NUL-terminated command line and live structures; the token is ours.
     let ok = unsafe {
-        CreateProcessW(
+        CreateProcessAsUserW(
+            token,
             core::ptr::null(),
             c.as_mut_ptr(),
             core::ptr::null(),
@@ -337,10 +385,12 @@ fn run(cmd: &str) -> Result<(), Hresult> {
             &mut pi,
         )
     };
+    // SAFETY: our token handle, closed once.
+    unsafe { CloseHandle(token) };
     if ok == 0 {
         return Err(REGDB_E_CLASSNOTREG);
     }
-    // SAFETY: the handles CreateProcessW returned, closed once.
+    // SAFETY: the handles CreateProcessAsUserW returned, closed once.
     unsafe {
         CloseHandle(pi.thread);
         CloseHandle(pi.process);
@@ -401,10 +451,10 @@ fn start_service(name: &str, args: &[String]) -> Option<Result<(), Hresult>> {
     }
 }
 
-/// Start what `plan` says.
-fn launch(plan: &Plan) -> Result<(), Hresult> {
+/// Start what `plan` says, for client process `client`.
+fn launch(plan: &Plan, client: u32) -> Result<(), Hresult> {
     match plan {
-        Plan::Command(cmd) => run(cmd),
+        Plan::Command(cmd) => run(cmd, client),
         Plan::Service { name, args } => {
             let key = alloc::format!(r"SYSTEM\CurrentControlSet\Services\{name}");
             if !key_exists(&key) {
@@ -421,7 +471,7 @@ fn launch(plan: &Plan) -> Result<(), Hresult> {
                 cmd.push(' ');
                 cmd.push_str(a);
             }
-            run(&cmd).map_err(|_| CO_E_SERVER_EXEC_FAILURE)
+            run(&cmd, client).map_err(|_| CO_E_SERVER_EXEC_FAILURE)
         }
     }
 }
@@ -616,7 +666,7 @@ fn handle(req: Request, client: u32) -> Reply {
                         waited = true;
                         started = Some(t);
                         if let Some(p) = &plan
-                            && let Err(hr) = launch(p)
+                            && let Err(hr) = launch(p, client)
                         {
                             STATE.with(|a| a.launch_failed(&clsid, p));
                             return Reply::hr(hr);

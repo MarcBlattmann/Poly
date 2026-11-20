@@ -18,6 +18,7 @@
 //! [ADR 0063]: ../../../docs/adr/0063-nt-processes-object-manager-and-memory.md
 
 mod afd;
+mod audio;
 mod backend;
 pub mod console;
 mod io;
@@ -65,6 +66,7 @@ pub static GUI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-gui32.
 pub static SYS32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-sys32.exe"));
 pub static SAFESEH32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-safeseh32.exe"));
 pub static ANSI32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-ansi32.exe"));
+pub static MSGLOOP32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/wow64-msgloop32.exe"));
 
 include!(concat!(env!("OUT_DIR"), "/wow64_dlls.rs"));
 mod test_wow64;
@@ -174,11 +176,15 @@ pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.
 /// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static SERVICES_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/services.exe"));
 /// Poly's `explorer.exe`, the stand-in of the session's shell (ADR 0222), installed in
-/// `C:\Windows` by [`layout`] and started for the elevated logon; empty without `xtask`.
+/// `C:\Windows` by [`layout`] and started for the standard and elevated logons; empty without `xtask`.
 pub static EXPLORER_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/explorer.exe"));
 /// Poly's `cmd.exe`, the command processor (ADR 0240), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
 pub static CMD_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/cmd.exe"));
+/// Poly's `polyopen.exe` (ADR 0230): starts a program as the shell opens it (`ShellExecuteExW`,
+/// so its manifest is honoured), for Poly's installer window; installed in `C:\Windows\System32`
+/// by [`layout`]; empty without `xtask`.
+pub static POLYOPEN_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/polyopen.exe"));
 /// Our `hnetcfg.dll`: the Windows Firewall's COM objects over a rule table that enforces nothing.
 pub static HNETCFG: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/hnetcfg.dll"));
 /// Our `msimg32.dll`: `AlphaBlend` over `gdi32!GdiAlphaBlend`.
@@ -339,6 +345,12 @@ struct NtState {
 
 static STATE: Mutex<Option<NtState>> = Mutex::new(None);
 
+/// The NT personality's locks threads sleep on, for the timeline (ADR 0247).
+pub fn name_timeline_queues() {
+    crate::timeline::name_queue(STATE.queue_address(), "nt-state-lock");
+    crate::timeline::name_queue(io::draining_queue(), "nt-io-drain");
+}
+
 /// `poly.win32k.session=interactive`: win32k reproduces the interactive
 /// desktop session of the slice B oracle instead of session 0 (ADR 0131).
 static INTERACTIVE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
@@ -409,7 +421,8 @@ static ONLY_SET: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool
 
 /// Whether a diagnostic needs the processes' command lines.
 fn wants_command_lines() -> bool {
-    WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0
+    crate::timeline::on()
+        || WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0
         || MEM_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0
         || ONLY_SET.load(core::sync::atomic::Ordering::Relaxed)
 }
@@ -437,10 +450,25 @@ fn read_command_line(pid: u32) -> Option<String> {
 
 /// Remember the calling process's command line if a diagnostic needs it and it is not known.
 fn note_command_line(pid: u32) {
-    if !wants_command_lines() || COMMAND_LINES.lock().contains_key(&pid) {
+    if !wants_command_lines() {
+        return;
+    }
+    // Known already: no lock (every system call comes here).
+    static NOTED: [core::sync::atomic::AtomicU64; 1024] = [const { core::sync::atomic::AtomicU64::new(0) }; 1024];
+    let slot = nt_pid_bit(pid);
+    if let Some((word, bit)) = slot
+        && NOTED[word].load(core::sync::atomic::Ordering::Relaxed) & bit != 0
+    {
+        return;
+    }
+    if COMMAND_LINES.lock().contains_key(&pid) {
         return;
     }
     if let Some(line) = read_command_line(pid) {
+        if let Some((word, bit)) = slot {
+            NOTED[word].fetch_or(bit, core::sync::atomic::Ordering::Relaxed);
+        }
+        crate::timeline::name_process(pid, &line);
         COMMAND_LINES.lock().insert(pid, line);
     }
 }
@@ -792,7 +820,18 @@ fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
     if guard.is_none() {
         make_state(&mut guard);
     }
-    f(guard.as_mut().expect("made above"))
+    run_noting_completions(guard.as_mut().expect("made above"), f)
+}
+
+/// Run `f` on the state; if it queued an I/O completion, the current thread owes a drain: it
+/// returns to user mode only after the completion is delivered (ADR 0247, [`io::after_call`]).
+fn run_noting_completions<R>(s: &mut NtState, f: impl FnOnce(&mut NtState) -> R) -> R {
+    let before = s.sys.io.completions_queued();
+    let r = f(s);
+    if s.sys.io.completions_queued() != before {
+        io::owe_drain();
+    }
+    r
 }
 
 /// The NT state of the first NT use, made in a frame of its own: `with`
@@ -812,6 +851,9 @@ fn make_state(slot: &mut Option<NtState>) {
     state.sys.ntdll32 = NTDLL32;
     // The logon the programs run in (ADR 0222).
     state.sys.logon = *LOGON.lock();
+    // The system's commit limit (ADR 0250): RAM less the frames the kernel keeps for itself.
+    let total = crate::frames::FRAMES.lock().as_ref().map_or(0, |f| f.total_frames());
+    state.sys.commit_limit = total.saturating_sub(crate::frames::reserve()) * 4096;
     state.sys.consent.hook = *UAC_ANSWER.lock();
     // The Windows folders on C: and the registry values that follow
     // them (ADR 0073), before file I/O attaches C:.
@@ -822,10 +864,11 @@ fn make_state(slot: &mut Option<NtState>) {
     if let Ok(tid) = thread::spawn_named("nt-boot-services", boot_services, 0) {
         let _ = thread::detach(tid);
     }
-    // The elevated logon's session has a shell holding the filtered token (ADR 0222).
-    if state.sys.logon == poly_personality_nt::security::Logon::Elevated
-        && let Ok(tid) = thread::spawn_named("nt-shell", shell_main, 0)
-    {
+    // An interactive user is logged on at the console in every boot, as on the machine the
+    // recordings come from: their shell runs in session 1 with their filtered token, whatever
+    // logon the programs of the boot have (ADR 0222, 0235). The SSH logon's programs (the `admin`
+    // logon, session 0) reach it too, as the desktop's `ShellWindows` chain does on Windows.
+    if let Ok(tid) = thread::spawn_named("nt-shell", shell_main, 0) {
         let _ = thread::detach(tid);
     }
     if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
@@ -865,12 +908,37 @@ fn build_state(slot: &mut Option<NtState>) {
 
 /// Run `f` on the NT state if the first NT use made it already.
 fn with_existing<R>(f: impl FnOnce(&mut NtState) -> R) -> Option<R> {
-    STATE.lock().as_mut().map(f)
+    STATE.lock().as_mut().map(|s| run_noting_completions(s, f))
 }
 
 /// Whether `pid` is an NT process the kernel has set up.
 pub fn is_nt_process(pid: u32) -> bool {
-    with(|s| s.processes.contains_key(&ProcessId(pid)))
+    match nt_pid_bit(pid) {
+        Some((word, bit)) => NT_PIDS[word].load(core::sync::atomic::Ordering::Acquire) & bit != 0,
+        None => with(|s| s.processes.contains_key(&ProcessId(pid))),
+    }
+}
+
+/// Which processes are in the NT state's table, for [`is_nt_process`] without the NT lock: every
+/// system call of every NT thread asks it first, and the lock it took queued them (ADR 0247). Set
+/// and cleared under the lock, with the table; process ids past the bitmap ask the table.
+static NT_PIDS: [core::sync::atomic::AtomicU64; 1024] = [const { core::sync::atomic::AtomicU64::new(0) }; 1024];
+
+/// Process `pid`'s word and bit in [`NT_PIDS`], if it has one.
+fn nt_pid_bit(pid: u32) -> Option<(usize, u64)> {
+    let pid = pid as usize;
+    (pid < NT_PIDS.len() * 64).then(|| (pid / 64, 1u64 << (pid % 64)))
+}
+
+/// Mark process `pid` as in the NT table or not (with the table, under the NT lock).
+fn note_nt_pid(pid: u32, present: bool) {
+    if let Some((word, bit)) = nt_pid_bit(pid) {
+        if present {
+            NT_PIDS[word].fetch_or(bit, core::sync::atomic::Ordering::Release);
+        } else {
+            NT_PIDS[word].fetch_and(!bit, core::sync::atomic::Ordering::Release);
+        }
+    }
 }
 
 /// The calling thread's view of the kernel for one system call.
@@ -1090,6 +1158,16 @@ impl NtKernel for Kernel {
     }
 
     fn debug_print(&mut self, text: &[u8]) {
+        // A thread's name for the timeline (ADR 0247), never a line of the log.
+        if let Some(rest) = text.strip_prefix(b"\x1ftimeline-name ") {
+            let rest = alloc::string::String::from_utf8_lossy(rest);
+            if let Some((tid, name)) = rest.split_once(' ')
+                && let Ok(tid) = tid.parse::<u32>()
+            {
+                crate::timeline::name_thread(self.pid.0, tid, name);
+            }
+            return;
+        }
         crate::kprintln!("nt: pid {}: {}", self.pid.0, alloc::string::String::from_utf8_lossy(text).trim_end());
     }
 
@@ -1206,6 +1284,25 @@ impl NtKernel for Kernel {
         afd::net_info()
     }
 
+    fn audio_device(&mut self) -> Option<poly_audio::nt::DeviceInfo> {
+        audio::device()
+    }
+
+    fn audio_open(
+        &mut self,
+        format: poly_audio::Format,
+        buffer_frames: u32,
+    ) -> Result<Arc<dyn poly_personality_nt::audio::NtAudioStream>, NtStatus> {
+        audio::open(format, buffer_frames)
+    }
+
+    fn audio_pend(
+        &mut self,
+        w: poly_personality_nt::audio::AudioWait,
+    ) -> Result<(), poly_personality_nt::audio::AudioWait> {
+        audio::pend(w)
+    }
+
     fn net_interfaces(&self) -> Vec<poly_personality_nt::afd::IfInfo> {
         afd::net_interfaces()
     }
@@ -1221,6 +1318,16 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let mut k = Kernel::new(ProcessId(process.pid), ThreadRef(u64::from(tid)), memory);
     let trace = TRACE.load(core::sync::atomic::Ordering::Relaxed);
     let trail = TRAIL_LEN.load(core::sync::atomic::Ordering::Relaxed);
+    // A call that needs neither the NT state nor the work below (the clock): no lock at all
+    // (ADR 0247). Traced runs keep every call on the full path.
+    if trace == 0
+        && trail == 0
+        && !crate::arch::user::compat()
+        && !apitrace::wanted()
+        && let Some(outcome) = poly_personality_nt::dispatch_unlocked(&mut k, regs)
+    {
+        return outcome;
+    }
     note_command_line(process.pid);
     let traced =
         (trace != 0 || trail != 0 || apitrace::wanted()).then(|| selected(process.pid)).filter(|&s| s).map(|_| {
@@ -1386,6 +1493,16 @@ struct HandlesFor {
     /// `lpThreadAttributes`), applied once the creator's handles are open.
     process_security: Option<Vec<u8>>,
     thread_security: Option<Vec<u8>>,
+    /// The process it is a child of (`PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`): its parent and the
+    /// source of its token; else the creator.
+    parent: Option<ProcessId>,
+}
+
+impl HandlesFor {
+    /// The process it is a child of and inherits its token from.
+    fn parent(&self) -> ProcessId {
+        self.parent.unwrap_or(self.caller.process)
+    }
 }
 
 /// Handles to a new process and its first thread.
@@ -1418,11 +1535,12 @@ fn start_params(
     let console_app = image.info.optional.subsystem == poly_pe::subsystem::WINDOWS_CUI;
     let started = with(|s| {
         s.processes.insert(pid, NtProcess::new(pid));
+        note_nt_pid(pid.0, true);
         s.created.insert(pid, registry::filetime_now());
         s.finished.remove(&pid);
         s.peak.remove(&pid);
         let proc = s.processes.get_mut(&pid).expect("just inserted");
-        proc.parent = handles.map_or(0, |h| h.caller.process.0);
+        proc.parent = handles.map_or(0, |h| h.parent().0);
         if let Some(h) = handles {
             proc.set_mitigation(h.mitigation);
             s.sys.winsta.begin(pid, h.desktop.clone());
@@ -1451,7 +1569,7 @@ fn start_params(
             poly_personality_nt::security::inherit_token(
                 &mut s.sys,
                 pid,
-                handles.map(|h| h.caller.process),
+                handles.map(HandlesFor::parent),
                 handles.and_then(|h| h.token),
                 thread,
             )?;
@@ -1495,6 +1613,7 @@ fn start_params(
                         &mut s.sys,
                         pid,
                         Some(&h.caller),
+                        h.token.is_some(),
                         proc.object.map(|o| (o, h.process_security.as_deref())),
                         proc.threads.first().map(|t| (t.object, h.thread_security.as_deref())),
                     );
@@ -1523,6 +1642,7 @@ fn start_params(
             Err(e) => {
                 s.created.remove(&pid);
                 let mut proc = s.processes.remove(&pid).expect("just inserted");
+                note_nt_pid(pid.0, false);
                 let mut b = MemBackend { memory, sections: &mut s.sections };
                 exec::process_exit(&mut s.sys, &mut proc, &mut b);
                 Err(e)
@@ -1560,9 +1680,10 @@ fn create_process(
     // The first thread's id is its own (GetThreadId of the main thread differs from the process id).
     let tid = crate::process::alloc_nt_id();
     let format = Format::Pe { bits: Bits::B64, arch: Arch::X86_64 };
-    // The process that created it is its parent in /proc (ADR 0230).
+    // The process that created it (or the one it was created as a child of) is its parent in
+    // /proc (ADR 0230).
     let mut nt = Process::new_nt(pid, format, traced);
-    nt.ppid = creator_process.as_ref().map_or(0, |p| p.pid);
+    nt.ppid = req.parent.map_or_else(|| creator_process.as_ref().map_or(0, |p| p.pid), |p| p.0);
     let process = Arc::new(nt);
     let want = HandlesFor {
         caller: creator,
@@ -1578,6 +1699,7 @@ fn create_process(
         error_mode: req.error_mode,
         process_security: req.process_security,
         thread_security: req.thread_security,
+        parent: req.parent,
     };
     let (start, handles) = start_params(&process, &memory, req.image, tid, &req.params, &sources, Some(&want))?;
     let (ph, th) = handles.expect("asked for");
@@ -1589,7 +1711,9 @@ fn create_process(
     };
     if req.suspended {
         // CREATE_SUSPENDED (ADR 0089): the first thread starts when its
-        // suspend count drops to zero (`sched::resume`).
+        // suspend count drops to zero (`sched::resume`). Until then a thread
+        // another process makes in it does not end it by leaving.
+        process.hold();
         with(|s| {
             let c = s.ctl.entry(first).or_default();
             c.suspend_count = 1;
@@ -1657,6 +1781,40 @@ pub(super) fn start_first_thread(process: &Arc<Process>, memory: &Arc<Memory>, s
 
 pub use sched::wait_while_suspended;
 
+/// The pages each NT process holds of its own (resident less page cache and shared pages: what
+/// ending it would free), for the out-of-memory policy (ADR 0250).
+pub fn own_pages() -> Vec<(u32, u64)> {
+    io::memories()
+        .into_iter()
+        .map(|(pid, memory)| {
+            let (resident, cached, shared) = memory.page_counts();
+            (pid, resident.saturating_sub(cached + shared))
+        })
+        .collect()
+}
+
+/// The path of NT process `pid`'s executable below its volume, for logs.
+pub fn image_of(pid: u32) -> Option<String> {
+    with_existing(|s| {
+        s.processes
+            .get(&ProcessId(pid))
+            .and_then(|p| p.image_name.as_ref())
+            .map(|(_, path)| String::from_utf16_lossy(path))
+    })
+    .flatten()
+}
+
+/// The system's commit charge and its limit (ADR 0250), if the NT state is there.
+pub fn commit() -> Option<(u64, u64)> {
+    with_existing(|s| (s.sys.commit_total, s.sys.commit_limit))
+}
+
+/// End NT process `pid` because memory ran out (ADR 0250, `crate::oom`): as `NtTerminateProcess`
+/// with `STATUS_NO_MEMORY`.
+pub fn terminate_for_memory(pid: u32) -> Result<(), NtStatus> {
+    sched::terminate_process_by_id(ProcessId(pid), poly_ntobj::status::STATUS_NO_MEMORY)
+}
+
 /// Translate a thread's [`ExitStatus`] to the `NTSTATUS` its object reports.
 fn exit_to_nt(status: ExitStatus) -> NtStatus {
     match status {
@@ -1702,6 +1860,7 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     if WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 {
         crate::kprintln!("nt-waits: p{pid} ended at {} ms", crate::time::now_ns() / 1_000_000);
     }
+    let mut dropped = Vec::new();
     let host_needed = with(|s| {
         if let Some(created) = s.created.remove(&ProcessId(pid)) {
             let cpu = used;
@@ -1718,7 +1877,19 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
             );
         }
         s.peak.remove(&ProcessId(pid));
+        // A first thread that never started keeps no reference to the process.
+        let unstarted: Vec<_> =
+            s.processes.get(&ProcessId(pid)).map_or_else(Vec::new, |p| p.threads.iter().map(|t| t.thread).collect());
+        for t in unstarted {
+            if let Some(c) = s.ctl.get_mut(&t) {
+                c.deferred_start = None;
+                if let Some(d) = c.deferred_process.take() {
+                    dropped.push(d);
+                }
+            }
+        }
         if let Some(mut proc) = s.processes.remove(&ProcessId(pid)) {
+            note_nt_pid(pid, false);
             let mut b = MemBackend { memory, sections: &mut s.sections };
             exec::process_exit(&mut s.sys, &mut proc, &mut b);
         }
@@ -1728,9 +1899,14 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
         let now_ms = crate::time::now_ns() / 1_000_000;
         poly_personality_nt::scm::process_ended(&mut s.sys, ProcessId(pid), now_ms, registry::filetime_now())
     });
+    // Dropped out of the lock: a memory map may sleep as it goes.
+    drop(dropped);
     if host_needed {
         start_service_host();
     }
+    // Its children go to its own parent (ADR 0230), so `/proc` links every
+    // process to a living ancestor.
+    adopt_children(pid);
 
     // Its file objects closed with its handles: deliver the cancellations.
     io::drain();
@@ -1741,6 +1917,18 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     io::unregister(pid);
     sched::drain_wakes();
     registry::flush();
+}
+
+/// The processes whose parent is `pid`, which is ending, get `pid`'s parent (ADR 0230): an
+/// installer's helper started by a short-lived elevated copy stays in the installer's tree.
+fn adopt_children(pid: u32) {
+    let Some(me) = crate::process::find(pid) else { return };
+    let parent = crate::linux::task::parent_of(&me);
+    for p in crate::process::all() {
+        if p.pid != pid && crate::linux::task::parent_of(&p) == pid {
+            p.adopted.store(parent, core::sync::atomic::Ordering::Relaxed);
+        }
+    }
 }
 
 /// `services.exe` is being started (ADR 0221): one start at a time.
@@ -1777,9 +1965,9 @@ fn services_main(_: usize) -> usize {
     0
 }
 
-/// Start `C:\Windows\explorer.exe`, the stand-in of the session's shell (ADR 0222), with the
-/// logon's filtered token: an elevated program finds it and starts a process de-elevated with a
-/// copy of that token.
+/// Start `C:\Windows\explorer.exe`, the stand-in of the interactive user's shell (ADR 0222), in
+/// session 1 with that user's filtered token: an elevated program finds it and starts a process
+/// de-elevated with a copy of that token.
 fn shell_main(_: usize) -> usize {
     if EXPLORER_EXE.is_empty() {
         return 0;
@@ -1794,7 +1982,14 @@ fn shell_main(_: usize) -> usize {
         p.start()
     });
     match started {
-        Ok(p) => crate::kprintln!("nt: explorer.exe started (p{}) with the filtered token", p.pid),
+        Ok(p) => {
+            // The session's shell window answers as this process's (`GetShellWindow`).
+            with(|s| {
+                let tid = s.processes.get(&ProcessId(p.pid)).and_then(|q| q.threads.first()).map_or(0, |t| t.thread.0);
+                s.sys.win32k.wm.set_shell_process(p.pid, tid as u32);
+            });
+            crate::kprintln!("nt: explorer.exe started (p{}) with the filtered token", p.pid)
+        }
         Err(e) => crate::kprintln!("nt: explorer.exe could not start: {e}"),
     }
     0

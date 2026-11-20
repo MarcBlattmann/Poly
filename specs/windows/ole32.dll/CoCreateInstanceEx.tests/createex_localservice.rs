@@ -1765,6 +1765,11 @@ fn test(t: &mut Test) {
         u32::from(stopped),
         u32::from(wait_log(tag, "exit", 2000))
     );
+    // The first service process asked to end through the quit file (the service's stop handler makes it) and has logged
+    // its end: the file is removed before the service is started again, or the new process would find it at once, leave
+    // about 10 ms after it registered its class, and the check below that the service is running would depend on the
+    // timing of the two processes.
+    delete_file(&quit_path(tag));
     let (hr3, o3) = create_inst(&clsid, CLSCTX_LOCAL_SERVER, &IID_IUnknown);
     say!(
         t,

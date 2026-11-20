@@ -329,6 +329,9 @@ struct WindowsRun {
     told: Option<usize>,
     /// Waiting was stopped.
     stop: bool,
+    /// Started through `polyopen.exe`, which waits for everything the program started
+    /// itself (a job object) and says so: the window waits for it alone.
+    opener: bool,
 }
 
 /// Make the file at `path` executable if it is not: Poly's exec wants the
@@ -339,6 +342,26 @@ fn make_executable(path: &str) -> Result<(), String> {
         poly_rt::fs::set_mode(path, 0o755).map_err(|e| alloc::format!("{path}: {e}"))?;
     }
     Ok(())
+}
+
+/// How a Windows program is started from the window: through
+/// `polyopen.exe` (ADR 0230), which opens it as the Windows shell does
+/// (`ShellExecuteExW`): its manifest's `requestedExecutionLevel` is read and
+/// the consent prompt asked first (ADR 0222). `argv[0]` is the program (a
+/// path of Poly's file system: the kernel hands it on as its DOS path). On a
+/// disk without `polyopen.exe` the program is started itself.
+fn opened(argv: &[String]) -> Result<(Vec<String>, bool), String> {
+    let program = argv.first().ok_or("nothing to run")?;
+    match winapps::vfs_path(winapps::POLYOPEN, &VfsFiles).filter(|p| poly_rt::fs::exists(p)) {
+        Some(opener) => {
+            make_executable(&opener)?;
+            Ok((core::iter::once(opener).chain(argv.iter().cloned()).collect(), true))
+        }
+        None => {
+            make_executable(program)?;
+            Ok((argv.to_vec(), false))
+        }
+    }
 }
 
 /// The file system as `poly_pkg::windows::apps` reads it.
@@ -387,7 +410,8 @@ fn grow(tree: &mut BTreeSet<u32>, main: u32, procs: &[(u32, u32, bool)]) -> usiz
             break;
         }
     }
-    procs.iter().filter(|(pid, _, ended)| *pid != main && !*ended && tree.contains(pid)).count()
+    let me = poly_rt::process::id();
+    procs.iter().filter(|(pid, _, ended)| *pid != main && *pid != me && !*ended && tree.contains(pid)).count()
 }
 
 /// The shortcut files in the folders an installer puts them in, with a
@@ -501,6 +525,24 @@ impl Native {
                 Ok(None) => {}
                 Err(_) => w.ended = Some(false),
             }
+        }
+        if w.opener {
+            // polyopen.exe counts what the program started, exactly (its job).
+            if let Some(n) = pumped.output.iter().rev().find_map(|l| poly_pkg::installer::open_waiting(l))
+                && w.told != Some(n)
+            {
+                w.told = Some(n);
+                pumped.waiting = Some(n);
+            }
+            if w.ended.is_none() && !w.stop {
+                return pumped;
+            }
+            if !w.pending.is_empty() {
+                pumped.output.push(String::from_utf8_lossy(&w.pending).into_owned());
+            }
+            pumped.ended = Some(w.ended.unwrap_or(true));
+            self.windows = None;
+            return pumped;
         }
         let main = w.child.id();
         let others = grow(&mut w.tree, main, &processes());
@@ -703,13 +745,12 @@ impl view::Host for Native {
     }
 
     fn run_windows(&mut self, argv: &[String]) -> Result<(), String> {
-        let program = argv.first().ok_or("nothing to run")?;
-        make_executable(program)?;
+        let (argv, opener) = opened(argv)?;
         self.before = (scan_links(), uninstall_keys());
         let [read, write] = poly_rt::sys::pipe().map_err(|e| alloc::format!("a pipe: {e}"))?;
         let (read, write) = (File::from_handle(read), File::from_handle(write));
         poly_rt::sys::set_nonblocking(read.handle(), true).map_err(|e| alloc::format!("a pipe: {e}"))?;
-        let mut cmd = Command::new(program);
+        let mut cmd = Command::new(&argv[0]);
         cmd.args(argv.iter().skip(1).map(String::as_str))
             .envs(
                 poly_rt::env::vars()
@@ -721,10 +762,21 @@ impl view::Host for Native {
             .stderr(Stdio::Handle(write.handle()));
         let child = cmd.spawn().map_err(|e| alloc::format!("{e}"))?;
         drop(write);
+        // The window itself is the tree's root: a process whose parent ended is adopted by
+        // its nearest living ancestor (the kernel, ADR 0230), which may be this window.
         let mut tree = BTreeSet::new();
+        tree.insert(poly_rt::process::id());
         tree.insert(child.id());
-        self.windows =
-            Some(WindowsRun { child, output: read, pending: Vec::new(), tree, ended: None, told: None, stop: false });
+        self.windows = Some(WindowsRun {
+            child,
+            output: read,
+            pending: Vec::new(),
+            tree,
+            ended: None,
+            told: None,
+            stop: false,
+            opener,
+        });
         Ok(())
     }
 
@@ -803,17 +855,18 @@ impl view::Host for Native {
     }
 
     fn run_program(&mut self, path: &str) -> Result<(), String> {
-        make_executable(path)?;
+        let (argv, _) = opened(&[path.to_string()])?;
         // The desktop shows a busy pointer until the program has a window.
         let mut startup = poly_app::startup::Startup::begin(path);
-        let mut cmd = Command::new(path);
-        cmd.envs(
-            poly_rt::env::vars()
-                .filter_map(|v| core::str::from_utf8(v).ok())
-                .filter(|v| !poly_app::startup::is_token_var(v)),
-        )
-        .envs(startup.environment().iter().map(String::as_str))
-        .stdin(Stdio::Null);
+        let mut cmd = Command::new(&argv[0]);
+        cmd.args(argv.iter().skip(1).map(String::as_str))
+            .envs(
+                poly_rt::env::vars()
+                    .filter_map(|v| core::str::from_utf8(v).ok())
+                    .filter(|v| !poly_app::startup::is_token_var(v)),
+            )
+            .envs(startup.environment().iter().map(String::as_str))
+            .stdin(Stdio::Null);
         match cmd.spawn() {
             Ok(child) => {
                 startup.started(child.id());

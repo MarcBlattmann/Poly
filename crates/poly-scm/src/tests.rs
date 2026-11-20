@@ -400,3 +400,23 @@ fn the_database_survives_a_reload_and_marked_services_go() {
     assert!(again.service(&w("Gone")).is_none());
     assert!(!e.key_exists("Gone"));
 }
+
+#[test]
+fn the_system_starts_a_service_its_caller_may_not() {
+    let mut e = Env::new();
+    let m = e.mgr();
+    let h = e.create(m, "SysOnly").unwrap();
+    // A standard user cannot start it (the default descriptor gives interactive users no start).
+    let admins = poly_security::sid::builtin(544);
+    let standard = e.token.filter(0, &[admins], &[], &[], 0x56).unwrap();
+    let c = Caller { pid: ME, token: Some(&standard), now: 0 };
+    let cm = u64::from(e.scm.open_manager(&c, SC_MANAGER_CONNECT).unwrap());
+    assert_eq!(e.scm.open_service(&c, cm, Some(&w("SysOnly")), SERVICE_START), Err(ERROR_ACCESS_DENIED));
+    // The system can: the host is woken to start the process, nobody waits on an event.
+    let fx = e.scm.start_for_system(&w("SysOnly")).unwrap();
+    assert!(fx.contains(&Effect::WakeHost));
+    assert_eq!(e.status(h).state, SERVICE_START_PENDING);
+    // Asking again while it starts is no error and changes nothing.
+    assert_eq!(e.scm.start_for_system(&w("sysonly")), Ok(Vec::new()));
+    assert_eq!(e.scm.start_for_system(&w("NoSuch")), Err(ERROR_SERVICE_DOES_NOT_EXIST));
+}

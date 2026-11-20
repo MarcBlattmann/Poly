@@ -176,6 +176,7 @@ dependencies = [
  "poly-smp",
  "poly-squashfs",
  "poly-term",
+ "poly-timeline",
  "poly-tty",
  "poly-unix",
  "poly-vdso",
@@ -194,6 +195,7 @@ dependencies = [
 name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
+ "poly-audio",
  "poly-nls",
  "poly-ntobj",
  "poly-pe",
@@ -222,6 +224,10 @@ version = "0.0.1"
 dependencies = [
  "poly-vfs",
 ]
+
+[[package]]
+name = "poly-mach"
+version = "0.0.1"
 
 [[package]]
 name = "poly-macho"
@@ -296,6 +302,7 @@ name = "poly-personality-nt"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-audio",
  "poly-console",
  "poly-iphlp",
  "poly-kernelbase",
@@ -317,6 +324,7 @@ name = "poly-personality-xnu"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-mach",
 ]
 
 [[package]]
@@ -400,6 +408,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-timeline"
+version = "0.0.1"
+
+[[package]]
 name = "poly-tty"
 version = "0.0.1"
 dependencies = [
@@ -480,6 +492,7 @@ name = "poly-win32k"
 version = "0.0.1"
 dependencies = [
  "poly-nls",
+ "poly-png",
 ]
 
 [[package]]

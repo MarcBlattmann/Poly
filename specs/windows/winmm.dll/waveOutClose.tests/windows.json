@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_close_basic",
+      "exe_sha256": "aed4184a0cd335dff41feb93d11490522603c8ee58397fb1e3fc3fa8068d30c9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4KY2xvc2UgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBjbG9zZQpjbG9zZSBhZ2FpbiA9IE1NU1lTRVJSX0lOVkFMSEFORExFICg1KQpvayBjbG9zZSBhZ2FpbgpjbG9zZSAwID0gTU1TWVNFUlJfSU5WQUxIQU5ETEUgKDUpCm9rIGNsb3NlIDAKY2xvc2UgYSBtYWRlLXVwIHZhbHVlID0gTU1TWVNFUlJfSU5WQUxIQU5ETEUgKDUpCm9rIGNsb3NlIGEgbWFkZS11cCB2YWx1ZQpwcmVwYXJlID0gTU1TWVNFUlJfSU5WQUxIQU5ETEUgKDUpCm9rIHByZXBhcmUKcmVzZXQgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgcmVzZXQKcGF1c2UgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgcGF1c2UKcmVzdGFydCA9IE1NU1lTRVJSX0lOVkFMSEFORExFICg1KQpvayByZXN0YXJ0CmJyZWFrIGxvb3AgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgYnJlYWsgbG9vcApnZXQgcG9zaXRpb24gPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgZ2V0IHBvc2l0aW9uCm9wZW4gYWdhaW4gPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBvcGVuIGFnYWluCmNsb3NlIHRoZSBuZXcgaGFuZGxlID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgY2xvc2UgdGhlIG5ldyBoYW5kbGUKc3VtbWFyeSAxNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen = MMSYSERR_NOERROR (0)\nok open\nclose = MMSYSERR_NOERROR (0)\nok close\nclose again = MMSYSERR_INVALHANDLE (5)\nok close again\nclose 0 = MMSYSERR_INVALHANDLE (5)\nok close 0\nclose a made-up value = MMSYSERR_INVALHANDLE (5)\nok close a made-up value\nprepare = MMSYSERR_INVALHANDLE (5)\nok prepare\nreset = MMSYSERR_INVALHANDLE (5)\nok reset\npause = MMSYSERR_INVALHANDLE (5)\nok pause\nrestart = MMSYSERR_INVALHANDLE (5)\nok restart\nbreak loop = MMSYSERR_INVALHANDLE (5)\nok break loop\nget position = MMSYSERR_INVALHANDLE (5)\nok get position\nopen again = MMSYSERR_NOERROR (0)\nok open again\nclose the new handle = MMSYSERR_NOERROR (0)\nok close the new handle\nsummary 14 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 281
+    },
+    {
+      "name": "wo_close_stillplaying",
+      "exe_sha256": "abbfc59b9a84e1093ae0bb6ad179aee218326ae1795b580a29ccf5a2c5fa8856",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4Kb2sgcXVldWUgYSBsb25nIGJ1ZmZlcgpvayBzdGlsbCBxdWV1ZWQKY2xvc2Ugd2hpbGUgcGxheWluZyA9IFdBVkVSUl9TVElMTFBMQVlJTkcgKDMzKQpvayBjbG9zZSB3aGlsZSBwbGF5aW5nCm9rIG5vIFdPTV9DTE9TRSBmcm9tIHRoZSByZWZ1c2VkIGNhbGwKb2sgcXVldWUgYW5vdGhlciBidWZmZXIKb2sgYm90aCBkb25lCmNsb3NlIHdoZW4gaWRsZSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIGNsb3NlIHdoZW4gaWRsZQpvayBvbmUgV09NX0NMT1NFCm9wZW4gYWdhaW4gPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBvcGVuIGFnYWluCm9rIHF1ZXVlCmNsb3NlIHdoaWxlIHBsYXlpbmcgPSBXQVZFUlJfU1RJTExQTEFZSU5HICgzMykKb2sgY2xvc2Ugd2hpbGUgcGxheWluZwpyZXNldCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHJlc2V0CmNsb3NlIGFmdGVyIHJlc2V0ID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgY2xvc2UgYWZ0ZXIgcmVzZXQKc3VtbWFyeSAxNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen = MMSYSERR_NOERROR (0)\nok open\nok queue a long buffer\nok still queued\nclose while playing = WAVERR_STILLPLAYING (33)\nok close while playing\nok no WOM_CLOSE from the refused call\nok queue another buffer\nok both done\nclose when idle = MMSYSERR_NOERROR (0)\nok close when idle\nok one WOM_CLOSE\nopen again = MMSYSERR_NOERROR (0)\nok open again\nok queue\nclose while playing = WAVERR_STILLPLAYING (33)\nok close while playing\nreset = MMSYSERR_NOERROR (0)\nok reset\nclose after reset = MMSYSERR_NOERROR (0)\nok close after reset\nsummary 15 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 464
+    }
+  ]
+}

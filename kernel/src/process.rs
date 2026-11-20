@@ -48,6 +48,11 @@ pub struct Process {
     /// the kernel started. A Linux process's current parent (after its
     /// parent ended) is in the personality's process tree (`linux::task`).
     pub ppid: u32,
+    /// The parent it was given when its own ended (an NT process's children
+    /// go to the nearest living ancestor, as Linux reparents orphans; ADR
+    /// 0230: a Windows installer's process tree stays whole in `/proc` while
+    /// the processes in between end); 0 while its parent lives.
+    pub adopted: AtomicU32,
     pub personality: Personality,
     pub format: binfmt::Format,
     /// Open files, root and working directory, umask, credentials
@@ -178,6 +183,10 @@ struct Threads {
     exiting: Vec<u32>,
     /// Set when the last thread has gone.
     status: Option<ExitStatus>,
+    /// Holds on the process ([`Process::hold`]): while there is one, the last live thread leaving
+    /// does not end it (an NT process whose first thread was created suspended and has not
+    /// started yet, while a thread another process made in it comes and goes).
+    holds: u32,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -283,6 +292,7 @@ impl Process {
         Process {
             pid,
             ppid,
+            adopted: AtomicU32::new(0),
             personality,
             format,
             files,
@@ -380,7 +390,7 @@ impl Process {
             t.live.retain(|(id, _)| *id != tid);
             t.exiting.retain(|&id| id != tid);
             self.live.store(t.live.len() as u32, Ordering::SeqCst);
-            if !t.live.is_empty() || t.status.is_some() {
+            if !t.live.is_empty() || t.status.is_some() || t.holds > 0 {
                 drop(t);
                 // A thread may wait for the others to go (`execve`).
                 EVENTS.wake_all();
@@ -390,13 +400,54 @@ impl Process {
             t.status = Some(status);
             status
         };
+        self.finish_last();
+        Some(status)
+    }
+
+    /// The last thread has gone: close the files and leave the process table.
+    fn finish_last(&self) {
         self.files.close_all();
-        {
-            let mut table = TABLE.lock();
-            if table.get(&self.pid).is_some_and(|w| core::ptr::eq(w.as_ptr(), self)) {
-                table.remove(&self.pid);
-            }
+        let mut table = TABLE.lock();
+        if table.get(&self.pid).is_some_and(|w| core::ptr::eq(w.as_ptr(), self)) {
+            table.remove(&self.pid);
         }
+    }
+
+    /// Keep the process from ending when its last live thread leaves, until [`release`] or
+    /// [`drop_holds`]: an NT process created suspended keeps one while its first thread waits
+    /// to start, so a thread another process made in it (`CreateRemoteThread`) can come and go
+    /// before (specs/windows/kernel32.dll/CreateRemoteThread.yaml, `process_not_started`).
+    ///
+    /// [`release`]: Self::release
+    /// [`drop_holds`]: Self::drop_holds
+    pub fn hold(&self) {
+        self.threads.lock().holds += 1;
+    }
+
+    /// Give up one [`hold`](Self::hold). If that leaves the process with no live thread after
+    /// it had some, it ends now: as with [`detach_thread`](Self::detach_thread), the caller
+    /// finishes its personality's part and calls [`ended`](Self::ended).
+    pub fn release(&self) -> Option<ExitStatus> {
+        self.release_holds(false)
+    }
+
+    /// Give up every hold (the process is being ended); see [`release`](Self::release).
+    pub fn drop_holds(&self) -> Option<ExitStatus> {
+        self.release_holds(true)
+    }
+
+    fn release_holds(&self, all: bool) -> Option<ExitStatus> {
+        let status = {
+            let mut t = self.threads.lock();
+            t.holds = if all { 0 } else { t.holds.saturating_sub(1) };
+            if t.holds > 0 || !t.live.is_empty() || t.status.is_some() || t.started == 0 {
+                return None;
+            }
+            let status = t.group_exit.or(t.last_exiting).unwrap_or(ExitStatus::Exited(0));
+            t.status = Some(status);
+            status
+        };
+        self.finish_last();
         Some(status)
     }
 
@@ -448,6 +499,8 @@ impl Process {
     pub fn group_exit(&self, status: ExitStatus) -> ExitStatus {
         let status = {
             let mut t = self.threads.lock();
+            // A first thread that has not started never will: the last live thread ends it.
+            t.holds = 0;
             *t.group_exit.get_or_insert(status)
         };
         self.exiting.store(true, Ordering::SeqCst);

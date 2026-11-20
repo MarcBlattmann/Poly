@@ -295,6 +295,12 @@ pub const FSCTL_PIPE_LISTEN: u32 = 0x0011_0008;
 pub const FSCTL_PIPE_PEEK: u32 = 0x0011_400C;
 pub const FSCTL_PIPE_TRANSCEIVE: u32 = 0x0011_C017;
 pub const FSCTL_PIPE_WAIT: u32 = 0x0011_0018;
+/// `FSCTL_PIPE_IMPERSONATE` (`ntifs.h`: `CTL_CODE(FILE_DEVICE_NAMED_PIPE, 7, METHOD_BUFFERED,
+/// FILE_ANY_ACCESS)`): what `ImpersonateNamedPipeClient` sends.
+pub const FSCTL_PIPE_IMPERSONATE: u32 = 0x0011_001C;
+/// `STATUS_CANNOT_IMPERSONATE` (`ntstatus.h`): "Unable to impersonate using a named pipe until
+/// data has been read from that pipe".
+pub const STATUS_CANNOT_IMPERSONATE: NtStatus = NtStatus(0xC000_010D);
 /// Poly's own: the process and session ids of the two ends and whether
 /// the server has read from the client (`GetNamedPipeClientProcessId`,
 /// `GetNamedPipeHandleStateW`); function numbers above `winioctl.h`'s.

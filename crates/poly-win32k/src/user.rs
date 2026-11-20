@@ -237,6 +237,35 @@ pub struct CMsg {
     pub private: u32,
 }
 
+/// The bytes of a `MSG` in the calling process: 28 on x86, where `winuser.h` has no `lPrivate`
+/// (it is `_MAC` only), and the whole 48 on x64, where [`CMsg::private`] lies in the structure's
+/// tail padding. Writing a `CMsg` whole into a 32-bit caller's `MSG` overran it by 4 bytes, the
+/// stack cookie behind a message loop's `MSG` (`wow64-gui-overrun`, Google's 32-bit installer).
+pub const MSG_BYTES: usize = if core::mem::size_of::<usize>() == 4 { 28 } else { 48 };
+
+const _: () = assert!(core::mem::size_of::<CMsg>() >= MSG_BYTES);
+const _: () = assert!(core::mem::size_of::<usize>() == 4 || core::mem::size_of::<CMsg>() == MSG_BYTES);
+
+/// Write `m` into a caller's `MSG`: [`MSG_BYTES`] bytes, not one more.
+///
+/// # Safety
+/// `dst` points at a writable `MSG` of the calling process.
+pub unsafe fn put_msg(dst: *mut CMsg, m: &CMsg) {
+    // SAFETY: the caller's promise; `CMsg` holds at least `MSG_BYTES` bytes.
+    unsafe { core::ptr::copy_nonoverlapping(m as *const CMsg as *const u8, dst as *mut u8, MSG_BYTES) };
+}
+
+/// Read a caller's `MSG`: [`MSG_BYTES`] bytes (on x86 `private` is 0).
+///
+/// # Safety
+/// `src` points at a readable `MSG` of the calling process.
+pub unsafe fn get_msg(src: *const CMsg) -> CMsg {
+    let mut m = CMsg::default();
+    // SAFETY: the caller's promise; `CMsg` holds at least `MSG_BYTES` bytes.
+    unsafe { core::ptr::copy_nonoverlapping(src as *const u8, &mut m as *mut CMsg as *mut u8, MSG_BYTES) };
+    m
+}
+
 /// What these functions need from the process they run in.
 pub trait Env {
     /// The `PolyUserCall` system call.
@@ -329,6 +358,11 @@ pub trait Env {
     fn win_event(&self, _event: u32, _hwnd: u32, _id_object: i32, _id_child: i32) {}
     /// The calling thread looks into its queue: the WinEvent callbacks queued for it run.
     fn pump_events(&self) {}
+    /// A thread found its queue empty and blocks for messages (`blocking`) or only looked: win32k
+    /// keeps it for `WaitForInputIdle` (`crate::idle`, ADR 0245). A process tells it once of each.
+    fn input_idle(&self, blocking: bool) {
+        self.call(Request::InputIdle { blocking });
+    }
 }
 
 /// `MAKELPARAM(lo, hi)`.
@@ -2339,6 +2373,10 @@ pub fn peek_message<E: Env + ?Sized>(env: &E, out: &mut CMsg, filter: u64, min: 
                 env.set_last_error(code);
                 return false;
             }
+            Reply::Empty { .. } => {
+                env.input_idle(false);
+                return false;
+            }
             _ => return false,
         }
     }
@@ -2358,7 +2396,11 @@ pub fn get_message<E: Env + ?Sized>(env: &E, out: &mut CMsg, filter: u64, min: u
                 env.message_hook(out, true);
                 return if out.message == WM_QUIT { 0 } else { 1 };
             }
-            Reply::Empty { next_timer_ms } => env.wait_queue(next_timer_ms),
+            Reply::Empty { next_timer_ms } => {
+                // Nothing there: the thread waits for input, the process's idle point.
+                env.input_idle(true);
+                env.wait_queue(next_timer_ms)
+            }
             Reply::Error { code } => {
                 env.set_last_error(code);
                 return -1;
@@ -2479,6 +2521,10 @@ pub fn msg_wait<E: Env + ?Sized>(env: &E, handles: &[u64], wait_all: bool, ms: u
             (a, None) => a,
             (None, b) => b,
         };
+        // Blocking for input with none there: the process's idle point.
+        if mask != 0 && wait != Some(0) {
+            env.input_idle(true);
+        }
         // The queue's event takes part when input counts at all (with `wait_all`: the wait ends when
         // every object is signaled and input is there).
         let r = env.wait_handles(handles, wait_all, wait, mask != 0, flags & MWMO_ALERTABLE != 0);

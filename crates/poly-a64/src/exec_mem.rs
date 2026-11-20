@@ -36,11 +36,27 @@ impl Cpu {
         }
     }
 
+    /// The alignment rule of ordered, atomic and exclusive accesses with
+    /// FEAT_LSE2 (measured on Apple silicon): any address is fine as long
+    /// as the access stays within one aligned 16-byte block.
     fn align_check(addr: u64, bytes: usize, access: Access) -> Result<(), Trap> {
-        if addr & (bytes as u64 - 1) != 0 {
+        if (addr & 15) as usize + bytes > 16 {
             Err(Trap::Fault(MemFault { addr, access, alignment: true }))
         } else {
             Ok(())
+        }
+    }
+
+    /// A store to `addr..addr + len` by this thread: if it touches the
+    /// bytes the exclusive monitor watches, the monitor closes (Apple's
+    /// cores fail a later store-exclusive then, even if the value is the
+    /// same; measured with `a64diff native`).
+    fn store_seen(&mut self, addr: u64, len: usize) {
+        if let Some(m) = self.monitor
+            && addr < m.addr.wrapping_add(m.size as u64)
+            && m.addr < addr.wrapping_add(len as u64)
+        {
+            self.monitor = None;
         }
     }
 
@@ -60,6 +76,7 @@ impl Cpu {
                     MemKind::Store => {
                         let data = self.store_value(fp, rt);
                         mem.write_uint(a, bytes, data & size_mask(bytes))?;
+                        self.store_seen(a, bytes);
                     }
                     MemKind::Load => {
                         let v = mem.read_uint(a, bytes)?;
@@ -89,6 +106,7 @@ impl Cpu {
                         let d2 = self.store_value(fp, rt2) & size_mask(bytes);
                         mem.write_uint(a, bytes, d1)?;
                         mem.write_uint(a.wrapping_add(bytes as u64), bytes, d2)?;
+                        self.store_seen(a, 2 * bytes);
                     }
                     PairKind::Load | PairKind::LoadSw => {
                         let v1 = mem.read_uint(a, bytes)?;
@@ -123,6 +141,34 @@ impl Cpu {
                     Self::align_check(a, bytes, Access::Read)?;
                     let v = mem.read_uint(a, bytes)?;
                     self.set_xr(rt, v as u64);
+                }
+                Ok(())
+            }
+            Inst::OrderedImm { kind, size, rt, rn, offset } => {
+                let bytes = 1usize << size;
+                let a = self.xsp(rn).wrapping_add(offset as u64);
+                let access = if kind == MemKind::Store { Access::Write } else { Access::Read };
+                Self::align_check(a, bytes, access)?;
+                match kind {
+                    MemKind::Store => mem.write_uint(a, bytes, u128::from(self.xr(rt)) & size_mask(bytes))?,
+                    MemKind::LoadSigned(w) => {
+                        let v = mem.read_uint(a, bytes)? as u64;
+                        self.set_rw(rt, w, sign_extend(v, bytes));
+                    }
+                    _ => {
+                        let v = mem.read_uint(a, bytes)?;
+                        self.set_xr(rt, v as u64);
+                    }
+                }
+                Ok(())
+            }
+            Inst::LoadAuth { rt, rn, offset, writeback, .. } => {
+                // Keys disabled: authentication leaves the base unchanged.
+                let a = self.xsp(rn).wrapping_add(offset as u64);
+                let v = mem.read_uint(a, 8)? as u64;
+                self.set_xr(rt, v);
+                if writeback {
+                    self.set_xsp(rn, a);
                 }
                 Ok(())
             }

@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "sus_basic",
+      "source_sha256": "255491b1da471d8d363c1f45a2c99d4c98612de5a165435b9fc07dcc9d6e6226",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a9f6f77ead95aecb76032e9ea9153c19dd7790032e416cc925d4f9642cc8be52",
+          "exit_code": 0,
+          "stdout": "ok both are held back: no handler yet\nok sigsuspend returns EINTR\nok both handlers ran, SIGUSR2 first\nok in the last handler (SIGUSR1) the mask was just its own bit\nok the old mask is restored (USR1 and USR2 blocked)\nok nothing is pending afterwards\nok a signal sent while waiting wakes it: EINTR\nok the handler ran once\nok in the handler the mask was the temporary mask plus the signal\nok restored afterwards\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

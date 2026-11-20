@@ -1,0 +1,58 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "gfs_buffer",
+      "exe_sha256": "f24b89b09cc454b7bf4a72143f874c6877dc55f006c005b4d3a27c4e492a4a36",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsZSBtYWRlOiB5ZXMKbGVuZ3RoIDA6IG9rIGZhbHNlLCBlcnJvciAxMjIsIGxlbmd0aCBuZWVkZWQgaXMgbW9yZSB0aGFuIDA6IHllcwpsZW5ndGggMTY6IG9rIDAsIGVycm9yIDEyMiwgc2FtZSBsZW5ndGggbmVlZGVkIGFzIGJlZm9yZTogeWVzCm9uZSBieXRlIHNob3J0OiBvayAwLCBlcnJvciAxMjIKZXhhY3RseSB0aGUgbGVuZ3RoIG5lZWRlZDogb2sgMSwgbGVuZ3RoIHJldHVybmVkIGVxdWFscyB0aGUgbGVuZ3RoIG5lZWRlZDogeWVzCmRlc2NyaXB0b3IgdmFsaWQ6IHllcywgY29udHJvbCBxdWVyeSBvazogMSwgc2VsZi1yZWxhdGl2ZSBiaXQ6IHllcywgcmV2aXNpb24gMQpHZXRTZWN1cml0eURlc2NyaXB0b3JMZW5ndGggPT0gbGVuZ3RoIG5lZWRlZDogeWVzCmJ1ZmZlciBvZiAyMDQ4OiBvayAxLCBsZW5ndGggcmV0dXJuZWQgZXF1YWxzIHRoZSBsZW5ndGggbmVlZGVkOiB5ZXMKTlVMTCBwb2ludGVyIGZvciB0aGUgbGVuZ3RoIHJldHVybmVkOiBvayAwLCBlcnJvciA5OTgKTlVMTCBidWZmZXIgd2l0aCBsZW5ndGggMTAwOiBvayAwLCBlcnJvciA5OTgKb3duZXIgPCBvd25lcitncm91cCtEQUNMOiB5ZXM7IERBQ0wgPCBvd25lcitncm91cCtEQUNMOiB5ZXM7IGxhYmVsIGFsb25lIGlzIG5vdCBtb3JlIHRoYW4gdGhlIG93bmVyIGFsb25lIHBsdXMgdGhlIGhlYWRlcjogeWVzCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "file made: yes\nlength 0: ok false, error 122, length needed is more than 0: yes\nlength 16: ok 0, error 122, same length needed as before: yes\none byte short: ok 0, error 122\nexactly the length needed: ok 1, length returned equals the length needed: yes\ndescriptor valid: yes, control query ok: 1, self-relative bit: yes, revision 1\nGetSecurityDescriptorLength == length needed: yes\nbuffer of 2048: ok 1, length returned equals the length needed: yes\nNULL pointer for the length returned: ok 0, error 998\nNULL buffer with length 100: ok 0, error 998\nowner < owner+group+DACL: yes; DACL < owner+group+DACL: yes; label alone is not more than the owner alone plus the header: yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 66
+    },
+    {
+      "name": "gfs_info",
+      "exe_sha256": "d02e8dd97c4ef17dd4a94a961638736ce0b5215310f909027ea7ab436a4cc326",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsZSBtYWRlOiB5ZXMKcHJlcGFyZWQ6IG93bmVyL2dyb3VwIG9rLCBEQUNMIG9rLCBsYWJlbCBvaywgYXVkaXQgb2sKb3duZXIgKDB4MSk6IFtPOkJBXQpncm91cCAoMHgyKTogW0c6V0RdCkRBQ0wgKDB4NCk6IFtEOihBOztGQTs7O0JBKShBOztGUjs7O1dEKV0KU0FDTCAoMHg4KTogW1M6KEFVO1NBO0ZBOzs7V0QpXQpsYWJlbCAoMHgxMCk6IFtTOihNTDs7Tlc7OztNRSldCm93bmVyIGFuZCBncm91cCAoMHgzKTogW086QkFHOldEXQpvd25lciBhbmQgREFDTCAoMHg1KTogW086QkFEOihBOztGQTs7O0JBKShBOztGUjs7O1dEKV0KZ3JvdXAgYW5kIERBQ0wgKDB4Nik6IFtHOldERDooQTs7RkE7OztCQSkoQTs7RlI7OztXRCldCm93bmVyLCBncm91cCBhbmQgREFDTCAoMHg3KTogW086QkFHOldERDooQTs7RkE7OztCQSkoQTs7RlI7OztXRCldCkRBQ0wgYW5kIFNBQ0wgKDB4Yyk6IFtEOihBOztGQTs7O0JBKShBOztGUjs7O1dEKVM6KEFVO1NBO0ZBOzs7V0QpXQpEQUNMIGFuZCBsYWJlbCAoMHgxNCk6IFtEOihBOztGQTs7O0JBKShBOztGUjs7O1dEKVM6KE1MOztOVzs7O01FKV0KU0FDTCBhbmQgbGFiZWwgKDB4MTgpOiBbUzooQVU7U0E7RkE7OztXRCkoTUw7O05XOzs7TUUpXQpvd25lciwgZ3JvdXAsIERBQ0wgYW5kIGxhYmVsICgweDE3KTogW086QkFHOldERDooQTs7RkE7OztCQSkoQTs7RlI7OztXRClTOihNTDs7Tlc7OztNRSldCmV2ZXJ5dGhpbmcgKDB4MWYpOiBbTzpCQUc6V0REOihBOztGQTs7O0JBKShBOztGUjs7O1dEKVM6KEFVO1NBO0ZBOzs7V0QpKE1MOztOVzs7O01FKV0KREFDTCB3aXRoIHRoZSBwcm90ZWN0ZWQgZmxhZyBhc2tlZCAoMHg4MDAwMDAwNCk6IFtEOihBOztGQTs7O0JBKShBOztGUjs7O1dEKV0KREFDTCB3aXRoIHRoZSB1bnByb3RlY3RlZCBmbGFnIGFza2VkICgweDIwMDAwMDA0KTogW0Q6KEE7O0ZBOzs7QkEpKEE7O0ZSOzs7V0QpXQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "file made: yes\nprepared: owner/group ok, DACL ok, label ok, audit ok\nowner (0x1): [O:BA]\ngroup (0x2): [G:WD]\nDACL (0x4): [D:(A;;FA;;;BA)(A;;FR;;;WD)]\nSACL (0x8): [S:(AU;SA;FA;;;WD)]\nlabel (0x10): [S:(ML;;NW;;;ME)]\nowner and group (0x3): [O:BAG:WD]\nowner and DACL (0x5): [O:BAD:(A;;FA;;;BA)(A;;FR;;;WD)]\ngroup and DACL (0x6): [G:WDD:(A;;FA;;;BA)(A;;FR;;;WD)]\nowner, group and DACL (0x7): [O:BAG:WDD:(A;;FA;;;BA)(A;;FR;;;WD)]\nDACL and SACL (0xc): [D:(A;;FA;;;BA)(A;;FR;;;WD)S:(AU;SA;FA;;;WD)]\nDACL and label (0x14): [D:(A;;FA;;;BA)(A;;FR;;;WD)S:(ML;;NW;;;ME)]\nSACL and label (0x18): [S:(AU;SA;FA;;;WD)(ML;;NW;;;ME)]\nowner, group, DACL and label (0x17): [O:BAG:WDD:(A;;FA;;;BA)(A;;FR;;;WD)S:(ML;;NW;;;ME)]\neverything (0x1f): [O:BAG:WDD:(A;;FA;;;BA)(A;;FR;;;WD)S:(AU;SA;FA;;;WD)(ML;;NW;;;ME)]\nDACL with the protected flag asked (0x80000004): [D:(A;;FA;;;BA)(A;;FR;;;WD)]\nDACL with the unprotected flag asked (0x20000004): [D:(A;;FA;;;BA)(A;;FR;;;WD)]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    },
+    {
+      "name": "gfs_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "718dde7c8e093d79fadcade85f6fcc0d5b5d0cab6b1c8d31e8b5a8c838d3a3c7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsZSBtYWRlOiB5ZXMKb3duZXIgKDB4MSk6IFtPOjx1c2VyPl0KZ3JvdXAgKDB4Mik6IFtHOjxncm91cD5dCkRBQ0wgKDB4NCk6IFtEOihBOztGQTs7O1NZKShBOztGQTs7O0JBKShBOztGQTs7Ozx1c2VyPildCmxhYmVsICgweDEwKTogW1M6KE1MOztOVzs7O0xXKV0KU0FDTCAoMHg4KTogW2Vycm9yIDEzMTRdCm93bmVyIGFuZCBTQUNMICgweDkpOiBbZXJyb3IgMTMxNF0KbGFiZWwgYW5kIFNBQ0wgKDB4MTgpOiBbZXJyb3IgMTMxNF0KZXZlcnl0aGluZyAoMHgxZik6IFtlcnJvciAxMzE0XQpvd25lciwgZ3JvdXAsIERBQ0wgYW5kIGxhYmVsICgweDE3KTogW086PHVzZXI+Rzo8Z3JvdXA+RDooQTs7RkE7OztTWSkoQTs7RkE7OztCQSkoQTs7RkE7Ozs8dXNlcj4pUzooTUw7O05XOzs7TFcpXQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "file made: yes\nowner (0x1): [O:<user>]\ngroup (0x2): [G:<group>]\nDACL (0x4): [D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)]\nlabel (0x10): [S:(ML;;NW;;;LW)]\nSACL (0x8): [error 1314]\nowner and SACL (0x9): [error 1314]\nlabel and SACL (0x18): [error 1314]\neverything (0x1f): [error 1314]\nowner, group, DACL and label (0x17): [O:<user>G:<group>D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)S:(ML;;NW;;;LW)]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 84
+    }
+  ]
+}

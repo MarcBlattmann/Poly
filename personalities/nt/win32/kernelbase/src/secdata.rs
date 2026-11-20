@@ -119,11 +119,14 @@ pub unsafe extern "system" fn FreeSid(p: *mut u8) -> *mut u8 {
     if unsafe { nt::RtlFreeHeap(process_heap(), 0, p) } != 0 { core::ptr::null_mut() } else { p }
 }
 
-/// `EqualSid`: no validity check.
+/// `EqualSid`: no validity check. It sets the last error to 0 on every call, also when the SIDs
+/// differ (`specs/windows/advapi32.dll/ImpersonateNamedPipeClient.yaml`, `last_error_in_the_tests`).
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn EqualSid(a: *const u8, b: *const u8) -> i32 {
     // SAFETY: the caller's SIDs.
-    i32::from(sid::equal(unsafe { sid::raw(a) }, unsafe { sid::raw(b) }))
+    let equal = sid::equal(unsafe { sid::raw(a) }, unsafe { sid::raw(b) });
+    set_last_error(0);
+    i32::from(equal)
 }
 
 /// `EqualPrefixSid`.
@@ -137,7 +140,10 @@ pub unsafe extern "system" fn EqualPrefixSid(a: *const u8, b: *const u8) -> i32 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn GetLengthSid(p: *const u8) -> u32 {
     // SAFETY: the caller's SID header.
-    sid::length_of(unsafe { core::slice::from_raw_parts(p, 2) })
+    let n = sid::length_of(unsafe { core::slice::from_raw_parts(p, 2) });
+    // The last error becomes 0 (`last_error_in_the_tests`, as for `EqualSid`).
+    set_last_error(0);
+    n
 }
 
 /// `IsValidSid`: revision 1 and at most 15 sub-authorities.

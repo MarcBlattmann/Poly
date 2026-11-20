@@ -312,7 +312,7 @@ pub const DISK_FILE: &str = "poly-chrome-win-disk.img";
 pub const APP_ON_DISK: &str = "poly/nt/c/Program Files/Chrome";
 pub const APP_DOS: &str = "C:\\Program Files\\Chrome";
 /// Changes when what the disk carries of Poly's fonts changes (the disk is made again).
-pub(crate) const FONTS_STAMP: &str = "fonts-0181-dejavu";
+pub(crate) const FONTS_STAMP: &str = "fonts-0234-dejavu-droid";
 /// The test directory on the disk (`C:\poly-test`): the launcher, the
 /// stages, the pages.
 pub const TEST_ON_DISK: &str = "poly/nt/c/poly-test";
@@ -649,7 +649,10 @@ pub fn app_tree(polystub: &[u8], kit: Option<&Path>) -> Result<crate::rootdisk::
     // `C:\Windows\Fonts`. Without them Chrome's UI font set-up found no face and started over until its
     // stack was full (stage 1, ADR 0155 addendum 9).
     crate::fonts::fetch_dejavu()?;
+    crate::fonts::fetch_cjk()?;
     crate::fonts::add_to_root(&mut tree)?;
+    // And a font for Chinese, Japanese and Korean (ADR 0234), which DejaVu lacks.
+    crate::fonts::add_cjk_to_root(&mut tree);
     Ok(tree)
 }
 

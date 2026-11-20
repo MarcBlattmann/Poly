@@ -98,6 +98,7 @@ fn a_second_threads_stack_grows_too() {
         suspended: false,
         desired_access: 0x1F_FFFF,
         security: None,
+        ..Default::default()
     };
     let t = exec::create_thread(&mut f.sys, &mut f.proc, &mut f.mem, &req, tid).unwrap();
     let guard = t.stack_limit - 0x1000;
@@ -154,6 +155,7 @@ fn a_new_threads_stack_grows_through_its_guard_page_too() {
         suspended: false,
         desired_access: 0x1F_FFFF,
         security: None,
+        ..Default::default()
     };
     let t = ThreadRef(TID.0 + 1);
     let s = exec::create_thread(&mut f.sys, &mut f.proc, &mut f.mem, &req, t).unwrap();
@@ -434,4 +436,59 @@ fn a_stack_the_program_allocated_grows_when_the_teb_names_it() {
         exec::access_fault(&mut f.proc, &mut f.mem, TID, other),
         AccessFault::Exception(STATUS_GUARD_PAGE_VIOLATION)
     );
+}
+
+#[test]
+fn stack_sizes_follow_the_sheet() {
+    // specs/windows/ntdll.dll/NtCreateThreadEx.yaml, `stack_sizes`: an image with a 1 MiB reserve
+    // and a 4 KiB commit; (StackSize, MaximumStackSize) -> (reserve, commit).
+    const K: u64 = 1024;
+    let s = |commit, reserve| exec::stack_sizes(1024 * K, 4 * K, commit, reserve).unwrap();
+    assert_eq!(s(0, 0), (1024 * K, 4 * K));
+    assert_eq!(s(256 * K, 0), (1024 * K, 256 * K));
+    assert_eq!(s(0, 2048 * K), (2048 * K, 4 * K));
+    assert_eq!(s(64 * K, 256 * K), (256 * K, 64 * K));
+    assert_eq!(s(256 * K, 256 * K).0, 1024 * K, "the maximum must be above the commit");
+    assert_eq!(s(2048 * K, 256 * K), (2048 * K, 2048 * K), "a commit above the reserve: all committed");
+    assert_eq!(s(0, 4 * K).0, 1024 * K, "below 64 KiB: the default");
+    assert_eq!(s(0, 100_000).0, 128 * K, "rounded up to 64 KiB");
+    assert_eq!(s(1, 0), (1024 * K, 4 * K));
+    assert_eq!(s(0, 1 << 40).0, 1 << 40);
+    assert_eq!(s(1024 * 1024 * K, 0), (1024 * 1024 * K, 1024 * 1024 * K), "1 GiB commit: 1 GiB, all committed");
+    assert_eq!(exec::stack_sizes(1024 * K, 4 * K, 0, u64::MAX), Err(STATUS_INVALID_PARAMETER));
+    assert_eq!(exec::stack_sizes(1024 * K, 4 * K, u64::MAX, 0), Err(STATUS_INVALID_PARAMETER));
+}
+
+#[test]
+fn a_new_threads_handle_access_follows_the_sheet() {
+    // specs/windows/ntdll.dll/NtCreateThreadEx.yaml, `desired_access`.
+    use crate::threads::thread_access;
+    assert_eq!(thread_access(0x10_0000), 0x10_0000);
+    assert_eq!(thread_access(0x800), 0x800);
+    assert_eq!(thread_access(0x1), 0x1);
+    assert_eq!(thread_access(0x2), 0x1002);
+    assert_eq!(thread_access(0x1F_03FF), 0x1F_1FFF);
+    assert_eq!(thread_access(0x1F_FFFF), 0x1F_FFFF);
+    assert_eq!(thread_access(0x200_0000), 0x1F_FFFF);
+    assert_eq!(thread_access(0x1000_0000), 0x1F_FFFF);
+    assert_eq!(thread_access(0x8000_0000), 0x2_0848);
+    assert_eq!(thread_access(0xFFFF_FFFF), 0x11F_FFFF);
+}
+
+#[test]
+fn a_whole_committed_stack_has_no_guard_page() {
+    let mut f = Fake::bare();
+    start(&mut f, &test_exe(false)).unwrap();
+    let req = crate::kernel::ThreadCreate {
+        start_routine: IMAGE_BASE + 0x1000,
+        stack_commit: 0x20_0000,
+        desired_access: 0x1F_FFFF,
+        ..Default::default()
+    };
+    let t = ThreadRef(TID.0 + 1);
+    let s = exec::create_thread(&mut f.sys, &mut f.proc, &mut f.mem, &req, t).unwrap();
+    let bottom = s.stack_base - 0x20_0000;
+    assert_eq!(s.stack_limit, bottom);
+    let q = f.proc.vm.query(bottom).unwrap();
+    assert_eq!((q.state, q.protect, q.allocation_base), (MEM_COMMIT, PAGE_READWRITE, bottom));
 }

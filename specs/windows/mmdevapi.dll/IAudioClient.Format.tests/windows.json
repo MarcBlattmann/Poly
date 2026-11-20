@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_fmt_period",
+      "exe_sha256": "f7a77733f5555d76045a6c458934eab8af1b475a18521da2d5ba2815ecb867f2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0RGV2aWNlUGVyaW9kID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0RGV2aWNlUGVyaW9kCmRlZmF1bHQgMTAwMDAwIG1pbmltdW0gMzAwMDAKb2sgZGVmYXVsdCBwZXJpb2QgMTAgbXMKb2sgbWluaW11bSBwZXJpb2QgMyBtcwpHZXREZXZpY2VQZXJpb2QoTlVMTCwgTlVMTCkgPSBFX1BPSU5URVIgKDB4ODAwMDQwMDMpCm9rIEdldERldmljZVBlcmlvZChOVUxMLCBOVUxMKQpHZXREZXZpY2VQZXJpb2QoZGVmYXVsdCBvbmx5KSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldERldmljZVBlcmlvZChkZWZhdWx0IG9ubHkpCm9rIGRlZmF1bHQgcGVyaW9kClF1ZXJ5SW50ZXJmYWNlKElBdWRpb0NsaWVudDIpID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgUXVlcnlJbnRlcmZhY2UoSUF1ZGlvQ2xpZW50MikKUXVlcnlJbnRlcmZhY2UoSUF1ZGlvQ2xpZW50MykgPSBTX09LICgweDAwMDAwMDAwKQpvayBRdWVyeUludGVyZmFjZShJQXVkaW9DbGllbnQzKQpHZXRTaGFyZWRNb2RlRW5naW5lUGVyaW9kID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0U2hhcmVkTW9kZUVuZ2luZVBlcmlvZApkZWZhdWx0IDQ4MCBmdW5kYW1lbnRhbCA0ODAgbWluIDQ4MCBtYXggNDgwCm9rIGRlZmF1bHQgcGVyaW9kIGluIGZyYW1lcwpvayBmdW5kYW1lbnRhbCBwZXJpb2QKb2sgbWluaW11bSBwZXJpb2QKb2sgbWF4aW11bSBwZXJpb2QKR2V0U2hhcmVkTW9kZUVuZ2luZVBlcmlvZChOVUxMIGZvcm1hdCkgPSBFX0lOVkFMSURBUkcgKDB4ODAwNzAwNTcpCm9rIEdldFNoYXJlZE1vZGVFbmdpbmVQZXJpb2QoTlVMTCBmb3JtYXQpCm9rIG91dHB1dHMgdW50b3VjaGVkCkdldEN1cnJlbnRTaGFyZWRNb2RlRW5naW5lUGVyaW9kID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0Q3VycmVudFNoYXJlZE1vZGVFbmdpbmVQZXJpb2QKb2sgYSBmb3JtYXQKb2sgdGhlIG1peCBmb3JtYXQKb2sgY3VycmVudCBwZXJpb2QKc3VtbWFyeSAxOSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetDevicePeriod = S_OK (0x00000000)\nok GetDevicePeriod\ndefault 100000 minimum 30000\nok default period 10 ms\nok minimum period 3 ms\nGetDevicePeriod(NULL, NULL) = E_POINTER (0x80004003)\nok GetDevicePeriod(NULL, NULL)\nGetDevicePeriod(default only) = S_OK (0x00000000)\nok GetDevicePeriod(default only)\nok default period\nQueryInterface(IAudioClient2) = S_OK (0x00000000)\nok QueryInterface(IAudioClient2)\nQueryInterface(IAudioClient3) = S_OK (0x00000000)\nok QueryInterface(IAudioClient3)\nGetSharedModeEnginePeriod = S_OK (0x00000000)\nok GetSharedModeEnginePeriod\ndefault 480 fundamental 480 min 480 max 480\nok default period in frames\nok fundamental period\nok minimum period\nok maximum period\nGetSharedModeEnginePeriod(NULL format) = E_INVALIDARG (0x80070057)\nok GetSharedModeEnginePeriod(NULL format)\nok outputs untouched\nGetCurrentSharedModeEnginePeriod = S_OK (0x00000000)\nok GetCurrentSharedModeEnginePeriod\nok a format\nok the mix format\nok current period\nsummary 19 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    },
+    {
+      "name": "ws_fmt_supported",
+      "exe_sha256": "ff883d0a35fc617fcf786705971ca48888ba784bd43c4d8e10305b3f44424c1b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIG1peCBmb3JtYXQgPSBTX09LICgweDAwMDAwMDAwKQpvayB0aGUgbWl4IGZvcm1hdApvayBubyBjbG9zZXN0IG1hdGNoIGZvciBTX09LCmZsb2F0IDMyIHN0ZXJlbyBleHRlbnNpYmxlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgZmxvYXQgMzIgc3RlcmVvIGV4dGVuc2libGUKb2sgbm8gY2xvc2VzdCBtYXRjaCBmb3IgU19PSwppbnQgMTYgc3RlcmVvIGV4dGVuc2libGUgPSBTX09LICgweDAwMDAwMDAwKQpvayBpbnQgMTYgc3RlcmVvIGV4dGVuc2libGUKb2sgbm8gY2xvc2VzdCBtYXRjaCBmb3IgU19PSwppbnQgMzIgc3RlcmVvIGV4dGVuc2libGUgPSBTX09LICgweDAwMDAwMDAwKQpvayBpbnQgMzIgc3RlcmVvIGV4dGVuc2libGUKb2sgbm8gY2xvc2VzdCBtYXRjaCBmb3IgU19PSwpQQ00gMTYgc3RlcmVvID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgUENNIDE2IHN0ZXJlbwpvayBubyBjbG9zZXN0IG1hdGNoIGZvciBTX09LClBDTSAyNCBzdGVyZW8gPSBTX09LICgweDAwMDAwMDAwKQpvayBQQ00gMjQgc3RlcmVvCm9rIG5vIGNsb3Nlc3QgbWF0Y2ggZm9yIFNfT0sKZmxvYXQgNDQxMDAgc3RlcmVvID0gU19GQUxTRSAoMHgwMDAwMDAwMSkKb2sgZmxvYXQgNDQxMDAgc3RlcmVvCm9rIGEgY2xvc2VzdCBtYXRjaApvayB0aGUgY2xvc2VzdCBtYXRjaCBpcyB0aGUgbWl4IGZvcm1hdApQQ00gMTYgNDQxMDAgc3RlcmVvID0gU19GQUxTRSAoMHgwMDAwMDAwMSkKb2sgUENNIDE2IDQ0MTAwIHN0ZXJlbwpvayBhIGNsb3Nlc3QgbWF0Y2gKb2sgdGhlIGNsb3Nlc3QgbWF0Y2ggaXMgdGhlIG1peCBmb3JtYXQKUENNIDE2IDQ0MTAwIG1vbm8gPSBTX0ZBTFNFICgweDAwMDAwMDAxKQpvayBQQ00gMTYgNDQxMDAgbW9ubwpvayBhIGNsb3Nlc3QgbWF0Y2gKb2sgdGhlIGNsb3Nlc3QgbWF0Y2ggaXMgdGhlIG1peCBmb3JtYXQKZmxvYXQgOTYwMDAgc3RlcmVvID0gU19GQUxTRSAoMHgwMDAwMDAwMSkKb2sgZmxvYXQgOTYwMDAgc3RlcmVvCm9rIGEgY2xvc2VzdCBtYXRjaApvayB0aGUgY2xvc2VzdCBtYXRjaCBpcyB0aGUgbWl4IGZvcm1hdApmbG9hdCBtb25vIGF0IHRoZSBtaXggcmF0ZSA9IFNfRkFMU0UgKDB4MDAwMDAwMDEpCm9rIGZsb2F0IG1vbm8gYXQgdGhlIG1peCByYXRlCm9rIGEgY2xvc2VzdCBtYXRjaApvayB0aGUgY2xvc2VzdCBtYXRjaCBpcyB0aGUgbWl4IGZvcm1hdApQQ00gOCBiaXQgODAwMCBtb25vID0gU19GQUxTRSAoMHgwMDAwMDAwMSkKb2sgUENNIDggYml0IDgwMDAgbW9ubwpvayBhIGNsb3Nlc3QgbWF0Y2gKb2sgdGhlIGNsb3Nlc3QgbWF0Y2ggaXMgdGhlIG1peCBmb3JtYXQKTlVMTCBmb3JtYXQgPSBFX1BPSU5URVIgKDB4ODAwMDQwMDMpCm9rIE5VTEwgZm9ybWF0Cm9rIG5vIGNsb3Nlc3QgbWF0Y2gKdW5zdXBwb3J0ZWQgZm9ybWF0LCBOVUxMIGNsb3Nlc3QtbWF0Y2ggcG9pbnRlciA9IEVfUE9JTlRFUiAoMHg4MDAwNDAwMykKb2sgdW5zdXBwb3J0ZWQgZm9ybWF0LCBOVUxMIGNsb3Nlc3QtbWF0Y2ggcG9pbnRlcgpleHRlbnNpYmxlIHdpdGggY2JTaXplIDAgPSBFX0lOVkFMSURBUkcgKDB4ODAwNzAwNTcpCm9rIGV4dGVuc2libGUgd2l0aCBjYlNpemUgMApzaGFyZSBtb2RlIDUgPSBBVURDTE5UX0VfVU5TVVBQT1JURURfRk9STUFUICgweDg4ODkwMDA4KQpvayBzaGFyZSBtb2RlIDUKc3VtbWFyeSAzNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the mix format = S_OK (0x00000000)\nok the mix format\nok no closest match for S_OK\nfloat 32 stereo extensible = S_OK (0x00000000)\nok float 32 stereo extensible\nok no closest match for S_OK\nint 16 stereo extensible = S_OK (0x00000000)\nok int 16 stereo extensible\nok no closest match for S_OK\nint 32 stereo extensible = S_OK (0x00000000)\nok int 32 stereo extensible\nok no closest match for S_OK\nPCM 16 stereo = S_OK (0x00000000)\nok PCM 16 stereo\nok no closest match for S_OK\nPCM 24 stereo = S_OK (0x00000000)\nok PCM 24 stereo\nok no closest match for S_OK\nfloat 44100 stereo = S_FALSE (0x00000001)\nok float 44100 stereo\nok a closest match\nok the closest match is the mix format\nPCM 16 44100 stereo = S_FALSE (0x00000001)\nok PCM 16 44100 stereo\nok a closest match\nok the closest match is the mix format\nPCM 16 44100 mono = S_FALSE (0x00000001)\nok PCM 16 44100 mono\nok a closest match\nok the closest match is the mix format\nfloat 96000 stereo = S_FALSE (0x00000001)\nok float 96000 stereo\nok a closest match\nok the closest match is the mix format\nfloat mono at the mix rate = S_FALSE (0x00000001)\nok float mono at the mix rate\nok a closest match\nok the closest match is the mix format\nPCM 8 bit 8000 mono = S_FALSE (0x00000001)\nok PCM 8 bit 8000 mono\nok a closest match\nok the closest match is the mix format\nNULL format = E_POINTER (0x80004003)\nok NULL format\nok no closest match\nunsupported format, NULL closest-match pointer = E_POINTER (0x80004003)\nok unsupported format, NULL closest-match pointer\nextensible with cbSize 0 = E_INVALIDARG (0x80070057)\nok extensible with cbSize 0\nshare mode 5 = AUDCLNT_E_UNSUPPORTED_FORMAT (0x88890008)\nok share mode 5\nsummary 35 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 61
+    }
+  ]
+}

@@ -38,6 +38,29 @@ summary: >
   the signal. Default actions (a child sending itself the signal):
   SIGTERM, SIGUSR1 and SIGHUP kill the process (wait status = the number);
   SIGCHLD, SIGCONT, SIGURG and SIGWINCH are discarded.
+  More behaviour. siginfo of a SA_SIGINFO handler (104 bytes: si_signo 0,
+  si_errno 4, si_code 8, si_pid 12, si_uid 16, si_status 20, si_addr 24):
+  kill by another process gives si_signo the number, si_errno 0, si_pid
+  the sender, si_uid the sender's user (si_code differed between runs, 0
+  or 1, and is not specified); SIGCHLD for a child's exit has si_code
+  CLD_EXITED 1, si_pid the child, si_status the exit code; for a kill
+  CLD_KILLED 2 with status 9. Faults on arm64: a read or write of the
+  unmapped address 8 is SIGSEGV with si_code SEGV_ACCERR (2) and si_addr
+  8; a write to a PROT_NONE or a read-only page is SIGBUS (10) with
+  si_code BUS_ADRALN (1) and si_addr the exact address; a jump to an odd
+  address is SIGBUS 1; an undefined instruction is SIGILL (4) with si_code
+  ILL_ILLTRP (2); a breakpoint instruction is SIGTRAP (5) with si_code 0.
+  Restart: a blocking read of an empty pipe interrupted by a signal goes
+  on after the handler with SA_RESTART (2) and returns the data that
+  arrives later (the handler ran once); without SA_RESTART the read is
+  EINTR (4) and the data stays in the pipe; wait4 behaves the same;
+  sigsuspend and a blocking kevent with no timeout are EINTR even with
+  SA_RESTART. SIGPIPE: a write to a pipe or a socket pair whose peer is
+  closed fails with EPIPE (32) and sends SIGPIPE (handler runs once, with
+  SIG_IGN nothing runs, default kills the writer: wait status 13); with
+  the socket option SO_NOSIGPIPE (0x1022 at level SOL_SOCKET 0xffff,
+  setsockopt BSD 105, value 1, reads back 1) the write is EPIPE without a
+  signal; the option on a pipe is ENOTSOCK (38).
 returns:
   success: "0"
 errors:
@@ -50,5 +73,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 3  # count in <symbol>.tests/
-  held_out: 2  # count kept by the diff runner
+  visible: 5  # count in <symbol>.tests/
+  held_out: 3  # count kept by the diff runner

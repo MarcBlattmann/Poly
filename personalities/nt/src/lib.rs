@@ -48,6 +48,7 @@ extern crate alloc;
 
 pub mod abi;
 pub mod afd;
+pub mod audio;
 pub mod backend;
 pub mod consent;
 pub mod console;
@@ -78,6 +79,7 @@ pub mod security;
 pub mod services;
 pub mod sync;
 pub mod sysinfo;
+pub mod sysproc;
 pub mod system;
 pub mod threads;
 pub mod trace;
@@ -180,6 +182,35 @@ pub fn dispatch_with<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Outcome 
     regs.rax = u64::from(result.unwrap_or_else(|e| e).0);
     registry::finish(k);
     Outcome::Handled
+}
+
+/// A call that reads and changes nothing of the NT state and leaves the kernel nothing to do after
+/// it (no wake, no I/O, no output), run on its own: `None` for every other call, which goes to
+/// [`dispatch_with`]. The kernel runs these without its locks or its end-of-call work (ADR 0247):
+/// `NtQueryPerformanceCounter` is the call Chrome makes most, and taking two kernel locks for a
+/// clock reading queued its threads behind each other.
+pub fn dispatch_unlocked<K: NtKernel>(k: &mut K, regs: &mut SyscallRegs) -> Option<Outcome> {
+    if regs.rax as u32 & 0x3fff != query_performance_counter_number() {
+        return None;
+    }
+    let result = sysinfo::query_performance_counter(k, regs);
+    regs.rax = u64::from(result.unwrap_or_else(|e| e).0);
+    Some(Outcome::Handled)
+}
+
+/// `NtQueryPerformanceCounter`'s number (table and index), looked up once.
+fn query_performance_counter_number() -> u32 {
+    use core::sync::atomic::{AtomicU32, Ordering};
+    static NUMBER: AtomicU32 = AtomicU32::new(u32::MAX);
+    let n = NUMBER.load(Ordering::Relaxed);
+    if n != u32::MAX {
+        return n;
+    }
+    let n = services::all()
+        .find(|&&(s, _, _)| s == Service::QueryPerformanceCounter)
+        .map_or(u32::MAX - 1, |&(_, n, _)| n & 0x3fff);
+    NUMBER.store(n, Ordering::Relaxed);
+    n
 }
 
 fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<NtStatus, NtStatus> {
@@ -302,6 +333,7 @@ fn run<K: NtKernel>(k: &mut K, regs: &SyscallRegs, service: Service) -> Result<N
         PolyProcessList => proclist::process_list(k, regs),
         NotifyChangeDirectoryFile => io::notify::notify_change_directory_file(k, regs),
         PolyRequestElevation => consent::request_elevation(k, regs),
+        PolyStartSystemProcess => sysproc::start_system_process(k, regs),
         RaiseException => exception::raise_exception(k, regs),
         Continue => exception::continue_context(k, regs),
         QuerySystemTime => sysinfo::query_system_time(k, regs),

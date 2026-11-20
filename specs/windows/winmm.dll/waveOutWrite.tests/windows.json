@@ -1,0 +1,84 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_write_errors",
+      "exe_sha256": "d15678fa916e0b48f2b8bfc4bc97a59f1369674f7d50d3d756b5e7320389a44f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKd3JpdGUgYW4gdW5wcmVwYXJlZCBoZWFkZXIgPSBXQVZFUlJfVU5QUkVQQVJFRCAoMzQpCm9rIHdyaXRlIGFuIHVucHJlcGFyZWQgaGVhZGVyCm9rIGZsYWdzIHVuY2hhbmdlZApvayBwcmVwYXJlCnNpemUgMCA9IE1NU1lTRVJSX0lOVkFMUEFSQU0gKDExKQpvayBzaXplIDAKc2l6ZSA4ID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIHNpemUgOApzaXplIDQ3ID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIHNpemUgNDcKbnVsbCBoZWFkZXIgPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgbnVsbCBoZWFkZXIKb2sgbm90aGluZyB3YXMgcXVldWVkIGJ5IHRoZSBmYWlsZWQgY2FsbHMKaGFuZGxlIDAgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgaGFuZGxlIDAKbWFkZS11cCBoYW5kbGUgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgbWFkZS11cCBoYW5kbGUKd3JpdGUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayB3cml0ZQp3cml0ZSB0aGUgcXVldWVkIGhlYWRlciBhZ2FpbiA9IFdBVkVSUl9TVElMTFBMQVlJTkcgKDMzKQpvayB3cml0ZSB0aGUgcXVldWVkIGhlYWRlciBhZ2FpbgpvayBkb25lCm9rIHVucHJlcGFyZQp3cml0ZSBhZnRlciB1bnByZXBhcmUgPSBXQVZFUlJfVU5QUkVQQVJFRCAoMzQpCm9rIHdyaXRlIGFmdGVyIHVucHJlcGFyZQpvayBwcmVwYXJlCmNsb3NlZCBoYW5kbGUgd2l0aCBhIHByZXBhcmVkIGhlYWRlciA9IE1NU1lTRVJSX0lOVkFMSEFORExFICg1KQpvayBjbG9zZWQgaGFuZGxlIHdpdGggYSBwcmVwYXJlZCBoZWFkZXIKc3VtbWFyeSAxOCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nwrite an unprepared header = WAVERR_UNPREPARED (34)\nok write an unprepared header\nok flags unchanged\nok prepare\nsize 0 = MMSYSERR_INVALPARAM (11)\nok size 0\nsize 8 = MMSYSERR_INVALPARAM (11)\nok size 8\nsize 47 = MMSYSERR_INVALPARAM (11)\nok size 47\nnull header = MMSYSERR_INVALPARAM (11)\nok null header\nok nothing was queued by the failed calls\nhandle 0 = MMSYSERR_INVALHANDLE (5)\nok handle 0\nmade-up handle = MMSYSERR_INVALHANDLE (5)\nok made-up handle\nwrite = MMSYSERR_NOERROR (0)\nok write\nwrite the queued header again = WAVERR_STILLPLAYING (33)\nok write the queued header again\nok done\nok unprepare\nwrite after unprepare = WAVERR_UNPREPARED (34)\nok write after unprepare\nok prepare\nclosed handle with a prepared header = MMSYSERR_INVALHANDLE (5)\nok closed handle with a prepared header\nsummary 18 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 267
+    },
+    {
+      "name": "wo_write_loop",
+      "exe_sha256": "a803a2e817088e8d91dfe147c2405d2f44a4f7ae47f9824f5e01ec5ee9f8e478",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb2sgcHJlcGFyZQp3cml0ZSB0aGUgbG9vcGVkIGhlYWRlciA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHdyaXRlIHRoZSBsb29wZWQgaGVhZGVyCm9rIGRvbmUKZmxhZ3MgRE9ORXxQUkVQQVJFRHxCRUdJTkxPT1B8RU5ETE9PUApvayBmbGFncyB3aGVuIGRvbmUKb2sgZHdMb29wcyB1bmNoYW5nZWQKcG9zaXRpb24gYWZ0ZXIgdGhlIGxvb3AgMjg4MApvayBwb3NpdGlvbiBpcyB0aHJlZSB0aW1lcyB0aGUgbGVuZ3RoCndyaXRlIHRoZSBoZWFkZXIgdGhhdCBiZWdpbnMgdGhlIGxvb3AgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayB3cml0ZSB0aGUgaGVhZGVyIHRoYXQgYmVnaW5zIHRoZSBsb29wCm9rIGl0IHdhaXRzIGZvciB0aGUgZW5kIG9mIHRoZSBsb29wCndyaXRlIHRoZSBoZWFkZXIgdGhhdCBlbmRzIHRoZSBsb29wID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgd3JpdGUgdGhlIGhlYWRlciB0aGF0IGVuZHMgdGhlIGxvb3AKb2sgYm90aCBkb25lCnBvc2l0aW9uIGdyZXcgYnkgMzg0MApvayB0d28gaGVhZGVycyBwbGF5ZWQgdHdpY2U6IGZvdXIgYnVmZmVycwpzdW1tYXJ5IDEyIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nok prepare\nwrite the looped header = MMSYSERR_NOERROR (0)\nok write the looped header\nok done\nflags DONE|PREPARED|BEGINLOOP|ENDLOOP\nok flags when done\nok dwLoops unchanged\nposition after the loop 2880\nok position is three times the length\nwrite the header that begins the loop = MMSYSERR_NOERROR (0)\nok write the header that begins the loop\nok it waits for the end of the loop\nwrite the header that ends the loop = MMSYSERR_NOERROR (0)\nok write the header that ends the loop\nok both done\nposition grew by 3840\nok two headers played twice: four buffers\nsummary 12 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 684
+    },
+    {
+      "name": "wo_write_order",
+      "exe_sha256": "c8e2bd04d7d853f4f1a6fd2a8cae2beae8526ae91f22d366c09d9729a0dca7b2",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4Kb2sgcXVldWUKb2sgcXVldWUKb2sgcXVldWUKb2sgcXVldWUKb2sgcXVldWUKb2sgcXVldWUKb2sgYWxsIGRvbmUKb3JkZXIgY2FsbGJhY2tzID0gNwpvcmRlciBjYiAwIFdPTV9PUEVOIHRocmVhZD1tYWluIGluc3Q9b2sgcDI9MApvcmRlciBjYiAxIFdPTV9ET05FIGhkcj0wIGZsYWdzPURPTkV8UFJFUEFSRUQgdGhyZWFkPW90aGVyIGluc3Q9b2sgcDI9MApvcmRlciBjYiAyIFdPTV9ET05FIGhkcj0xIGZsYWdzPURPTkV8UFJFUEFSRUQgdGhyZWFkPW90aGVyIGluc3Q9b2sgcDI9MApvcmRlciBjYiAzIFdPTV9ET05FIGhkcj0yIGZsYWdzPURPTkV8UFJFUEFSRUQgdGhyZWFkPW90aGVyIGluc3Q9b2sgcDI9MApvcmRlciBjYiA0IFdPTV9ET05FIGhkcj0zIGZsYWdzPURPTkV8UFJFUEFSRUQgdGhyZWFkPW90aGVyIGluc3Q9b2sgcDI9MApvcmRlciBjYiA1IFdPTV9ET05FIGhkcj00IGZsYWdzPURPTkV8UFJFUEFSRUQgdGhyZWFkPW90aGVyIGluc3Q9b2sgcDI9MApvcmRlciBjYiA2IFdPTV9ET05FIGhkcj01IGZsYWdzPURPTkV8UFJFUEFSRUQgdGhyZWFkPW90aGVyIGluc3Q9b2sgcDI9MApvayBzZXZlbiBjYWxsYmFja3MgKG9wZW4gYW5kIHNpeCBkb25lKQpvayBXT01fRE9ORQpvayBidWZmZXJzIGZpbmlzaCBpbiB0aGUgb3JkZXIgd3JpdHRlbgpvayBXT01fRE9ORQpvayBidWZmZXJzIGZpbmlzaCBpbiB0aGUgb3JkZXIgd3JpdHRlbgpvayBXT01fRE9ORQpvayBidWZmZXJzIGZpbmlzaCBpbiB0aGUgb3JkZXIgd3JpdHRlbgpvayBXT01fRE9ORQpvayBidWZmZXJzIGZpbmlzaCBpbiB0aGUgb3JkZXIgd3JpdHRlbgpvayBXT01fRE9ORQpvayBidWZmZXJzIGZpbmlzaCBpbiB0aGUgb3JkZXIgd3JpdHRlbgpvayBXT01fRE9ORQpvayBidWZmZXJzIGZpbmlzaCBpbiB0aGUgb3JkZXIgd3JpdHRlbgpvayBmbGFncwpvayBkd0J5dGVzUmVjb3JkZWQKb2sgZmxhZ3MKb2sgZHdCeXRlc1JlY29yZGVkCm9rIGZsYWdzCm9rIGR3Qnl0ZXNSZWNvcmRlZApvayBmbGFncwpvayBkd0J5dGVzUmVjb3JkZWQKb2sgZmxhZ3MKb2sgZHdCeXRlc1JlY29yZGVkCm9rIGZsYWdzCm9rIGR3Qnl0ZXNSZWNvcmRlZApwb3NpdGlvbiBlcXVhbHMgdGhlIHRvdGFsIHdyaXR0ZW46IHRydWUKb2sgcG9zaXRpb24gaXMgdGhlIHRvdGFsIHdyaXR0ZW4Kc3VtbWFyeSAzNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen = MMSYSERR_NOERROR (0)\nok open\nok queue\nok queue\nok queue\nok queue\nok queue\nok queue\nok all done\norder callbacks = 7\norder cb 0 WOM_OPEN thread=main inst=ok p2=0\norder cb 1 WOM_DONE hdr=0 flags=DONE|PREPARED thread=other inst=ok p2=0\norder cb 2 WOM_DONE hdr=1 flags=DONE|PREPARED thread=other inst=ok p2=0\norder cb 3 WOM_DONE hdr=2 flags=DONE|PREPARED thread=other inst=ok p2=0\norder cb 4 WOM_DONE hdr=3 flags=DONE|PREPARED thread=other inst=ok p2=0\norder cb 5 WOM_DONE hdr=4 flags=DONE|PREPARED thread=other inst=ok p2=0\norder cb 6 WOM_DONE hdr=5 flags=DONE|PREPARED thread=other inst=ok p2=0\nok seven callbacks (open and six done)\nok WOM_DONE\nok buffers finish in the order written\nok WOM_DONE\nok buffers finish in the order written\nok WOM_DONE\nok buffers finish in the order written\nok WOM_DONE\nok buffers finish in the order written\nok WOM_DONE\nok buffers finish in the order written\nok WOM_DONE\nok buffers finish in the order written\nok flags\nok dwBytesRecorded\nok flags\nok dwBytesRecorded\nok flags\nok dwBytesRecorded\nok flags\nok dwBytesRecorded\nok flags\nok dwBytesRecorded\nok flags\nok dwBytesRecorded\nposition equals the total written: true\nok position is the total written\nsummary 35 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 502
+    },
+    {
+      "name": "wo_write_sizes",
+      "exe_sha256": "18778806cf33fe370d2e3042a91727f23f1f68d8f9024e6956a1ba751dac41d5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4Kb2sgcXVldWUgYSB6ZXJvIGxlbmd0aCBidWZmZXIKb2sgemVybyBsZW5ndGggZG9uZQpvayBxdWV1ZSBhbiBvZGQgbGVuZ3RoIGJ1ZmZlcgpvayBvZGQgbGVuZ3RoIGRvbmUKb2sgcXVldWUgYSBvbmUtZnJhbWUgYnVmZmVyCm9rIG9uZSBmcmFtZSBkb25lCm9rIHRocmVlIFdPTV9ET05FCm9rIGZsYWdzCm9rIGZsYWdzCm9rIGZsYWdzCnN1bW1hcnkgMTIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen = MMSYSERR_NOERROR (0)\nok open\nok queue a zero length buffer\nok zero length done\nok queue an odd length buffer\nok odd length done\nok queue a one-frame buffer\nok one frame done\nok three WOM_DONE\nok flags\nok flags\nok flags\nsummary 12 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 389
+    },
+    {
+      "name": "wo_write_stream_event",
+      "exe_sha256": "6929492d0096ba603c1e01262e4b82e2bb0b35e64b5c1cec8227e82bdda8c53a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4KY29tcGxldGVkIDUwIGVycm9ycyAwIHdva2UgYXQgbGVhc3Qgb25jZSB0cnVlCm9rIGFsbCBmaWZ0eSBidWZmZXJzIGNvbXBsZXRlZApvayBubyBjYWxsIGZhaWxlZApwb3NpdGlvbiBpcyB0aGUgdG90YWw6IHRydWUKb2sgcG9zaXRpb24gaXMgdGhlIHRvdGFsCmNsb3NlID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgY2xvc2UKc3VtbWFyeSA2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen = MMSYSERR_NOERROR (0)\nok open\ncompleted 50 errors 0 woke at least once true\nok all fifty buffers completed\nok no call failed\nposition is the total: true\nok position is the total\nclose = MMSYSERR_NOERROR (0)\nok close\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 770
+    }
+  ]
+}

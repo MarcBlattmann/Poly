@@ -24,11 +24,11 @@ mod scene;
 mod text;
 
 pub use cursors::NamedCursor;
-pub use frame::{BORDER, BUTTON_GAP, CLOSE_SIZE, CORNER_RADIUS, TITLE_HEIGHT, Theme};
+pub use frame::{BORDER, BUTTON_GAP, CLOSE_SIZE, CORNER_RADIUS, RESIZE_REACH, TITLE_HEIGHT, Theme};
 pub use scale::{Scale, UNIT as SCALE_UNIT};
 pub use scene::{
     BUSY_PHASES, BUSY_SIZE, Backdrop, CURSOR_SIZE, Content, CursorLook, Hit, Placement, Scene, View, Window, WindowId,
-    buffer_point,
+    buffer_point, surface_point,
 };
 pub use text::{BitmapFont, TextRenderer};
 

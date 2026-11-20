@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "setx_limits",
+      "source_sha256": "251d22deaeaf0eaa79bebbcea5826a668b70850cc4e8ee8a8e2fcc3895eb3806",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c4b61f32d3e9a7a76c153e5e3f0d66095cf5d6b2e46d80a5b04d5ac1251fb538",
+          "exit_code": 0,
+          "stdout": "ok a name of 127 bytes\nok a name of 128 bytes is ENAMETOOLONG\nok an empty name is EINVAL\nok a value of 64 KiB\nok its length reads back\nok a value of 1 MiB\nok 1 MiB reads back identical\nok a value of 4 MiB\nok its length reads back\nok fifty attributes on one file\nok the last reads back\nok a NULL value with size 0 stores an empty attribute\nok which reads back with length 0\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "setx_targets",
+      "source_sha256": "c66c3ca772a1644875e31ca1c86cf024719aba81d24901c55d684acbe45f5a9e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "69b140b846bcf127710aa6d20fa73d5420389dd5482e2914575ffc125486cd6e",
+          "exit_code": 0,
+          "stdout": "ok a missing file is ENOENT\nok a file with mode 0444 is EACCES, even for its owner\nok an unreadable value pointer is EFAULT (the file is missing too: ENOENT comes first)\nok an unreadable value pointer is EFAULT\nok a directory\nok an attribute survives rename\nok and is seen through a hard link\nok survives truncation\nok survives the removal of the other name\nok the resource fork can be written at a position\nok the bytes at that position changed, the length did not\nok writing beyond the end\nok makes it 21 bytes with a gap of zeros\nok FinderInfo of 31 bytes is ERANGE\nok of 33 bytes too\nok of 32 bytes\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

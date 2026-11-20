@@ -51,7 +51,7 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// `mswsock` (Winsock), `winhttp` (the proxy settings), `crypt32` (certificate
 /// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`; and the
 /// Direct3D 11 / DXGI / DirectComposition DLLs of Chrome's stage 5 (spec-chrome-win-s5):
-/// `d3d11`, `dxgi`, `dcomp`, `dxcore`.
+/// `d3d11`, `dxgi`, `dcomp`, `dxcore`; and `msimg32` (`AlphaBlend`, spec-win-updater-gap).
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -89,6 +89,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "dcomp.dll",
     "dxcore.dll",
     "ucrtbase.dll",
+    "winmm.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";
@@ -251,6 +252,11 @@ pub struct Built {
     /// of ADR 0171). `win poly` boots Poly with `poly.win.token=<kind>`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    /// Whether it needs a sound card (`card`), or must have none (`none`: its first line says
+    /// `NO SOUND DEVICE`, its reference was recorded with the oracle's card turned off); absent:
+    /// neither (no card). `win poly` boots Poly with the machine it asks for ([`sound_devices`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sound: Option<String>,
 }
 
 /// `manifest.json` beside the executables.
@@ -396,6 +402,7 @@ pub fn build_runtime(
         let bytes = util::read(&built)?;
         let imports = check_image_with(&bytes, allowed).map_err(|e| format!("{exe}: {e}"))?;
         util::write(&out.join(&exe), &bytes)?;
+        let sound = sound_of(&src.path, &imports);
         tests.push(Built {
             name: src.name.clone(),
             source: rel(repo, &src.path),
@@ -406,6 +413,7 @@ pub fn build_runtime(
             imports,
             session: session_of(&src.path, &src.name),
             token: token_of(&src.path, &src.name),
+            sound,
         });
     }
     let revision = util::git_text(repo, &["rev-parse", "HEAD"]).ok().map(|s| s.trim().to_string());
@@ -434,6 +442,41 @@ fn session_of(source: &Path, name: &str) -> Option<String> {
         Some("interactive") if bottom => Some("interactive-bottom".to_string()),
         _ => session,
     }
+}
+
+/// What a test needs of the machine's sound (ADR 0244): `none` when its first line says
+/// `NO SOUND DEVICE`; `card` when it imports a `winmm.dll` sound function (`waveOut*`,
+/// `waveIn*`, `midi*`, `mixer*`, `PlaySound*`: the oracle has a sound card); else nothing.
+pub fn sound_of(source: &Path, imports: &BTreeMap<String, Vec<String>>) -> Option<String> {
+    let first = std::fs::read_to_string(source).ok()?.lines().next().map(str::to_string).unwrap_or_default();
+    if first.contains("NO SOUND DEVICE") {
+        return Some("none".into());
+    }
+    let sound = |n: &String| ["waveOut", "waveIn", "midi", "mixer", "PlaySound"].iter().any(|p| n.starts_with(p));
+    imports.get("winmm.dll").is_some_and(|names| names.iter().any(sound)).then(|| "card".into())
+}
+
+/// QEMU's arguments for a test's sound ([`sound_of`]): for `card`, a sound card whose output goes
+/// nowhere (`-audiodev none`): virtio-sound if this QEMU has it, else Intel HDA.
+pub fn sound_devices(sound: Option<&str>, has_virtio_sound: bool) -> Vec<String> {
+    if sound != Some("card") {
+        return Vec::new();
+    }
+    let mut v: Vec<String> = ["-audiodev", "none,id=polysnd"].map(String::from).to_vec();
+    if has_virtio_sound {
+        v.extend(["-device", "virtio-sound-pci,audiodev=polysnd"].map(String::from));
+    } else {
+        v.extend(["-device", "intel-hda", "-device", "hda-output,audiodev=polysnd"].map(String::from));
+    }
+    v
+}
+
+/// Does this machine's QEMU have `virtio-sound-pci`?
+fn qemu_has_virtio_sound() -> bool {
+    std::process::Command::new("qemu-system-x86_64")
+        .args(["-device", "help"])
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("\"virtio-sound-pci\""))
 }
 
 /// The token kind a test's reference was recorded with: the test's own `token` in the
@@ -847,19 +890,23 @@ fn decode(field: &Option<String>) -> Result<Option<Vec<u8>>> {
 /// `ntdll.dll` share a volume device as on Windows, where a program and the
 /// system directory are usually on the same volume (ADR 0185).
 pub const TEST_DIR: &str = "/nt/c/PolyTests";
-/// The test executable on Poly (`C:\PolyTests\test-binary.exe`).
-pub const TEST_EXE: &str = "/nt/c/PolyTests/test-binary.exe";
-
-/// Kernel arguments: the test-run protocol (ADR 0027) plus the
-/// observation file, which the kernel reports as standard output
-/// (`POLY-OUT: fd=1`) when the program has ended.
-pub fn poly_kernel_args() -> String {
-    format!("{} poly.test.stdout={TEST_DIR}/{OUTPUT_FILE}", poly::kernel_args_for(TEST_EXE))
+/// The test executable on Poly: `C:\PolyTests\<name>.exe`, under the name it had on Windows, so
+/// that what a test sees of its own image name (a child's report of its parent's image, as in
+/// ShellDispatch.ShellExecute's tests) is what the recording saw.
+pub fn test_exe(exe: &str) -> String {
+    format!("{TEST_DIR}/{exe}")
 }
 
-/// A test's run from Poly's serial log. The executable is [`TEST_EXE`]
-/// (`/nt/c/PolyTests/test-binary.exe` in the initramfs), which Poly's NT
-/// personality names `C:\PolyTests\test-binary.exe`, so the observation file is
+/// Kernel arguments: the test-run protocol (ADR 0027) for executable `exe` (`<name>.exe`) plus the
+/// observation file, which the kernel reports as standard output (`POLY-OUT: fd=1`) when the
+/// program has ended.
+pub fn poly_kernel_args(exe: &str) -> String {
+    format!("{} poly.test.stdout={TEST_DIR}/{OUTPUT_FILE}", poly::kernel_args_for(&test_exe(exe)))
+}
+
+/// A test's run from Poly's serial log. The executable is [`test_exe`]
+/// (`/nt/c/PolyTests/<name>.exe` in the initramfs), which Poly's NT
+/// personality names `C:\PolyTests\<name>.exe`, so the observation file is
 /// `/nt/c/PolyTests/poly-test.out`.
 pub fn parse_poly_serial(name: &str, log: &str, exe_sha256: &str, timed_out: bool) -> Result<RunResult> {
     let mut r = RunResult {
@@ -1011,17 +1058,19 @@ pub fn run_poly(target: &poly::Target, bin: &Path, manifest: &Manifest, work: &P
     /// The processors a Windows test boots with: `GetCurrentProcessorNumber`'s recorded test pins a
     /// thread to each of the first four.
     const WINDOWS_TEST_CPUS: u32 = 4;
+    let virtio_sound = manifest.tests.iter().any(|t| t.sound.as_deref() == Some("card")) && qemu_has_virtio_sound();
     let results = util::parallel_map(&manifest.tests, jobs, |t| -> Result<RunResult> {
         let bytes = util::read(&bin.join(&t.exe))?;
         let fonts = if dwrite(t) || creates_gdi_fonts(t) { fonts.clone() } else { Vec::new() };
-        let image = poly::initramfs_at(TEST_EXE, &bytes, &fonts)?;
+        let image = poly::initramfs_at(&test_exe(&t.exe), &bytes, &fonts)?;
         let args = format!(
             "{}{}{}",
-            poly_kernel_args(),
+            poly_kernel_args(&t.exe),
             session_kernel_args(t.session.as_deref()),
             token_kernel_args(t.token.as_deref())
         );
-        let (done, log, _) = target.boot_log_cpus(&t.name, &image, work, &args, WINDOWS_TEST_CPUS)?;
+        let devices = sound_devices(t.sound.as_deref(), virtio_sound);
+        let (done, log, _) = target.boot_log_devices(&t.name, &image, work, &args, WINDOWS_TEST_CPUS, &devices)?;
         let timed_out = done.exit == crate::trace::Exit::Timeout;
         let mut r = parse_poly_serial(&t.name, &log, &t.exe_sha256, timed_out)?;
         r.ms = Some(done.duration_ns / 1_000_000);
@@ -1487,6 +1536,9 @@ mod tests {
         // The common dialogs' tests import comdlg32 (spec-win-apps-2).
         let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
         assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
+        // AlphaBlend's tests import msimg32 (spec-win-updater-gap).
+        let blend = image(&[("MSIMG32.dll", &["AlphaBlend"])], 3);
+        assert_eq!(check_image(&blend).unwrap()["msimg32.dll"], ["AlphaBlend"]);
         // The C runtime entries' tests import ucrtbase (spec-win-apps-4).
         let crt = image(&[("ucrtbase.dll", &["_get_stream_buffer_pointers"])], 3);
         assert_eq!(check_image(&crt).unwrap()["ucrtbase.dll"], ["_get_stream_buffer_pointers"]);
@@ -1574,6 +1626,7 @@ mod tests {
                 imports: BTreeMap::new(),
                 session: None,
                 token: None,
+                sound: None,
             });
         }
         let m =
@@ -1673,8 +1726,8 @@ mod tests {
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", true).unwrap().status, "timeout");
         assert_eq!(parse_poly_serial("t", "POLY-INIT: exec /x\n", "", false).unwrap().status, "error");
         assert!(parse_poly_serial("t", "POLY-INIT: exec /x\nPOLY-OUT: fd=1 hex=zz\n", "", false).is_err());
-        assert!(poly_kernel_args().contains(" poly.init=/nt/c/PolyTests/test-binary.exe "));
-        assert!(poly_kernel_args().ends_with(" poly.test.stdout=/nt/c/PolyTests/poly-test.out"));
+        assert!(poly_kernel_args("nt_a.exe").contains(" poly.init=/nt/c/PolyTests/nt_a.exe "));
+        assert!(poly_kernel_args("nt_a.exe").ends_with(" poly.test.stdout=/nt/c/PolyTests/poly-test.out"));
     }
 
     #[test]
@@ -1744,5 +1797,45 @@ mod tests {
         assert!(text.ends_with("3 tests: 1 fail, 1 missing, 1 pass\n"));
         let only = diff(&reference, &target, &["a".into()]).unwrap();
         assert_eq!(only.tests.len(), 1);
+    }
+
+    #[test]
+    fn a_test_gets_the_sound_it_was_recorded_with() {
+        let dir = std::env::temp_dir().join(format!("poly-sound-of-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let nodev = dir.join("nodev.rs");
+        std::fs::write(
+            &nodev,
+            "//! NO SOUND DEVICE: run without a card.
+#![no_std]
+",
+        )
+        .unwrap();
+        let plain = dir.join("plain.rs");
+        std::fs::write(
+            &plain,
+            "//! waveOutOpen: opens.
+",
+        )
+        .unwrap();
+        let mut wave = BTreeMap::new();
+        wave.insert("winmm.dll".to_string(), vec!["waveOutOpen".to_string()]);
+        let mut timer = BTreeMap::new();
+        timer.insert("winmm.dll".to_string(), vec!["timeGetTime".to_string()]);
+        assert_eq!(sound_of(&nodev, &wave).as_deref(), Some("none"));
+        assert_eq!(sound_of(&plain, &wave).as_deref(), Some("card"));
+        assert_eq!(sound_of(&plain, &timer), None);
+        assert_eq!(sound_of(&plain, &BTreeMap::new()), None);
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(sound_devices(None, true).is_empty());
+        assert!(sound_devices(Some("none"), true).is_empty());
+        assert_eq!(
+            sound_devices(Some("card"), true).join(" "),
+            "-audiodev none,id=polysnd -device virtio-sound-pci,audiodev=polysnd"
+        );
+        assert_eq!(
+            sound_devices(Some("card"), false).join(" "),
+            "-audiodev none,id=polysnd -device intel-hda -device hda-output,audiodev=polysnd"
+        );
     }
 }

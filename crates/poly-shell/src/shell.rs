@@ -130,6 +130,9 @@ pub struct Shell {
     /// The catalog without the open windows.
     base_apps: Vec<App>,
     launcher: Launcher,
+    /// The launcher is shown because the desktop showed it (at the start, or when the last window
+    /// closed), not because the user asked: the hotkey then keeps it (ADR 0234).
+    launcher_unasked: bool,
     text: Text,
     clock: String,
     /// The time last set: Unix seconds and the offset east of UTC.
@@ -207,6 +210,7 @@ impl Shell {
             icons: core::cell::RefCell::new(AppIcons::default()),
             settings_window: SettingsWindow::default(),
             consent: crate::consent::Consent::default(),
+            launcher_unasked: true,
         };
         let rows = s.room_for_rows();
         s.launcher.set_limit(rows);
@@ -872,8 +876,15 @@ impl Shell {
         out
     }
 
-    /// The hotkey: show the launcher, or hide it.
+    /// The hotkey: show the launcher, or hide it. A launcher the desktop showed by itself with
+    /// nothing typed yet stays: the user who presses the hotkey wants it, and found it open (ADR
+    /// 0234: "Windows key, type chrome, Enter" right after the start closed it and the typing went
+    /// nowhere). A second press hides it.
     pub fn toggle_launcher(&mut self) {
+        let unasked = core::mem::take(&mut self.launcher_unasked);
+        if unasked && self.launcher.is_visible() && self.launcher.query().is_empty() {
+            return;
+        }
         if !self.launcher.is_visible() {
             self.panel = None;
         }
@@ -883,7 +894,21 @@ impl Shell {
         });
     }
 
+    /// The desktop shows the launcher by itself (the last window closed): as at the start, the
+    /// hotkey then keeps it ([`Shell::toggle_launcher`]).
+    pub fn show_launcher_unasked(&mut self) {
+        if !self.launcher.is_visible() {
+            self.panel = None;
+            self.change(|s| {
+                s.launcher.show();
+                Outcome::Changed
+            });
+        }
+        self.launcher_unasked = true;
+    }
+
     pub fn hide_launcher(&mut self) {
+        self.launcher_unasked = false;
         if self.launcher.is_visible() {
             self.change(|s| {
                 s.launcher.hide();

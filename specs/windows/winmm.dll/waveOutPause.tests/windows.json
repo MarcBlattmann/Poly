@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_pause_errors",
+      "exe_sha256": "cc38002fd5c3e0b8f6fd4ef6dd32f511aa6a8a15a7108cbc47513114e6fb3b68",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKaGFuZGxlIDAgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgaGFuZGxlIDAKbWFkZS11cCBoYW5kbGUgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgbWFkZS11cCBoYW5kbGUKcGF1c2UgYW4gaWRsZSBoYW5kbGUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBwYXVzZSBhbiBpZGxlIGhhbmRsZQpyZXNldCBhIHBhdXNlZCBoYW5kbGUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayByZXNldCBhIHBhdXNlZCBoYW5kbGUKY2xvc2VkIGhhbmRsZSA9IE1NU1lTRVJSX0lOVkFMSEFORExFICg1KQpvayBjbG9zZWQgaGFuZGxlCnN1bW1hcnkgNiBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nhandle 0 = MMSYSERR_INVALHANDLE (5)\nok handle 0\nmade-up handle = MMSYSERR_INVALHANDLE (5)\nok made-up handle\npause an idle handle = MMSYSERR_NOERROR (0)\nok pause an idle handle\nreset a paused handle = MMSYSERR_NOERROR (0)\nok reset a paused handle\nclosed handle = MMSYSERR_INVALHANDLE (5)\nok closed handle\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 197
+    },
+    {
+      "name": "wo_pause_midplay",
+      "exe_sha256": "9cea9260755cf806f115a6e7347e356e095611df7d902c0f80b5f9ec2b2088e8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb2sgcXVldWUKb2sgcXVldWUKb2sgcXVldWUKb2sgdGhlIGZpcnN0IGJ1ZmZlciBmaW5pc2hlcwpwYXVzZSA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHBhdXNlCnBvc2l0aW9uIGZyb3plbiB3aGlsZSBwYXVzZWQ6IHRydWUKb2sgcG9zaXRpb24gZnJvemVuCm9rIHBvc2l0aW9uIGF0IGxlYXN0IHRoZSBmaXJzdCBidWZmZXIKb2sgcG9zaXRpb24gYmVsb3cgdGhlIHRvdGFsCm9rIHRoZSBsYXN0IGJ1ZmZlciBpcyBub3QgZG9uZSB3aGlsZSBwYXVzZWQKcmVzdGFydCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHJlc3RhcnQKb2sgYWxsIGRvbmUKb2sgcG9zaXRpb24gaXMgdGhlIHRvdGFsCnN1bW1hcnkgMTMgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nok queue\nok queue\nok queue\nok the first buffer finishes\npause = MMSYSERR_NOERROR (0)\nok pause\nposition frozen while paused: true\nok position frozen\nok position at least the first buffer\nok position below the total\nok the last buffer is not done while paused\nrestart = MMSYSERR_NOERROR (0)\nok restart\nok all done\nok position is the total\nsummary 13 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 693
+    }
+  ]
+}

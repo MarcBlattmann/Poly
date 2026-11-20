@@ -1,0 +1,88 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "sfs_dacl",
+      "exe_sha256": "40537812816762a3bd5fa5073996fa726409ad9c043ec07b5a14370081a99618",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsZSBtYWRlOiB5ZXMKaW5pdGlhbCBkYWNsOiBEOihBOztGQTs7O1NZKShBOztGQTs7O0JBKShBOztGQTs7Ozx1c2VyPikKdHdvIEFDRXM6IG9rOyByZWFkcyBiYWNrIEQ6KEE7O0ZBOzs7QkEpKEE7O0ZSOzs7V0QpCnNhbWUgd2l0aCB0aGUgcHJvdGVjdGVkIGZsYWcgaW4gdGhlIGluZm9ybWF0aW9uOiBvazsgcmVhZHMgYmFjayBEOihBOztGQTs7O0JBKShBOztGUjs7O1dEKQpwcm90ZWN0ZWQgaW4gdGhlIGRlc2NyaXB0b3I6IG9rOyByZWFkcyBiYWNrIEQ6UChBOztGQTs7O0JBKQpwcm90ZWN0ZWQgaW4gdGhlIGRlc2NyaXB0b3IgYW5kIHVucHJvdGVjdGVkIGluIHRoZSBpbmZvcm1hdGlvbjogb2s7IHJlYWRzIGJhY2sgRDpQKEE7O0ZBOzs7QkEpCmF1dG8taW5oZXJpdGVkIGZsYWdzIGluIHRoZSBkZXNjcmlwdG9yOiBvazsgcmVhZHMgYmFjayBEOihBOztGQTs7O1dEKQpwcm90ZWN0ZWQgYW5kIGF1dG8taW5oZXJpdGVkIGluIHRoZSBkZXNjcmlwdG9yOiBvazsgcmVhZHMgYmFjayBEOlAoQTs7RkE7OztXRCkKTlVMTCBEQUNMOiBvazsgcmVhZHMgYmFjayBEOk5PX0FDQ0VTU19DT05UUk9MCmVtcHR5IERBQ0w6IG9rOyByZWFkcyBiYWNrIEQ6CmRlc2NyaXB0b3IgdGhhdCBoYXMgbm8gREFDTDogb2s7IHJlYWRzIGJhY2sgRDpOT19BQ0NFU1NfQ09OVFJPTApkZW55IGFuZCBnZW5lcmljIHJpZ2h0czogb2s7IHJlYWRzIGJhY2sgRDooRDs7Rlc7OztXRCkoQTs7MHgxMjAwYTk7OztXRCkoQTs7RkE7OztCQSkoQTs7MHgxMjAwYTk7OztBQykKYW4gQUNFIG1hcmtlZCBpbmhlcml0ZWQ6IG9rOyByZWFkcyBiYWNrIEQ6KEE7SUQ7RkE7OztXRCkKcmVzdG9yZSBldmVyeW9uZSBmdWxsOiBvazsgcmVhZHMgYmFjayBEOihBOztGQTs7O1dEKQpkZXNjcmlwdG9yIHdpdGggb3duZXIgYW5kIGdyb3VwLCBpbmZvcm1hdGlvbiBEQUNMIG9ubHk6IG9rOyBvd25lciBhbmQgZ3JvdXAgdW5jaGFuZ2VkOiB5ZXM7IGRhY2wgRDooQTs7RkE7OztXRCkKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "file made: yes\ninitial dacl: D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)\ntwo ACEs: ok; reads back D:(A;;FA;;;BA)(A;;FR;;;WD)\nsame with the protected flag in the information: ok; reads back D:(A;;FA;;;BA)(A;;FR;;;WD)\nprotected in the descriptor: ok; reads back D:P(A;;FA;;;BA)\nprotected in the descriptor and unprotected in the information: ok; reads back D:P(A;;FA;;;BA)\nauto-inherited flags in the descriptor: ok; reads back D:(A;;FA;;;WD)\nprotected and auto-inherited in the descriptor: ok; reads back D:P(A;;FA;;;WD)\nNULL DACL: ok; reads back D:NO_ACCESS_CONTROL\nempty DACL: ok; reads back D:\ndescriptor that has no DACL: ok; reads back D:NO_ACCESS_CONTROL\ndeny and generic rights: ok; reads back D:(D;;FW;;;WD)(A;;0x1200a9;;;WD)(A;;FA;;;BA)(A;;0x1200a9;;;AC)\nan ACE marked inherited: ok; reads back D:(A;ID;FA;;;WD)\nrestore everyone full: ok; reads back D:(A;;FA;;;WD)\ndescriptor with owner and group, information DACL only: ok; owner and group unchanged: yes; dacl D:(A;;FA;;;WD)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    },
+    {
+      "name": "sfs_dir",
+      "exe_sha256": "4c20dc645088236d1fc7089fee376ace12a2796894afeaefc4daa5cd2cf5bda7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGlyZWN0b3J5IG1hZGU6IHllcwpmaWxlIGluIGl0IG1hZGU6IHllcwpkaXJlY3RvcnkgREFDTCB3aXRoIGFuIGluaGVyaXRhYmxlIEFDRTogb2s7IHJlYWRzIGJhY2sgRDooQTtPSUNJO0ZBOzs7QkEpKEE7O0ZSOzs7V0QpCmZpbGUgdGhhdCBleGlzdGVkIGlzIHVuY2hhbmdlZDogeWVzCmluaGVyaXQtb25seSBhbmQgbm8tcHJvcGFnYXRlIGZsYWdzOiBvazsgcmVhZHMgYmFjayBEOihBO09JQ0lJTztGQTs7O1dEKShBO05QO0ZSOzs7QkEpCmRpcmVjdG9yeSBncm91cDogb2s7IHJlYWRzIGJhY2sgRzpCQQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "directory made: yes\nfile in it made: yes\ndirectory DACL with an inheritable ACE: ok; reads back D:(A;OICI;FA;;;BA)(A;;FR;;;WD)\nfile that existed is unchanged: yes\ninherit-only and no-propagate flags: ok; reads back D:(A;OICIIO;FA;;;WD)(A;NP;FR;;;BA)\ndirectory group: ok; reads back G:BA\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    },
+    {
+      "name": "sfs_label_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "0a59e1e6791af5fed439c9646a5dd2648f27d251975e17df9296680dfc4dd39e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsZSBtYWRlOiB5ZXMKaW5pdGlhbCBsYWJlbDogW10KbGFiZWwgbG93LCBuby13cml0ZS11cDogb2s7IHJlYWRzIGJhY2sgW1M6KE1MOztOVzs7O0xXKV0KbGFiZWwgbWVkaXVtOiBvazsgcmVhZHMgYmFjayBbUzooTUw7O05XOzs7TUUpXQpsYWJlbCBoaWdoOiBlcnJvciAxMjk5OyByZWFkcyBiYWNrIFtTOihNTDs7Tlc7OztNRSldCmxhYmVsIHN5c3RlbSBsZXZlbDogZXJyb3IgMTI5OTsgcmVhZHMgYmFjayBbUzooTUw7O05XOzs7TUUpXQpsYWJlbCBsb3csIG5vLXJlYWQtdXAgYW5kIG5vLWV4ZWN1dGUtdXA6IG9rOyByZWFkcyBiYWNrIFtTOihNTDs7TlJOWDs7O0xXKV0KYXVkaXQgQUNFIHRocm91Z2ggU0FDTCBpbmZvcm1hdGlvbjogZXJyb3IgMTMxNApyZWFkaW5nIHRoZSBTQUNMOiBlcnJvciAxMzE0CnJlYWRpbmcgZXZlcnl0aGluZzogZXJyb3IgMTMxNApyZWFkaW5nIG93bmVyLCBncm91cCwgREFDTCBhbmQgbGFiZWw6IE86PHVzZXI+Rzo8Z3JvdXA+RDooQTs7RkE7OztTWSkoQTs7RkE7OztCQSkoQTs7RkE7Ozs8dXNlcj4pUzooTUw7O05STlg7OztMVykKU2VTZWN1cml0eVByaXZpbGVnZTogbmFtZSBrbm93biB5ZXM7IGVuYWJsaW5nIGl0IHN1Y2NlZWRlZDogbm8Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "file made: yes\ninitial label: []\nlabel low, no-write-up: ok; reads back [S:(ML;;NW;;;LW)]\nlabel medium: ok; reads back [S:(ML;;NW;;;ME)]\nlabel high: error 1299; reads back [S:(ML;;NW;;;ME)]\nlabel system level: error 1299; reads back [S:(ML;;NW;;;ME)]\nlabel low, no-read-up and no-execute-up: ok; reads back [S:(ML;;NRNX;;;LW)]\naudit ACE through SACL information: error 1314\nreading the SACL: error 1314\nreading everything: error 1314\nreading owner, group, DACL and label: O:<user>G:<group>D:(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;<user>)S:(ML;;NRNX;;;LW)\nSeSecurityPrivilege: name known yes; enabling it succeeded: no\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 59
+    },
+    {
+      "name": "sfs_owner",
+      "exe_sha256": "7bbdaea0b968279b7ea981429ff53add2c7715a8d5394ad834287b6ee88e8729",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsZSBtYWRlOiB5ZXMKaW5pdGlhbCBvd25lcjogTzpCQQpvd25lciBBZG1pbmlzdHJhdG9yczogb2s7IHJlYWRzIGJhY2sgTzpCQQpvd25lciBFdmVyeW9uZTogb2s7IHJlYWRzIGJhY2sgTzpXRApvd25lciBTWVNURU06IG9rOyByZWFkcyBiYWNrIE86U1kKb3duZXIgdGhlIGNhbGxlcidzIG93biB1c2VyOiBvazsgcmVhZHMgYmFjayBPOjx1c2VyPgpncm91cCBBZG1pbmlzdHJhdG9yczogb2s7IHJlYWRzIGJhY2sgRzpCQQpncm91cCBFdmVyeW9uZTogb2s7IHJlYWRzIGJhY2sgRzpXRApvd25lciBhbmQgZ3JvdXAgdG9nZXRoZXI6IG9rOyByZWFkcyBiYWNrIE86U1lHOlNZCm93bmVyIGFza2VkLCBkZXNjcmlwdG9yIGhhcyBub25lOiBlcnJvciAxMzM4OyBvd25lciBub3cgTzpTWQpncm91cCBhc2tlZCwgZGVzY3JpcHRvciBoYXMgbm9uZTogZXJyb3IgMTMzODsgZ3JvdXAgbm93IEc6U1kKZGFjbCBhc2tlZCwgZGVzY3JpcHRvciBoYXMgb3duZXIgYW5kIGdyb3VwIHRvbzogb2s7IG93bmVyIGFuZCBncm91cCBub3cgTzpTWUc6U1kKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "file made: yes\ninitial owner: O:BA\nowner Administrators: ok; reads back O:BA\nowner Everyone: ok; reads back O:WD\nowner SYSTEM: ok; reads back O:SY\nowner the caller's own user: ok; reads back O:<user>\ngroup Administrators: ok; reads back G:BA\ngroup Everyone: ok; reads back G:WD\nowner and group together: ok; reads back O:SYG:SY\nowner asked, descriptor has none: error 1338; owner now O:SY\ngroup asked, descriptor has none: error 1338; group now G:SY\ndacl asked, descriptor has owner and group too: ok; owner and group now O:SYG:SY\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    },
+    {
+      "name": "sfs_owner_std",
+      "session": "interactive",
+      "token": "standard",
+      "exe_sha256": "f7163c5be0ab354e2c439d60f8fdddbfea4c4085a142c7702ce145b3258ea7b6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsZSBtYWRlOiB5ZXMKaW5pdGlhbCBvd25lcjogTzo8dXNlcj4Kb3duZXIgQWRtaW5pc3RyYXRvcnM6IGVycm9yIDEzMDc7IHJlYWRzIGJhY2sgTzo8dXNlcj4Kb3duZXIgRXZlcnlvbmU6IGVycm9yIDEzMDc7IHJlYWRzIGJhY2sgTzo8dXNlcj4Kb3duZXIgU1lTVEVNOiBlcnJvciAxMzA3OyByZWFkcyBiYWNrIE86PHVzZXI+Cm93bmVyIHRoZSBjYWxsZXIncyBvd24gdXNlcjogb2s7IHJlYWRzIGJhY2sgTzo8dXNlcj4KZ3JvdXAgQWRtaW5pc3RyYXRvcnM6IG9rOyByZWFkcyBiYWNrIEc6QkEKZ3JvdXAgRXZlcnlvbmU6IG9rOyByZWFkcyBiYWNrIEc6V0QKZ3JvdXAgU1lTVEVNOiBvazsgcmVhZHMgYmFjayBHOlNZCm93bmVyIGFza2VkLCBkZXNjcmlwdG9yIGhhcyBub25lOiBlcnJvciAxMzM4CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "file made: yes\ninitial owner: O:<user>\nowner Administrators: error 1307; reads back O:<user>\nowner Everyone: error 1307; reads back O:<user>\nowner SYSTEM: error 1307; reads back O:<user>\nowner the caller's own user: ok; reads back O:<user>\ngroup Administrators: ok; reads back G:BA\ngroup Everyone: ok; reads back G:WD\ngroup SYSTEM: ok; reads back G:SY\nowner asked, descriptor has none: error 1338\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

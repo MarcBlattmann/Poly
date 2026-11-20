@@ -46,6 +46,7 @@ use poly_win32k::wire;
 
 mod headless;
 mod hooks;
+mod idle;
 mod winevent;
 
 #[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
@@ -376,6 +377,10 @@ impl Env for Sys {
     fn pump_events(&self) {
         winevent::pump();
         headless::pump_power_settings();
+    }
+
+    fn input_idle(&self, blocking: bool) {
+        idle::note(self, blocking);
     }
 }
 
@@ -1159,16 +1164,15 @@ pub extern "system" fn IsZoomed(hwnd: H) -> i32 {
 }
 
 /// `GetShellWindow`: "the handle of the Shell's desktop window. If no Shell process is present,
-/// the return value is NULL" (Learn). Poly's desktop is its own shell, not a Windows shell
-/// process with a window in this session: NULL. (Chrome delay-loads the function when it starts;
-/// ADR 0155, step 9. Doc-derived.)
+/// the return value is NULL" (Learn). win32k's shell window of the interactive session, which
+/// answers as the shell stand-in's (`explorer.exe`, ADR 0222) once it runs; NULL in session 0
+/// (CreateProcessWithTokenW.yaml `shell_token`).
 #[unsafe(no_mangle)]
 pub extern "system" fn GetShellWindow() -> H {
-    // The interactive session has windows of another process (the shell's): the lowest of them is
-    // the shell window (GetKeyboardLayout.yaml `other_threads`). None in session 0.
-    let desktop = u::desktop(&SYS);
-    let Reply::Relatives { children, .. } = call(Request::Relatives { hwnd: desktop }) else { return 0 };
-    children.into_iter().rev().find(|&c| info(c as H).is_some_and(|i| i.pid >= 0xFFFF_FFF0)).map_or(0, |c| c as H)
+    match call(Request::ShellWindow {}) {
+        Reply::Handle { hwnd } => hwnd as H,
+        _ => 0,
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -1499,10 +1503,44 @@ pub unsafe extern "system" fn GetMessageW(msg: *mut CMsg, hwnd: H, min: u32, max
     let mut m = CMsg::default();
     let r = u::get_message(&SYS, &mut m, hwnd as u64, min, max);
     if r != -1 {
-        // SAFETY: the caller's MSG.
-        unsafe { *msg = m };
+        keep_packet(&m);
+        // SAFETY: the caller's MSG, written in its own size (28 bytes on x86).
+        unsafe { u::put_msg(msg, &m) };
     }
     r
+}
+
+/// The last `VK_PACKET` key message each thread retrieved, with its UTF-16 unit
+/// (`CMsg::private`): a 32-bit `MSG` has no room for the unit, so `TranslateMessage` finds it
+/// here.
+static PACKETS: SpinLock<Vec<(u32, CMsg)>> = SpinLock::new(Vec::new());
+
+fn keep_packet(m: &CMsg) {
+    if u::MSG_BYTES >= core::mem::size_of::<CMsg>() || m.private == 0 {
+        return;
+    }
+    let tid = SYS.tid();
+    PACKETS.with(|p| {
+        p.retain(|(t, _)| *t != tid);
+        p.push((tid, *m));
+    });
+}
+
+/// A caller's `MSG` with the `VK_PACKET` unit this thread retrieved with it.
+///
+/// # Safety
+/// `msg` points at a readable `MSG`.
+unsafe fn caller_msg(msg: *const CMsg) -> CMsg {
+    // SAFETY: the caller's promise.
+    let mut m = unsafe { u::get_msg(msg) };
+    if m.private == 0 {
+        let tid = SYS.tid();
+        let same = |k: &CMsg| (k.hwnd, k.message, k.w, k.l, k.time) == (m.hwnd, m.message, m.w, m.l, m.time);
+        if let Some(unit) = PACKETS.with(|p| p.iter().find(|(t, k)| *t == tid && same(k)).map(|(_, k)| k.private)) {
+            m.private = unit;
+        }
+    }
+    m
 }
 
 #[unsafe(no_mangle)]
@@ -1510,16 +1548,17 @@ pub unsafe extern "system" fn PeekMessageW(msg: *mut CMsg, hwnd: H, min: u32, ma
     let mut m = CMsg::default();
     let r = u::peek_message(&SYS, &mut m, hwnd as u64, min, max, remove);
     if r {
-        // SAFETY: the caller's MSG.
-        unsafe { *msg = m };
+        keep_packet(&m);
+        // SAFETY: the caller's MSG, written in its own size (28 bytes on x86).
+        unsafe { u::put_msg(msg, &m) };
     }
     i32::from(r)
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn DispatchMessageW(msg: *const CMsg) -> isize {
-    // SAFETY: the caller's MSG.
-    u::dispatch_message(&SYS, unsafe { &*msg }) as isize
+    // SAFETY: the caller's MSG, read in its own size.
+    u::dispatch_message(&SYS, &unsafe { u::get_msg(msg) }) as isize
 }
 
 #[unsafe(no_mangle)]
@@ -1527,13 +1566,13 @@ pub unsafe extern "system" fn TranslateMessage(msg: *const CMsg) -> i32 {
     if msg.is_null() {
         return 0;
     }
-    // SAFETY: the caller's MSG.
-    let m = unsafe { &*msg };
+    // SAFETY: the caller's MSG, read in its own size.
+    let m = unsafe { caller_msg(msg) };
     if matches!(m.message, kbd::WM_KEYDOWN | kbd::WM_SYSKEYDOWN) {
         refresh_layout();
     }
     // The dead-key state is the thread's, shared with ToUnicode.
-    i32::from(with_dead_state(|d| u::input::translate(&SYS, m, d)))
+    i32::from(with_dead_state(|d| u::input::translate(&SYS, &m, d)))
 }
 
 #[unsafe(no_mangle)]
@@ -2397,10 +2436,14 @@ pub unsafe extern "system" fn SetKeyboardState(state: *const u8) -> i32 {
     1
 }
 
-/// `SendInput` (SendInput.yaml): INPUT is 40 bytes on x64 (winuser.h).
+/// `INPUT` (winuser.h): 40 bytes on x64 with its union at 8, 28 on x86 with it at 4.
+const INPUT_SIZE: usize = if core::mem::size_of::<usize>() == 8 { 40 } else { 28 };
+const INPUT_UNION: usize = if core::mem::size_of::<usize>() == 8 { 8 } else { 4 };
+
+/// `SendInput` (SendInput.yaml): `INPUT` is 40 bytes on x64, 28 in a 32-bit process.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SendInput(count: u32, inputs: *const u8, size: i32) -> u32 {
-    if count == 0 || size != 40 {
+    if count == 0 || size as usize != INPUT_SIZE {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;
     }
@@ -2410,26 +2453,27 @@ pub unsafe extern "system" fn SendInput(count: u32, inputs: *const u8, size: i32
     }
     let mut events = Vec::with_capacity(count as usize);
     for k in 0..count as usize {
-        // SAFETY: `count` INPUT structures of 40 bytes.
-        let b = unsafe { core::slice::from_raw_parts(inputs.add(k * 40), 40) };
+        // SAFETY: `count` INPUT structures of `INPUT_SIZE` bytes.
+        let b = unsafe { core::slice::from_raw_parts(inputs.add(k * INPUT_SIZE), INPUT_SIZE) };
+        let o = INPUT_UNION;
         let u32_at = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
         let u16_at = |i: usize| u16::from_le_bytes([b[i], b[i + 1]]);
         let kind = u32_at(0);
         let e = if kind == 1 {
             poly_win32k::proto::InputEvent {
                 kind,
-                a: i32::from(u16_at(8)),
-                b: i32::from(u16_at(10)),
+                a: i32::from(u16_at(o)),
+                b: i32::from(u16_at(o + 2)),
                 data: 0,
-                flags: u32_at(12),
+                flags: u32_at(o + 4),
             }
         } else {
             poly_win32k::proto::InputEvent {
                 kind,
-                a: u32_at(8) as i32,
-                b: u32_at(12) as i32,
-                data: u32_at(16),
-                flags: u32_at(20),
+                a: u32_at(o) as i32,
+                b: u32_at(o + 4) as i32,
+                data: u32_at(o + 8),
+                flags: u32_at(o + 12),
             }
         };
         events.push(e);

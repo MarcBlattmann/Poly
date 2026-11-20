@@ -1,0 +1,84 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "52b65ac5af8d",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T00:01:32Z",
+  "tests": [
+    {
+      "name": "wfii_busy",
+      "exe_sha256": "6dae21828309fc6aa7a238a70e36f5a1a52657fc925c23073926d9029f7e2c8f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmV2ZXIgaWRsZSAoYnVzeSBsb29wKSwgdGltZW91dCAxMDA6IHJlc3VsdCBXQUlUX1RJTUVPVVQgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIGJlZm9yZSB0aGUgY2hpbGQncyBpZGxlIHBvaW50Cm5ldmVyIGlkbGUgKGJ1c3kgbG9vcCksIHRpbWVvdXQgMzAwMDogcmVzdWx0IFdBSVRfVElNRU9VVCBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKR1VJIGNoaWxkLCBuZXZlciBsb2FkcyB1c2VyMzIsIHRpbWVvdXQgMDogcmVzdWx0IFdBSVRfVElNRU9VVCBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKbmV2ZXIgaWRsZSAod2luZG93LCBubyBtZXNzYWdlIGNhbGwpLCB0aW1lb3V0IDEwMDogcmVzdWx0IFdBSVRfVElNRU9VVCBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKbmV2ZXIgaWRsZSAod2luZG93LCBubyBtZXNzYWdlIGNhbGwpLCB0aW1lb3V0IDMwMDA6IHJlc3VsdCBXQUlUX1RJTUVPVVQgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIGJlZm9yZSB0aGUgY2hpbGQncyBpZGxlIHBvaW50CkdVSSBjaGlsZCB3aXRoIGEgcXVldWUgKElzR1VJVGhyZWFkKSBhbmQgbm8gbWVzc2FnZSBjYWxsLCB0aW1lb3V0IDEwMDogcmVzdWx0IFdBSVRfVElNRU9VVCBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKaWRsZSBvbmx5IGFmdGVyIDEuNSBzLCB0aW1lb3V0IDEwMDogcmVzdWx0IFdBSVRfVElNRU9VVCBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKaWRsZSBvbmx5IGFmdGVyIDEuNSBzLCB0aW1lb3V0IDEwMDAwOiByZXN1bHQgMCAoc2F0aXNmaWVkKSBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgd2l0aGluIDIgcyBhZnRlciB0aGUgY2hpbGQncyBpZGxlIHBvaW50CnN1c3BlbmRlZCBjaGlsZCwgdGltZW91dCAzMDA6IHJlc3VsdCBXQUlUX1RJTUVPVVQgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIGJlZm9yZSB0aGUgY2hpbGQncyBpZGxlIHBvaW50CnNhbWUgY2hpbGQgcmVzdW1lZCwgdGltZW91dCAxMDAwMDogcmVzdWx0IDAgKHNhdGlzZmllZCkgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIHdpdGhpbiAyIHMgYWZ0ZXIgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludApzdXNwZW5kZWQgR1VJIGNoaWxkLCBuZXZlciBsb2FkcyB1c2VyMzIsIHRpbWVvdXQgMzAwOiByZXN1bHQgV0FJVF9USU1FT1VUIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCBiZWZvcmUgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "never idle (busy loop), timeout 100: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nnever idle (busy loop), timeout 3000: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nGUI child, never loads user32, timeout 0: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nnever idle (window, no message call), timeout 100: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nnever idle (window, no message call), timeout 3000: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nGUI child with a queue (IsGUIThread) and no message call, timeout 100: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nidle only after 1.5 s, timeout 100: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nidle only after 1.5 s, timeout 10000: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nsuspended child, timeout 300: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nsame child resumed, timeout 10000: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nsuspended GUI child, never loads user32, timeout 300: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 11691
+    },
+    {
+      "name": "wfii_calls",
+      "exe_sha256": "965c87228b757939fd42e3391c29364a278d7efb36b82f7f180a4e99fe5d8393",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0TWVzc2FnZSwgZW1wdHkgcXVldWU6IHJlc3VsdCAwIChzYXRpc2ZpZWQpIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKUGVla01lc3NhZ2UgUE1fUkVNT1ZFLCBlbXB0eSBxdWV1ZTogcmVzdWx0IDAgKHNhdGlzZmllZCkgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIG1vcmUgdGhhbiAyIHMgYWZ0ZXIgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludApQZWVrTWVzc2FnZSBQTV9OT1JFTU9WRSwgZW1wdHkgcXVldWU6IHJlc3VsdCAwIChzYXRpc2ZpZWQpIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCBtb3JlIHRoYW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKV2FpdE1lc3NhZ2U6IHJlc3VsdCAwIChzYXRpc2ZpZWQpIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKTXNnV2FpdEZvck11bHRpcGxlT2JqZWN0cywgUVNfQUxMSU5QVVQ6IHJlc3VsdCAwIChzYXRpc2ZpZWQpIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetMessage, empty queue: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nPeekMessage PM_REMOVE, empty queue: result 0 (satisfied) error unchanged returned more than 2 s after the child's idle point\nPeekMessage PM_NOREMOVE, empty queue: result 0 (satisfied) error unchanged returned more than 2 s after the child's idle point\nWaitMessage: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nMsgWaitForMultipleObjects, QS_ALLINPUT: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 17506
+    },
+    {
+      "name": "wfii_exit",
+      "exe_sha256": "dd18ed4a614b0be8e4ccd1c081a8e0221f478edf7057704da1d79a0974e3fe06",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y2hpbGQgZXhpdHMgZHVyaW5nIHRoZSB3YWl0IChuZXZlciBpZGxlKTogcmVzdWx0IDAgKHNhdGlzZmllZCkgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIGJlZm9yZSB0aGUgY2hpbGQncyBpZGxlIHBvaW50CmNoaWxkIGV4aXRzIGR1cmluZyB0aGUgd2FpdCwgSU5GSU5JVEUgdGltZW91dDogcmVzdWx0IDAgKHNhdGlzZmllZCkgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIGJlZm9yZSB0aGUgY2hpbGQncyBpZGxlIHBvaW50CmNoaWxkIGFscmVhZHkgZW5kZWQgKG5ldmVyIGlkbGUpLCB0aW1lb3V0IDUwMDA6IHJlc3VsdCBXQUlUX0ZBSUxFRCBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKY2hpbGQgd2FzIGlkbGUsIHRoZW4gZW5kZWQsIHRpbWVvdXQgNTAwMDogcmVzdWx0IFdBSVRfRkFJTEVEIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKY2hpbGQgaWRsZSBhdCAwLjcgcywgZW5kcyAwLjUgcyBsYXRlcjsgd2FpdCB3aXRoIHRpbWVvdXQgMTAwMDA6IHJlc3VsdCAwIChzYXRpc2ZpZWQpIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKY2hpbGQgdGVybWluYXRlZCBiZWZvcmUgdGhlIGNhbGwsIHRpbWVvdXQgNTAwMDogcmVzdWx0IFdBSVRfRkFJTEVEIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCBiZWZvcmUgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "child exits during the wait (never idle): result 0 (satisfied) error unchanged returned before the child's idle point\nchild exits during the wait, INFINITE timeout: result 0 (satisfied) error unchanged returned before the child's idle point\nchild already ended (never idle), timeout 5000: result WAIT_FAILED error unchanged returned before the child's idle point\nchild was idle, then ended, timeout 5000: result WAIT_FAILED error unchanged returned within 2 s after the child's idle point\nchild idle at 0.7 s, ends 0.5 s later; wait with timeout 10000: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nchild terminated before the call, timeout 5000: result WAIT_FAILED error unchanged returned before the child's idle point\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 5237
+    },
+    {
+      "name": "wfii_once",
+      "exe_sha256": "fc8eff46dd354238cedc9cff31d638663f5298ca8d0ef4cc48da7d44b4301bb0",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3Qgd2FpdDogcmVzdWx0IDAgKHNhdGlzZmllZCkgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIHdpdGhpbiAyIHMgYWZ0ZXIgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludApzZWNvbmQgd2FpdCwgY2hpbGQgYnVzeSBhZ2FpbiwgdGltZW91dCAyMDA6IHJlc3VsdCAwIChzYXRpc2ZpZWQpIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKdGhpcmQgd2FpdCwgdGltZW91dCAwOiByZXN1bHQgMCAoc2F0aXNmaWVkKSBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgd2l0aGluIDIgcyBhZnRlciB0aGUgY2hpbGQncyBpZGxlIHBvaW50CmZvdXJ0aCB3YWl0LCBJTkZJTklURTogcmVzdWx0IDAgKHNhdGlzZmllZCkgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIHdpdGhpbiAyIHMgYWZ0ZXIgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludApmaXJzdCB3YWl0LCB0aW1lb3V0IDAsIGNoaWxkIG5vdCBpZGxlIHlldDogcmVzdWx0IFdBSVRfVElNRU9VVCBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgYmVmb3JlIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKc2Vjb25kIHdhaXQsIHRpbWVvdXQgMTAwMDA6IHJlc3VsdCAwIChzYXRpc2ZpZWQpIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKdGhpcmQgd2FpdCwgdGltZW91dCAwLCBjaGlsZCBpZGxlOiByZXN1bHQgMCAoc2F0aXNmaWVkKSBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgd2l0aGluIDIgcyBhZnRlciB0aGUgY2hpbGQncyBpZGxlIHBvaW50CmZpcnN0IHdhaXQsIHRpbWVvdXQgMTAwOiByZXN1bHQgV0FJVF9USU1FT1VUIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCBiZWZvcmUgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludApzZWNvbmQgd2FpdCwgdGltZW91dCAxMDAwMDogcmVzdWx0IDAgKHNhdGlzZmllZCkgZXJyb3IgdW5jaGFuZ2VkIHJldHVybmVkIHdpdGhpbiAyIHMgYWZ0ZXIgdGhlIGNoaWxkJ3MgaWRsZSBwb2ludApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first wait: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nsecond wait, child busy again, timeout 200: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nthird wait, timeout 0: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nfourth wait, INFINITE: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nfirst wait, timeout 0, child not idle yet: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nsecond wait, timeout 10000: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nthird wait, timeout 0, child idle: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nfirst wait, timeout 100: result WAIT_TIMEOUT error unchanged returned before the child's idle point\nsecond wait, timeout 10000: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 5284
+    },
+    {
+      "name": "wfii_pending",
+      "exe_sha256": "b8e15b2d00a973b5f7c346a2a12fd0728509729a4ecc7acc950f51701dea1fb3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bWVzc2FnZSBwZW5kaW5nLCB0aGVuIGJsb2NraW5nIEdldE1lc3NhZ2U6IHJlc3VsdCAwIChzYXRpc2ZpZWQpIGVycm9yIHVuY2hhbmdlZCByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKc2Vjb25kIHRocmVhZCBpZGxlLCBtYWluIHRocmVhZCBidXN5OiByZXN1bHQgMCAoc2F0aXNmaWVkKSBlcnJvciB1bmNoYW5nZWQgcmV0dXJuZWQgd2l0aGluIDIgcyBhZnRlciB0aGUgY2hpbGQncyBpZGxlIHBvaW50CnR3byB3YWl0ZXJzOiBtYWluIHRocmVhZCAwIChzYXRpc2ZpZWQpIHNlY29uZCB0aHJlYWQgMCAoc2F0aXNmaWVkKSByZXR1cm5lZCB3aXRoaW4gMiBzIGFmdGVyIHRoZSBjaGlsZCdzIGlkbGUgcG9pbnQKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "message pending, then blocking GetMessage: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\nsecond thread idle, main thread busy: result 0 (satisfied) error unchanged returned within 2 s after the child's idle point\ntwo waiters: main thread 0 (satisfied) second thread 0 (satisfied) returned within 2 s after the child's idle point\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 5064
+    }
+  ]
+}

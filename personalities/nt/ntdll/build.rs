@@ -90,6 +90,8 @@ fn main() {
     // And the process list, for kernelbase's tool help snapshot.
     println!("cargo:rustc-link-arg=/EXPORT:PolyProcessList");
     println!("cargo:rustc-link-arg=/EXPORT:PolyRequestElevation");
+    // And the start of the system's own programs as the system (ADR 0235), for ole32 and taskschd.
+    println!("cargo:rustc-link-arg=/EXPORT:PolyStartSystemProcess");
     // The memory functions the Windows applications import from ntdll (ADR 0155, step 10): the
     // `compiler_builtins` ones, as `ucrtbase.dll` exports them.
     if !x86 {

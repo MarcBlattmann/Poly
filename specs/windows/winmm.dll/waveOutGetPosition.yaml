@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/winmm.dll/waveOutGetPosition.yaml
+id: windows/api/winmm.dll/waveOutGetPosition
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-waveout
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only). Microsoft Learn: "waveOutOpen function", "waveOutClose", "waveOutPrepareHeader", "waveOutUnprepareHeader", "waveOutWrite", "waveOutPause", "waveOutRestart", "waveOutReset", "waveOutBreakLoop", "waveOutGetPosition", "waveOutGetVolume", "waveOutSetVolume", "waveOutGetDevCaps", "waveOutGetNumDevs", "waveOutGetID", "waveOutGetErrorText", "waveOutMessage", "WAVEHDR", "WAVEFORMATEX", "WAVEFORMATEXTENSIBLE", "WAVEOUTCAPS", "MMTIME", "waveOutProc callback function", "Multimedia Error Codes"; constants and layouts from mmsystem.h, mmeapi.h, mmreg.h and ksmedia.h. The import names of Chrome's chrome.dll come from the survey in docs/windows/audio-plan.md. No Wine, ReactOS or Chromium source was read and no Microsoft binary was disassembled.
+summary: >
+  Reports how much has been played since the device was opened or last reset, in bytes or in samples (frames). MMTIME is 12 bytes (a 4-byte type and an 8-byte union; the value is the first 4 bytes of the union).
+interface:
+  signature: "MMRESULT waveOutGetPosition(HWAVEOUT handle, LPMMTIME time, UINT size)"
+rules:
+  types: "TIME_BYTES (4) and TIME_SAMPLES (2) are supported and come back with that wType (bytes of the format opened; samples = frames: 9600 bytes of 16 bit stereo = 2400 samples). Every other type asked for (TIME_MS, TIME_SMPTE, TIME_MIDI, TIME_TICKS, 0, an undefined 0x40) succeeds but is answered in bytes: wType is set to TIME_BYTES and the value is in bytes"
+  start: "0 for a fresh handle (bytes and samples)"
+  progress: "while buffers play it never goes down and never passes the bytes written; when the last buffer is done it is the total (four buffers of 9600: 38400 bytes, 9600 samples); a handle opened afterwards starts at 0 again"
+  formats: "the position counts bytes of the format opened and samples as bytes / block size (checked for PCM 16 bit mono and stereo, 24 and 32 bit, float 32 bit mono and stereo, at 44100 and 48000 Hz and more)"
+  frozen: "does not advance while the handle is paused; is 0 after waveOutReset"
+  size: "the size argument is not checked in the tests beyond 12 (the oracle accepted other sizes too); callers pass 12"
+  errors: "a null MMTIME is MMSYSERR_INVALPARAM; handle 0, a made-up value and a closed handle are MMSYSERR_INVALHANDLE"
+  relation: "after a buffer's WHDR_DONE is set the position reaches exactly the sum of the bytes of all buffers done within a short time (the tests wait up to 2 s for it); it is never above the bytes written"
+errors:
+  invalid_param: "MMSYSERR_INVALPARAM (11)"
+  invalid_handle: "MMSYSERR_INVALHANDLE (5)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond; the value advances with the audio"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing winmm.dll, kernel32.dll (and user32.dll for the window and thread callback tests) by name, built with the pipeline's usual flags. Every test needs a wave output device: it first checks that waveOutGetNumDevs is at least 1 and fails if not. Audio data is always silence (zero samples; never 8-bit data, whose silence is not zero), so nothing is audible. Observations are return codes, header flags, booleans, counts, orders of callbacks and positions that follow from the bytes written; never handles, thread ids, addresses or times. Waiting is bounded: a buffer of 50 or 100 ms is waited for up to 5 s, and "nothing happens" checks look for 100 to 400 ms. The tests that change the volume restore it; the volume is per process, so a test that fails does not leave it changed. A few tests are the exception: they say "NO SOUND DEVICE" in their first line and must be run with no sound device present; their recording was made with the oracle's sound card disabled (the HD audio function turned off in Device Manager terms, and turned on again after the run); where such a test runs with a device it fails.
+not_covered: >
+  Machines with no sound device, except for the no-device rules named above; devices other than device 0 and the mapper; how long a buffer takes to start or the latency of any call; capture (waveIn) and MIDI. The exact value at a given instant while playing (only relations are recorded); the size argument.

@@ -60,10 +60,28 @@ impl Section {
     }
 }
 
+/// What [`NtSystem::thread_records`] keeps of a thread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ThreadRecord {
+    /// The process the thread runs (ran) in.
+    pub process: ProcessId,
+    /// Its exit status, once it has ended.
+    pub exit: Option<poly_ntobj::NtStatus>,
+    /// Made with `THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER` (`ThreadHideFromDebugger`).
+    pub hidden: bool,
+}
+
 /// The machine-wide NT state.
 #[derive(Debug)]
 pub struct NtSystem {
     pub objects: ObjectManager,
+    /// The system's commit charge: the private memory every process has committed through
+    /// `NtAllocateVirtualMemory` and not freed (ADR 0250).
+    pub commit_total: u64,
+    /// The most that may be committed: the machine's RAM less what the kernel keeps, set by the
+    /// kernel (Poly has no pagefile, so every committed page has a frame waiting for it).
+    /// `u64::MAX` until then.
+    pub commit_limit: u64,
     /// File I/O: volumes, file objects, share access, locks, IRPs (ADR 0067).
     pub io: crate::io::IoState,
     /// The registry, reached through the `\REGISTRY` object (ADR 0066).
@@ -73,6 +91,13 @@ pub struct NtSystem {
     /// exists (another process holds a handle to it), for
     /// `NtQueryInformationProcess` (`GetExitCodeProcess`, ADR 0079).
     pub process_exits: BTreeMap<ProcessId, poly_ntobj::NtStatus>,
+
+    /// Every thread whose thread object exists: its process and, once it has ended, its exit
+    /// status. A handle to a thread of another process (`CreateRemoteThread`, a child's first
+    /// thread) is answered from here: `GetProcessIdOfThread` and `GetExitCodeThread` still work
+    /// after that process has gone (specs/windows/kernel32.dll/CreateRemoteThread.yaml,
+    /// `exit_process_routine`). Forgotten with the thread object.
+    pub thread_records: BTreeMap<poly_ntobj::ThreadRef, ThreadRecord>,
 
     /// win32k's machine-wide state: the desktop link's surfaces (ADR 0128).
     pub win32k: crate::win32k::Win32k,
@@ -155,6 +180,7 @@ impl NtSystem {
             io: crate::io::IoState::new(),
             registry,
             process_exits: BTreeMap::new(),
+            thread_records: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
             lowbox_sids: Vec::new(),
@@ -164,6 +190,8 @@ impl NtSystem {
             working_sets: BTreeMap::new(),
             ntdll32: &[],
             logon: poly_security::token::Logon::Admin,
+            commit_total: 0,
+            commit_limit: u64::MAX,
             consent: crate::consent::Broker::default(),
             sections: BTreeMap::new(),
             next_key: 1,
@@ -253,6 +281,9 @@ impl NtSystem {
                     self.working_sets.remove(&ProcessId(d.cookie as u32));
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
                 }
+                ObjectType::Thread => {
+                    self.thread_records.remove(&poly_ntobj::ThreadRef(d.cookie));
+                }
                 ObjectType::Job => self.jobs.deleted(d.cookie),
                 ObjectType::WindowStation | ObjectType::Desktop => self.winsta.deleted(&mut self.objects, d.id),
                 _ => {}
@@ -337,6 +368,13 @@ pub struct NtProcess {
     pub priority_class: u8,
     /// The process that created it (0: the kernel started it).
     pub parent: u32,
+    /// What it has added to the system's commit charge (`NtSystem::commit_total`, ADR 0250),
+    /// given back when it frees memory and when it ends.
+    pub commit_charged: u64,
+    /// Its executable's subsystem (`IMAGE_SUBSYSTEM_*`, the optional header's `Subsystem`): 2 for a
+    /// GUI program, 3 for a console one; 0 before an image is mapped. `WaitForInputIdle` refuses
+    /// console programs (ADR 0245).
+    pub subsystem: u16,
 }
 
 impl NtProcess {
@@ -368,6 +406,8 @@ impl NtProcess {
             wow64: false,
             priority_class: 2,
             parent: 0,
+            commit_charged: 0,
+            subsystem: 0,
         }
     }
 

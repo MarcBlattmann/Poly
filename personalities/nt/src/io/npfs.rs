@@ -219,6 +219,66 @@ pub struct NamedPipe {
     pub instances: Vec<u64>,
 }
 
+/// The identity a pipe's client gives its server
+/// (`specs/windows/advapi32.dll/ImpersonateNamedPipeClient.yaml`, `which_token_of_the_client`,
+/// `levels`).
+#[derive(Clone, Debug)]
+pub struct ClientSecurity {
+    /// The client's token when it opened the pipe.
+    pub token: poly_security::token::Token,
+    /// The impersonation level the client allows.
+    pub level: u32,
+    /// Dynamic tracking: the client's process and thread, whose token at the time of the call
+    /// counts (the snapshot when the thread is gone).
+    pub track: Option<(poly_ntobj::ProcessId, poly_ntobj::ThreadRef)>,
+    /// Only the enabled privileges are given.
+    pub effective_only: bool,
+}
+
+impl ClientSecurity {
+    /// What a client with `caller`'s identity and quality of service `qos` gives. Without one
+    /// (no `SECURITY_SQOS_PRESENT`): its process's token, whatever its thread impersonates, with
+    /// the enabled privileges only, at `SecurityImpersonation`. With one: its thread's token if
+    /// it impersonates, else its process's, all privileges unless `EffectiveOnly`, at the level
+    /// asked for.
+    pub fn of(
+        om: &poly_ntobj::ObjectManager,
+        caller: &poly_ntobj::Caller,
+        qos: Option<crate::abi::Qos>,
+    ) -> Option<ClientSecurity> {
+        let sec = &om.security;
+        Some(match qos {
+            None => ClientSecurity {
+                token: sec.token(sec.process_token(caller.process)?)?.clone(),
+                level: poly_security::token::SECURITY_IMPERSONATION,
+                track: None,
+                effective_only: true,
+            },
+            Some(q) => ClientSecurity {
+                token: sec.token(sec.effective(caller.process, caller.thread)?)?.clone(),
+                level: q.level,
+                track: q.dynamic.then_some((caller.process, caller.thread)),
+                effective_only: q.effective_only,
+            },
+        })
+    }
+
+    /// The token the server is given now (`sec`: the object manager's tokens, for tracking).
+    pub fn current(&self, sec: &poly_ntobj::security::ObjectSecurity) -> poly_security::token::Token {
+        let mut t = self
+            .track
+            .and_then(|(p, th)| sec.effective(p, th))
+            .and_then(|id| sec.token(id))
+            .cloned()
+            .unwrap_or_else(|| self.token.clone());
+        if self.effective_only {
+            // SE_PRIVILEGE_ENABLED (`winnt.h`).
+            t.privileges.retain(|&(_, attributes)| attributes & 2 != 0);
+        }
+        t
+    }
+}
+
 /// One instance.
 #[derive(Debug)]
 pub struct Instance {
@@ -240,8 +300,11 @@ pub struct Instance {
     /// `FSCTL_PIPE_LISTEN` requests waiting for a client.
     pub listeners: VecDeque<u64>,
     /// The server has read data the client wrote (what makes the client's
-    /// user name available, `GetNamedPipeHandleStateW`).
+    /// user name available, `GetNamedPipeHandleStateW`, and lets the server
+    /// impersonate it, `FSCTL_PIPE_IMPERSONATE`).
     pub server_read: bool,
+    /// Who the client is, for `ImpersonateNamedPipeClient`.
+    pub client_token: Option<ClientSecurity>,
 }
 
 /// The named pipe file system.
@@ -432,6 +495,7 @@ impl IoState {
                 to_client: Chan::with_quota(outbound),
                 listeners: VecDeque::new(),
                 server_read: false,
+                client_token: None,
             },
         );
         self.np.pipes.get_mut(key).expect("there").instances.push(id);
@@ -458,6 +522,7 @@ impl IoState {
         key: &[u16],
         access: u32,
         client_pid: u32,
+        client_token: Option<ClientSecurity>,
     ) -> core::result::Result<u64, NtStatus> {
         let p = self.np.pipes.get(key).ok_or(STATUS_OBJECT_NAME_NOT_FOUND)?;
         if access & FILE_READ_DATA != 0 && p.share & FILE_SHARE_READ == 0 {
@@ -476,6 +541,7 @@ impl IoState {
         inst.state = PipeState::Connected;
         inst.client_pid = Some(client_pid);
         inst.server_read = false;
+        inst.client_token = client_token;
         Ok(id)
     }
 
@@ -644,6 +710,22 @@ impl IoState {
 
     /// `FSCTL_PIPE_PEEK`: the pipe's header and up to `max` bytes of the
     /// first message (or of the stream), consuming nothing.
+    /// `FSCTL_PIPE_IMPERSONATE` on `file`: the token and impersonation level of the client of
+    /// its instance. Only a server end asks (a client end: `STATUS_ILLEGAL_FUNCTION`), and only
+    /// once it has read what the client wrote (Learn, `ImpersonateNamedPipeClient`: the client's
+    /// context is that of the last message read; before any: `STATUS_CANNOT_IMPERSONATE`).
+    pub fn np_client_token(&self, file: u64) -> core::result::Result<ClientSecurity, NtStatus> {
+        let end = self.np_end(file).ok_or(STATUS_INVALID_HANDLE)?;
+        if !end.server {
+            return Err(STATUS_ILLEGAL_FUNCTION);
+        }
+        let inst = self.np.instances.get(&end.instance).ok_or(STATUS_PIPE_BROKEN)?;
+        if !matches!(inst.state, PipeState::Connected | PipeState::Closing) || !inst.server_read {
+            return Err(STATUS_CANNOT_IMPERSONATE);
+        }
+        inst.client_token.clone().ok_or(STATUS_CANNOT_IMPERSONATE)
+    }
+
     pub fn np_peek(&self, file: u64, max: usize) -> core::result::Result<(Vec<u8>, bool), NtStatus> {
         let end = self.np_end(file).ok_or(STATUS_INVALID_HANDLE)?;
         let inst = self.np.instances.get(&end.instance).ok_or(STATUS_PIPE_BROKEN)?;
@@ -731,6 +813,7 @@ impl IoState {
         inst.client_file = None;
         inst.client_pid = None;
         inst.server_read = false;
+        inst.client_token = None;
         let failed = Self::np_drain(inst);
         for id in failed {
             self.complete(id, STATUS_PIPE_DISCONNECTED, 0, None);

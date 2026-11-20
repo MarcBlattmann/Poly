@@ -207,7 +207,13 @@ pub fn zombie(pid: u32) -> Option<Arc<Process>> {
 /// The current parent of `process` (its creator's pid until that ended,
 /// then init's or 0).
 pub fn parent_of(process: &Process) -> u32 {
-    TREE.lock().parent(process.pid as i32).map_or(process.ppid, |p| p as u32)
+    TREE.lock().parent(process.pid as i32).map_or_else(
+        || match process.adopted.load(core::sync::atomic::Ordering::Relaxed) {
+            0 => process.ppid,
+            adopted => adopted,
+        },
+        |p| p as u32,
+    )
 }
 
 /// The process group and session of `pid` (its own pid if the tree does
@@ -634,9 +640,10 @@ pub fn execve(k: &mut Thread<'_>, req: &ExecRequest<'_>) -> Result<(), Errno> {
     }
     vfork_release(old_tid);
     vfork_release(pid);
-    if crate::profile::enabled() {
+    if crate::profile::enabled() || crate::timeline::on() {
         let line: Vec<u8> = argv_refs.iter().flat_map(|a| a.iter().copied().chain(*b" ")).collect();
         crate::profile::process("exec", pid, &line);
+        crate::timeline::name_process(pid, &alloc::string::String::from_utf8_lossy(&line));
     }
     Ok(())
 }

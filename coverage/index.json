@@ -37,6 +37,10 @@
       "description": "Microsoft Learn event logging reference (event sources, EVENTLOGRECORD, the EventLog registry keys) as Chrome's setup.exe uses it, observed by the spec agents (spec-win-chrome-setup); entries named by behaviour",
       "revision": "Windows 11 25H2 build 26200.9974"
     },
+    "ms-learn-input-idle": {
+      "description": "Microsoft Learn WaitForInputIdle, ShellExecuteEx (SEE_MASK_WAITFORINPUTIDLE) and the message-queue functions that make a process 'idle for input': what the oracle does for console and GUI processes (entries named by function, the ShellExecuteEx mask by dotted name)",
+      "revision": "Windows 11 build 26300.9974"
+    },
     "ms-learn-netfw": {
       "description": "Microsoft Learn Windows Firewall with Advanced Security API (netfw.h: INetFwPolicy2, INetFwRules, INetFwRule) as Chrome's setup.exe uses it to add its inbound mDNS rule, observed by the spec agents (spec-win-chrome-setup); entries named by class",
       "revision": "Windows 11 25H2 build 26200.9974"
@@ -76,6 +80,10 @@
     "poly-adr-0132": {
       "description": "Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents",
       "revision": "ADR 0132"
+    },
+    "windows-audio-w2": {
+      "description": "The COM audio interfaces of mmdevapi and audioses that Chrome for Windows calls for shared-mode output (device enumerator, devices, IAudioClient, render client, clock, session control), found by a COM-level trace of Chrome on the Windows oracle (spec-win-wasapi); names from Microsoft Learn, mmdeviceapi.h, audioclient.h and audiopolicy.h",
+      "revision": "Windows 11 26H2 build 26300.9974"
     },
     "windows-com-state": {
       "description": "COM state of a thread and process observed by spec agents on the Windows oracle where Chrome's browser process reaches it (TEB.ReservedForOle, the global interface table, BITS); the names come from Microsoft Learn, objidl.h and bits.h (spec-com-ole-tls)",

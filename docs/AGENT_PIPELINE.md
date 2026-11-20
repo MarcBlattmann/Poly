@@ -383,7 +383,7 @@ an outline font of the height asked, as on any Windows.
 refuses an executable that imports from a DLL other than `ntdll`,
 `kernel32`, `user32`, `gdi32`, `dwmapi`, `imm32`, `shcore`, `dwrite`, `advapi32`, `userenv`, `version` and the DLLs of Chrome's first stage
 (`shlwapi`, `shell32`, `comctl32`, `comdlg32`, `powrprof`, `wtsapi32`, `netapi32`, `iphlpapi`, `oleacc`, `uiautomationcore`, `ole32`, `oleaut32`,
-`kernelbase`, and Chrome's network stage: `ws2_32`, `mswsock`, `winhttp`, `crypt32`, `secur32`, `dhcpcsvc`, and `ucrtbase` for the C runtime entries; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
+`kernelbase`, and Chrome's network stage: `ws2_32`, `mswsock`, `winhttp`, `crypt32`, `secur32`, `dhcpcsvc`, and `ucrtbase` for the C runtime entries, and `winmm` for the wave output entries; the list is `ALLOWED_DLLS` in `tools/pipeline/src/windows.rs`) (the GUI entries' tests are still console
 programs; the DirectWrite entries' tests import `dwrite.dll`; `advapi32` and `userenv` are for the security model; `msimg32` is for `AlphaBlend`), or delay-loaded. An import by ordinal (`raw-dylib` with `#[link_ordinal(n)]`) is allowed and kept in the manifest as `#n`: it is how comctl32's `SetWindowSubclass` and its relatives (410..413) are bound by their real users. `win diff` compares per test the 32-bit exit code, the
 observation file, stdout and stderr; a reference that timed out, did not
 start or was not the same on both runs is an **error**, a test Poly cannot
@@ -454,6 +454,13 @@ declined (`ERROR_CANCELLED`), so those tests take about 140 s per run (give them
 On Poly a `poly.win.token=standard` test run has nobody to click: the consent dialog must answer No at once.
 Per-test `token` and `session` in `windows.json` rows are kept by `tests split` (`RunResult`).
 Never click through or approve a real consent prompt on the oracle, and never change UAC settings there.
+
+**Tests that need a sound card, or none.** The oracle has a sound card. `win build` notes in the manifest what a test
+needs (`sound`): a test that imports a `winmm.dll` sound function (`waveOut*`, `waveIn*`, `midi*`, `mixer*`,
+`PlaySound*`) gets `card`, and `win poly` (and `win polycheck`) boots Poly with a sound card whose output goes
+nowhere (`-audiodev none`; virtio-sound, else Intel HDA). A test whose first line says `NO SOUND DEVICE` was recorded
+with the oracle's card turned off; it gets `none` and boots without one. Every other test boots as before, without
+a card.
 
 **Tests with resources and dialogs** (menus, dialogs, string tables, bitmaps, icons,
 accelerators; `specs/windows/user32.dll/LoadMenuW.tests` and its relatives). A test that

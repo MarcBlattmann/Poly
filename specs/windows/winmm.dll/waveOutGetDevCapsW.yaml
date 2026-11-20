@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/winmm.dll/waveOutGetDevCapsW.yaml
+id: windows/api/winmm.dll/waveOutGetDevCapsW
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-waveout
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only). Microsoft Learn: "waveOutOpen function", "waveOutClose", "waveOutPrepareHeader", "waveOutUnprepareHeader", "waveOutWrite", "waveOutPause", "waveOutRestart", "waveOutReset", "waveOutBreakLoop", "waveOutGetPosition", "waveOutGetVolume", "waveOutSetVolume", "waveOutGetDevCaps", "waveOutGetNumDevs", "waveOutGetID", "waveOutGetErrorText", "waveOutMessage", "WAVEHDR", "WAVEFORMATEX", "WAVEFORMATEXTENSIBLE", "WAVEOUTCAPS", "MMTIME", "waveOutProc callback function", "Multimedia Error Codes"; constants and layouts from mmsystem.h, mmeapi.h, mmreg.h and ksmedia.h. The import names of Chrome's chrome.dll come from the survey in docs/windows/audio-plan.md. No Wine, ReactOS or Chromium source was read and no Microsoft binary was disassembled.
+summary: >
+  Describes an output device: the sound card, or the sound mapper (id WAVE_MAPPER = 0xFFFFFFFF), or the device an open handle was opened on (the handle can be passed as the id).
+interface:
+  signature: "MMRESULT waveOutGetDevCapsW(UINT_PTR deviceId, LPWAVEOUTCAPSW caps, UINT size)"
+chrome: "Chrome for Windows (157) imports it statically from winmm.dll (survey, docs/windows/audio-plan.md): Chrome falls back to the waveOut API when WASAPI is not available."
+rules:
+  device_0: "wMid 1 (Microsoft), wChannels 2, dwFormats 0xFFFFF (all twenty WAVE_FORMAT_*M*/S* bits), dwSupport 0x2E = WAVECAPS_PLAYBACKRATE | WAVECAPS_VOLUME | WAVECAPS_LRVOLUME | WAVECAPS_SAMPLEACCURATE (not WAVECAPS_PITCH, not WAVECAPS_SYNC). szPname is the card's name, not empty and terminated inside its 32 units (\"Speakers (Synaptics HD Audio)\" on the oracle: it is hardware; wPid and vDriverVersion are hardware and Windows version dependent and are not compared). The answer is the same on every call"
+  mapper: "id 0xFFFFFFFF: szPname \"Microsoft Sound Mapper\", wMid 1, wPid 2 (MM_WAVE_MAPPER), wChannels 2, dwFormats 0xFFFFF, dwSupport 0x2E"
+  by_handle: "the id may be the handle of an open device: the answer is the device's (same name, formats, channels and support). A handle after it was closed is no valid id (an error)"
+  size: "WAVEOUTCAPSW is 84 bytes. A size below 84 (but not 0) is MMSYSERR_INVALPARAM and nothing is written; 0 succeeds and writes nothing; 84 or more succeeds and writes exactly 84 bytes"
+  bad_id: "ids from the device count up (the count, count + 1, 0xFFFFFFFE, 77, 0x7FFFFFFF) are MMSYSERR_BADDEVICEID and nothing is written"
+  no_device: "with no sound device, device 0 and the mapper are MMSYSERR_BADDEVICEID (not MMSYSERR_NODRIVER), in the wide and the ANSI form; the id is checked before the size (size 8 gives MMSYSERR_BADDEVICEID) but a null buffer is still MMSYSERR_INVALPARAM"
+errors:
+  bad_id: "MMSYSERR_BADDEVICEID (2)"
+  bad_size: "MMSYSERR_INVALPARAM (11) for 1 <= size < 84 and for a null buffer"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing winmm.dll, kernel32.dll (and user32.dll for the window and thread callback tests) by name, built with the pipeline's usual flags. Every test needs a wave output device: it first checks that waveOutGetNumDevs is at least 1 and fails if not. Audio data is always silence (zero samples; never 8-bit data, whose silence is not zero), so nothing is audible. Observations are return codes, header flags, booleans, counts, orders of callbacks and positions that follow from the bytes written; never handles, thread ids, addresses or times. Waiting is bounded: a buffer of 50 or 100 ms is waited for up to 5 s, and "nothing happens" checks look for 100 to 400 ms. The tests that change the volume restore it; the volume is per process, so a test that fails does not leave it changed. A few tests are the exception: they say "NO SOUND DEVICE" in their first line and must be run with no sound device present; their recording was made with the oracle's sound card disabled (the HD audio function turned off in Device Manager terms, and turned on again after the run); where such a test runs with a device it fails.
+not_covered: >
+  Machines with no sound device, except for the no-device rules named above; devices other than device 0 and the mapper; how long a buffer takes to start or the latency of any call; capture (waveIn) and MIDI.

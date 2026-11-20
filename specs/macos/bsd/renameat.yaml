@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/renameat.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# renameat.tests/macos.json.
+id: macos/syscall/bsd/renameat
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-19
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 465,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 465, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. renameat(fromfd,
+  from, tofd, to) is rename with directory descriptors (AT_FDCWD is -2): a
+  relative path is looked up from its descriptor, an absolute path ignores
+  it (even if the descriptor is a file). Moving between two directories
+  keeps the inode; an existing destination file is replaced. A descriptor
+  that is not open is EBADF (9); a file as the directory descriptor of a
+  relative path ENOTDIR (20); a missing name ENOENT (2) (also inside a
+  directory that was removed). The refusals of rename apply: a directory
+  into itself or its own subdirectory EINVAL (22), over a non-empty
+  directory ENOTEMPTY (66), over a file ENOTDIR (20), a file over a
+  directory EISDIR (21), a destination directory without write permission
+  EACCES (13), unreadable path EFAULT (14).
+returns:
+  success: "0"
+errors:
+  bad_fd: "EBADF (9)"
+  not_dir: "ENOTDIR (20)"
+  missing: "ENOENT (2)"
+  refused: "EINVAL (22), ENOTEMPTY (66), EISDIR (21), EACCES (13), EFAULT (14)"
+side_effects: "a name changes; an existing destination is replaced"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

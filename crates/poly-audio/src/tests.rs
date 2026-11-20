@@ -343,3 +343,123 @@ fn captured_periods_reach_each_client_in_its_format() {
     let n = deliver(&mut slow, &captured, &mut scratch);
     assert!((440..=442).contains(&n), "{n}");
 }
+
+// ----- `\Device\PolyAudio` (ADR 0244)
+
+mod nt {
+    use crate::nt::*;
+    use crate::{Format, MAX_CHANNELS, Sample};
+
+    #[test]
+    fn the_ring_takes_what_fits_and_wraps() {
+        let mut r = Ring::new(8);
+        assert_eq!(r.write(5), Spans { first: (0, 5), second: (0, 0) });
+        assert_eq!((r.queued(), r.room()), (5, 3));
+        // Only the room is taken.
+        assert_eq!(r.write(10).frames(), 3);
+        assert_eq!(r.write(1).frames(), 0);
+        assert_eq!(r.peek(6), Spans { first: (0, 6), second: (0, 0) });
+        r.consume(6);
+        assert_eq!((r.taken(), r.played(), r.queued()), (6, 0, 2));
+        // The device plays what the mixer took, no more.
+        r.heard(4);
+        assert_eq!(r.played(), 4);
+        r.heard(100);
+        assert_eq!(r.played(), 6);
+        // The next write goes round the end.
+        assert_eq!(r.write(5), Spans { first: (0, 5), second: (0, 0) });
+        assert_eq!(r.peek(7), Spans { first: (6, 2), second: (0, 5) });
+        // More than queued cannot be used.
+        r.consume(100);
+        assert_eq!((r.taken(), r.queued(), r.room()), (13, 0, 8));
+        let s = r.write(8);
+        assert_eq!(s, Spans { first: (5, 3), second: (0, 5) });
+    }
+
+    #[test]
+    fn a_dry_spell_is_one_underrun_and_its_silence_counts() {
+        let mut r = Ring::new(16);
+        // Not running: nothing counts.
+        r.ran_short(10);
+        assert_eq!(r.info().underruns, 0);
+        r.start();
+        r.write(4);
+        r.consume(4);
+        r.heard(4);
+        r.ran_short(6);
+        r.ran_short(10);
+        let i = r.info();
+        assert_eq!((i.underruns, i.silence, i.played), (1, 16, 4));
+        // Frames again end the spell; the next one counts anew.
+        r.write(2);
+        r.consume(2);
+        r.ran_short(8);
+        assert_eq!(r.info().underruns, 2);
+        // A reset zeroes the counters but the underruns, and stops.
+        r.reset();
+        let i = r.info();
+        assert_eq!((i.written, i.played, i.silence, i.underruns, i.running, i.queued), (0, 0, 0, 2, false, 0));
+        assert_eq!(i.buffer_frames, 16);
+    }
+
+    #[test]
+    fn the_buffers_round_trip() {
+        let d = DeviceInfo { format: Format::new(Sample::S16, 2, 48_000), period_frames: 480, periods: 4 };
+        assert_eq!(DeviceInfo::decode(&d.encode()), Some(d));
+        let s = StreamInfo {
+            written: 1 << 40,
+            played: 77,
+            silence: 3,
+            underruns: 2,
+            running: true,
+            buffer_frames: 9600,
+            queued: 12,
+            device_rate: 48_000,
+            device_period_frames: 480,
+            device_periods: 4,
+        };
+        assert_eq!(StreamInfo::decode(&s.encode()), Some(s));
+        assert_eq!(StreamInfo::decode(&[0; 8]), None);
+        for (i, &x) in SAMPLES.iter().enumerate() {
+            assert_eq!((sample_code(x), sample_of(i as u32)), (i as u32, Some(x)));
+        }
+        assert_eq!(sample_of(SAMPLES.len() as u32), None);
+    }
+
+    #[test]
+    fn only_a_usable_open_request_decodes() {
+        let ok = OpenReq { format: Format::new(Sample::Float, 2, 44_100), buffer_frames: 4410 };
+        assert_eq!(OpenReq::decode(&ok.encode()), Some(ok));
+        let bad = |f: Format, n: u32| OpenReq::decode(&OpenReq { format: f, buffer_frames: n }.encode());
+        assert_eq!(bad(Format::new(Sample::S16, 0, 48_000), 10), None);
+        assert_eq!(bad(Format::new(Sample::S16, MAX_CHANNELS as u8 + 1, 48_000), 10), None);
+        assert_eq!(bad(Format::new(Sample::S16, 2, 0), 10), None);
+        assert_eq!(bad(Format::new(Sample::S16, 2, 48_000), 0), None);
+        let too_big = (MAX_BUFFER_BYTES / 4 + 1) as u32;
+        assert_eq!(bad(Format::new(Sample::S16, 2, 48_000), too_big), None);
+        let mut unknown = ok.encode();
+        unknown[0] = 99;
+        assert_eq!(OpenReq::decode(&unknown), None);
+        assert_eq!(OpenReq::decode(&ok.encode()[..12]), None);
+    }
+
+    #[test]
+    fn gains_spread_to_every_channel() {
+        let one = 0x8000u32.to_le_bytes();
+        assert_eq!(gains_of(&one), Some([0x8000; MAX_CHANNELS]));
+        let mut two = [0u8; 8];
+        two[..4].copy_from_slice(&1u32.to_le_bytes());
+        two[4..].copy_from_slice(&2u32.to_le_bytes());
+        assert_eq!(gains_of(&two), Some([1, 2, 2, 2, 2, 2, 2, 2]));
+        assert_eq!(gains_of(&[]), None);
+        assert_eq!(gains_of(&[0; 3]), None);
+        assert_eq!(gains_of(&[0; 4 * (MAX_CHANNELS + 1)]), None);
+    }
+
+    #[test]
+    fn the_codes_are_sound_device_codes() {
+        assert_eq!(DEVICE, 0x001d_2003);
+        assert_eq!(WAIT >> 16, FILE_DEVICE_SOUND);
+        assert_eq!(WAIT & 3, METHOD_NEITHER);
+    }
+}

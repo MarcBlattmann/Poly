@@ -20,6 +20,8 @@ unsafe extern "system" {
     fn OpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> i32;
     fn GetSystemDirectoryW(buffer: *mut u16, size: u32) -> u32;
     fn LoadLibraryW(name: *const u16) -> Handle;
+    fn GetModuleHandleW(name: *const u16) -> Handle;
+    fn GetCurrentThreadId() -> u32;
     fn GetProcAddress(module: Handle, name: *const u8) -> *const u8;
     fn CreateProcessAsUserW(
         token: Handle,
@@ -149,6 +151,55 @@ fn userenv() -> Option<(CreateBlock, DestroyBlock)> {
     })
 }
 
+/// `STARTUPINFOW.lpDesktop`'s offset (`processthreadsapi.h`: after `cb` and `lpReserved`).
+const SI_DESKTOP_AT: usize = 2 * core::mem::size_of::<usize>();
+/// `UOI_NAME` (`winuser.h`).
+const UOI_NAME: i32 = 2;
+
+type GetStation = unsafe extern "system" fn() -> Handle;
+type GetDesktop = unsafe extern "system" fn(u32) -> Handle;
+type ObjectInfo = unsafe extern "system" fn(Handle, i32, *mut u16, u32, *mut u32) -> i32;
+
+/// `<station>\<desktop>` of the calling process and thread, NUL-terminated, when `user32` is
+/// loaded (a process that never loaded it is on no desktop yet).
+fn callers_desktop() -> Option<Vec<u16>> {
+    let name: Vec<u16> = "user32.dll".encode_utf16().chain([0]).collect();
+    // SAFETY: a NUL-terminated name; the module is only looked up, not loaded.
+    let m = unsafe { GetModuleHandleW(name.as_ptr()) };
+    if m == 0 {
+        return None;
+    }
+    // SAFETY: NUL-terminated names of the module's exports, with these signatures (Learn,
+    // `winuser.h`).
+    let (station, desktop, info) = unsafe {
+        let s = GetProcAddress(m, c"GetProcessWindowStation".as_ptr().cast());
+        let d = GetProcAddress(m, c"GetThreadDesktop".as_ptr().cast());
+        let i = GetProcAddress(m, c"GetUserObjectInformationW".as_ptr().cast());
+        if s.is_null() || d.is_null() || i.is_null() {
+            return None;
+        }
+        (
+            core::mem::transmute::<*const u8, GetStation>(s),
+            core::mem::transmute::<*const u8, GetDesktop>(d),
+            core::mem::transmute::<*const u8, ObjectInfo>(i),
+        )
+    };
+    let name_of = |h: Handle| -> Option<Vec<u16>> {
+        let mut buf = [0u16; 128];
+        let mut need = 0u32;
+        // SAFETY: a buffer of 256 bytes.
+        let ok = unsafe { info(h, UOI_NAME, buf.as_mut_ptr(), 256, &mut need) };
+        (ok != 0 && h != 0).then(|| buf.iter().copied().take_while(|&c| c != 0).collect())
+    };
+    // SAFETY: plain calls; the handles are the process's and thread's own (not to be closed).
+    let (s, d) = unsafe { (station(), desktop(GetCurrentThreadId())) };
+    let mut out = name_of(s)?;
+    out.push(u16::from(b'\\'));
+    out.extend(name_of(d)?);
+    out.push(0);
+    Some(out)
+}
+
 /// A NUL-terminated string's units, if the pointer is not null.
 unsafe fn units<'a>(p: *const u16) -> Option<&'a [u16]> {
     if p.is_null() {
@@ -209,10 +260,29 @@ pub unsafe extern "system" fn CreateProcessWithTokenW(
     } else {
         (environment, flags)
     };
-    // A NULL STARTUPINFO is accepted: the child gets an empty one.
-    let mut blank = [0u8; STARTUPINFO_SIZE];
-    blank[..4].copy_from_slice(&(STARTUPINFO_SIZE as u32).to_le_bytes());
-    let si = if startup_info.is_null() { blank.as_ptr() } else { startup_info };
+    // A NULL STARTUPINFO is accepted: the child gets an empty one. Without `lpDesktop` the child
+    // is on the caller's station and desktop, which it is told by name (the sheet's `startup_info`:
+    // `WinSta0\Default` in the interactive session).
+    let mut copy = [0u8; STARTUPINFO_SIZE];
+    // SAFETY: the caller's STARTUPINFOW, read in its own size (at most ours).
+    unsafe {
+        if !startup_info.is_null() {
+            let cb = (startup_info as *const u32).read_unaligned() as usize;
+            core::ptr::copy_nonoverlapping(startup_info, copy.as_mut_ptr(), cb.min(STARTUPINFO_SIZE));
+        }
+    }
+    copy[..4].copy_from_slice(&(STARTUPINFO_SIZE as u32).to_le_bytes());
+    let desktop_name = callers_desktop();
+    let named = usize::from_le_bytes({
+        let mut b = [0u8; core::mem::size_of::<usize>()];
+        b.copy_from_slice(&copy[SI_DESKTOP_AT..SI_DESKTOP_AT + core::mem::size_of::<usize>()]);
+        b
+    }) != 0;
+    if !named && let Some(d) = &desktop_name {
+        copy[SI_DESKTOP_AT..SI_DESKTOP_AT + core::mem::size_of::<usize>()]
+            .copy_from_slice(&(d.as_ptr() as usize).to_le_bytes());
+    }
+    let si = copy.as_ptr();
     // SAFETY: the caller's arguments; nothing of the caller is inherited.
     let ok = unsafe {
         CreateProcessAsUserW(
