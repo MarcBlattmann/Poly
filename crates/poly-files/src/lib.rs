@@ -21,6 +21,7 @@
 //!   filter.
 //! - [`ops`]: new folder, rename, copy/cut and paste, permanent delete.
 //! - [`trash`]: the freedesktop.org trash (home trash).
+//! - [`zip`]: extracting ZIP archives into a folder.
 //!
 //! `no_std` with `alloc`, no `unsafe`, and no panics on any input.
 
@@ -39,6 +40,7 @@ pub mod ops;
 pub mod path;
 pub mod places;
 pub mod trash;
+pub mod zip;
 
 #[cfg(test)]
 mod testfs;
