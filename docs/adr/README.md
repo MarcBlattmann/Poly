@@ -229,6 +229,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0253](0253-file-descriptors-set-as-given-and-new-files-get-their-creators-default.md) | File descriptors set as given, and new files get their creator's default | Accepted |
 | [0254](0254-unmapping-does-not-wait-for-other-cpus.md) | Unmapping does not wait for other CPUs | Accepted |
 | [0255](0255-boots-that-run-programs-see-a-real-cpu.md) | Boots that run programs see a real CPU | Accepted |
+| [0257](0257-arm64-mach-o-programs-run-in-a-translated-xnu-process.md) | arm64 Mach-O programs run in a translated XNU process | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

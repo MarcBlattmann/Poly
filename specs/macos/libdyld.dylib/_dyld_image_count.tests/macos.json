@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "dyld_image_count_dlopen",
+      "source_sha256": "75a4202a35c2b19034818ace009decae8c15dcf9f428764242b30024bbc8009e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9d85265ffe4b87d4d7f3ac85620ac62dd1eb1fb129a8254fc1a59ef7339aaed6",
+          "exit_code": 0,
+          "stdout": "ok dlopen of CoreFoundation\nok CoreFoundation and its dependencies add images\nok the first 8 images keep their index and name\nok a new image has CoreFoundation in its name, and new images come at the end\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2f95aaee04a282e59c0f908853f93918982e1845034053f5299175cc10318eef",
+          "exit_code": 0,
+          "stdout": "ok dlopen of CoreFoundation\nok CoreFoundation and its dependencies add images\nok the first 8 images keep their index and name\nok a new image has CoreFoundation in its name, and new images come at the end\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dyld_image_count_more",
+      "source_sha256": "87f1aaa4cef4eadeeaaa1f5583c4222ef49c54aab4f4538a5d4c3c5ffa83e332",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4351f920b4c89d8cf8ff1dc0cb29c715599b013fffe662bb6f5a2adb3b9d9694",
+          "exit_code": 0,
+          "stdout": "ok image 1 is libSystem\nok dlopen of an image that is loaded\nok the count is unchanged\nok dlopen of a sub-library of libSystem: count unchanged\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ee7288d67cf16eddee90599c44ac6ea9206b5c1f4e3e73bd62574d03278430f7",
+          "exit_code": 0,
+          "stdout": "ok image 1 is libSystem\nok dlopen of an image that is loaded\nok the count is unchanged\nok dlopen of a sub-library of libSystem: count unchanged\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "640cf2d46e54",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T09:06:50Z",
+  "tests": [
+    {
+      "name": "mlv_button_cover",
+      "exe_sha256": "0bb3d348aa7841a80ec237dde346a514c43db47b16a36409a36b0bd8154116ff",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBsZWZ0IGJ1dHRvbiBkb3duIChTZW5kSW5wdXQpIG9uIEEsIHRoZW4gcG9wdXAgQiBzaG93biBvdmVyIHRoZSBwb2ludGVyLCB0aGVuIHRoZSBidXR0b24gdXAKICBHZXRDYXB0dXJlIGlzIG51bGwKICBHZXRDYXB0dXJlIGFmdGVyIHRoZSBidXR0b24gaXMgcmVsZWFzZWQ6IG51bGwKICBBIFdNX1NFVENVUlNPUiB3aW5kb3c9QSBoaXQ9MSBtc2c9V01fTEJVVFRPTkRPV04KICBBIFdNX0xCVVRUT05ET1dOIGtleXM9MHgxIGNsaWVudD0xMDAsNjAKICBCIFdNX1NIT1dXSU5ET1cgc2hvdz0xIHN0YXR1cz0wCiAgQiBXTV9TRVRDVVJTT1Igd2luZG93PUIgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEIgV01fTU9VU0VNT1ZFIGtleXM9MHgxIGNsaWVudD01OCw3MQogIEIgV01fU0VUQ1VSU09SIHdpbmRvdz1CIGhpdD0xIG1zZz1XTV9MQlVUVE9OVVAKICBCIFdNX0xCVVRUT05VUCBrZXlzPTB4MCBjbGllbnQ9NTgsNzEKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQgpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== left button down (SendInput) on A, then popup B shown over the pointer, then the button up\n  GetCapture is null\n  GetCapture after the button is released: null\n  A WM_SETCURSOR window=A hit=1 msg=WM_LBUTTONDOWN\n  A WM_LBUTTONDOWN keys=0x1 client=100,60\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x1 client=58,71\n  B WM_SETCURSOR window=B hit=1 msg=WM_LBUTTONUP\n  B WM_LBUTTONUP keys=0x0 client=58,71\n  cursor (208,191) over B\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1189
+    }
+  ]
+}

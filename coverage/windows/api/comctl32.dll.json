@@ -182,5 +182,6 @@
 {"symbol":"ToolbarWindow32","status":"claimed","claimed_by":"spec-win-apps-5","src":["ms-learn-commctrl"]},
 {"symbol":"UninitializeFlatSB","src":["wine-spec"]},
 {"symbol":"_TrackMouseEvent","status":"stub","src":["wine-spec"],"seeds":["wine:comctl32/tests/listview.c:test_oneclickactivate"]},
-{"symbol":"msctls_statusbar32","status":"claimed","claimed_by":"spec-win-apps-5","src":["ms-learn-commctrl"]}
+{"symbol":"msctls_statusbar32","status":"claimed","claimed_by":"spec-win-apps-5","src":["ms-learn-commctrl"]},
+{"symbol":"tooltips_class32","status":"claimed","claimed_by":"spec-win-mouseleave","src":["ms-learn-commctrl"]}
 ]

@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "pthread_create_attr",
+      "source_sha256": "ba3ca894545babd5f24ef59236f9428e3026e7f66b9cad4c4eb6f10fb7ee83df",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "710490ced57c271d2993c8a854b983df627be68f9065d8e4586e7ddedde23ae5",
+          "exit_code": 0,
+          "stdout": "ok create detached returns 0\nok the detached thread ran\nok setstacksize 4 MiB\nok create with a 4 MiB stack returns 0\nok the 3000 KiB recursion completed\nok create with a 64 KiB stack returns 0\nok a 20 KiB recursion completed on the 64 KiB stack\nok an explicitly joinable attr: join works\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6b1a7667a7c82ec361d0d372658b720c82dd8f2c89349e9146ad33fc36f3be54",
+          "exit_code": 0,
+          "stdout": "ok create detached returns 0\nok the detached thread ran\nok setstacksize 4 MiB\nok create with a 4 MiB stack returns 0\nok the 3000 KiB recursion completed\nok create with a 64 KiB stack returns 0\nok a 20 KiB recursion completed on the 64 KiB stack\nok an explicitly joinable attr: join works\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pthread_create_many",
+      "source_sha256": "408405abe989357c74f9859f6b1f02f50894a0280535c984619f1dd1c5fb2a32",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "22730748b88ee0c403b67b3a71ac397d66a7875e559997810e7e3c6c68976bea",
+          "exit_code": 0,
+          "stdout": "ok 64 creates return 0\nok all 64 are alive at the same time (they wait for each other)\nok each thread got its own argument and returned its own result\nok stacks do not overlap (no two locals within 4096 bytes)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4d25be5d714a483677f69d62891e79c54047bc28fd897083596860138afce7fb",
+          "exit_code": 0,
+          "stdout": "ok 64 creates return 0\nok all 64 are alive at the same time (they wait for each other)\nok each thread got its own argument and returned its own result\nok stacks do not overlap (no two locals within 4096 bytes)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pthread_create_more",
+      "source_sha256": "3942d4d5b318b915a9f17cf010c0032e64a775026d52571404db6b1763e092ec",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "38db39e21e82854242f3a11a32e680875b3743e2eeed2ee73dd6b4251139cfd9",
+          "exit_code": 0,
+          "stdout": "ok create the child\nok join the child\nok the main thread joins a grandchild\nok with its result\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0e7fe863b2ca51dc8b868a39ed940405c17b7c09df7c9025327192487bb4ca32",
+          "exit_code": 0,
+          "stdout": "ok create the child\nok join the child\nok the main thread joins a grandchild\nok with its result\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
