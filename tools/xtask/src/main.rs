@@ -92,6 +92,10 @@
 //!                       (Linux), make target/poly-chromium-disk.img
 //!   chromium [--release] [--fresh-disk] [--scale=N] [STEP...]
 //!                       boot Chromium's disk to the desktop, steps as for toolkits (--scale=N: a HiDPI desktop)
+//!   libsystem [--out <dir>] [--cache-key]
+//!                       build Poly's libSystem.B.dylib and its sub-libraries (or take them from
+//!                       the content-hash cache), verify them, optionally copy them into <dir>/usr/lib
+//!                       (libsystem.rs, ADR 0258)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -157,6 +161,7 @@ mod installer;
 mod installer2;
 mod ktest;
 mod libsearch;
+mod libsystem;
 mod linuxchrome;
 mod macho;
 mod macimports;
@@ -282,6 +287,7 @@ const COMMANDS: &[&str] = &[
     "wayland",
     "nls-tables",
     "system-messages",
+    "libsystem",
     "ntdll",
     "win32",
     "wow64",
@@ -322,6 +328,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("cursors") => cursors::command(rest),
         Some("fonts") => fonts::command(rest),
         Some("wayland") => wayland::run(&root(), rest),
+        Some("libsystem") => libsystem::command(rest),
         Some("ntdll") => ntdll::command(rest),
         Some("win32") => win32::command(rest),
         Some("wow64") => wow64::command(rest),
@@ -1691,6 +1698,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // The Mach core's visible spec tests that run on Poly today, x86-64
     // builds, output compared with macOS's (macho.rs, ADR 0238).
     ("macho-mach", macho::mach_boot_test),
+    // An SDK-linked C program with Poly's own libSystem.B.dylib (libsystem.rs,
+    // ADR 0258).
+    ("libsystem", libsystem::boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
@@ -1853,6 +1863,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "dynamic",
             "macho",
             "macho-mach",
+            "libsystem",
             "busybox",
             "rootdisk",
             "toolkits",
@@ -2194,6 +2205,14 @@ fn fmt_checks(plan: &quicklint::Plan) -> Result {
             cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
         )?;
     }
+    if plan.libsystem {
+        step(
+            "fmt (libsystem)",
+            cargo()
+                .args(["fmt", "--check", "--manifest-path"])
+                .arg(root().join("personalities/xnu/libsystem/Cargo.toml")),
+        )?;
+    }
     if plan.win32 {
         step(
             "fmt (win32)",
@@ -2312,6 +2331,10 @@ fn lint_units(plan: &quicklint::Plan) -> Result {
     // The aarch64 boot stub: its own package (ADR 0154).
     if plan.aarch64 {
         aarch64::lint()?;
+    }
+    // Poly's libSystem, for its Darwin target (ADR 0258).
+    if plan.libsystem {
+        libsystem::lint()?;
     }
     Ok(())
 }
