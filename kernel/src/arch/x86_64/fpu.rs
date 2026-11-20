@@ -61,6 +61,11 @@ const ALIGN: usize = 64;
 /// field, XCOMP_BV the second (SDM Vol. 1 §13.4.2).
 const HEADER_OFFSET: usize = LEGACY_SIZE;
 const HEADER_SIZE: usize = 64;
+/// Size and end offset of the AVX (YMM_Hi128) component in the standard XSAVE
+/// area: 16 × 128-bit upper halves immediately after the header
+/// (SDM Vol. 1 §13.4.3).
+const AVX_SIZE: usize = 256;
+const AVX_END: usize = HEADER_OFFSET + HEADER_SIZE + AVX_SIZE;
 /// MXCSR_MASK in an FXSAVE image (SDM Vol. 1 §10.5.1.2); 0 there means
 /// the default mask 0xFFBF.
 const MXCSR_MASK_OFFSET: usize = 28;
@@ -113,9 +118,28 @@ pub(super) unsafe fn init() {
     // SAFETY: forwarded from the caller; the format is chosen above.
     unsafe { init_cpu() };
     if xsave {
-        // EBX: the area size for the components enabled in XCR0 now.
-        let size = __cpuid_count(0xd, 0).ebx as usize;
-        AREA_SIZE.store(size.max(LEGACY_SIZE + 64), Ordering::Relaxed);
+        let xcr0 = XCR0.load(Ordering::Relaxed);
+        // EBX is the area size for the components enabled in XCR0, but some
+        // hypervisors (notably WHPX under QEMU `-cpu host`) do not update
+        // CPUID.(EAX=0DH,ECX=0):EBX after XSETBV and keep reporting 576 while
+        // XSAVE64 still writes every component enabled in XCR0 (832 bytes with
+        // AVX), overflowing the heap allocation. Cross-check against each
+        // enabled component's own subleaf (ECX=i: offset EBX + size EAX) and
+        // the architectural AVX end (SDM Vol. 1 §13.2, §13.4.3).
+        let mut size = (__cpuid_count(0xd, 0).ebx as usize).max(HEADER_OFFSET + HEADER_SIZE);
+        let mut ext = xcr0 & !(XCR0_X87 | XCR0_SSE);
+        while ext != 0 {
+            let i = ext.trailing_zeros();
+            ext &= ext - 1;
+            let leaf = __cpuid_count(0xd, i);
+            if leaf.eax != 0 && leaf.ebx != 0 {
+                size = size.max((leaf.ebx as usize).saturating_add(leaf.eax as usize));
+            }
+        }
+        if xcr0 & XCR0_AVX != 0 {
+            size = size.max(AVX_END);
+        }
+        AREA_SIZE.store(size, Ordering::Relaxed);
     }
     // MXCSR_MASK as FXSAVE reports it (SDM Vol. 1 §11.6.6).
     #[repr(C, align(16))]
@@ -374,5 +398,36 @@ unsafe fn restore(area: NonNull<u8>) {
     } else {
         // SAFETY: forwarded from the caller.
         unsafe { asm!("fxrstor64 [{}]", in(reg) area.as_ptr(), options(nostack, readonly)) }
+    }
+}
+
+crate::kernel_test! {
+    fn fpu_save_fits_in_area_size() -> TestResult {
+        const GUARD: usize = 256;
+        const SENTINEL: u8 = 0xa5;
+        let info = info();
+        if info.xsave && info.xcr0 & XCR0_AVX != 0 && info.area_size < AVX_END {
+            return Err("XSAVE area size is smaller than the AVX save area");
+        }
+        let total = info.area_size + GUARD;
+        let layout = Layout::from_size_align(total, ALIGN).map_err(|_| "bad FPU test layout")?;
+        // SAFETY: `total >= 512 + 256`, aligned to 64 bytes.
+        let raw = unsafe { alloc::alloc::alloc(layout) };
+        let Some(ptr) = NonNull::new(raw) else {
+            return Err("out of memory for FPU save test");
+        };
+        // SAFETY: `ptr` owns `total` writable bytes until `dealloc` below.
+        let overflowed = unsafe {
+            core::ptr::write_bytes(ptr.as_ptr(), SENTINEL, total);
+            save(ptr);
+            let tail = core::slice::from_raw_parts(ptr.as_ptr().add(info.area_size), GUARD);
+            let bad = tail.iter().any(|&b| b != SENTINEL);
+            dealloc(ptr.as_ptr(), layout);
+            bad
+        };
+        if overflowed {
+            return Err("FPU save wrote past area_size()");
+        }
+        Ok(())
     }
 }
