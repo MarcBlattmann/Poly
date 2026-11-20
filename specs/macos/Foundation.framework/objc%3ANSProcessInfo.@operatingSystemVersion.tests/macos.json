@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsprocessinfo_operatingsystemversion_atleast13",
+      "source_sha256": "0f46d6cf1a1410ed2f3acc69948f96df07383c971dfe3910c6cc2dec7714b4bb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bb47def010a319d7c1a874234c7665e93c13515dddc3556f989a1697bb62decb",
+          "exit_code": 0,
+          "stdout": "ok sizeof v == 24\nok v.majorVersion >= 13\nok v.minorVersion >= 0 && v.patchVersion >= 0\nok [pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){13, 0, 0}]\nok [pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){10, 15, 7}]\nok [pi isOperatingSystemAtLeastVersion:v]\nok ![pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){v.majorVersion + 1, 0, 0}]\nok ![pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){v.majorVersion, v.minorVersion + 1, 0}]\nok ![pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){99, 0, 0}]\nok [pi.operatingSystemVersionString hasPrefix:@\"Version \"]\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "383983c14ed6669a59f7f1b3f18558a04a69987770050f0f009b310ffee37c4b",
+          "exit_code": 0,
+          "stdout": "ok sizeof v == 24\nok v.majorVersion >= 13\nok v.minorVersion >= 0 && v.patchVersion >= 0\nok [pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){13, 0, 0}]\nok [pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){10, 15, 7}]\nok [pi isOperatingSystemAtLeastVersion:v]\nok ![pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){v.majorVersion + 1, 0, 0}]\nok ![pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){v.majorVersion, v.minorVersion + 1, 0}]\nok ![pi isOperatingSystemAtLeastVersion:(NSOperatingSystemVersion){99, 0, 0}]\nok [pi.operatingSystemVersionString hasPrefix:@\"Version \"]\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsprocessinfo_operatingsystemversion_threads",
+      "source_sha256": "a0b2423093809ec05724c27dd71625d2109bd92dcdb9d2110759b978f7106dcd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ea4b38a18d7ed715f79afcb6485c06681a10f1b02ec65a3c8250f71e1d359a5f",
+          "exit_code": 0,
+          "stdout": "ok done && at_least\nok from_thread.majorVersion == v.majorVersion && from_thread.minorVersion == v.minorVersion && from_thread.patchVersion == v.patchVersion\nok from_thread.majorVersion >= 13\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5ca8130625d415f9e0b7393d720c8af5d2c0bf7d714417e2d56179d557b8a1d0",
+          "exit_code": 0,
+          "stdout": "ok done && at_least\nok from_thread.majorVersion == v.majorVersion && from_thread.minorVersion == v.minorVersion && from_thread.patchVersion == v.patchVersion\nok from_thread.majorVersion >= 13\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

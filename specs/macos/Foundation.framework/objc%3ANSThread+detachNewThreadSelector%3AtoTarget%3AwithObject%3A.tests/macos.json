@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsthread_detachnewthreadselector_runs",
+      "source_sha256": "38926c720669b824e195cce2b7bc1435ddfdbbdd6dc5a12bfed6f7f19e79dfe7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c50a4f337d6295867f1299ae4c70607bb69bdc161fddfa28fd3cab842f5f2bf5",
+          "exit_code": 0,
+          "stdout": "ok w->ran == 1\nok w->onMain == 0\nok ns_is(w->got, \"argument\")\nok many[j]->ran == 1 && many[j]->onMain == 0\nok many[j]->ran == 1 && many[j]->onMain == 0\nok many[j]->ran == 1 && many[j]->onMain == 0\nok many[j]->ran == 1 && many[j]->onMain == 0\nok many[j]->ran == 1 && many[j]->onMain == 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d34bfbe13d3f1e6f82c28f184663c9383833f4f4cc255e13c786fa64e5ae93d5",
+          "exit_code": 0,
+          "stdout": "ok w->ran == 1\nok w->onMain == 0\nok ns_is(w->got, \"argument\")\nok many[j]->ran == 1 && many[j]->onMain == 0\nok many[j]->ran == 1 && many[j]->onMain == 0\nok many[j]->ran == 1 && many[j]->onMain == 0\nok many[j]->ran == 1 && many[j]->onMain == 0\nok many[j]->ran == 1 && many[j]->onMain == 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsthread_detachnewthreadselector_threads_differ",
+      "source_sha256": "533809ebf64e30bfbfabc0d617fbe83a9041cef64f62898817b4701164bf5a6b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "edbc469cf176deb121588de39c99cff349b13a863b8f8c60225e63db0c1a8fa3",
+          "exit_code": 0,
+          "stdout": "ok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok seen.count == 10\nok [NSThread currentThread].threadDictionary[@\"mine\"] == nil\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a128a37e2d679a9eb9ed98a4f5fdfe532c8774f2c6bf895c79b8dce3bedcb0cb",
+          "exit_code": 0,
+          "stdout": "ok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok r->done && r->thread != nil && r->thread != [NSThread mainThread]\nok seen.count == 10\nok [NSThread currentThread].threadDictionary[@\"mine\"] == nil\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

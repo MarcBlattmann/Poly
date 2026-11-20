@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsprocessinfo_arguments_application",
+      "source_sha256": "8751422b90ed7b65eeff7b28c6e33e24e1827c6bae3ead581d42c684274969c2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "92e0ea47d83153296489769cae239eaba5304eeaaf21481fbd39388241afd3ec",
+          "exit_code": 0,
+          "stdout": "ok args != nil && args.count == 3\nok ns_is(args[0], \"T.app/Contents/MacOS/t\") || [args[0] hasSuffix:@\"/T.app/Contents/MacOS/t\"]\nok ns_is(args[1], \"--in-app\")\nok ns_is(args[2], \"two words \\xc3\\xa9\")\nok [a isKindOfClass:[NSString class]]\nok [a isKindOfClass:[NSString class]]\nok [a isKindOfClass:[NSString class]]\nok [[NSProcessInfo processInfo].arguments isEqualToArray:args]\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "02cc05d8d453308d5d53b33a186fcb7a6f290d5b641f555c462548a35da73cf1",
+          "exit_code": 0,
+          "stdout": "ok args != nil && args.count == 3\nok ns_is(args[0], \"T.app/Contents/MacOS/t\") || [args[0] hasSuffix:@\"/T.app/Contents/MacOS/t\"]\nok ns_is(args[1], \"--in-app\")\nok ns_is(args[2], \"two words \\xc3\\xa9\")\nok [a isKindOfClass:[NSString class]]\nok [a isKindOfClass:[NSString class]]\nok [a isKindOfClass:[NSString class]]\nok [[NSProcessInfo processInfo].arguments isEqualToArray:args]\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsprocessinfo_arguments_plain",
+      "source_sha256": "c2eefb9a170d08d4bdccef07f005a9aaea863477d8707c094fcd8655bf48fdcb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4e0c454291680b988bc01fd29fb3e7f117643ecaa92fa00731576e61d34aa697",
+          "exit_code": 0,
+          "stdout": "ok args != nil && args.count == 1\nok [args[0] isKindOfClass:[NSString class]]\nok ns_is(args[0], poly_argv[0])\nok [[NSProcessInfo processInfo].arguments[0] length] > 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e2f0d7564f5a899ffb259ed6ed6c9dcfbf07ffe644e2054ba2d21cc040dfa1da",
+          "exit_code": 0,
+          "stdout": "ok args != nil && args.count == 1\nok [args[0] isKindOfClass:[NSString class]]\nok ns_is(args[0], poly_argv[0])\nok [[NSProcessInfo processInfo].arguments[0] length] > 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

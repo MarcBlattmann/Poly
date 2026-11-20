@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdyld.dylib/dladdr.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in dladdr.tests/macos.json.
+id: macos/api/libdyld.dylib/dladdr
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  dladdr(address, &info) fills a Dl_info (32 bytes: dli_fname, dli_fbase, dli_sname, dli_saddr) and returns
+  nonzero when the address lies in an image, else 0 and leaves info untouched (NULL, 0x1000, a stack address and
+  a heap address were each 0). dli_fname is the path of the image (the program: image 0's name; libraries: their
+  install name), dli_fbase the image's header (the _dyld_get_image_header value), dli_sname the nearest exported or
+  local symbol at or below the address, without the C underscore, dli_saddr that symbol's address: a program
+  function ("a_function"), an address 3 bytes into it (same symbol, saddr the function's start), a global
+  variable ("global_var"), and a static (local) variable were all named. malloc is in
+  /usr/lib/system/libsystem_malloc.dylib, getpid in libsystem_kernel.dylib (reported as "__getpid", an alias), dlopen in
+  libdyld.dylib, pthread_self in libsystem_pthread.dylib, strlen in libsystem_platform.dylib ("_platform_strlen").
+  The header of the program gives the symbol "__dso_handle"; the header of image 1 is reported under libSystem's name.
+  The address -1 (all ones) returned nonzero (not specified). Same on both architectures.
+returns:
+  "found": "nonzero; info filled"
+  "not_found": "0; info not touched"
+errors:
+  "none": "no errno is set"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

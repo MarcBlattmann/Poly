@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nstemporarydirectory_basics",
+      "source_sha256": "eb6f634821bac71548b31b067301b620b0645d606d73606977759955d870cd52",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "12f280e707a5f1802211bd86bdb11653749ffd9773573a3f7af1aa744bfc1ea8",
+          "exit_code": 0,
+          "stdout": "ok tmp != nil && [tmp hasPrefix:@\"/\"] && [tmp hasSuffix:@\"/\"]\nok [[NSFileManager defaultManager] fileExistsAtPath:tmp isDirectory:&isDir] && isDir\nok [NSTemporaryDirectory() isEqualToString:tmp]\nok [tmp hasPrefix:@\"/var/folders/\"] || [tmp hasPrefix:@\"/private/var/folders/\"]\nok [fm createFileAtPath:file contents:[NSData dataWithBytes:\"x\" length:1] attributes:nil]\nok [fm isWritableFileAtPath:tmp]\nok [fm removeItemAtPath:file error:nil] && ![fm fileExistsAtPath:file]\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1e82f9bc7580cf4bfc8636f542f4eea41490efb3e504e0214a1856f30784327d",
+          "exit_code": 0,
+          "stdout": "ok tmp != nil && [tmp hasPrefix:@\"/\"] && [tmp hasSuffix:@\"/\"]\nok [[NSFileManager defaultManager] fileExistsAtPath:tmp isDirectory:&isDir] && isDir\nok [NSTemporaryDirectory() isEqualToString:tmp]\nok [tmp hasPrefix:@\"/var/folders/\"] || [tmp hasPrefix:@\"/private/var/folders/\"]\nok [fm createFileAtPath:file contents:[NSData dataWithBytes:\"x\" length:1] attributes:nil]\nok [fm isWritableFileAtPath:tmp]\nok [fm removeItemAtPath:file error:nil] && ![fm fileExistsAtPath:file]\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nstemporarydirectory_unique_names",
+      "source_sha256": "61864090d6067d2298d2e06d62a995bd20f0ef2fc5a65d2ebec92506da9b6fda",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c216bae5d79eb704f591db81a6c483b2bc9e775ed9699eb15d65a11c9b39a095",
+          "exit_code": 0,
+          "stdout": "ok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok names.count == 5\nok [fm fileExistsAtPath:p]\nok [fm fileExistsAtPath:p]\nok [fm fileExistsAtPath:p]\nok [fm fileExistsAtPath:p]\nok [fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![tmp isEqualToString:fm.currentDirectoryPath] && ![tmp hasPrefix:[NSHomeDirectory() stringByAppendingString:@\"/Documents\"]]\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3544dc87ee8be16919beb857328bbaaaa479e677bca85fc4c131a570507f3777",
+          "exit_code": 0,
+          "stdout": "ok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok [fm createDirectoryAtPath:p withIntermediateDirectories:NO attributes:nil error:nil]\nok names.count == 5\nok [fm fileExistsAtPath:p]\nok [fm fileExistsAtPath:p]\nok [fm fileExistsAtPath:p]\nok [fm fileExistsAtPath:p]\nok [fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![fm fileExistsAtPath:p]\nok ![tmp isEqualToString:fm.currentDirectoryPath] && ![tmp hasPrefix:[NSHomeDirectory() stringByAppendingString:@\"/Documents\"]]\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

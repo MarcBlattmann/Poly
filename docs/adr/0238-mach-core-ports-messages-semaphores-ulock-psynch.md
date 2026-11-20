@@ -85,3 +85,54 @@ translator are other tracks), so nothing of this can run on Poly today.
   and dead-name notifications, MIG servers for task, thread, host and
   semaphore ports (`semaphore_create` is a crate call until they exist),
   process-shared psynch objects.
+
+## Addendum (2026-11-20): Mach exceptions
+
+What Chrome's crash handling (Crashpad) and its process model need: handlers
+for a task's or thread's exceptions, the messages the kernel sends them, and
+the state of a thread that stopped.
+
+1. **Sending.** `mach_msg_trap` sends for x86-64 programs (alone and as the
+   send half of an RPC); a full queue waits, with `MACH_SEND_TIMEOUT` at
+   most the timeout. arm64 programs keep what the sheet recorded (a send
+   with this trap ends the process; they send with `mach_msg2_trap`, which
+   no public header describes yet).
+2. **The kernel answers MIG requests** sent to a task or thread port, in
+   `poly-mach` (`ipc/mig.rs`): `task_` / `thread_set_exception_ports`,
+   `_get_` and `_swap_`, `thread_get_state` / `thread_set_state`,
+   `semaphore_create` / `semaphore_destroy`; anything else gets
+   `MIG_BAD_ID`. Layouts are those of the SDK's MIG-generated headers
+   (`mach/task.h`, `mach/thread_act.h`, `mach/exc.h`), ids the subsystem
+   base plus the routine's index in the preprocessed `.defs`; inline arrays
+   of variable size travel packed (as MIG documents), a get's reply carries
+   32 port descriptors with the handlers first.
+3. **Handlers** live in tables per task, per thread and for the host: per
+   exception type a send right, a behaviour (`EXCEPTION_DEFAULT`,
+   `_STATE`, `_STATE_IDENTITY`, with `MACH_EXCEPTION_CODES`) and a state
+   flavour (`x86_THREAD_STATE64`, `x86_THREAD_STATE`,
+   `x86_EXCEPTION_STATE64`). A new task inherits its parent's task
+   handlers (a child of `posix_spawn` or fork).
+4. **Raising.** A CPU fault of an XNU thread that demand paging did not
+   resolve becomes `EXC_BAD_ACCESS` (`KERN_INVALID_ADDRESS` or
+   `KERN_PROTECTION_FAILURE` and the address; #GP: `EXC_I386_GPFLT`),
+   `EXC_BAD_INSTRUCTION` (#UD), `EXC_ARITHMETIC` (#DE) or `EXC_BREAKPOINT`
+   (#BP, #DB), with the codes of `mach/i386/exception.h`. The thread stops;
+   its state is kept for `thread_get_state` / `thread_set_state`. The
+   thread's handler, then the task's, then the host's gets
+   `exception_raise*` (2401-2403) or `mach_exception_raise*` (2405-2407)
+   with a send-once reply right to a port the kernel holds. `KERN_SUCCESS`
+   resumes the thread with the reply's state (state behaviours) or the one
+   `thread_set_state` gave; any other reply, or a reply right that dies,
+   passes the exception on; without a taker the default action follows.
+5. **Tests.** On the host: `poly-mach`'s message tests and the
+   personality's `tests/exceptions.rs`. On Poly (boot group `macho-mach`):
+   two x86-64 programs built with MIG stubs that Apple's `mig` generates,
+   as a black box, from the SDK's `.defs` (`personalities/xnu/tests/data/
+   exc/build.sh`): a parent registers a handler, spawns itself, and its
+   MIG server answers the child's faults (a state reply that moves the
+   child on; a decline that leaves the default action).
+
+Not yet: the protected behaviours, `EXC_CRASH` and corpse notifications,
+`host_set_exception_ports` by message (the host port has no server yet),
+`posix_spawnattr_setexceptionports_np` (its sheet is on the way), arm64
+thread state (with the translator), and the float and debug flavours.

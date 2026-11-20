@@ -39,17 +39,37 @@ pub struct Candidate {
     pub protected: bool,
     /// It is ending already: ending it again frees nothing more.
     pub ending: bool,
+    /// How much more (or less) expendable it is, from -1000 to 1000, as Linux's `oom_score_adj`
+    /// (proc_pid_oom_score_adj(5)): a Linux process's own value; for a Windows process what its
+    /// relations say (`poly_personality_nt::oomadj`). -1000: never ended.
+    pub adj: i32,
 }
 
-/// The process to end when memory has run out: the one holding the most frames that is neither
-/// protected nor ending already (the youngest of equals: the larger id). `None` if there is none,
-/// or if none holds any memory.
-pub fn choose_victim(candidates: &[Candidate]) -> Option<u32> {
+/// `oom_score_adj`'s range.
+pub const OOM_SCORE_ADJ_MIN: i32 = -1000;
+pub const OOM_SCORE_ADJ_MAX: i32 = 1000;
+
+/// A candidate's score, as Linux's: its frames plus `adj` thousandths of all `total` frames
+/// (proc_pid_oom_score_adj(5): "the value is added to the badness score ... in units of
+/// one-thousandth of the memory available"). `None` for one with `adj` -1000 (never ended).
+pub fn badness(c: &Candidate, total: u64) -> Option<i64> {
+    let adj = c.adj.clamp(OOM_SCORE_ADJ_MIN, OOM_SCORE_ADJ_MAX);
+    if adj == OOM_SCORE_ADJ_MIN {
+        return None;
+    }
+    Some(c.resident as i64 + i64::from(adj) * (total.min(i64::MAX as u64 / 2000) as i64) / 1000)
+}
+
+/// The process to end when memory has run out: the one with the highest [`badness`] that is
+/// neither protected nor ending already and holds memory (the youngest of equals: the larger
+/// id). `None` if there is none. `total`: the machine's frames.
+pub fn choose_victim(candidates: &[Candidate], total: u64) -> Option<u32> {
     candidates
         .iter()
         .filter(|c| !c.protected && !c.ending && c.resident > 0)
-        .max_by_key(|c| (c.resident, c.pid))
-        .map(|c| c.pid)
+        .filter_map(|c| badness(c, total).map(|b| (b, c.pid)))
+        .max()
+        .map(|(_, pid)| pid)
 }
 
 #[cfg(test)]
@@ -68,11 +88,31 @@ mod tests {
 
     #[test]
     fn the_victim_is_the_largest_process_that_may_go() {
-        let c = |pid, resident, protected, ending| Candidate { pid, resident, protected, ending };
-        assert_eq!(choose_victim(&[]), None);
-        assert_eq!(choose_victim(&[c(1, 900, true, false), c(7, 10, false, false)]), Some(7));
-        assert_eq!(choose_victim(&[c(5, 300, false, true), c(6, 200, false, false)]), Some(6));
-        assert_eq!(choose_victim(&[c(8, 100, false, false), c(9, 100, false, false)]), Some(9));
-        assert_eq!(choose_victim(&[c(3, 0, false, false), c(4, 50, true, false)]), None);
+        let c = |pid, resident, protected, ending| Candidate { pid, resident, protected, ending, adj: 0 };
+        let t = 1 << 20;
+        assert_eq!(choose_victim(&[], t), None);
+        assert_eq!(choose_victim(&[c(1, 900, true, false), c(7, 10, false, false)], t), Some(7));
+        assert_eq!(choose_victim(&[c(5, 300, false, true), c(6, 200, false, false)], t), Some(6));
+        assert_eq!(choose_victim(&[c(8, 100, false, false), c(9, 100, false, false)], t), Some(9));
+        assert_eq!(choose_victim(&[c(3, 0, false, false), c(4, 50, true, false)], t), None);
+    }
+
+    #[test]
+    fn the_score_adjustment_makes_children_go_first() {
+        let c = |pid, resident, adj| Candidate { pid, resident, protected: false, ending: false, adj };
+        let total = 1 << 20; // 4 GiB
+        // A browser of 270 MiB and a renderer of 100 MiB that says it is expendable (300, as
+        // Linux Chromium writes): the renderer goes.
+        let browser = c(10, 270 << 8, 0);
+        let renderer = c(11, 100 << 8, 300);
+        assert_eq!(choose_victim(&[browser, renderer], total), Some(11));
+        // Without the adjustment the larger one goes.
+        assert_eq!(choose_victim(&[browser, c(11, 100 << 8, 0)], total), Some(10));
+        // -1000: never, even when it is the only one.
+        assert_eq!(choose_victim(&[c(12, 500, -1000)], total), None);
+        // A negative adjustment protects a smaller process less than -1000 would.
+        assert_eq!(badness(&c(13, 1000, -500), 2000), Some(0));
+        // Values beyond the range count as its ends.
+        assert_eq!(badness(&c(14, 10, 5000), 1000), Some(1010));
     }
 }

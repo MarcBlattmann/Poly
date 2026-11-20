@@ -27,9 +27,9 @@ use poly_audio::{Format, Sample};
 use poly_hda::{DmaRegion, Hda, Memory, StreamFormat};
 use poly_pci::{Bdf, command};
 
-/// Periods in the ring buffer, 20 ms each.
-const PERIODS: u32 = 4;
-const PERIOD_MS: u32 = 20;
+/// Periods in the ring buffer, 10 ms each (as virtio-sound's: the grain of every client's clock).
+const PERIODS: u32 = 6;
+const PERIOD_MS: u32 = 10;
 const BUFFER_BYTES: usize = 64 * 1024;
 
 /// Waits for the driver: spin on the clock.
@@ -66,7 +66,7 @@ impl core::fmt::Debug for HdaHw {
 }
 
 /// The stream format: 16-bit stereo at 48 kHz if the path takes it, else
-/// 44.1 kHz, else its first rate; periods of about 20 ms whose byte count
+/// 44.1 kHz, else its first rate; periods of about 10 ms whose byte count
 /// is a multiple of 128 (the BDL's alignment).
 fn choose(path: &poly_hda::OutputPath) -> Option<(StreamFormat, HwFormat)> {
     let channels = 2u8.min(path.max_channels.max(1));

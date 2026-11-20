@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSException.raise.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSException.raise.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSException.raise"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSException raise] throws the exception: an @catch (NSException *e) clause gets the same object,
+  with name, reason and userInfo as given, and a callStackSymbols array that is not empty (an
+  exception only created, not yet thrown, has an empty one); @finally blocks run on the way up, in
+  every frame between the raise and the catch (three nested levels all clean up, in order, the
+  catching frame continues after its @try, a second raise after a catch works the same);
+  +raise:format: builds the reason from a format and gives userInfo nil; @throw of a non-exception
+  object (a string) is caught as id; an unknown selector sent to an object raises
+  NSInvalidArgumentException; @throw; inside a catch rethrows the same exception to the outer clause.
+  Exceptions unwind by the system's Objective-C exception ABI (libobjc's personality), also across C
+  frames of the same program.
+returns:
+  thrown: "control goes to the nearest enclosing @catch"
+errors: {}
+side_effects: "unwinds the stack"
+threading: "per thread"
+ordering:
+  - "@finally blocks run innermost first"
+timing:
+  typical: "tens of microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
