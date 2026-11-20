@@ -1021,12 +1021,14 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
 /// clear of the window that appears in the middle.
 const BUSY_AT: (i32, i32) = (900, 600);
 
-/// How many pixels of the busy pointer's spinner area (to the arrow's
-/// lower right, ADR 0167) differ between two screenshots.
-fn spinner_diff(a: &screen::Image, b: &screen::Image) -> usize {
+/// How many pixels of the busy pointer's spinner area differ between two screenshots: to the
+/// arrow's lower right for Poly's own (ADR 0167), the ring below the arrow for the cursor
+/// theme's (`themed`, ADR 0252).
+fn spinner_diff(a: &screen::Image, b: &screen::Image, themed: bool) -> usize {
+    let (xs, ys) = if themed { (-2..14, 8..22) } else { (10..27, 8..28) };
     let mut n = 0;
-    for y in BUSY_AT.1 + 8..BUSY_AT.1 + 28 {
-        for x in BUSY_AT.0 + 10..BUSY_AT.0 + 27 {
+    for y in BUSY_AT.1 + ys.start..BUSY_AT.1 + ys.end {
+        for x in BUSY_AT.0 + xs.start..BUSY_AT.0 + xs.end {
             n += usize::from(a.pixel(x as u32, y as u32) != b.pixel(x as u32, y as u32));
         }
     }
@@ -1052,11 +1054,16 @@ fn startup_feedback(d: &mut Driver) -> std::result::Result<(), String> {
     thread::sleep(Duration::from_millis(250));
     let busy_b = d.shot("busy-pointer-later")?;
     expect("the app has no window yet (the pointer is still busy)", count(&d.lines, "busy pointer off") == off)?;
-    // The arrow is there (its white inside) ...
+    // The arrow is there (its white inside; the cursor theme's is a light grey, ADR 0252) ...
+    let themed = count(&d.lines, "poly-compositor: cursor theme ") > 0;
     let tip = (BUSY_AT.0 as u32 + 2, BUSY_AT.1 as u32 + 4);
-    expect("the busy pointer is the arrow", busy_a.pixel(tip.0, tip.1) == [0xff, 0xff, 0xff])?;
-    // ... and its spinner turns (the pictures differ at its lower right).
-    let turned = spinner_diff(&busy_a, &busy_b);
+    let light = |img: &screen::Image| {
+        let p = img.pixel(tip.0, tip.1);
+        if themed { p.iter().all(|&c| c >= 0xe0) } else { p == [0xff, 0xff, 0xff] }
+    };
+    expect("the busy pointer is the arrow", light(&busy_a))?;
+    // ... and its spinner turns (the pictures differ where it is).
+    let turned = spinner_diff(&busy_a, &busy_b, themed);
     expect(&format!("the spinner turns ({turned} pixels differ)"), turned >= 4)?;
     // The window maps: the busy pointer ends, by the process (not a token).
     let line = d.wait("launch Slow Window:", 90)?;
@@ -1067,10 +1074,10 @@ fn startup_feedback(d: &mut Driver) -> std::result::Result<(), String> {
     expect("the window is clear of the busy pointer", x + w + 40 < BUSY_AT.0 || y + 300 < BUSY_AT.1)?;
     thread::sleep(Duration::from_millis(800));
     let normal = d.shot("normal-pointer")?;
-    expect("the arrow stays", normal.pixel(tip.0, tip.1) == [0xff, 0xff, 0xff])?;
-    let gone = spinner_diff(&busy_a, &normal);
+    expect("the arrow stays", light(&normal))?;
+    let gone = spinner_diff(&busy_a, &normal, themed);
     expect(&format!("the spinner is gone ({gone} pixels differ)"), gone >= 4)?;
-    let calm = spinner_diff(&normal, &d.shot("normal-pointer-later")?);
+    let calm = spinner_diff(&normal, &d.shot("normal-pointer-later")?, themed);
     expect(&format!("nothing turns any more ({calm} pixels differ)"), calm == 0)?;
     let closed = count(&d.lines, "wl-demo: closed");
     d.send(&abs(x + w / 2, y + 30))?;
