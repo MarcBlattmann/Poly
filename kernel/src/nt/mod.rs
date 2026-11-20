@@ -1628,7 +1628,9 @@ fn create_process(
     };
     if req.suspended {
         // CREATE_SUSPENDED (ADR 0089): the first thread starts when its
-        // suspend count drops to zero (`sched::resume`).
+        // suspend count drops to zero (`sched::resume`). Until then a thread
+        // another process makes in it does not end it by leaving.
+        process.hold();
         with(|s| {
             let c = s.ctl.entry(first).or_default();
             c.suspend_count = 1;
@@ -1741,6 +1743,7 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     if WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 {
         crate::kprintln!("nt-waits: p{pid} ended at {} ms", crate::time::now_ns() / 1_000_000);
     }
+    let mut dropped = Vec::new();
     let host_needed = with(|s| {
         if let Some(created) = s.created.remove(&ProcessId(pid)) {
             let cpu = used;
@@ -1757,6 +1760,17 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
             );
         }
         s.peak.remove(&ProcessId(pid));
+        // A first thread that never started keeps no reference to the process.
+        let unstarted: Vec<_> =
+            s.processes.get(&ProcessId(pid)).map_or_else(Vec::new, |p| p.threads.iter().map(|t| t.thread).collect());
+        for t in unstarted {
+            if let Some(c) = s.ctl.get_mut(&t) {
+                c.deferred_start = None;
+                if let Some(d) = c.deferred_process.take() {
+                    dropped.push(d);
+                }
+            }
+        }
         if let Some(mut proc) = s.processes.remove(&ProcessId(pid)) {
             let mut b = MemBackend { memory, sections: &mut s.sections };
             exec::process_exit(&mut s.sys, &mut proc, &mut b);
@@ -1767,6 +1781,8 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
         let now_ms = crate::time::now_ns() / 1_000_000;
         poly_personality_nt::scm::process_ended(&mut s.sys, ProcessId(pid), now_ms, registry::filetime_now())
     });
+    // Dropped out of the lock: a memory map may sleep as it goes.
+    drop(dropped);
     if host_needed {
         start_service_host();
     }

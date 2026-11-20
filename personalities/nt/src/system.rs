@@ -60,6 +60,17 @@ impl Section {
     }
 }
 
+/// What [`NtSystem::thread_records`] keeps of a thread.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ThreadRecord {
+    /// The process the thread runs (ran) in.
+    pub process: ProcessId,
+    /// Its exit status, once it has ended.
+    pub exit: Option<poly_ntobj::NtStatus>,
+    /// Made with `THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER` (`ThreadHideFromDebugger`).
+    pub hidden: bool,
+}
+
 /// The machine-wide NT state.
 #[derive(Debug)]
 pub struct NtSystem {
@@ -73,6 +84,13 @@ pub struct NtSystem {
     /// exists (another process holds a handle to it), for
     /// `NtQueryInformationProcess` (`GetExitCodeProcess`, ADR 0079).
     pub process_exits: BTreeMap<ProcessId, poly_ntobj::NtStatus>,
+
+    /// Every thread whose thread object exists: its process and, once it has ended, its exit
+    /// status. A handle to a thread of another process (`CreateRemoteThread`, a child's first
+    /// thread) is answered from here: `GetProcessIdOfThread` and `GetExitCodeThread` still work
+    /// after that process has gone (specs/windows/kernel32.dll/CreateRemoteThread.yaml,
+    /// `exit_process_routine`). Forgotten with the thread object.
+    pub thread_records: BTreeMap<poly_ntobj::ThreadRef, ThreadRecord>,
 
     /// win32k's machine-wide state: the desktop link's surfaces (ADR 0128).
     pub win32k: crate::win32k::Win32k,
@@ -155,6 +173,7 @@ impl NtSystem {
             io: crate::io::IoState::new(),
             registry,
             process_exits: BTreeMap::new(),
+            thread_records: BTreeMap::new(),
             win32k: crate::win32k::Win32k::default(),
             jobs: crate::job::Jobs::default(),
             lowbox_sids: Vec::new(),
@@ -252,6 +271,9 @@ impl NtSystem {
                     self.proc_attrs.remove(&ProcessId(d.cookie as u32));
                     self.working_sets.remove(&ProcessId(d.cookie as u32));
                     self.jobs.process_forgotten(ProcessId(d.cookie as u32));
+                }
+                ObjectType::Thread => {
+                    self.thread_records.remove(&poly_ntobj::ThreadRef(d.cookie));
                 }
                 ObjectType::Job => self.jobs.deleted(d.cookie),
                 ObjectType::WindowStation | ObjectType::Desktop => self.winsta.deleted(&mut self.objects, d.id),

@@ -312,6 +312,10 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("GetThreadContext", "api-ms-win-core-processthreads-l1-1-0"),
     ("SetThreadContext", "api-ms-win-core-processthreads-l1-1-0"),
     ("SuspendThread", "api-ms-win-core-processthreads-l1-1-0"),
+    // specs/windows/kernel32.dll/CreateRemoteThread.yaml (Chrome makes threads in its children).
+    ("CreateRemoteThread", "api-ms-win-core-processthreads-l1-1-0"),
+    ("CreateRemoteThreadEx", "api-ms-win-core-processthreads-l1-1-0"),
+    ("GetProcessIdOfThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetProcessTimes", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetStartupInfoW", "api-ms-win-core-processthreads-l1-1-0"),
     ("IsProcessorFeaturePresent", "api-ms-win-core-processthreads-l1-1-1"),
@@ -567,6 +571,7 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("QueryThreadCycleTime", "api-ms-win-core-realtime-l1-1-0"),
     ("K32GetProcessMemoryInfo", "api-ms-win-core-psapi-l1-1-0"),
     ("K32GetModuleInformation", "api-ms-win-core-psapi-l1-1-0"),
+    ("K32EnumProcessModules", "api-ms-win-core-psapi-l1-1-0"),
     // Batch B0 of the Chrome installers (docs/windows/chrome-installer-plan.md; Learn's "API set"
     // rows, the session one a guess: its page names kernel32.dll only).
     ("GetDriveTypeW", "api-ms-win-core-file-l1-1-0"),
