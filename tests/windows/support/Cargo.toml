@@ -2,7 +2,9 @@
 # (tests/windows/*.rs and specs/windows/<component>/<symbol>.tests/*.rs),
 # ADR 0075. A no_std crate for x86_64-pc-windows-msvc only; built by
 # `cargo xtask pipeline win build`, never by the host workspace (excluded
-# there). No third-party crates: core only.
+# there). No third-party crates: core only. A test with the line
+# `// poly-arch: x86` is built for i686-pc-windows-msvc (ADR 0259), which
+# links Poly's own 32-bit helper routines.
 [package]
 name = "poly-wtest"
 version = "0.0.1"
@@ -12,6 +14,9 @@ publish = false
 
 [lib]
 path = "src/lib.rs"
+
+[target.'cfg(target_arch = "x86")'.dependencies]
+poly-msvc32 = { path = "../../../personalities/nt/msvc32" }
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
