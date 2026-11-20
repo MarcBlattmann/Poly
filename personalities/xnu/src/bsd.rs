@@ -41,6 +41,7 @@ pub mod nr {
     pub const KILL: u64 = 37;
     pub const GETTIMEOFDAY: u64 = 116;
     pub const GETRUSAGE: u64 = 117;
+    pub const IOCTL: u64 = 54;
     pub const UNLINK: u64 = 10;
     pub const ACCESS: u64 = 33;
     pub const UMASK: u64 = 60;
@@ -433,6 +434,7 @@ pub fn call(k: &mut dyn BsdKernel, number: u64, a: &[u64; 8]) -> Option<Result<R
         KILL => kill(k, a[0] as i32, a[1] as i32),
         GETTIMEOFDAY => gettimeofday(k, a[0], a[1]),
         GETRUSAGE => getrusage(k, a[0] as i32, a[1]),
+        IOCTL => ioctl(k, fd, a[1] as u32),
         UNLINK | RMDIR => read_cstr(k, a[0], PATH_MAX).and_then(|p| k.unlink(&p, number == RMDIR)).and_then(|()| ok(0)),
         MKDIR => read_cstr(k, a[0], PATH_MAX).and_then(|p| k.mkdir(&p, a[1] as u32 & 0o7777)).and_then(|()| ok(0)),
         ACCESS => access(k, a[0], a[1] as u32),
@@ -803,6 +805,24 @@ fn getrusage(k: &mut dyn BsdKernel, who: i32, out: u64) -> Result<Ret, u32> {
     }
     put(k, out, &b).and_then(|()| ok(0))
 }
+
+/// `ioctl(fd, request, argument)` (the ioctl sheet): `EBADF` for a
+/// descriptor that is not open; `FIOCLEX` / `FIONCLEX` set and clear
+/// close-on-exec; every other request, the terminal ones included, is
+/// `ENOTTY` (Poly cannot tell an XNU program its descriptor is a terminal
+/// yet, so programs take their input as from a file).
+fn ioctl(k: &mut dyn BsdKernel, fd: i32, request: u32) -> Result<Ret, u32> {
+    const FIOCLEX: u32 = 0x2000_6601;
+    const FIONCLEX: u32 = 0x2000_6602;
+    k.status(fd)?;
+    match request {
+        FIOCLEX | FIONCLEX => fcntl(k, fd, 2, u64::from(request == FIOCLEX)),
+        _ => Err(ENOTTY),
+    }
+}
+
+/// `ENOTTY` (`<sys/errno.h>`).
+const ENOTTY: u32 = 25;
 
 /// `access(path, mode)`: whether the file exists; the permission bits are
 /// not checked yet (Poly runs programs as one user).

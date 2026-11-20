@@ -561,3 +561,11 @@ fn gettimeofday_fills_a_timeval_and_a_zero_zone() {
     // Both pointers may be null.
     assert_eq!(k.call(nr::GETTIMEOFDAY, &[0, 0]).unwrap().value, 0);
 }
+
+#[test]
+fn ioctl_terminal_requests_are_enotty() {
+    let mut k = Fake::new();
+    assert_eq!(k.call(nr::IOCTL, &[1, 0x4048_7413, BUF]), Err(25));
+    assert_eq!(k.call(nr::IOCTL, &[1, 0x1234_5678, 0]), Err(25));
+    assert_eq!(k.call(nr::IOCTL, &[77, 0x4048_7413, BUF]), Err(9));
+}

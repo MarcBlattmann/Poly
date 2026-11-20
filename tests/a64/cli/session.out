@@ -1,0 +1,24 @@
+sqlite 3.47
+CH|3|799597
+FR|2|2624900
+IT|1|1371498
+Paris
+Milan
+Lyon
+Zurich
+Zurich|1
+Geneva|2
+Basel|3
+Paris|1
+Lyon|2
+Milan|1
+0,1,1,2,3,5,8,13,21,34,55,89,144,233,377,610,987,1597,2584,4181
+3.142|   42|ab  |ff
+{"name":"Zurich","people":421878}
+x
+2026-12-01|366
+integer|real|text|blob|null
+799597
+10000|50005000|5000.5|1|10000
+5|3.14|MIXED CASE|5|506F6C79
+done

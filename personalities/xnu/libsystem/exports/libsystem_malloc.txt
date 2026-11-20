@@ -2,8 +2,17 @@ _aligned_alloc
 _calloc
 _free
 _malloc
+_malloc_create_zone
+_malloc_default_zone
+_malloc_destroy_zone
 _malloc_good_size
+_malloc_set_zone_name
 _malloc_size
+_malloc_zone_calloc
+_malloc_zone_free
+_malloc_zone_from_ptr
+_malloc_zone_malloc
+_malloc_zone_realloc
 _posix_memalign
 _realloc
 _reallocf

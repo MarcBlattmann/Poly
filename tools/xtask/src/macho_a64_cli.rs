@@ -24,9 +24,11 @@ fn read(rel: &str) -> Result<Vec<u8>> {
 pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let hello = read("tests/macos/libsystem/hello_a64")?;
     let lua = read("tests/a64/cli/bin/lua")?;
-    let programs: Vec<(&str, &[u8])> = vec![("mhello-libsystem", &hello), ("lua", &lua)];
+    let sqlite = read("tests/a64/cli/bin/sqlite3")?;
+    let programs: Vec<(&str, &[u8])> = vec![("mhello-libsystem", &hello), ("lua", &lua), ("sqlite3", &sqlite)];
     let mut tree = Tree { files: native::runtime_files()?, ..Default::default() };
     tree.files.push(("usr/share/poly-a64/hello.lua".into(), 0o644, read("tests/a64/cli/hello.lua")?));
+    tree.files.push(("usr/share/poly-a64/session.sql".into(), 0o644, read("tests/a64/cli/session.sql")?));
     for (path, bytes) in libsystem::tree_files()? {
         tree.files.push((path, 0o755, bytes));
     }
@@ -44,5 +46,19 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     eprintln!("==> boot test: Lua 5.4 (built from source for arm64) runs a script on Poly through the translator");
     let b = run_ending(kernel, syms, &image, "lua", &["/usr/share/poly-a64/hello.lua"], &["POLY_LUA=yes"], "code=0")?;
     in_order("lua", &b.output, &["lua: done, 0 failed".to_string()])?;
+
+    eprintln!("==> boot test: the SQLite shell (built from source for arm64) runs a session on Poly");
+    let b = run_ending(
+        kernel,
+        syms,
+        &image,
+        "sqlite3",
+        &["-init", "/usr/share/poly-a64/session.sql", ":memory:", ".quit"],
+        &[],
+        "code=0",
+    )?;
+    let want = String::from_utf8(read("tests/a64/cli/session.out")?).map_err(|e| e.to_string())?;
+    let lines: Vec<String> = want.lines().map(String::from).collect();
+    in_order("sqlite3", &b.output, &lines)?;
     Ok(())
 }
