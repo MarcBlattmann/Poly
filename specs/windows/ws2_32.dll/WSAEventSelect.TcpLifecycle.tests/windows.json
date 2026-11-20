@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d45892328ab7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:26:42Z",
+  "tests": [
+    {
+      "name": "cnet_tcp",
+      "exe_sha256": "475b742201fe765e59c2f0cd7eef9de53d4f4f48c238bfffc794a49c12fd231a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RklPTkJJTzogMApXU0FFdmVudFNlbGVjdChGRF9DT05ORUNUKTogMAp0aGUgbGlzdGVuZXIgYWNjZXB0ZWQ6IHllcwpXU0FFbnVtTmV0d29ya0V2ZW50czogMCwgZXZlbnRzIDB4MTAsIGZpcnN0IGVycm9yIDAKcmVjdihNU0dfUEVFSykgd2l0aCBub3RoaW5nIHRvIHJlYWQ6IC0xLCBlcnJvciAxMDAzNQp0aGUgc2VydmVyIHJlYWRzIDEwMCBieXRlcwp0aGUgZXZlbnQgaXMgc2lnbmFsbGVkIGJ5IHRoZSBkYXRhOiB5ZXMKcmVjdiBhZ2FpbjogLTEsIGVycm9yIDEwMDM1CmV2ZW50cyAweDEKc2VsZWN0aW5nIGFnYWluIHdpdGggZGF0YSB1bnJlYWQgc2lnbmFscyBhdCBvbmNlOiBubwp0aGUgZXZlbnQgaXMgc2lnbmFsbGVkIGJ5IHRoZSBwZWVyJ3Mgc2h1dGRvd246IHllcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "FIONBIO: 0\nWSAEventSelect(FD_CONNECT): 0\nthe listener accepted: yes\nWSAEnumNetworkEvents: 0, events 0x10, first error 0\nrecv(MSG_PEEK) with nothing to read: -1, error 10035\nthe server reads 100 bytes\nthe event is signalled by the data: yes\nrecv again: -1, error 10035\nevents 0x1\nselecting again with data unread signals at once: no\nthe event is signalled by the peer's shutdown: yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 195
+    },
+    {
+      "name": "cnet_tcp_b",
+      "exe_sha256": "d942e8c159c5391e818fb019dec14303bb9a13ee1c10e9c447fcf0f4f3574f4d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "VENQX05PREVMQVk6IDAKbm9uLWJsb2NraW5nIGNvbm5lY3Q6IC0xLCBlcnJvciAxMDAzNQp0aGUgcmVnaXN0ZXJlZCB3YWl0IGNhbGxlZCBiYWNrOiB5ZXMKaXQgcmVzZXQgdGhlIGV2ZW50OiB5ZXMKV1NBU2VuZCBvZiAxMDAgYnl0ZXMgd2l0aCBhbiBPVkVSTEFQUEVEOiAwLCBzZW50IDEwMCwgZXZlbnQgc2lnbmFsbGVkIHllcwpXU0FFdmVudFNlbGVjdChGRF9SRUFEIHwgRkRfQ0xPU0UpOiAwOyBldmVudCBzaWduYWxsZWQgYXQgb25jZSBubwpXU0FFbnVtTmV0d29ya0V2ZW50czogMCwgZXZlbnRzIDB4MSwgZmlyc3QgZXJyb3IgMDsgZXZlbnQgcmVzZXQgeWVzCmV2ZW50IHNpZ25hbGxlZCBhZnRlciB0aGUgcmVhZCBkcmFpbmVkIHRoZSBkYXRhOiBubwp1bnJlYWQgZGF0YSBhbmQgdGhlIGV2ZW50IHdhcyBub3QgY29uc3VtZWQ6IHNpZ25hbGxlZCB5ZXMKc2VsZWN0aW5nIEZEX1dSSVRFIG9uIGEgY29ubmVjdGVkIHNvY2tldCBzaWduYWxzIGF0IG9uY2U6IHllcwpldmVudHMgMHgyMCwgZXJyb3IgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "TCP_NODELAY: 0\nnon-blocking connect: -1, error 10035\nthe registered wait called back: yes\nit reset the event: yes\nWSASend of 100 bytes with an OVERLAPPED: 0, sent 100, event signalled yes\nWSAEventSelect(FD_READ | FD_CLOSE): 0; event signalled at once no\nWSAEnumNetworkEvents: 0, events 0x1, first error 0; event reset yes\nevent signalled after the read drained the data: no\nunread data and the event was not consumed: signalled yes\nselecting FD_WRITE on a connected socket signals at once: yes\nevents 0x20, error 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 197
+    }
+  ]
+}

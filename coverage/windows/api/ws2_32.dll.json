@@ -1,4 +1,6 @@
 [
+{"symbol":"AddrInfoLists","status":"claimed","claimed_by":"chrome-qa-fixes","src":["ms-learn-chrome-net"]},
+{"symbol":"ByteOrder","status":"claimed","claimed_by":"chrome-qa-fixes","src":["ms-learn-chrome-net"]},
 {"symbol":"FreeAddrInfoEx","src":["wine-spec"]},
 {"symbol":"FreeAddrInfoExW","status":"stub","src":["wine-spec"],"seeds":["wine:ws2_32/tests/protocol.c:test_GetAddrInfoExW"]},
 {"symbol":"FreeAddrInfoW","status":"claimed","claimed_by":"impl-winsock","src":["wine-spec"],"seeds":["wine:ws2_32/tests/protocol.c:test_GetAddrInfoW"]},
@@ -38,6 +40,8 @@
 {"symbol":"WSAEnumProtocolsA","status":"stub","src":["wine-spec"],"seeds":["wine:ws2_32/tests/protocol.c:test_WSAEnumProtocolsA","wine:ws2_32/tests/sock.c:test_WSASocket"]},
 {"symbol":"WSAEnumProtocolsW","status":"stub","src":["wine-spec"],"seeds":["wine:ws2_32/tests/protocol.c:test_WSAEnumProtocolsW"]},
 {"symbol":"WSAEventSelect","status":"green","tests_visible":6,"tests_held_out":3,"src":["wine-spec"],"seeds":["wine:ws2_32/tests/sock.c:test_select_after_WSAEventSelect","wine:ws2_32/tests/afd.c:test_get_events_reset","wine:ws2_32/tests/sock.c:test_WSAEnumNetworkEvents","wine:ws2_32/tests/afd.c:test_read_write","wine:ws2_32/tests/afd.c:test_get_events","wine:ws2_32/tests/sock.c:test_fionbio","wine:ws2_32/tests/sock.c:test_sioAddressListChange","wine:ws2_32/tests/sock.c:select_events"]},
+{"symbol":"WSAEventSelect.TcpLifecycle","status":"claimed","claimed_by":"chrome-qa-fixes","src":["ms-learn-chrome-net"]},
+{"symbol":"WSAEvents","status":"claimed","claimed_by":"chrome-qa-fixes","src":["ms-learn-chrome-net"]},
 {"symbol":"WSAGetLastError","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:ws2_32/tests/protocol.c:test_WSAEnumProtocolsA","wine:ws2_32/tests/protocol.c:test_WSAEnumProtocolsW","wine:ws2_32/tests/protocol.c:test_WSAEnumNameSpaceProvidersA","wine:ws2_32/tests/protocol.c:test_WSAEnumNameSpaceProvidersW","wine:ws2_32/tests/sock.c:test_bind_bluetooth","wine:ws2_32/tests/sock.c:test_write_events","wine:ws2_32/tests/sock.c:test_udp_reset_options","wine:ws2_32/tests/sock.c:test_WithoutWSAStartup"]},
 {"symbol":"WSAGetOverlappedResult","status":"green","tests_visible":2,"tests_held_out":1,"src":["wine-spec"],"seeds":["wine:ws2_32/tests/sock.c:test_WSAGetOverlappedResult","wine:ws2_32/tests/sock.c:test_ip_pktinfo","wine:ws2_32/tests/sock.c:test_TransmitFile","wine:ws2_32/tests/sock.c:sync_recv"]},
 {"symbol":"WSAGetQOSByName","src":["wine-spec"]},

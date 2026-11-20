@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextSetShouldAntialias.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextSetShouldAntialias.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextSetShouldAntialias
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextSetShouldAntialias(context, bool) switches antialiasing of paths, rects and clips on (the default) or off for later drawing; it is part of the graphics state (restored by CGContextRestoreGState). With it off every pixel is either painted fully or not at all (alpha 0 or 255). The coverage rule observed for antialiased edges: the fraction c of a pixel an edge leaves covered (by area) is quantised to A = floor(256c + 0.5) in 0..256; the alpha of an opaque fill is A - 1 for A >= 1 (so 255 for a covered pixel and 0 below A = 1), and 0 for A = 0. For a rect edge this gives alpha 16k - 1 for coverage k/16 (0f 1f 2f ... ef ff for k = 1..16). Diagonal and curved edges follow the same rule within +-1 of the exact area. The rule without antialiasing: a pixel is painted when A >= 1, that is when the shape covers at least 1/512 of the pixel (rect widths: 8/4096 painted, 7/4096 not), so a rect covers every pixel it touches by more than that: for a fill from x0 to x0 + 1: x0 = 0 paints one column, any x0 in (0, 1) paints two, x0 = 1 one; widths .25, .5, .75, 1, 1.25, 1.5, 2, 2.4, 2.5, 2.6 from origin 0 paint 1 1 1 1 2 2 2 3 3 3 columns, from 0.25: 1 1 1 2 2 2 3 3 3 3, from 0.5: 1 1 2 2 2 2 3 3 3 4, from 0.75: 1 2 2 2 2 3 3 4 4 4. A triangle (0,0) (8,3) (0,8) with antialiasing off paints exactly the pixels that are non-zero with it on: from the top row of an 8x8 bitmap 2, 4, 5, 7, 8, 8, 6 and 3 pixels per row; with it on the same pixels hold partial alpha at the edge (b0 1c / ff f3 70 03 / ...).
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "changes a flag of the graphics state"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

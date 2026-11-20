@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSAEvents.yaml
+id: windows/api/ws2_32.dll/WSAEvents
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory; the loopback and the internet were available"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above, and the observed call trace of Chrome for Testing 157 (its network service, headless, github.com and bbc.com, specs/windows/apps/chrome/traces/net-*.trace.json: function names, counts and first-call order only). Microsoft Learn: WSACreateEvent, WSAResetEvent, WSASetEvent, WSACloseEvent, WSAGetLastError. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  WSACreateEvent, WSASetEvent, WSAResetEvent and WSACloseEvent (Chrome makes and closes about 70 events per page load): the event is a manual-reset event created non-signalled; WSAResetEvent clears it and also works on an auto-reset CreateEventW event; a NULL or invalid or closed handle gives FALSE with WSAGetLastError 6 (WSA_INVALID_HANDLE); WSACloseEvent closes any event handle.
+interface:
+  signature: "WSAEVENT WSACreateEvent(void); BOOL WSASetEvent(WSAEVENT); BOOL WSAResetEvent(WSAEVENT); BOOL WSACloseEvent(WSAEVENT)"
+rules:
+  create: "WSACreateEvent returns a handle, non-signalled; WSASetEvent: TRUE, signalled, and it stays signalled through waits (manual reset); WSAResetEvent: TRUE, non-signalled; WSAResetEvent of an event that is not set: TRUE."
+  other_events: "an auto-reset event made by CreateEventW(set): a wait consumes it; SetEvent then WSAResetEvent: TRUE, non-signalled."
+  bad_handles: "WSAResetEvent(NULL), WSAResetEvent(INVALID_HANDLE_VALUE), WSASetEvent(NULL), WSACloseEvent(NULL): FALSE with WSAGetLastError 6; WSACloseEvent(INVALID_HANDLE_VALUE) returns TRUE (observed)."
+  close: "WSACloseEvent(event): TRUE; then WSAResetEvent(event) and a second WSACloseEvent(event): FALSE with WSAGetLastError 6; WSACloseEvent of a CreateEventW event: TRUE; a duplicate of a WSA event keeps working after the original was closed."
+errors:
+  invalid: "WSA_INVALID_HANDLE (6)"
+side_effects: "none outside the test's own handles"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except the waits named in the rules"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), the same program three times (cnet_events, cnet_events_b, cnet_events_c): each makes every call and writes every third observation line (the first line is the first file's, the second the second file's, and so on), so each program is complete and the three together give the whole list. Each declares what it calls from Learn's prototypes; observations are return values, error codes, counts and relations, never handles, addresses, ports or times.
+not_covered: >
+  WSAWaitForMultipleEvents, WSAGetOverlappedResult, events with names, closing an event a wait is using.

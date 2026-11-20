@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGPathAddEllipseInRect.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGPathAddEllipseInRect.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGPathAddEllipseInRect
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGPathAddEllipseInRect(path, transform, rect) appends a closed ellipse: element 0 move to (maxX, midY) ... then four curve elements and a close; the path elements, with the exact bits of every point of a circle (0,0,10,10) and an ellipse (1,2,8,4), are in the test (the control points use the factor 0.5522847498307935 of the radius). The bounding box of the path is the rect, the path bounding box too; CGPathContainsPoint is true for the centre and false for a point outside the curve inside the rect corner. A transform argument translates the points (translate(10,20): bounding box x 10, y 20); a rect with negative size gives the standardised ellipse; a rect of width 0 or CGRectNull leaves the path empty (CGPathIsEmpty true).
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "appends to the path"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

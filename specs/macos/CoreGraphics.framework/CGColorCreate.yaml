@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGColorCreate.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGColorCreate.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGColorCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGColorCreate(space, components) makes a colour (components include alpha as the last value) that keeps the components as given (out-of-range values too): CGColorCreateGenericRGB(0.1, 0.5, 0.9, 0.7) has 4 components and alpha 0.7; CGColorCreateGenericGray(0.3, 0.6) has 2 components; CGColorGetColorSpace gives the space given; equal colours are equal under CGColorEqualToColor; CGColorGetConstantColor(kCGColorBlack) is (0, 1), White (1, 1), Clear (0, 0), as gray colours with two components. CGColorCreateCopyByMatchingToColorSpace converts: sRGB (0.2, 0.4, 0.6) to Display P3 gives approximately (0.24987, 0.39523, 0.58404) (exact floats in the tests; the last bits of two components differ between arm64 and x86_64), to generic gray (0.31065, 1); Display P3 red to sRGB is (1, 0, 0, 1) (clamped); to the same space unchanged; CGColorCreateCopyWithAlpha changes only the alpha.
+returns:
+  "colour": "a new colour"
+errors:
+  "none": "no error result"
+side_effects: "makes a colour object"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+arch_differences: "sRGB to Display P3 conversion: the last bits of two components differ (e.g. 3fd94b7940000000 on arm64, 3fd94b7900000000 on x86_64)"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

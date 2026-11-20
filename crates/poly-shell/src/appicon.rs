@@ -207,6 +207,11 @@ impl Bitmap {
             fb.width() as i32,
             fb.height() as i32,
         ));
+        // Nothing of the icon is inside: no row to draw (and the column
+        // offsets below would be outside the icon).
+        if r.is_empty() {
+            return;
+        }
         for py in r.y..r.bottom() {
             let row = &mut fb.row_mut(py as u32)[r.x as usize..r.right() as usize];
             let src = &self.pixels[(py - oy) as usize * self.width as usize..][(r.x - ox) as usize..];
@@ -671,6 +676,33 @@ mod tests {
         // Off the edge of the screen: no panic.
         b.draw(&mut fb2, Rect::new(0, 0, 10, 10), 9, 9, 3);
         b.draw(&mut fb2, Rect::new(0, 0, 10, 10), -5, -5, 3);
+    }
+
+    /// The launcher crash: a clip strip to the right of (or touching) the
+    /// icon, on the icon's rows. The intersection used to keep the strip's
+    /// rows with no width, and the source offset ran past the icon's last
+    /// row ("range start index 116 out of range for slice of length 112").
+    #[test]
+    fn a_clip_beside_the_icon_draws_nothing_and_does_not_panic() {
+        let (w, h) = (112u32, 112u32);
+        let b = Bitmap { width: w, height: h, pixels: vec![0xff11_2233; (w * h) as usize] };
+        let mut fb = MemoryFramebuffer::new(400, 300);
+        let (x, y) = (20, 30);
+        for clip in [
+            Rect::new(x + w as i32 + 4, 0, 50, 300), // right of it, all its rows
+            Rect::new(x + w as i32, y, 1, h as i32), // touching its right edge
+            Rect::new(0, y, x, h as i32),            // touching its left edge
+            Rect::new(x, y + h as i32, w as i32, 5), // touching its bottom edge
+            Rect::new(x, 0, w as i32, y),            // touching its top edge
+            Rect::new(x + 10, y + 10, 0, 50),        // zero width over it
+            Rect::new(x + 10, y + 10, 50, 0),        // zero height over it
+        ] {
+            b.draw(&mut fb, clip, x, y, w as i32);
+            assert!(fb.pixels().iter().all(|&p| p == 0), "{clip:?} drew");
+        }
+        // The same icon right of the screen's edge, the clip on screen.
+        b.draw(&mut fb, Rect::new(0, 0, 400, 300), 400, y, w as i32);
+        assert!(fb.pixels().iter().all(|&p| p == 0));
     }
 
     #[test]

@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/ByteOrder.yaml
+id: windows/api/ws2_32.dll/ByteOrder
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory; the loopback and the internet were available"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above, and the observed call trace of Chrome for Testing 157 (its network service, headless, github.com and bbc.com, specs/windows/apps/chrome/traces/net-*.trace.json: function names, counts and first-call order only). Microsoft Learn: htons, ntohs, htonl, ntohl. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  htons/ntohs swap the two bytes of a 16-bit value and htonl/ntohl the four bytes of a 32-bit value on x86 and x64 (little endian); 0 and 0xFFFF are unchanged; the pair round-trips. Chrome's network service calls ntohs about 3,400 times per page load.
+interface:
+  signature: "u_short htons(u_short); u_short ntohs(u_short); u_long htonl(u_long); u_long ntohl(u_long)"
+rules:
+  values: "htons(0x1234) = 0x3412 and ntohs(0x1234) = 0x3412; htons(0xBB01) = 0x01BB and ntohs(0x01BB) = 0xBB01; htonl(0x11223344) = 0x44332211 and ntohl(0x11223344) = 0x44332211; htons(0) = 0, htons(0xFFFF) = 0xFFFF; ntohs(htons(v)) = v."
+errors:
+  none: "the calls cannot fail and do not set WSAGetLastError"
+side_effects: "none outside the test's own handles"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except the waits named in the rules"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), the same program three times (cnet_bo, cnet_bo_b, cnet_bo_c): each makes every call and writes every third observation line (the first line is the first file's, the second the second file's, and so on), so each program is complete and the three together give the whole list. Each declares what it calls from Learn's prototypes; observations are return values, error codes, counts and relations, never handles, addresses, ports or times.
+not_covered: >
+  64-bit variants (htonll), calls before WSAStartup (the observed tests call after it).

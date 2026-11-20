@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextFillRect.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextFillRect.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextFillRect
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextFillRect(context, rect) fills the rect (in user space, through the CTM, clipped, composited with the blend mode and alpha) with the fill colour. Whole-pixel rects write exact bytes (colour (1, .5, .25) opaque -> ff 80 40 ff); rects hanging over the edges of the bitmap are clipped; width or height 0 draws nothing; a negative width/height is the same rect standardised; CGRectNull draws nothing; CGRectInfinite fills the whole bitmap. The coverage rule observed for antialiased edges: the fraction c of a pixel an edge leaves covered (by area) is quantised to A = floor(256c + 0.5) in 0..256; the alpha of an opaque fill is A - 1 for A >= 1 (so 255 for a covered pixel and 0 below A = 1), and 0 for A = 0. For a rect edge this gives alpha 16k - 1 for coverage k/16 (0f 1f 2f ... ef ff for k = 1..16). Diagonal and curved edges follow the same rule within +-1 of the exact area. Measured: width k/16 of a pixel gives alpha 0f 1f 2f 3f 4f 5f 6f 7f 8f 9f af bf cf df ef ff (k = 1..16); a 0.5 x 0.5 square in a pixel is alpha 3f; a 1.5 x 1.5 rect at (0.25, 0.25) gives alpha 8f on each of the four pixels it covers (9/16 of each); rects at fractional offsets (0.125, 0.25, 1/3, 0.5, 0.75, 0.9375) give e.g. offset 0.125: rows 8b 9f 13 / 53 5f 0b. With a colour of alpha < 1 the partial coverage multiplies it: 50% red at 50% coverage gives 40 00 00 40 on arm64 and 3f 00 00 3f on x86_64; at 25% coverage 20 00 00 20 and 1f 00 00 1f.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "writes pixels"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+arch_differences: "a partial-coverage edge with a colour alpha below 1: x86_64 is one lower (3f for 40, 1f for 20, see the summary)"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
