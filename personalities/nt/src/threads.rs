@@ -682,9 +682,18 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
         // AffinityMask.
         21 => reply(k, buf, length, ret, &1u64.to_le_bytes()),
         // SessionInformation: the session id of the PEB.
+        // SessionInformation: the caller's from its PEB; another process's is its primary token's
+        // session, which its PEB was written from (`security::write_session_id`).
         24 => {
-            let (peb, off) = k.with_state(|_, proc, _| (proc.peb, proc.layout().peb_session_id));
-            let session = abi::read_u32(k, peb + off).unwrap_or(0);
+            let session = if pid == k.caller().process {
+                let (peb, off) = k.with_state(|_, proc, _| (proc.peb, proc.layout().peb_session_id));
+                abi::read_u32(k, peb + off).unwrap_or(0)
+            } else {
+                k.with_state(|sys, _, _| {
+                    let security = &sys.objects.security;
+                    security.process_token(pid).and_then(|id| security.token(id)).map_or(0, |t| t.session)
+                })
+            };
             reply(k, buf, length, ret, &le32(session))
         }
         PROCESS_WOW64_INFORMATION => {

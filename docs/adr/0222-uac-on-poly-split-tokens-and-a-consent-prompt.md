@@ -292,9 +292,18 @@ interactive session. On the oracle a user is logged on at the console whatever t
   (`Token::uac_filtered`), whatever logon the boot's own programs have. Before, it started only for
   the standard and elevated logons (ADR 0235).
 - That is one more idle process per boot.
-- A session-0 caller has no shell window, so the chain looks for an `explorer.exe` whose token's
-  session (`TokenSessionId`) is not 0. Poly's `ProcessIdToSessionId` answers the caller's own session
-  for any process id, so it cannot tell.
+- A session-0 caller has no shell window, so the chain looks for an `explorer.exe` whose session
+  (`ProcessIdToSessionId`) is not 0.
+- `ProcessIdToSessionId` used to answer the caller's own session for any process id, and so did
+  `NtQueryInformationProcess` class 24 (it read the caller's PEB whatever the handle named). Both now
+  answer for the process asked about:
+  - the caller's own from its PEB;
+  - another process's from class 24, which gives that process's primary token's session (the value
+    its PEB was written from);
+  - an unused id fails with `OpenProcess`'s `ERROR_INVALID_PARAMETER`.
+
+  The rules are in WTSGetActiveConsoleSessionId.yaml (`child`, `bad_pid`) and
+  NtQueryInformationProcess.yaml (`session`).
 
 **Known gap, deferred:** `CreateProcessWithTokenW` `cpwt_ssh_session0`. On Windows, programs of the
 SSH logon (session 0) live on their logon's own window station (`Service-0x…$`). Poly puts every

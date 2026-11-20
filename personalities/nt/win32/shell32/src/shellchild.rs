@@ -21,19 +21,13 @@ unsafe extern "system" {
     fn GetWindowThreadProcessId(hwnd: usize, pid: *mut u32) -> u32;
 }
 
-#[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
-#[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
-unsafe extern "system" {
-    fn OpenProcessToken(process: usize, access: u32, token: *mut usize) -> i32;
-    fn GetTokenInformation(token: *mut u8, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> i32;
-}
-
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn OpenProcess(access: u32, inherit: i32, pid: u32) -> usize;
     fn CloseHandle(h: usize) -> i32;
     fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> usize;
+    fn ProcessIdToSessionId(pid: u32, session: *mut u32) -> i32;
     fn Process32FirstW(snapshot: usize, entry: *mut u8) -> i32;
     fn Process32NextW(snapshot: usize, entry: *mut u8) -> i32;
 
@@ -81,33 +75,6 @@ const SI_FLAGS_AT: usize = if core::mem::size_of::<usize>() == 8 { 60 } else { 4
 const SI_SHOW_AT: usize = SI_FLAGS_AT + 4;
 const STARTF_USESHOWWINDOW: u32 = 1;
 
-/// `TOKEN_QUERY`, `TokenSessionId` (`winnt.h`).
-const TOKEN_QUERY: u32 = 0x0008;
-const TOKEN_SESSION_ID: u32 = 12;
-
-/// The session of process `pid`: its token's (`TokenSessionId`).
-fn session_of(pid: u32) -> Option<u32> {
-    // SAFETY: plain calls with out-pointers; both handles are closed.
-    unsafe {
-        let p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if p == 0 {
-            return None;
-        }
-        let mut token = 0usize;
-        let mut session = None;
-        if OpenProcessToken(p, TOKEN_QUERY, &mut token) != 0 {
-            let mut b = [0u8; 4];
-            let mut got = 0u32;
-            if GetTokenInformation(token as *mut u8, TOKEN_SESSION_ID, b.as_mut_ptr(), 4, &mut got) != 0 {
-                session = Some(u32::from_le_bytes(b));
-            }
-            CloseHandle(token);
-        }
-        CloseHandle(p);
-        session
-    }
-}
-
 /// Whether `name` (UTF-16, any case) is `explorer.exe`.
 fn is_explorer(name: &[u16]) -> bool {
     let want = b"explorer.exe";
@@ -143,7 +110,8 @@ fn shell_pid() -> Option<u32> {
                 .map(|b| u16::from_le_bytes([b[0], b[1]]))
                 .take_while(|&c| c != 0)
                 .collect();
-            if is_explorer(&exe) && session_of(id).is_some_and(|s| s != 0) {
+            let mut session = 0u32;
+            if is_explorer(&exe) && ProcessIdToSessionId(id, &mut session) != 0 && session != 0 {
                 found = Some(id);
                 break;
             }
