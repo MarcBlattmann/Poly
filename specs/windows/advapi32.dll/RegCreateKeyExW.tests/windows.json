@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "wv_create_classes",
-      "exe_sha256": "4fd4577a9f481579f999856d2dad5306d3a8bb4887788ca9c86661213126d463",
+      "exe_sha256": "ffaeaf63d6f974014e1cd2ee75648b4a0b405cd1b9b5581520677e31654adc5d",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -26,7 +26,7 @@
     },
     {
       "name": "wv_create_hkcr",
-      "exe_sha256": "e8185f2d64e49e7f2f21d3e67f163db498eac4bbbfc57d714cf3c139286cbe46",
+      "exe_sha256": "f380b802e1b104d9f237105b351acaf0db03dfe0a121bb693d448d68d90e4956",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -40,7 +40,7 @@
     },
     {
       "name": "wv_create_shared",
-      "exe_sha256": "032bd0f2f4f2280adc5de7844540762c118559a3ce5f3593abb28a9ab458c5d6",
+      "exe_sha256": "8a111d4bc287e0171ef0d34a28fc38c0701d0b338c3d9904c2968247cddb7bff",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -54,7 +54,7 @@
     },
     {
       "name": "wv_create_software",
-      "exe_sha256": "ce5ed4f5e5ee196ddb535706d727ffb4ad0c63fe3951a890917e437e22eed92f",
+      "exe_sha256": "dc16375bf6fff51463511cf4ed1589432c0a36c093e0e43fb569c8de0468affb",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
