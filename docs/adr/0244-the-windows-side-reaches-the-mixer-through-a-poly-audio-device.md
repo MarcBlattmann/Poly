@@ -47,7 +47,7 @@ the personality share one definition:
 | `RESET` | | | stops, drops the frames, counts from 0, cancels the waits |
 | `SET_GAIN` | 1–8 gains (16.16) | | per channel; one value is all channels |
 | `QUERY` | | written, played, silence, underruns, running, buffer, queued, device rate/period/periods | |
-| `WAIT` | a played-frame count | the count reached | finishes when the mixer has taken that many frames |
+| `WAIT` | a played-frame count | the count reached | finishes when the device has played that many frames |
 
 - **`WAIT` instead of an event set by the kernel.** It is an ordinary NT request: it completes at once when the
   count is reached, else it is pending and completes later through its event, its APC, the handle's completion port
@@ -55,7 +55,7 @@ the personality share one definition:
   is a wait for the next period's frame count, set by the DLL's own thread; the kernel never holds a reference to
   a program's event, and cancellation, `CancelIo` and the end of a thread work as for every other request. The
   personality parks the request and hands it to the kernel's `nt-audio` worker (`NtKernel::audio_pend`), which
-  completes it under the NT lock when the audio thread says the mixer took frames, as the `nt-afd` worker does
+  completes it under the NT lock when the audio thread says frames were played, as the `nt-afd` worker does
   for sockets.
 - **The frames are copied, not shared.** `WRITE` carries them in its input buffer. A shared section would save one
   copy of at most a few hundred KB a second and needs a mapping per process, its own lifetime and a second
@@ -85,5 +85,9 @@ the personality share one definition:
 - A program sees only what Poly's DLLs give it; the device is not a Windows interface and no Windows program
   should open it itself.
 - One more client kind in the server: its lock order is the card's lock, then a stream's.
-- Positions count frames the mixer took, not frames the speaker played: the device's period and periods
-  (`QUERY`) let a DLL estimate what is still between the mixer and the speaker.
+- **Played means played by the device.** The mixer runs several device periods ahead of the speaker (four of 20 ms
+  on virtio-sound). A stream's frames count as played when the device finished the period they went out in: each
+  stream notes its frames per period in flight, and the server credits them as the device frees periods (all of
+  them when it stops). `queued` stays the ring's occupancy (written and not yet taken), so a writer sees room as
+  soon as the mixer took frames. A first version counted frames when the mixer took them; `waveOut`'s sheets
+  (W1) showed buffers reported done 70 ms early, so this ADR was amended with W1.
