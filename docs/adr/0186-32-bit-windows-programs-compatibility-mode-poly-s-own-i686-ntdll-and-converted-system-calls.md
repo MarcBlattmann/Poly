@@ -613,3 +613,45 @@ declared the same 32-byte `MSG` and so never noticed.
   `ShowScrollBar`, `EnableScrollBar`, the `SBM_*` messages) are implemented for both widths
   (`user32/src/scroll.rs`, `poly_win32k::scroll`; `SCROLLINFO` has no pointers). Still fail
   stubs, without a sheet: `GetWindowInfo`, `GetTitleBarInfo`, `GetScrollBarInfo`.
+
+## Addendum: registry views follow the open key (`impl-win-wow64-registry`)
+
+The sheets of `spec-win-wow64-registry` (`RegCreateKeyExW`, `RegCreateKeyExA`, `RegCreateKeyW`,
+`RegOpenKeyW`, `RegDeleteKeyExW`, `RegDeleteKeyW`, `NtCreateKey`, `NtOpenKey`, `NtQueryKey`,
+observed with 32-bit programs on Windows 11) replace stage 2's rule "the full path, in the
+call's view" where they disagree. Google's 32-bit updater (B7) made its class key one level at a
+time (`Software`, then `Classes`, `CLSID`, `{GUID}`) and opened the full path in one call; Poly
+put the two on different keys (`SOFTWARE\Wow6432Node\Classes\CLSID\...` and
+`SOFTWARE\Classes\Wow6432Node\CLSID\...`).
+
+- **The view belongs to the open key.** `apply_view` returns the view it chose, and
+  `NtRegistry` keeps it per open instance (removed when the key object goes): a key opened or
+  made with `KEY_WOW64_64KEY` is native, one with `KEY_WOW64_32KEY` is in the 32-bit view, one
+  with no bit has the view of the key it was relative to, or the caller's default (which is not
+  kept: `HKLM` that `kernelbase` opens has the view of whoever uses it). A call with no bit takes
+  the open key's view. A bit in the call wins, except that `KEY_WOW64_64KEY` below a key that
+  physically lies below `WOW6432Node` stays in the 32-bit view (the view is part of the key's
+  place: `Software` opened in the 32-bit view *is* `SOFTWARE\WOW6432Node`, as `NtQueryKey`
+  says). An empty name is the open key again, in its view.
+- **In the 32-bit view** the full path first loses the `WOW6432Node` of the 32-bit places (right
+  below `\REGISTRY\MACHINE\SOFTWARE` and right below a `Classes` key), then is redirected as
+  before (`wow64::x86_target`). So a path that names `WOW6432Node` is the physical key and is not
+  moved again, and `SOFTWARE\WOW6432Node\Classes` is the shared `Classes` for a 32-bit caller,
+  whose `CLSID` is `Classes\WOW6432Node\CLSID`: the updater's chain and its one-call open now
+  reach the same key. A `WOW6432Node` key anywhere else (`HKCU\Software\...`) is an ordinary key.
+- **The node is spelled `WOW6432Node`**, as Windows stores it (`NtQueryKey.yaml`), and the
+  default software hive also has `Classes\WOW6432Node` with the five redirected subkeys (a
+  32-bit `CLSID` exists on Windows: `RegCreateKeyExW.yaml` `level_by_level`). A hive file made
+  before keeps its old spelling (names match without regard to case).
+- **`kernelbase`**: `RegCreateKeyExW` makes the levels on the way with `MAXIMUM_ALLOWED` and the
+  call's view bits (`poly_kernelbase::registry::level_access`), so every level is in the same
+  view. Below `HKEY_CLASSES_ROOT`, Windows makes a 32-bit process's keys in the 32-bit view
+  whatever the bit, unless the key was opened through `HKEY_CLASSES_ROOT` with `KEY_WOW64_64KEY`
+  and the create has it too (`RegCreateKeyExW.yaml` `hkcr`; opening and deleting follow the bits
+  as below `HKLM`). The 32-bit `kernelbase` keeps the keys it opened or made through
+  `HKEY_CLASSES_ROOT` in a small table (until `RegCloseKey`) and turns such a create's bits into
+  `KEY_WOW64_32KEY` (`classes_create_access`). `advapi32` has `RegCreateKeyW/A` and
+  `RegOpenKeyW/A` (`MAXIMUM_ALLOWED`, no view bit, an empty or null name returns `hKey`).
+- **Not covered by the sheets, chosen alike**: a 64-bit process follows the same rules with its
+  default view native (`KEY_WOW64_32KEY` on a key makes the keys below it 32-bit ones); keys
+  opened below a key that came through `HKEY_CLASSES_ROOT` are not in the table.
