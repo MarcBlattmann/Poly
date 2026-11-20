@@ -84,6 +84,7 @@ pub mod eventlog;
 pub mod exports;
 pub mod file;
 pub mod fileex;
+pub mod fileinfo;
 pub mod knownfolder;
 pub mod kuser;
 pub mod locale;
