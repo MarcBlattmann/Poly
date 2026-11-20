@@ -39,6 +39,14 @@ pub mod nr {
     pub const GETUID: u64 = 24;
     pub const GETEUID: u64 = 25;
     pub const KILL: u64 = 37;
+    pub const GETTIMEOFDAY: u64 = 116;
+    pub const GETRUSAGE: u64 = 117;
+    pub const UNLINK: u64 = 10;
+    pub const ACCESS: u64 = 33;
+    pub const UMASK: u64 = 60;
+    pub const FSYNC: u64 = 95;
+    pub const MKDIR: u64 = 136;
+    pub const RMDIR: u64 = 137;
     pub const GETPPID: u64 = 39;
     pub const PIPE: u64 = 42;
     pub const GETEGID: u64 = 43;
@@ -188,6 +196,22 @@ pub trait BsdKernel {
     fn path_of(&self, _fd: i32) -> Result<Vec<u8>, u32> {
         Err(ENOSYS32)
     }
+    /// Remove the file (or with `dir`, the empty directory) at `path`.
+    fn unlink(&mut self, _path: &[u8], _dir: bool) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// Make the directory `path`.
+    fn mkdir(&mut self, _path: &[u8], _mode: u32) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// The (user, system) processor time of the process, or of its waited-
+    /// for children, in nanoseconds.
+    fn cpu_times(&self, _children: bool) -> (u64, u64) {
+        (0, 0)
+    }
+
     fn chdir(&mut self, _path: &[u8]) -> Result<(), u32> {
         Err(ENOSYS32)
     }
@@ -208,6 +232,11 @@ pub trait BsdKernel {
     }
     fn page_size(&self) -> u64 {
         4096
+    }
+
+    /// Nanoseconds since the Epoch (UTC); 0 if the kernel has no clock.
+    fn realtime_ns(&self) -> u64 {
+        0
     }
 
     fn pid(&self) -> u32 {
@@ -402,6 +431,14 @@ pub fn call(k: &mut dyn BsdKernel, number: u64, a: &[u64; 8]) -> Option<Result<R
             put(k, a[0], &pending.to_le_bytes()).and_then(|()| ok(0))
         }
         KILL => kill(k, a[0] as i32, a[1] as i32),
+        GETTIMEOFDAY => gettimeofday(k, a[0], a[1]),
+        GETRUSAGE => getrusage(k, a[0] as i32, a[1]),
+        UNLINK | RMDIR => read_cstr(k, a[0], PATH_MAX).and_then(|p| k.unlink(&p, number == RMDIR)).and_then(|()| ok(0)),
+        MKDIR => read_cstr(k, a[0], PATH_MAX).and_then(|p| k.mkdir(&p, a[1] as u32 & 0o7777)).and_then(|()| ok(0)),
+        ACCESS => access(k, a[0], a[1] as u32),
+        // No permission model yet: the mask is always the usual one.
+        UMASK => ok(0o022),
+        FSYNC => k.status(fd).and_then(|_| ok(0)),
         POSIX_SPAWN => posix_spawn(k, a),
         WAIT4 => wait4(k, a[0] as i32, a[1], a[2] as u32, a[3]),
         _ => return None,
@@ -731,6 +768,50 @@ fn sigprocmask(k: &mut dyn BsdKernel, how: u32, set: u64, old: u64) -> Result<Re
         let _ = k.copy_out(old, &prev.to_le_bytes());
     }
     ok(0)
+}
+
+/// `gettimeofday(tv, tz)` (POSIX; no spec sheet yet, ADR 0257 addendum):
+/// the time into `struct timeval` {seconds (8), microseconds (4), padding
+/// (4)} (`<sys/_types/_timeval.h>`), a zero `struct timezone` (two ints)
+/// if one is asked for; 0.
+fn gettimeofday(k: &mut dyn BsdKernel, tv: u64, tz: u64) -> Result<Ret, u32> {
+    let ns = k.realtime_ns();
+    if tv != 0 {
+        let mut b = [0u8; 16];
+        b[..8].copy_from_slice(&((ns / 1_000_000_000) as i64).to_le_bytes());
+        b[8..12].copy_from_slice(&((ns % 1_000_000_000 / 1000) as i32).to_le_bytes());
+        put(k, tv, &b)?;
+    }
+    if tz != 0 {
+        put(k, tz, &[0; 8])?;
+    }
+    ok(0)
+}
+
+/// `getrusage(who, usage)` (POSIX; ADR 0257 addendum): `RUSAGE_SELF` (0)
+/// or `RUSAGE_CHILDREN` (-1); `struct rusage` (`<sys/resource.h>`, 144
+/// bytes) with the user and system times and every count 0.
+fn getrusage(k: &mut dyn BsdKernel, who: i32, out: u64) -> Result<Ret, u32> {
+    if who != 0 && who != -1 {
+        return Err(EINVAL);
+    }
+    let (user, system) = k.cpu_times(who == -1);
+    let mut b = [0u8; 144];
+    for (at, ns) in [(0, user), (16, system)] {
+        b[at..at + 8].copy_from_slice(&((ns / 1_000_000_000) as i64).to_le_bytes());
+        b[at + 8..at + 12].copy_from_slice(&((ns % 1_000_000_000 / 1000) as i32).to_le_bytes());
+    }
+    put(k, out, &b).and_then(|()| ok(0))
+}
+
+/// `access(path, mode)`: whether the file exists; the permission bits are
+/// not checked yet (Poly runs programs as one user).
+fn access(k: &mut dyn BsdKernel, path: u64, mode: u32) -> Result<Ret, u32> {
+    if mode & !7 != 0 {
+        return Err(EINVAL);
+    }
+    let p = read_cstr(k, path, PATH_MAX)?;
+    k.stat(StatOf::Path { dirfd: file::AT_FDCWD, path: &p, follow: true }).and_then(|_| ok(0))
 }
 
 fn kill(k: &mut dyn BsdKernel, pid: i32, sig: i32) -> Result<Ret, u32> {

@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
     uint32_t size = sizeof path;
     int got = _NSGetExecutablePath(path, &size);
     check("_NSGetExecutablePath and _dyld_image_count",
-          got == 0 && strcmp(path, "/bin/mhello-libsystem") == 0 && _dyld_image_count() == 8 &&
+          got == 0 && strcmp(path, "/bin/mhello-libsystem") == 0 && _dyld_image_count() == 11 &&
               (const void *)_dyld_get_image_header(0) == (const void *)&_mh_execute_header &&
               strcmp(_dyld_get_image_name(0), "/bin/mhello-libsystem") == 0);
 

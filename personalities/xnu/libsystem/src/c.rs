@@ -418,6 +418,7 @@ variadic! {
     "snprintf" => "vsnprintf", 3, "rcx", "x3";
     "__sprintf_chk" => "__vsprintf_chk", 4, "r8", "x4";
     "__snprintf_chk" => "__vsnprintf_chk", 5, "r9", "x5";
+    "sscanf" => "vsscanf", 2, "rdx", "x2";
 }
 
 /// The result of a `printf` call: the count, or -1 with `errno`.

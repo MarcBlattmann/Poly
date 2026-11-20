@@ -168,6 +168,55 @@ bsd! {
     "__ulock_wait2" = 544,
 }
 
+// More wrappers for SDK-linked command-line programs (ADR 0257 addendum):
+// call numbers from the SDK's <sys/syscall.h>; the kernel answers ENOSYS
+// where it does not have the call yet.
+bsd! {
+    "unlink" = 10,
+    "chmod" = 15,
+    "getuid" = 24,
+    "geteuid" = 25,
+    "access" = 33,
+    "getppid" = 39,
+    "dup" = 41,
+    "getegid" = 43,
+    "__sigaction" = 46,
+    "getgid" = 47,
+    "symlink" = 57,
+    "readlink" = 58,
+    "umask" = 60,
+    "fsync" = 95,
+    "getrusage" = 117,
+    "fchown" = 123,
+    "fchmod" = 124,
+    "flock" = 131,
+    "mkdir" = 136,
+    "rmdir" = 137,
+    "utimes" = 138,
+    "futimes" = 139,
+    "gethostuuid" = 142,
+    "pread" = 153,
+    "pwrite" = 154,
+    "lseek" = 199,
+    "truncate" = 200,
+    "ftruncate" = 201,
+    "fsctl" = 242,
+    "statfs64" = 345,
+    "fstatfs64" = 346,
+}
+
+#[cfg(target_arch = "x86_64")]
+bsd! {
+    "statfs$INODE64" = 345,
+    "fstatfs$INODE64" = 346,
+}
+
+#[cfg(target_arch = "aarch64")]
+bsd! {
+    "statfs" = 345,
+    "fstatfs" = 346,
+}
+
 mach! {
     10 => ["_kernelrpc_mach_vm_allocate_trap", "mach_vm_allocate", "vm_allocate"],
     12 => ["_kernelrpc_mach_vm_deallocate_trap", "mach_vm_deallocate", "vm_deallocate"],

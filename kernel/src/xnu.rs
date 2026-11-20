@@ -437,6 +437,20 @@ impl BsdKernel for Thread<'_> {
         self.process.files.chdir(path).map_err(de)
     }
 
+    fn unlink(&mut self, path: &[u8], dir: bool) -> Result<(), u32> {
+        let flags = if dir { crate::fs::AT_REMOVEDIR } else { 0 };
+        self.process.files.unlinkat(crate::fs::AT_FDCWD, path, flags).map_err(de)
+    }
+
+    fn mkdir(&mut self, path: &[u8], mode: u32) -> Result<(), u32> {
+        self.process.files.mkdirat(crate::fs::AT_FDCWD, path, mode as u16).map_err(de)
+    }
+
+    fn cpu_times(&self, children: bool) -> (u64, u64) {
+        let t = if children { self.process.cpu.children() } else { crate::cputime::process(self.process) };
+        (t.user_ns, t.system_ns)
+    }
+
     fn fchdir(&mut self, fd: i32) -> Result<(), u32> {
         self.process.files.fchdir(fd).map_err(de)
     }
@@ -488,6 +502,10 @@ impl BsdKernel for Thread<'_> {
 
     fn page_size(&self) -> u64 {
         4096
+    }
+
+    fn realtime_ns(&self) -> u64 {
+        crate::time::realtime_ns()
     }
 
     fn pid(&self) -> u32 {

@@ -229,11 +229,7 @@ pub unsafe fn sscanf(input: &[u8], fmt: &[u8], args: &mut dyn Args) -> i32 {
                         }
                     }
                 }
-                let w = if width == 0 {
-                    if conv == b'c' { 1 } else { usize::MAX }
-                } else {
-                    width
-                };
+                let w = if width == 0 { if conv == b'c' { 1 } else { usize::MAX } } else { width };
                 let mut n = 0;
                 while n < w && n < rest.len() {
                     let b = rest[n];
@@ -281,7 +277,9 @@ mod tests {
         let (mut n, mut pg) = (0i32, 0i32);
         let ptrs = [&raw mut n as u64, &raw mut pg as u64];
         // SAFETY: two int pointers for two %d.
-        let r = unsafe { sscanf(b"| size 4096 pagesize 512", b"| size %d pagesize %d", &mut Slots { ints: &ptrs, doubles: &[] }) };
+        let r = unsafe {
+            sscanf(b"| size 4096 pagesize 512", b"| size %d pagesize %d", &mut Slots { ints: &ptrs, doubles: &[] })
+        };
         assert_eq!((r, n, pg), (2, 4096, 512));
         let mut v = [0u32; 4];
         let ptrs = v.each_mut().map(|p| p as *mut u32 as u64);
@@ -313,7 +311,13 @@ mod tests {
         let mut set = [0u8; 16];
         let mut d = 0f64;
         let mut fl = 0f32;
-        let ptrs = [s.as_mut_ptr() as u64, c.as_mut_ptr() as u64, set.as_mut_ptr() as u64, &raw mut d as u64, &raw mut fl as u64];
+        let ptrs = [
+            s.as_mut_ptr() as u64,
+            c.as_mut_ptr() as u64,
+            set.as_mut_ptr() as u64,
+            &raw mut d as u64,
+            &raw mut fl as u64,
+        ];
         // SAFETY: buffers large enough, a double and a float.
         let r = unsafe {
             sscanf(b"  word xyabc123 2.5e1 0.5", b"%s %2c%[a-c]%*d %lf %f", &mut Slots { ints: &ptrs, doubles: &[] })

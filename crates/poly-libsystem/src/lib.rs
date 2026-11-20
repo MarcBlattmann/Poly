@@ -15,6 +15,7 @@ extern crate alloc;
 pub mod atexit;
 pub mod cstr;
 pub mod ctype;
+pub mod errstr;
 pub mod heap;
 pub mod num;
 pub mod printf;

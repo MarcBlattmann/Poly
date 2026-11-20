@@ -1,4 +1,6 @@
 _fstat$INODE64
 _fstatat$INODE64
+_fstatfs$INODE64
 _lstat$INODE64
 _stat$INODE64
+_statfs$INODE64

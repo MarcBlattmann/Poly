@@ -25,9 +25,13 @@ c = []
 malloc = []
 pthread = []
 dyld = []
+m = []
+info = []
+compiler_rt = []
 
 [dependencies]
 poly-libsystem = { path = "../../../crates/poly-libsystem" }
+poly-libm = { path = "../../../crates/poly-libm" }
 
 [profile.release]
 panic = "abort"

@@ -25,7 +25,19 @@ pub struct Tm {
 
 impl Default for Tm {
     fn default() -> Self {
-        Tm { sec: 0, min: 0, hour: 0, mday: 0, mon: 0, year: 0, wday: 0, yday: 0, isdst: 0, gmtoff: 0, zone: core::ptr::null() }
+        Tm {
+            sec: 0,
+            min: 0,
+            hour: 0,
+            mday: 0,
+            mon: 0,
+            year: 0,
+            wday: 0,
+            yday: 0,
+            isdst: 0,
+            gmtoff: 0,
+            zone: core::ptr::null(),
+        }
     }
 }
 
@@ -322,9 +334,14 @@ mod tests {
     fn strftime_c_locale() {
         let t = 951_827_696; // Tue Feb 29 12:34:56 2000
         assert_eq!(fmt("%c", t), "Tue Feb 29 12:34:56 2000");
-        assert_eq!(fmt("%Y-%m-%d %H:%M:%S %j %a %A %b %B %p %I %y %C", t),
-            "2000-02-29 12:34:56 060 Tue Tuesday Feb February PM 12 00 20");
-        assert_eq!(fmt("%x %X %D %F %T %R %e|%k|%l", t), "02/29/00 12:34:56 02/29/00 2000-02-29 12:34:56 12:34 29|12|12");
+        assert_eq!(
+            fmt("%Y-%m-%d %H:%M:%S %j %a %A %b %B %p %I %y %C", t),
+            "2000-02-29 12:34:56 060 Tue Tuesday Feb February PM 12 00 20"
+        );
+        assert_eq!(
+            fmt("%x %X %D %F %T %R %e|%k|%l", t),
+            "02/29/00 12:34:56 02/29/00 2000-02-29 12:34:56 12:34 29|12|12"
+        );
         assert_eq!(fmt("%z %Z %% %u %w %s", t), "+0000 UTC % 2 2 951827696");
         // ISO weeks: 2021-01-03 (a Sunday) is in week 53 of 2020.
         let t = days_from_civil(2021, 1, 3) * 86_400;

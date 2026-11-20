@@ -58,7 +58,7 @@ struct Lib {
 /// The libraries in link order (each after those it links against).
 /// Versions: the SDK's `.tbd` files (`current-version`; compatibility 1.0.0
 /// where the file gives none, libdyld 0).
-const LIBS: [Lib; 7] = [
+const LIBS: [Lib; 10] = [
     Lib {
         feature: "kernel",
         name: "libsystem_kernel",
@@ -97,6 +97,30 @@ const LIBS: [Lib; 7] = [
         install: "/usr/lib/system/libsystem_malloc.dylib",
         compatibility: "1",
         current: "886.41.1",
+        links: &["libsystem_kernel"],
+    },
+    Lib {
+        feature: "m",
+        name: "libsystem_m",
+        install: "/usr/lib/system/libsystem_m.dylib",
+        compatibility: "1",
+        current: "3326.0.1",
+        links: &[],
+    },
+    Lib {
+        feature: "compiler_rt",
+        name: "libcompiler_rt",
+        install: "/usr/lib/system/libcompiler_rt.dylib",
+        compatibility: "1",
+        current: "103.4",
+        links: &[],
+    },
+    Lib {
+        feature: "info",
+        name: "libsystem_info",
+        install: "/usr/lib/system/libsystem_info.dylib",
+        compatibility: "1",
+        current: "1",
         links: &["libsystem_kernel"],
     },
     Lib {

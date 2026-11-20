@@ -63,6 +63,10 @@ impl Fake {
 }
 
 impl BsdKernel for Fake {
+    fn realtime_ns(&self) -> u64 {
+        1_700_000_000_123_456_789
+    }
+
     fn copy_in(&self, addr: u64, buf: &mut [u8]) -> Result<(), ()> {
         let o = addr.checked_sub(BASE).ok_or(())? as usize;
         let src = self.mem.get(o..o + buf.len()).ok_or(())?;
@@ -544,4 +548,16 @@ fn registers() {
     assert_eq!(dispatch_with(&mut k, &mut r), None);
     let mut r = SyscallRegs { rax: 0x100_001f, ..SyscallRegs::default() };
     assert_eq!(dispatch_with(&mut k, &mut r), None);
+}
+
+#[test]
+fn gettimeofday_fills_a_timeval_and_a_zero_zone() {
+    let mut k = Fake::new();
+    k.poke(BUF + 16, &[0xff; 8]);
+    assert_eq!(k.call(nr::GETTIMEOFDAY, &[BUF, BUF + 16]).unwrap().value, 0);
+    assert_eq!(k.u64_at(BUF), 1_700_000_000);
+    assert_eq!(u32::from_le_bytes(k.peek(BUF + 8, 4).try_into().unwrap()), 123_456);
+    assert_eq!(k.peek(BUF + 16, 8), &[0; 8]);
+    // Both pointers may be null.
+    assert_eq!(k.call(nr::GETTIMEOFDAY, &[0, 0]).unwrap().value, 0);
 }

@@ -23,8 +23,10 @@ fn read(rel: &str) -> Result<Vec<u8>> {
 /// The boot test group `macho-a64-cli`.
 pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let hello = read("tests/macos/libsystem/hello_a64")?;
-    let programs: Vec<(&str, &[u8])> = vec![("mhello-libsystem", &hello)];
+    let lua = read("tests/a64/cli/bin/lua")?;
+    let programs: Vec<(&str, &[u8])> = vec![("mhello-libsystem", &hello), ("lua", &lua)];
     let mut tree = Tree { files: native::runtime_files()?, ..Default::default() };
+    tree.files.push(("usr/share/poly-a64/hello.lua".into(), 0o644, read("tests/a64/cli/hello.lua")?));
     for (path, bytes) in libsystem::tree_files()? {
         tree.files.push((path, 0o755, bytes));
     }
@@ -38,5 +40,9 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let b = run_ending(kernel, syms, &image, "mhello-libsystem", &[], &[], "code=0")?;
     let lines: Vec<String> = libsystem::HELLO_LINES.iter().map(|l| l.to_string()).collect();
     in_order("mhello-libsystem", &b.output, &lines)?;
+
+    eprintln!("==> boot test: Lua 5.4 (built from source for arm64) runs a script on Poly through the translator");
+    let b = run_ending(kernel, syms, &image, "lua", &["/usr/share/poly-a64/hello.lua"], &["POLY_LUA=yes"], "code=0")?;
+    in_order("lua", &b.output, &["lua: done, 0 failed".to_string()])?;
     Ok(())
 }

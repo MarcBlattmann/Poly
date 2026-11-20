@@ -6,8 +6,13 @@ version = 4
 name = "libsystem"
 version = "0.0.1"
 dependencies = [
+ "poly-libm",
  "poly-libsystem",
 ]
+
+[[package]]
+name = "poly-libm"
+version = "0.0.1"
 
 [[package]]
 name = "poly-libsystem"
