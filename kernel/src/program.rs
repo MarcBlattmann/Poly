@@ -128,6 +128,21 @@ impl Prepared {
     }
 }
 
+/// The arguments a `#!` script's interpreter gets: Linux's (the rest of the
+/// line as one argument), or with `darwin` each blank-separated word.
+fn script_argv(line: &shebang::Shebang, path: &[u8], argv: &[Vec<u8>], darwin: bool) -> Vec<Vec<u8>> {
+    if !darwin {
+        return shebang::script_argv(line, path, argv);
+    }
+    let mut out = alloc::vec![line.interpreter.clone()];
+    if let Some(arg) = &line.arg {
+        out.extend(arg.split(|b| *b == b' ' || *b == b'\t').filter(|w| !w.is_empty()).map(<[u8]>::to_vec));
+    }
+    out.push(path.to_vec());
+    out.extend(argv.iter().skip(1).cloned());
+    out
+}
+
 /// Everything [`exec_path`] does but starting the thread.
 pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Result<Prepared, ExecPathError> {
     prepare_as(path, argv, envp, traced, None)
@@ -197,9 +212,13 @@ fn prepare_full(
             return Err(ExecPathError::Unsupported("#! scripts nested too deep".into()));
         }
         depth += 1;
+        // A macOS caller's `#!` line gives each word after the interpreter
+        // as an argument of its own ("#!prog child 3": "child", "3"; the
+        // execve sheet); Linux passes the rest of the line as one.
+        let darwin = parent.is_some_and(|p| p.xnu.is_some());
         let args = match &script {
-            Some((p, a)) => shebang::script_argv(&line, p, a),
-            None => shebang::script_argv(&line, path, &argv.iter().map(|a| a.to_vec()).collect::<Vec<_>>()),
+            Some((p, a)) => script_argv(&line, p, a, darwin),
+            None => script_argv(&line, path, &argv.iter().map(|a| a.to_vec()).collect::<Vec<_>>(), darwin),
         };
         script = Some((line.interpreter, args));
     };
@@ -390,7 +409,8 @@ pub fn run_init(boot: &BootInfo) -> bool {
         .chain(boot.args(testrun::INIT_ENV).map(String::from))
         .collect();
     let env: Vec<&[u8]> = env.iter().map(|s| s.as_bytes()).collect();
-    match identity.and_then(|id| run_first(path, &args, &env, traced, id.as_ref())) {
+    let cwd = boot.arg(crate::testinit::CWD_ARG);
+    match identity.and_then(|id| run_first(path, &args, &env, traced, id.as_ref(), cwd)) {
         Ok((pid, status)) => {
             crate::testinit::report_output_files(boot);
             testrun::exit(pid, status, crate::nt::take_exit_status(pid));
@@ -408,13 +428,14 @@ pub fn run_init(boot: &BootInfo) -> bool {
 }
 
 /// The first program with `args` after its path, as `identity` if the boot
-/// gave one (ADR 0081).
+/// gave one (ADR 0081), in the working directory `cwd` if one was given.
 fn run_first(
     path: &str,
     args: &[&str],
     env: &[&[u8]],
     traced: bool,
     identity: Option<&crate::testinit::Identity>,
+    cwd: Option<&str>,
 ) -> Result<(u32, ExitStatus), ExecPathError> {
     let argv: Vec<&[u8]> = core::iter::once(path).chain(args.iter().copied()).map(str::as_bytes).collect();
     // A traced program runs as the child of the kernel's init (ADR 0064).
@@ -427,6 +448,10 @@ fn run_first(
     }
     if let Some(id) = identity {
         crate::testinit::apply(prepared.process(), id);
+    }
+    // `poly.test.cwd`: the program starts in that directory, made for it.
+    if let Some(dir) = cwd {
+        crate::testinit::enter(prepared.process(), dir.as_bytes(), identity);
     }
     // An NT program's full NTSTATUS goes into its POLY-EXIT record.
     if let Prepared::Nt { process, .. } = &prepared {

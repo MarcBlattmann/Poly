@@ -70,8 +70,14 @@ pub fn to_frame(x: &[u64; 31], sp: u64) -> SyscallRegs {
 /// Write a handled frame back: `x0` from `rax`, and for BSD calls the
 /// carry flag.
 pub fn from_frame(frame: &SyscallRegs, x16: u64, x: &mut [u64; 31], nzcv: &mut u32) {
-    let (class, _) = decode(x16);
+    let (class, number) = decode(x16);
     x[0] = frame.rax;
+    // The calls with a second result return it in x1 (fork: 1 in the
+    // child; pipe: the write end); for the others rdx still holds the third
+    // argument and x1 stays.
+    if class == Class::Bsd && frame.rflags & RFLAGS_CF == 0 && crate::bsd::has_second_result(number) {
+        x[1] = frame.rdx;
+    }
     if class == Class::Bsd {
         if frame.rflags & RFLAGS_CF != 0 {
             *nzcv |= NZCV_C;

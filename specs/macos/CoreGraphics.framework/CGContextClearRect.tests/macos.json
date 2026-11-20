@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgclear_more",
+      "source_sha256": "41c4a6b135a692bd4943d511adee6ba21ee4e396a7566e0abc562b30c2109771",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1f0e8f731874c465bb3a67d4ea8bc7c804ea97540bd28fcb8189e792843ca8db",
+          "exit_code": 0,
+          "stdout": "value a bitmap without alpha (RGBX): cleared pixel then a red one 00 00000000 ff0000ff\nvalue a gray bitmap without alpha, first pixel after the clear 0\nvalue second 128\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "79e65c83208b6a3edb682aa089fc5daadf06a2f52e24cffb44d4664a6d701e27",
+          "exit_code": 0,
+          "stdout": "value a bitmap without alpha (RGBX): cleared pixel then a red one 00 00000000 ff0000ff\nvalue a gray bitmap without alpha, first pixel after the clear 0\nvalue second 128\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
