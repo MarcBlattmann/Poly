@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "xpc_retain_many",
+      "source_sha256": "54296d28eed850d52870cf9a6a1d6d4ad45f6ed9604cde3c216b341a192b6f8e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a59f7cf0fc1a4dcb12d78b55ab75249a7a5da6f3f21befcd6a8751b45120c41f",
+          "exit_code": 0,
+          "stdout": "ok 1000 retains all return the object\nok after 1000 releases it is still usable\nok xpc_copy is another object with the same contents\nok changing the copy leaves the original\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "854fa93c57a56db1b2d57d8f0e0bd241f6efe8c89ed052c28ec1ad1b4deae720",
+          "exit_code": 0,
+          "stdout": "ok 1000 retains all return the object\nok after 1000 releases it is still usable\nok xpc_copy is another object with the same contents\nok changing the copy leaves the original\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "xpc_retain_same_object",
+      "source_sha256": "6373cb8b3f14f04249175c85fc2bb0de0dd2b61a1f9aeec65cd83e7203f9a151",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f4a830c22b88eff694d7552d2b5e90352fe0c5664fa4b7d9ebc663ec6d1a191a",
+          "exit_code": 0,
+          "stdout": "ok a dictionary: the same pointer\nok still usable after one release\nok a string: the same pointer\nok the text survives the first release\nok an int64 survives the first release\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "04522a4335609cef60ff1609207a29a4f78e54ac54b96017254f5860fef6a439",
+          "exit_code": 0,
+          "stdout": "ok a dictionary: the same pointer\nok still usable after one release\nok a string: the same pointer\nok the text survives the first release\nok an int64 survives the first release\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

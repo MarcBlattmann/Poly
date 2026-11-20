@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_construct_defaults",
+      "source_sha256": "8aec4bd8f3b1f7270757aaeec16ca78a563898f98231f55ed30dcf1b1c4ab65a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3706a5c2fe575b587d33fbe7abbf5b1be399c45e3b630a171413b1c33e30d30d",
+          "exit_code": 0,
+          "stdout": "ok construct succeeds\nok a receive right and nothing else\nok a second call gives another name\nok queue limit 5\nok context 0\nok empty status: no messages, no send rights made, no notification requests\nok destruct takes it away\nok and the other is untouched\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "86481300160eef5101393609941f5fcea6508944930c75a7afd813df7270b09e",
+          "exit_code": 0,
+          "stdout": "ok construct succeeds\nok a receive right and nothing else\nok a second call gives another name\nok queue limit 5\nok context 0\nok empty status: no messages, no send rights made, no notification requests\nok destruct takes it away\nok and the other is untouched\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_construct_errors",
+      "source_sha256": "5ad5a7e379f66592e226005dab4e44d429ec178234d8b822a8deafaf1395d1ca",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "96a359dd1307f1383d940dd23ce9d18d76f8451bde7882e669f366a89f8540c1",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL as the task: MACH_SEND_INVALID_DEST\nok a name that is no task: MACH_SEND_INVALID_DEST\nok the out name is left alone\nok NULL options: KERN_MEMORY_ERROR (10)\nok NULL out pointer: KERN_MEMORY_ERROR (10)\nok a receive right as the task: MACH_SEND_INVALID_DEST\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1ddbe0b9f65fec2338f6bf9399915aa169f24af36257246dda06fa62aba88adf",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL as the task: MACH_SEND_INVALID_DEST\nok a name that is no task: MACH_SEND_INVALID_DEST\nok the out name is left alone\nok NULL options: KERN_MEMORY_ERROR (10)\nok NULL out pointer: KERN_MEMORY_ERROR (10)\nok a receive right as the task: MACH_SEND_INVALID_DEST\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_construct_options",
+      "source_sha256": "fa4816ca833bf9d18a91a1a7aba541c6b2db0fa7e1aad130aafe2ae99379ffea",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c83b1ff0786a8d06b5c344d5da97380cf63797188a56ea626cda676652178472",
+          "exit_code": 0,
+          "stdout": "ok INSERT_SEND_RIGHT succeeds\nok receive and send\nok one user reference\nok destruct with send_right_delta -1 takes both\nok QLIMIT 3\nok QLIMIT 1024 is accepted\nok QLIMIT 0 is accepted\nvalue queue limit when 0 was asked 0\nok QLIMIT 1025 is KERN_INVALID_VALUE (18)\nok and the out name is left alone\nok CONTEXT_AS_GUARD succeeds\nok the guard is the port's context\nok destruct with the guard works\nok a flag bit that means nothing is ignored\nok all three together\nok and destruct with delta -1 and the guard takes it away\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8e750960b1246f3b885e6a7fbb48a413e00d81ff3441935007723c32447980a1",
+          "exit_code": 0,
+          "stdout": "ok INSERT_SEND_RIGHT succeeds\nok receive and send\nok one user reference\nok destruct with send_right_delta -1 takes both\nok QLIMIT 3\nok QLIMIT 1024 is accepted\nok QLIMIT 0 is accepted\nvalue queue limit when 0 was asked 0\nok QLIMIT 1025 is KERN_INVALID_VALUE (18)\nok and the out name is left alone\nok CONTEXT_AS_GUARD succeeds\nok the guard is the port's context\nok destruct with the guard works\nok a flag bit that means nothing is ignored\nok all three together\nok and destruct with delta -1 and the guard takes it away\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

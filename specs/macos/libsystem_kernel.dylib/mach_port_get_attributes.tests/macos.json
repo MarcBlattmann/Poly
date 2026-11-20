@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_get_attributes_flavors",
+      "source_sha256": "862b2b13204537aab82c1f5adf5bee91a561e96317dfd4b7e698f66665a1524c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5e8ad63b8c899263a06c1f8e7062c1daeaa062d30e5da21e1dc2aaea1dd74089",
+          "exit_code": 0,
+          "stdout": "ok LIMITS_INFO: count 1, queue limit 5\nok DNREQUESTS_SIZE: succeeds with 0\nok flavor 999: KERN_INVALID_ARGUMENT\nok MACH_PORT_TEMPOWNER: KERN_INVALID_ARGUMENT\nok a count of 0: KERN_FAILURE (5)\nvalue RECEIVE_STATUS with a count of 5 5\nok a name not in the task: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "769e6b72a201492f3ab5bbe7f4b34174b9d87701441b7cd63c3d871ba6d34057",
+          "exit_code": 0,
+          "stdout": "ok LIMITS_INFO: count 1, queue limit 5\nok DNREQUESTS_SIZE: succeeds with 0\nok flavor 999: KERN_INVALID_ARGUMENT\nok MACH_PORT_TEMPOWNER: KERN_INVALID_ARGUMENT\nok a count of 0: KERN_FAILURE (5)\nvalue RECEIVE_STATUS with a count of 5 5\nok a name not in the task: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_get_attributes_receive_status",
+      "source_sha256": "d36a4f397c6a80a86c80e570e33601fd2a9e354db5863027ce31fabe4eefefc6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0755f2566d2a82288ceb955690af2ce5cda46ebe4e4612fbd6eedd7869633b25",
+          "exit_code": 0,
+          "stdout": "ok succeeds, count 10\nok a fresh port: all zero, queue limit 5\nok no notification requests: nsrequest 0, pdrequest 0\nok two MAKE_SENDs and a COPY_SEND: mscount 2\nok three queued: msgcount 3, seqno 0\nok one received: msgcount 2, seqno 1\nok a send-once right made: sorights 1\nok in a port set: pset 1\nok set_mscount 10: mscount 10\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4c48e5ed4815b0bfa0d464a4c345170cd517bd57b70d2bc728039cdfa16eeda5",
+          "exit_code": 0,
+          "stdout": "ok succeeds, count 10\nok a fresh port: all zero, queue limit 5\nok no notification requests: nsrequest 0, pdrequest 0\nok two MAKE_SENDs and a COPY_SEND: mscount 2\nok three queued: msgcount 3, seqno 0\nok one received: msgcount 2, seqno 1\nok a send-once right made: sorights 1\nok in a port set: pset 1\nok set_mscount 10: mscount 10\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

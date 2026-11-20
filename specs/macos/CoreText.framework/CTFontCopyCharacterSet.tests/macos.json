@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontcopycharacterset_copies",
+      "source_sha256": "fa56be69f605f11241e10c9c88741b34b61f983690ef83e9b4c569d7d9118d17",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "32502b88a64b23e7a937845bc10262ee07300387ca5cf90bc2e2a4572bb68b12",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(a, b)\nok CFEqual(a, CTFontCopyCharacterSet(CTFontCreateWithFontDescriptor(pt_descriptor(0), 20, &t)))\nok CFEqual(a, CTFontCopyCharacterSet(CTFontCreateCopyWithAttributes(pt_font(0, 10), 77, NULL, NULL)))\nok fb != NULL\nok CFCharacterSetIsCharacterMember(fs, 0x4E2D)\nok !CFEqual(fs, a)\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e4f7cd8e4191b6236dc524ad364ce4ffc47d0e47af0149c02e7c1df42f57bc60",
+          "exit_code": 0,
+          "stdout": "ok CFEqual(a, b)\nok CFEqual(a, CTFontCopyCharacterSet(CTFontCreateWithFontDescriptor(pt_descriptor(0), 20, &t)))\nok CFEqual(a, CTFontCopyCharacterSet(CTFontCreateCopyWithAttributes(pt_font(0, 10), 77, NULL, NULL)))\nok fb != NULL\nok CFCharacterSetIsCharacterMember(fs, 0x4E2D)\nok !CFEqual(fs, a)\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontcopycharacterset_polytest",
+      "source_sha256": "3ba180217e9b1680208d686bf417cfc104f2fa5c38cab0d481f5d642f9df314e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ec999ceafa0a56fe84b922215ccad05f47104687d22dd6c6dd4453ee3cdb8847",
+          "exit_code": 0,
+          "stdout": "ok cs != NULL && CFGetTypeID(cs) == CFCharacterSetGetTypeID()\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsLongCharacterMember(cs, 0x1F600)\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsLongCharacterMember(cs, 0x10000)\nok CFCharacterSetIsCharacterMember(cb, 'A') && !CFCharacterSetIsCharacterMember(cb, 'z')\nok CFEqual(cs, cb)\nsummary 20 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ddf37a6e537245ca286f43c8e9620529c9d7878f3a6763dc2dfbe3ce3e6a0398",
+          "exit_code": 0,
+          "stdout": "ok cs != NULL && CFGetTypeID(cs) == CFCharacterSetGetTypeID()\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsCharacterMember(cs, yes[i])\nok CFCharacterSetIsLongCharacterMember(cs, 0x1F600)\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsCharacterMember(cs, no[i])\nok !CFCharacterSetIsLongCharacterMember(cs, 0x10000)\nok CFCharacterSetIsCharacterMember(cb, 'A') && !CFCharacterSetIsCharacterMember(cb, 'z')\nok CFEqual(cs, cb)\nsummary 20 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

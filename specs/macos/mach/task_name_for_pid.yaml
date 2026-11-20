@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/task_name_for_pid.yaml. Observed with C tests (raw Mach traps, tests/macos/include/poly_mtest.h; ADR 0182);
+# results per architecture in task_name_for_pid.tests/macos.json.
+id: macos/syscall/mach/task_name_for_pid
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) with raw Mach traps and no libSystem call (tests/macos/include/poly_mtest.h), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  Mach trap 44 (task_name_for_pid_trap), no libSystem: x86_64 rax = 0x1000000 | 44; arm64 x16 = -44; arguments target task port,
+  pid, pointer to the out name. For the caller's own pid it succeeds with a send right that is not the task port's name (a
+  name port of its own, the same name when asked again); for the caller's parent and for a child that is running it succeeds
+  too (a send right); for pid 1, pid 0 and pids that do not exist, and for a child that has exited (not yet reaped
+  or reaped), it is KERN_FAILURE (5) and the out name is set to MACH_PORT_NULL. pid_for_task of such a name port gives the pid. With
+  MACH_PORT_NULL or a name that is nothing as the first argument the result was KERN_FAILURE (5) in the probe, even for
+  the own pid (recorded as a value in the test).
+returns:
+  success: "KERN_SUCCESS (0); *t = a send right to the task's name port"
+errors:
+  failure: "KERN_FAILURE (5): pid 0, 1, nonexistent or exited; *t = MACH_PORT_NULL"
+side_effects: "a send right is added to the task"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -376,3 +376,36 @@ kernel_test! {
         tear_down(memory)
     }
 }
+
+kernel_test! {
+    /// The kernel's writes into a process's memory (`Memory::write`: I/O completions, the status
+    /// blocks of another process's requests) take a page the page table maps writable as it is,
+    /// and still resolve the others: a read-only page refuses, a page shared with a forked child
+    /// is copied first.
+    fn kernel_writes_keep_writable_pages_and_still_copy_shared_ones() -> TestResult {
+        let parent = new_memory()?;
+        let base = parent.map_anonymous(Placement::Hint(0), 2 * P, Prot::RW).map_err(|_| "mmap failed")?;
+        parent.write(base, &marker(1)).map_err(|_| "writing a lazily mapped page failed")?;
+        let frame = parent.space().translate(base).map(|m| m.phys).ok_or("the written page is not mapped")?;
+        // Mapped writable: written in place, same frame, same rights.
+        parent.write(base, &marker(2)).map_err(|_| "writing a mapped page failed")?;
+        let after = parent.space().translate(base).ok_or("the page went away")?;
+        if after.phys != frame || rights(&parent, base) != Some(Prot::RW) || read_marker(&parent, base) != Ok(marker(2)) {
+            return Err("a write into a mapped writable page moved it, changed its rights or was lost");
+        }
+        // Shared with a child after fork: the page is mapped read-only until written, and a write
+        // copies it, so the child keeps what it had.
+        let child = parent.fork().map_err(|_| "fork failed")?;
+        parent.write(base, &marker(3)).map_err(|_| "writing a page shared with a child failed")?;
+        if read_marker(&child, base) != Ok(marker(2)) || read_marker(&parent, base) != Ok(marker(3)) {
+            return Err("a write into a page shared with a forked child reached the child");
+        }
+        // Read-only: refused.
+        parent.protect(base + P, P, Prot::READ).map_err(|_| "mprotect failed")?;
+        if parent.write(base + P, b"x") != Err(FaultError::Segv(SegvCode::AccErr)) {
+            return Err("a read-only page was written");
+        }
+        drop(child);
+        Ok(())
+    }
+}

@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32_v6.dll/InitCommonControlsEx.yaml
+id: windows/api/comctl32_v6.dll/InitCommonControlsEx
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station: windows and messages work, nothing is visible, no input) as the local account \"server\"; every test program carries a manifest that asks for Microsoft.Windows.Common-Controls 6.0.0.0 (an RT_MANIFEST resource), so it gets the side-by-side comctl32 version 6; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-comctl6-init
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, every one carrying a manifest (an RT_MANIFEST resource) that asks for Microsoft.Windows.Common-Controls 6.0.0.0 (publicKeyToken 6595b64144ccf1df, processorArchitecture *): the programs run with the side-by-side comctl32 version 6, the way Google's updater.exe, Chrome and most current installers do. The same programs built for 32-bit x86 (i686) and run on the same machine (WOW64) printed the same observation files line for line except for one value, named below. Microsoft Learn: "InitCommonControlsEx function (commctrl.h)", "INITCOMMONCONTROLSEX structure", "Common Control Versions", "Enabling Visual Styles", "DllGetVersion function", "DLLVERSIONINFO structure", "Progress Bar Control Reference", "Button Control Reference", "Edit Control Reference", "Subclassing Controls", "SetWindowTheme function (uxtheme.h)", "GetWindowTheme function"; commctrl.h, winuser.h, shlwapi.h, uxtheme.h, winerror.h for constants and layouts. docs/windows/updater-b7 (the coordinator's finding): the updater's UI thread calls InitCommonControlsEx({8, 0x4020}); Poly returned FALSE and the progress-bar window could not be created. No Wine or ReactOS source was read and no Microsoft binary was decompiled or disassembled.
+summary: >
+  Asks for the window classes of the common controls named in a bit mask to be registered; in a process whose manifest asks for comctl32 version 6 every defined ICC_ bit, ICC_STANDARD_CLASSES (0x4000) and ICC_LINK_CLASS (0x8000) included, is accepted and the call returns TRUE. The classes are all there before the call (version 6 registers them when the library loads), so the call only checks its argument. The result must depend on the process's manifest: Poly's rule for version 5.82 (0x4000 and 0x8000 are FALSE) is wrong for a process with a version 6 manifest.
+interface:
+  signature: "BOOL InitCommonControlsEx(const INITCOMMONCONTROLSEX *picce)"
+  structure: "INITCOMMONCONTROLSEX, 8 bytes: DWORD dwSize (must be 8), DWORD dwICC"
+  ordinal: "94 in the 64-bit library (93 in the 32-bit one); it is imported by name"
+chrome: "Google's 32-bit updater.exe (159.0.8140.0) calls InitCommonControlsEx({dwSize 8, dwICC 0x4020 = ICC_STANDARD_CLASSES | ICC_PROGRESS_CLASS}) on its UI thread, creates a dialog (class #32770) with a Static and four Button children, then CreateWindowExW(0, \"msctls_progress32\", ..., WS_CHILD, 53, 190, 653, ...). When the first call returns FALSE it logs \"Failed to initialize the native UI: 80004005\" and installs without a window."
+rules:
+  bits: "each bit 0x1, 0x2, 0x4, ... 0x8000 alone is TRUE; so are 0x4000 (ICC_STANDARD_CLASSES), 0x8000 (ICC_LINK_CLASS), 0x4020 (the updater's), 0xFF, 0x7FF, 0x3FFF, 0xFFFF, and 0 (nothing asked for)"
+  undefined_bits: "any of the bits 0x10000 to 0x40000000 (bit 16 to bit 30) makes the call FALSE: 0x10000, 0x20000, ... 0x40000000 alone, 0x1FFFF, 0xFFFF0000, 0x7FFFFFFF, 0xFFFFFFFF, 0xC0000000, 0x14000. A failed call leaves the last error as it was. Bit 31 (0x80000000) is accepted: 0x80000000 alone and 0x80004000 are TRUE"
+  size: "dwSize must be exactly 8: with 0, 1, 4, 7, 9, 12, 16, 0x7FFFFFFF or 0xFFFFFFFF, whatever the mask (0x20, 0x4000, 0x4020), the call is FALSE and leaves the last error alone; a correct call afterwards still returns TRUE, and again"
+  last_error: "a TRUE call may leave a value in the last error (ERROR_CLASS_ALREADY_EXISTS 1410 after some masks, because it registers classes that exist): the return value is the result and the last error after a success is not specified"
+  updater: "InitCommonControlsEx({8, 0x4020}) is TRUE; a dialog with a Static and four Buttons is then created; inside WM_INITDIALOG a window of class msctls_progress32 with WS_CHILD is created at (53, 190) with a width of 653: it exists, its parent is the dialog, its class name is msctls_progress32, its position in the dialog and width are those given, it answers PBM_SETRANGE32 (0 to 1000) and PBM_SETPOS (250: the old position 0, then PBM_GETPOS 250), and DestroyWindow of the dialog destroys it"
+  threads_repeat: "it may be called any number of times and from any thread (a second thread: TRUE, and windows of the common-control classes can be created there); the classes belong to the process"
+errors:
+  false_return: "FALSE with the last error unchanged: a wrong dwSize, or a mask with a bit from 0x10000 to 0x40000000"
+side_effects: "none observable: the classes already exist"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing comctl32.dll (when the test uses it), user32.dll and kernel32.dll by name (the subclass tests bind comctl32's functions by the ordinals the updater uses, 410 to 413); uxtheme.dll is loaded at run time with LoadLibraryW. Each test carries the manifest resource of version 6.0.0.0 of the common controls (written as data in the test's source with global_asm!, the way the resource tests carry menus and icons), so the program runs with the side-by-side comctl32 6.x; a Poly that decides the version from the manifest of the process passes them, one that treats every process as version 5.82 does not. Windows are created in session 0 (nothing is visible); controls are children of a plain window the test makes. Observations are results, window styles, class names and relations; no line holds a handle, an address, a path or a time. The 32-bit builds (not part of the pipeline, which builds 64-bit programs) gave the same lines.
+not_covered: >
+  Painting (the oracle session is not interactive: no WM_PAINT, nothing is drawn, visual styles are not active: IsThemeActive is FALSE), mouse and keyboard input, the controls' look and size metrics, DPI, a program with no manifest (version 5.82: see the sheets of comctl32.dll), a manifest of another version, ComCtl32 version 6 loaded by a DLL rather than by the program, and a NULL pointer for InitCommonControlsEx (not tried).
