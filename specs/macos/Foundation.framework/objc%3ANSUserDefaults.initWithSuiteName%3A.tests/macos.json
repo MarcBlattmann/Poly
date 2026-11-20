@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsuserdefaults_initwithsuitename_global_domain",
+      "source_sha256": "17dc74e3c1ae68ecaa325aa8886b728cbd6a90e7836b56ff566406b9a0765887",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d115a1146a3a5ed3b1a8db94540c07446fa14c8d83e086658791da0a9e373549",
+          "exit_code": 0,
+          "stdout": "ok [u objectForKey:@\"AppleLanguages\"] != nil\nok [u integerForKey:@\"nokey\"] == 0 && ![u boolForKey:@\"nokey\"] && [u doubleForKey:@\"nokey\"] == 0.0\nok [u stringForKey:@\"nokey\"] == nil && [u arrayForKey:@\"nokey\"] == nil && [u dictionaryForKey:@\"nokey\"] == nil && [u dataForKey:@\"nokey\"] == nil\nok [u dictionaryRepresentation][@\"nokey\"] == nil\nok nilsuite != nil\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e42476d4e4187c53af5d0571b8a5e60b7767763b14b09a982176591658aa049a",
+          "exit_code": 0,
+          "stdout": "ok [u objectForKey:@\"AppleLanguages\"] != nil\nok [u integerForKey:@\"nokey\"] == 0 && ![u boolForKey:@\"nokey\"] && [u doubleForKey:@\"nokey\"] == 0.0\nok [u stringForKey:@\"nokey\"] == nil && [u arrayForKey:@\"nokey\"] == nil && [u dictionaryForKey:@\"nokey\"] == nil && [u dataForKey:@\"nokey\"] == nil\nok [u dictionaryRepresentation][@\"nokey\"] == nil\nok nilsuite != nil\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsuserdefaults_initwithsuitename_isolation",
+      "source_sha256": "0be4e8cf0e6117a748ee2b04c6765fd02f1819cfe2155aaaa6d4b20a6b3588d8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "75605290ac3406debf1e08e0ab52fbef2cb105e04d7a2da184ba7d28a2616ba4",
+          "exit_code": 0,
+          "stdout": "ok a != nil\nok [a objectForKey:@\"b\"] == nil\nok [b boolForKey:@\"b\"]\nok [o objectForKey:@\"b\"] == nil\nok [[NSUserDefaults standardUserDefaults] objectForKey:@\"b\"] == nil\nok [NSUserDefaults standardUserDefaults] == [NSUserDefaults standardUserDefaults]\nok ns_is(CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR(\"b\"), CFSTR(\"test.poly.nsspec.init\"))) ? @\"seen\" : @\"unseen\", \"seen\")\nok [a objectForKey:@\"b\"] == nil\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3427e96f084a76d3bca8788a9f840133bce8196fb49f08e24256bfb1ef0821f7",
+          "exit_code": 0,
+          "stdout": "ok a != nil\nok [a objectForKey:@\"b\"] == nil\nok [b boolForKey:@\"b\"]\nok [o objectForKey:@\"b\"] == nil\nok [[NSUserDefaults standardUserDefaults] objectForKey:@\"b\"] == nil\nok [NSUserDefaults standardUserDefaults] == [NSUserDefaults standardUserDefaults]\nok ns_is(CFBridgingRelease(CFPreferencesCopyAppValue(CFSTR(\"b\"), CFSTR(\"test.poly.nsspec.init\"))) ? @\"seen\" : @\"unseen\", \"seen\")\nok [a objectForKey:@\"b\"] == nil\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

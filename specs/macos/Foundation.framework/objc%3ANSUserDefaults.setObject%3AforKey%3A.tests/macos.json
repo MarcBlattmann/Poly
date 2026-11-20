@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsuserdefaults_setobject_replace_and_remove",
+      "source_sha256": "6ec01981464c681f0a22db82fc1b1cf2660564749f94c3a58e440624e59f7567",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5e756c9ce80459cd57c8ebad3c8e89bbf1855963db1ddbc7af8f15aedf3dd4c1",
+          "exit_code": 0,
+          "stdout": "ok ns_is([u objectForKey:@\"k\"], \"v2\")\nok [[u objectForKey:@\"k\"] isKindOfClass:[NSNumber class]]\nok [u objectForKey:@\"k\"] == nil\nok [u objectForKey:@\"r\"] == nil\nok ns_is([u objectForKey:@\"\"], \"empty-key\")\nok [u synchronize]\nok cf != NULL && cf_is(cf, \"cfside\")\nok ns_is([u objectForKey:@\"fromcf\"], \"viaCF\")\nok [u objectForKey:@\"c\"] == nil\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a6edc3c003ff77eadb867b4924d11416bb974a02bdc67f0297ce56afc24960f4",
+          "exit_code": 0,
+          "stdout": "ok ns_is([u objectForKey:@\"k\"], \"v2\")\nok [[u objectForKey:@\"k\"] isKindOfClass:[NSNumber class]]\nok [u objectForKey:@\"k\"] == nil\nok [u objectForKey:@\"r\"] == nil\nok ns_is([u objectForKey:@\"\"], \"empty-key\")\nok [u synchronize]\nok cf != NULL && cf_is(cf, \"cfside\")\nok ns_is([u objectForKey:@\"fromcf\"], \"viaCF\")\nok [u objectForKey:@\"c\"] == nil\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsuserdefaults_setobject_types",
+      "source_sha256": "e50383b32ce59716e22465ad5b3bb4bf755fea062cbcd9d0d74bb0203752a7dc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bca1390c3eb24324782fac1467b365574ea09ec5013aca9f715de457ea37c77b",
+          "exit_code": 0,
+          "stdout": "ok ns_is([u objectForKey:@\"s\"], \"str\") && ns_is([u stringForKey:@\"s\"], \"str\")\nok [[u objectForKey:@\"n\"] isKindOfClass:[NSNumber class]] && [u integerForKey:@\"n\"] == 42 && [u boolForKey:@\"n\"] && [u doubleForKey:@\"n\"] == 42.0\nok ns_is([u stringForKey:@\"n\"], \"42\")\nok [u integerForKey:@\"s\"] == 0\nok [u objectForKey:@\"b\"] == (id)kCFBooleanTrue\nok [[u arrayForKey:@\"arr\"] count] == 2 && ns_is([u arrayForKey:@\"arr\"][0], \"a\")\nok ns_is([u dictionaryForKey:@\"d\"][@\"k\"], \"v\")\nok [u dataForKey:@\"data\"].length == 3\nok [[u objectForKey:@\"date\"] timeIntervalSinceReferenceDate] == 1000.0\nok ns_is([u objectForKey:@\"m\"], \"mut\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d4717785aa7eeee699e94c7a55869a56c7d2c58c3e5f7b36b4e538b723dc6ed1",
+          "exit_code": 0,
+          "stdout": "ok ns_is([u objectForKey:@\"s\"], \"str\") && ns_is([u stringForKey:@\"s\"], \"str\")\nok [[u objectForKey:@\"n\"] isKindOfClass:[NSNumber class]] && [u integerForKey:@\"n\"] == 42 && [u boolForKey:@\"n\"] && [u doubleForKey:@\"n\"] == 42.0\nok ns_is([u stringForKey:@\"n\"], \"42\")\nok [u integerForKey:@\"s\"] == 0\nok [u objectForKey:@\"b\"] == (id)kCFBooleanTrue\nok [[u arrayForKey:@\"arr\"] count] == 2 && ns_is([u arrayForKey:@\"arr\"][0], \"a\")\nok ns_is([u dictionaryForKey:@\"d\"][@\"k\"], \"v\")\nok [u dataForKey:@\"data\"].length == 3\nok [[u objectForKey:@\"date\"] timeIntervalSinceReferenceDate] == 1000.0\nok ns_is([u objectForKey:@\"m\"], \"mut\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_group_enter_more",
+      "source_sha256": "9484e199bfa41c8ea95577792aabdeba7f38741500a17286fe6eacf7265e5aa1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7499bf0a64efb361203217c91d799f0e5a2a4f6a632641913a2023af8d82ba42",
+          "exit_code": 0,
+          "stdout": "ok the notify block ran\nok after all four leaves\nok exactly once\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d884eaffeb75f18486db0c2223b3ceff1d4ba113f11151e77606890c7b196265",
+          "exit_code": 0,
+          "stdout": "ok the notify block ran\nok after all four leaves\nok exactly once\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

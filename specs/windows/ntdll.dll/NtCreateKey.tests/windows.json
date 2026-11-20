@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wv_ntcreate_views",
+      "exe_sha256": "9b18d1f968de6e85ebaa9ea2466176380e8ccbf3909ecdc5da107fd9deffe860",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWJzb2x1dGUgY2xhc3Mga2V5IGNyZWF0ZSBub25lOiAwMDAwMDAwMC8xIC0+IHg4NgphYnNvbHV0ZSBjbGFzcyBrZXkgY3JlYXRlIDMyOiAwMDAwMDAwMC8xIC0+IHg4NgphYnNvbHV0ZSBjbGFzcyBrZXkgY3JlYXRlIDY0OiAwMDAwMDAwMC8xIC0+IG5hdGl2ZQphYnNvbHV0ZSB2ZW5kb3Iga2V5IGNyZWF0ZSBub25lOiAwMDAwMDAwMC8xIC0+IHg4NgphYnNvbHV0ZSB2ZW5kb3Iga2V5IGNyZWF0ZSAzMjogMDAwMDAwMDAvMSAtPiB4ODYKYWJzb2x1dGUgdmVuZG9yIGtleSBjcmVhdGUgNjQ6IDAwMDAwMDAwLzEgLT4gbmF0aXZlCmJlbG93IENsYXNzZXMgW2hhbmRsZSBub25lXSBjcmVhdGUgbm9uZTogMDAwMDAwMDAvMSAtPiB4ODYKYmVsb3cgQ2xhc3NlcyBbaGFuZGxlIG5vbmVdIGNyZWF0ZSAzMjogMDAwMDAwMDAvMSAtPiB4ODYKYmVsb3cgQ2xhc3NlcyBbaGFuZGxlIG5vbmVdIGNyZWF0ZSA2NDogMDAwMDAwMDAvMSAtPiBuYXRpdmUKYmVsb3cgQ2xhc3NlcyBbaGFuZGxlIDMyXSBjcmVhdGUgbm9uZTogMDAwMDAwMDAvMSAtPiB4ODYKYmVsb3cgQ2xhc3NlcyBbaGFuZGxlIDMyXSBjcmVhdGUgMzI6IDAwMDAwMDAwLzEgLT4geDg2CmJlbG93IENsYXNzZXMgW2hhbmRsZSAzMl0gY3JlYXRlIDY0OiAwMDAwMDAwMC8xIC0+IG5hdGl2ZQpiZWxvdyBDbGFzc2VzIFtoYW5kbGUgNjRdIGNyZWF0ZSBub25lOiAwMDAwMDAwMC8xIC0+IG5hdGl2ZQpiZWxvdyBDbGFzc2VzIFtoYW5kbGUgNjRdIGNyZWF0ZSAzMjogMDAwMDAwMDAvMSAtPiB4ODYKYmVsb3cgQ2xhc3NlcyBbaGFuZGxlIDY0XSBjcmVhdGUgNjQ6IDAwMDAwMDAwLzEgLT4gbmF0aXZlCmJlbG93IFNvZnR3YXJlIFtoYW5kbGUgbm9uZV0gY3JlYXRlIG5vbmU6IDAwMDAwMDAwLzEgLT4geDg2CmJlbG93IFNvZnR3YXJlIFtoYW5kbGUgbm9uZV0gY3JlYXRlIDMyOiAwMDAwMDAwMC8xIC0+IHg4NgpiZWxvdyBTb2Z0d2FyZSBbaGFuZGxlIG5vbmVdIGNyZWF0ZSA2NDogMDAwMDAwMDAvMSAtPiB4ODYKYmVsb3cgU29mdHdhcmUgW2hhbmRsZSAzMl0gY3JlYXRlIG5vbmU6IDAwMDAwMDAwLzEgLT4geDg2CmJlbG93IFNvZnR3YXJlIFtoYW5kbGUgMzJdIGNyZWF0ZSAzMjogMDAwMDAwMDAvMSAtPiB4ODYKYmVsb3cgU29mdHdhcmUgW2hhbmRsZSAzMl0gY3JlYXRlIDY0OiAwMDAwMDAwMC8xIC0+IHg4NgpiZWxvdyBTb2Z0d2FyZSBbaGFuZGxlIDY0XSBjcmVhdGUgbm9uZTogMDAwMDAwMDAvMSAtPiBuYXRpdmUKYmVsb3cgU29mdHdhcmUgW2hhbmRsZSA2NF0gY3JlYXRlIDMyOiAwMDAwMDAwMC8xIC0+IHg4NgpiZWxvdyBTb2Z0d2FyZSBbaGFuZGxlIDY0XSBjcmVhdGUgNjQ6IDAwMDAwMDAwLzEgLT4gbmF0aXZlCmRpc3Bvc2l0aW9uczogMSB0aGVuIDIgKHNhbWUgdmlldyksIDEgKG90aGVyIHZpZXcpCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "absolute class key create none: 00000000/1 -> x86\nabsolute class key create 32: 00000000/1 -> x86\nabsolute class key create 64: 00000000/1 -> native\nabsolute vendor key create none: 00000000/1 -> x86\nabsolute vendor key create 32: 00000000/1 -> x86\nabsolute vendor key create 64: 00000000/1 -> native\nbelow Classes [handle none] create none: 00000000/1 -> x86\nbelow Classes [handle none] create 32: 00000000/1 -> x86\nbelow Classes [handle none] create 64: 00000000/1 -> native\nbelow Classes [handle 32] create none: 00000000/1 -> x86\nbelow Classes [handle 32] create 32: 00000000/1 -> x86\nbelow Classes [handle 32] create 64: 00000000/1 -> native\nbelow Classes [handle 64] create none: 00000000/1 -> native\nbelow Classes [handle 64] create 32: 00000000/1 -> x86\nbelow Classes [handle 64] create 64: 00000000/1 -> native\nbelow Software [handle none] create none: 00000000/1 -> x86\nbelow Software [handle none] create 32: 00000000/1 -> x86\nbelow Software [handle none] create 64: 00000000/1 -> x86\nbelow Software [handle 32] create none: 00000000/1 -> x86\nbelow Software [handle 32] create 32: 00000000/1 -> x86\nbelow Software [handle 32] create 64: 00000000/1 -> x86\nbelow Software [handle 64] create none: 00000000/1 -> native\nbelow Software [handle 64] create 32: 00000000/1 -> x86\nbelow Software [handle 64] create 64: 00000000/1 -> native\ndispositions: 1 then 2 (same view), 1 (other view)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 228
+    }
+  ]
+}

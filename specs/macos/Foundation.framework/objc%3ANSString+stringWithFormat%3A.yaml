@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSString+stringWithFormat%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSString+stringWithFormat%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSString+stringWithFormat:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  +[NSString stringWithFormat:(NSString *)format, ...] formats like printf with Foundation's
+  extensions and returns an autoreleased string; the result equals what CFStringCreateWithFormat gives
+  for the same format and arguments (the two share the engine, so CoreFoundation's
+  CFStringCreateWithFormat sheet applies). Integers (%d %i %u %x %X %o, lengths hh h l ll z t j, flags
+  - + space # 0, width, precision, * width), floats (%f %e %g, %Lf), %c, %C (a UniChar), %S (a UniChar
+  string), %p (null is 0x0), %% and positional %n$ work as in printf; %s reads a C string as Mac
+  Roman, so the UTF-8 bytes C3 A9 give the two characters U+221A U+00A9; width and precision apply
+  ('[%5s]' of 'ab' is '[   ab]'). %@ inserts the object's description: a string as itself, a number as
+  its value ('42', '1.5'), @YES and @NO as '1' and '0', nil as '(null)', NSNull as '<null>', an array
+  as '(\n    a,\n    2\n)' and a dictionary as '{\n    k = v;\n}' (four-space indentation, one entry
+  per line), a class object as its name ('NSObject'). Nested formats and the empty format work;
+  results of any length (a format with 43 characters from four 10-character strings tried) work the
+  same as short ones. A format with fewer arguments than conversions is undefined.
+returns:
+  success: "an autoreleased NSString"
+errors:
+  nil_format: "a nil or invalid receiver or argument not listed here is undefined; not to be relied on"
+  argument_mismatch: "undefined, as in printf"
+side_effects: "allocates the string"
+threading: "objects are immutable or the class says otherwise; immutable values may be read from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

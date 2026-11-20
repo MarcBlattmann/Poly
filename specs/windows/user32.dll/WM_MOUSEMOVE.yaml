@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/WM_MOUSEMOVE.yaml
+id: windows/api/user32.dll/WM_MOUSEMOVE
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, one monitor 1920x1080 at 100 %, 96 dpi), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner's \"keeper\" window in the foreground; the pointer is parked at (1500, 600) and moved only by SetCursorPos, SendInput button events never reach a window of another process; no mouse is attached; every test ran three times with identical output; the test programs carry no manifest (common controls 5.82, no visual styles)"
+  observed_by: spec-win-mouseleave
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: TrackMouseEvent, TRACKMOUSEEVENT, WM_MOUSELEAVE, WM_NCMOUSELEAVE, WM_MOUSEHOVER, WM_MOUSEMOVE, WM_CAPTURECHANGED, WM_SETCURSOR, WM_NCHITTEST, SetCapture, ReleaseCapture, GetCapture, WindowFromPoint, SetCursorPos, GetMessagePos, "About Mouse Input", "Tooltip Controls", the tooltip messages TTM_*; winuser.h and commctrl.h for constants and layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Windows sends WM_MOUSEMOVE (with a WM_SETCURSOR before it) to the window under the pointer after the window structure changed, although the pointer did not move. Observed with the pointer parked at screen (208,191), A at (100,100) 300x200 with its client area starting at (108,108).
+interface:
+  signature: "WM_MOUSEMOVE (0x0200), wParam the key flags, lParam the client coordinates of the pointer"
+rules:
+  after_change: "After a change under a still pointer the window now under the pointer gets WM_SETCURSOR (hit 1, msg WM_MOUSEMOVE), then WM_MOUSEMOVE with keys 0 and the client coordinates of the pointer, within about 60 ms: A shown with the pointer already on its place (client 100,60); a popup B shown over the pointer (B, client 58,71 for a popup at 150,120); A moved by 10 pixels (client 90,50); A resized so the pointer stays inside (client 100,60); the popup over the pointer hidden or destroyed (A gets the move); no move for A that was only disabled."
+  no_pointer_change: "GetCursorPos still says (208,191); GetMessagePos of the synthesized move is the pointer position; WindowFromPoint reports the window that is now under the pointer (the popup, or A again)."
+  setcursorpos: "SetCursorPos to the position the pointer is at delivers a WM_MOUSEMOVE (preceded by WM_SETCURSOR) all the same (client 100,60); one pixel to the right: WM_MOUSEMOVE with client 101,60. SendInput with a relative move of 0,0 delivers nothing."
+errors:
+  none: "The message has no error result."
+side_effects: "none beyond the rules above"
+threading: "mouse tracking and mouse capture belong to the thread that asked; a window belongs to the thread that created it; the cover tests with a window of another thread use one extra thread"
+ordering: []
+timing:
+  typical: "the messages after a change arrive within about 60 ms"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations and a message log; run with poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because pointer, hit testing and showing windows need the visible desktop. Window A (300x200 at 100,100, WS_EX_NOACTIVATE, never activated) has the pointer in its client area at screen (208,191) (or in its caption at (200,115)); it asks for TME_LEAVE where the rule says so. Every scene prints the mouse messages of every window of the test in the order they arrived, under the window's tag letter (A, B; handles are never printed), repeated identical lines once, then the pointer position and what WindowFromPoint reports; the scenes start with the pointer settled and the log empty, and wait 350 ms at the end. Times are checked against envelopes, never printed. The pointer is parked at (1500, 600) between scenes and put back at the end.
+not_covered: >
+  Moves by a real mouse, the key flags with buttons held (see WM_CAPTURECHANGED), the exact delay after a change, several monitors, mouse acceleration.

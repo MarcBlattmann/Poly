@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsbundle_bundleidentifier_application",
+      "source_sha256": "e2fef7ebf3ee5029dc9a9b285e60f07ad39beb0bf9097db3c0e1b3fd4aa55bb6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "00144793b5929850cbd001e2cc1790e16d4071b9710c1ea6a05cf16c7b7efa6b",
+          "exit_code": 0,
+          "stdout": "ok id_ != nil && ns_is(id_, \"test.poly.probe\")\nok CFBundleGetIdentifier(CFBundleGetMainBundle()) == (__bridge CFStringRef)id_\nok [[b objectForInfoDictionaryKey:@\"CFBundleIdentifier\"] isEqual:id_]\nok res != nil && res.bundleIdentifier == nil\nok [NSBundle bundleWithPath:@\"/nonexistent-poly-dir\"] == nil\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "07a4c6b4be6df546976231d48d9ff7048ce178e3c90d6efc0e64999d4318253e",
+          "exit_code": 0,
+          "stdout": "ok id_ != nil && ns_is(id_, \"test.poly.probe\")\nok CFBundleGetIdentifier(CFBundleGetMainBundle()) == (__bridge CFStringRef)id_\nok [[b objectForInfoDictionaryKey:@\"CFBundleIdentifier\"] isEqual:id_]\nok res != nil && res.bundleIdentifier == nil\nok [NSBundle bundleWithPath:@\"/nonexistent-poly-dir\"] == nil\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsbundle_bundleidentifier_lookup",
+      "source_sha256": "f9e2f79aed51ac727537fac1774ddc641f8b7bd8e4f0f3dc893d17fe5b328214",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "835ccf003934d9bdaefda154294ee808c29ff03f725a6019c935c014fda0d385",
+          "exit_code": 0,
+          "stdout": "ok [NSBundle bundleWithIdentifier:@\"test.poly.probe\"] == b\nok [NSBundle bundleWithIdentifier:@\"TEST.POLY.PROBE\"] == nil\nok [NSBundle bundleWithIdentifier:@\"test.poly\"] == nil\nok [NSBundle bundleWithIdentifier:@\"\"] == nil\nok CFBundleGetBundleWithIdentifier(CFSTR(\"test.poly.probe\")) != NULL\nok CFGetTypeID((__bridge CFTypeRef)b.bundleIdentifier) == CFStringGetTypeID()\nok [b.infoDictionary[@\"CFBundleIdentifier\"] isEqual:b.bundleIdentifier]\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "23ef84a5b3725b0b37021e6e09dcdf3382883beb6c589979fc12ebd9ad8ead1c",
+          "exit_code": 0,
+          "stdout": "ok [NSBundle bundleWithIdentifier:@\"test.poly.probe\"] == b\nok [NSBundle bundleWithIdentifier:@\"TEST.POLY.PROBE\"] == nil\nok [NSBundle bundleWithIdentifier:@\"test.poly\"] == nil\nok [NSBundle bundleWithIdentifier:@\"\"] == nil\nok CFBundleGetBundleWithIdentifier(CFSTR(\"test.poly.probe\")) != NULL\nok CFGetTypeID((__bridge CFTypeRef)b.bundleIdentifier) == CFStringGetTypeID()\nok [b.infoDictionary[@\"CFBundleIdentifier\"] isEqual:b.bundleIdentifier]\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

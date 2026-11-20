@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "ffx_basic",
+      "exe_sha256": "e540ce5ca824bc6a965ec314c2d970d8e38b38befc5e61a5bc6cdc8e930ca642",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c3RhbmRhcmQgaW5mbywgKjogNiBlbnRyaWVzLCB0aGVuIGVycm9yIDE4OyBbLiBhdHRyIDB4MTAgc2l6ZSAwIGFsdCBlbXB0eV0gWy4uIGF0dHIgMHgxMCBzaXplIDAgYWx0IGVtcHR5XSBbYWxwaGEudHh0IGF0dHIgMHgyMCBzaXplIDggYWx0IGVtcHR5XSBbYnJhdm8tbG9uZy1maWxlLW5hbWUudHh0IGF0dHIgMHgyMCBzaXplIDUgYWx0IHNldF0gW0NoYXJsaWUuZGF0IGF0dHIgMHgyMCBzaXplIDAgYWx0IGVtcHR5XSBbc3ViIGF0dHIgMHgxMCBzaXplIDAgYWx0IGVtcHR5XQpiYXNpYyBpbmZvLCAqOiA2IGVudHJpZXMsIHRoZW4gZXJyb3IgMTg7IFsuIGF0dHIgMHgxMCBzaXplIDAgYWx0IGVtcHR5XSBbLi4gYXR0ciAweDEwIHNpemUgMCBhbHQgZW1wdHldIFthbHBoYS50eHQgYXR0ciAweDIwIHNpemUgOCBhbHQgZW1wdHldIFticmF2by1sb25nLWZpbGUtbmFtZS50eHQgYXR0ciAweDIwIHNpemUgNSBhbHQgZW1wdHldIFtDaGFybGllLmRhdCBhdHRyIDB4MjAgc2l6ZSAwIGFsdCBlbXB0eV0gW3N1YiBhdHRyIDB4MTAgc2l6ZSAwIGFsdCBlbXB0eV0KYmFzaWMgaW5mbywgKi50eHQ6IDIgZW50cmllcywgdGhlbiBlcnJvciAxODsgW2FscGhhLnR4dCBhdHRyIDB4MjAgc2l6ZSA4IGFsdCBlbXB0eV0gW2JyYXZvLWxvbmctZmlsZS1uYW1lLnR4dCBhdHRyIDB4MjAgc2l6ZSA1IGFsdCBlbXB0eV0Kc3RhbmRhcmQgaW5mbywgYT9waGEuKjogMSBlbnRyaWVzLCB0aGVuIGVycm9yIDE4OyBbYWxwaGEudHh0IGF0dHIgMHgyMCBzaXplIDggYWx0IGVtcHR5XQpleGFjdCBuYW1lOiAxIGVudHJpZXMsIHRoZW4gZXJyb3IgMTg7IFthbHBoYS50eHQgYXR0ciAweDIwIHNpemUgOCBhbHQgZW1wdHldCmV4YWN0IG5hbWUsIG90aGVyIGNhc2U6IDEgZW50cmllcywgdGhlbiBlcnJvciAxODsgW2FscGhhLnR4dCBhdHRyIDB4MjAgc2l6ZSA4IGFsdCBlbXB0eV0KZXhhY3QgbmFtZSwgY2FzZSBzZW5zaXRpdmUgZmxhZzogMSBlbnRyaWVzLCB0aGVuIGVycm9yIDE4OyBbYWxwaGEudHh0IGF0dHIgMHgyMCBzaXplIDggYWx0IGVtcHR5XQpuYW1lIHRoYXQgZG9lcyBub3QgZXhpc3Q6IGZhaWxlZCB3aXRoIDIKd2lsZGNhcmQgd2l0aG91dCBhIG1hdGNoOiBmYWlsZWQgd2l0aCAyCmRpcmVjdG9yeSBvbmx5IGhpbnQsICo6IDYgZW50cmllcywgdGhlbiBlcnJvciAxODsgWy4gYXR0ciAweDEwIHNpemUgMCBhbHQgZW1wdHldIFsuLiBhdHRyIDB4MTAgc2l6ZSAwIGFsdCBlbXB0eV0gW2FscGhhLnR4dCBhdHRyIDB4MjAgc2l6ZSA4IGFsdCBlbXB0eV0gW2JyYXZvLWxvbmctZmlsZS1uYW1lLnR4dCBhdHRyIDB4MjAgc2l6ZSA1IGFsdCBlbXB0eV0gW0NoYXJsaWUuZGF0IGF0dHIgMHgyMCBzaXplIDAgYWx0IGVtcHR5XSBbc3ViIGF0dHIgMHgxMCBzaXplIDAgYWx0IGVtcHR5XQpsYXJnZSBmZXRjaCwgKjogNiBlbnRyaWVzLCB0aGVuIGVycm9yIDE4OyBbLiBhdHRyIDB4MTAgc2l6ZSAwIGFsdCBlbXB0eV0gWy4uIGF0dHIgMHgxMCBzaXplIDAgYWx0IGVtcHR5XSBbYWxwaGEudHh0IGF0dHIgMHgyMCBzaXplIDggYWx0IGVtcHR5XSBbYnJhdm8tbG9uZy1maWxlLW5hbWUudHh0IGF0dHIgMHgyMCBzaXplIDUgYWx0IGVtcHR5XSBbQ2hhcmxpZS5kYXQgYXR0ciAweDIwIHNpemUgMCBhbHQgZW1wdHldIFtzdWIgYXR0ciAweDEwIHNpemUgMCBhbHQgZW1wdHldCmluIGEgZGlyZWN0b3J5IHRoYXQgZG9lcyBub3QgZXhpc3Q6IGZhaWxlZCB3aXRoIDMKdGhlIGRpcmVjdG9yeSBpdHNlbGYgd2l0aG91dCBhIHdpbGRjYXJkOiAxIGVudHJpZXMsIHRoZW4gZXJyb3IgMTg7IFtmZngtZGlyIGF0dHIgMHgxMCBzaXplIDAgYWx0IGVtcHR5XQp0aGUgZGlyZWN0b3J5IHdpdGggYSB0cmFpbGluZyBiYWNrc2xhc2g6IGZhaWxlZCB3aXRoIDIKdW5rbm93biBpbmZvIGxldmVsIDI6IGZhaWxlZCB3aXRoIDg3CnVua25vd24gc2VhcmNoIG9wIDM6IGZhaWxlZCB3aXRoIDg3CnVua25vd24gZmxhZ3MgMHgxMDA6IGZhaWxlZCB3aXRoIDg3CnN1YlwqOiAzIGVudHJpZXMsIHRoZW4gZXJyb3IgMTg7IFsuIGF0dHIgMHgxMCBzaXplIDAgYWx0IGVtcHR5XSBbLi4gYXR0ciAweDEwIHNpemUgMCBhbHQgZW1wdHldIFtpbm5lci50eHQgYXR0ciAweDIwIHNpemUgMSBhbHQgZW1wdHldCmRpcmVjdG9yeSByZW1vdmVkOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "standard info, *: 6 entries, then error 18; [. attr 0x10 size 0 alt empty] [.. attr 0x10 size 0 alt empty] [alpha.txt attr 0x20 size 8 alt empty] [bravo-long-file-name.txt attr 0x20 size 5 alt set] [Charlie.dat attr 0x20 size 0 alt empty] [sub attr 0x10 size 0 alt empty]\nbasic info, *: 6 entries, then error 18; [. attr 0x10 size 0 alt empty] [.. attr 0x10 size 0 alt empty] [alpha.txt attr 0x20 size 8 alt empty] [bravo-long-file-name.txt attr 0x20 size 5 alt empty] [Charlie.dat attr 0x20 size 0 alt empty] [sub attr 0x10 size 0 alt empty]\nbasic info, *.txt: 2 entries, then error 18; [alpha.txt attr 0x20 size 8 alt empty] [bravo-long-file-name.txt attr 0x20 size 5 alt empty]\nstandard info, a?pha.*: 1 entries, then error 18; [alpha.txt attr 0x20 size 8 alt empty]\nexact name: 1 entries, then error 18; [alpha.txt attr 0x20 size 8 alt empty]\nexact name, other case: 1 entries, then error 18; [alpha.txt attr 0x20 size 8 alt empty]\nexact name, case sensitive flag: 1 entries, then error 18; [alpha.txt attr 0x20 size 8 alt empty]\nname that does not exist: failed with 2\nwildcard without a match: failed with 2\ndirectory only hint, *: 6 entries, then error 18; [. attr 0x10 size 0 alt empty] [.. attr 0x10 size 0 alt empty] [alpha.txt attr 0x20 size 8 alt empty] [bravo-long-file-name.txt attr 0x20 size 5 alt empty] [Charlie.dat attr 0x20 size 0 alt empty] [sub attr 0x10 size 0 alt empty]\nlarge fetch, *: 6 entries, then error 18; [. attr 0x10 size 0 alt empty] [.. attr 0x10 size 0 alt empty] [alpha.txt attr 0x20 size 8 alt empty] [bravo-long-file-name.txt attr 0x20 size 5 alt empty] [Charlie.dat attr 0x20 size 0 alt empty] [sub attr 0x10 size 0 alt empty]\nin a directory that does not exist: failed with 3\nthe directory itself without a wildcard: 1 entries, then error 18; [ffx-dir attr 0x10 size 0 alt empty]\nthe directory with a trailing backslash: failed with 2\nunknown info level 2: failed with 87\nunknown search op 3: failed with 87\nunknown flags 0x100: failed with 87\nsub\\*: 3 entries, then error 18; [. attr 0x10 size 0 alt empty] [.. attr 0x10 size 0 alt empty] [inner.txt attr 0x20 size 1 alt empty]\ndirectory removed: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

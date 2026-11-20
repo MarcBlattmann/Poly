@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSDictionary+dictionaryWithObjects%3AforKeys%3Acount%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSDictionary+dictionaryWithObjects%3AforKeys%3Acount%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSDictionary+dictionaryWithObjects:forKeys:count:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  +[NSDictionary dictionaryWithObjects:forKeys:count:] makes an immutable dictionary from count pairs:
+  keys are told apart by isEqual:/hash (a key made at run time finds an entry of a literal; the number
+  1 of any type finds the same key, @1LL and @1.0 find @1; the string '1' and the number 1 are
+  separate keys); of equal keys given twice the first pair is kept (count 1, value 'first'); count 0
+  gives an empty dictionary; a nil key or nil value raises NSInvalidArgumentException;
+  setObject:forKey: on an immutable dictionary raises NSInvalidArgumentException. NSMutableDictionary
+  replaces and removes (setObject:forKey: with nil raises NSInvalidArgumentException,
+  removeObjectForKey: of a missing key is ignored) and copies its keys: a mutable string used as a key
+  and changed afterwards is still found under its old text and the stored key is not the same object.
+  count, objectForKey: and subscripts (nil for a missing key), allKeys, isEqualToDictionary: (same
+  keys, equal values, any order). Bridging: an NSDictionary is a CFDictionary (CFDictionaryGetCount,
+  GetValue, ContainsKey work on it, CFEqual agrees), a CFDictionary from CFDictionaryCreate answers
+  the NSDictionary methods, a CFDictionaryCreateMutable one the NSMutableDictionary edits; the
+  description is '{\n    k = v;\n}'.
+returns:
+  success: "an autoreleased immutable dictionary"
+errors:
+  nil_key_or_value: "raises NSInvalidArgumentException"
+  mutating_immutable: "raises NSInvalidArgumentException"
+side_effects: "allocates; retains keys (copied) and values"
+threading: "immutable dictionaries are safe to read from any thread"
+ordering: []
+timing:
+  typical: "microseconds, linear in the count"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

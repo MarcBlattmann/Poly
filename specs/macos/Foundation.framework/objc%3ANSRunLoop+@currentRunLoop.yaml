@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSRunLoop+@currentRunLoop.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSRunLoop+@currentRunLoop.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSRunLoop+@currentRunLoop"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  +[NSRunLoop currentRunLoop] is the run loop of the calling thread; on the main thread it is
+  +mainRunLoop, the same object every call, and getCFRunLoop is CoreFoundation's
+  CFRunLoopGetCurrent/GetMain (the facts of the CFRunLoop sheets apply). -runMode:beforeDate: runs the
+  mode until the date: the default mode (NSDefaultRunLoopMode, the string 'kCFRunLoopDefaultMode';
+  NSRunLoopCommonModes is 'kCFRunLoopCommonModes') waits until the date and returns YES (about 0.2 s
+  asked, at least 0.15 and well under 2 s taken); a mode with nothing in it returns NO at once;
+  currentMode is nil outside a run and the running mode inside a callback (a timer in the default mode
+  sees 'kCFRunLoopDefaultMode'). -runUntilDate: runs the default mode to the date; a scheduled NSTimer
+  (scheduledTimerWithTimeInterval:repeats:block:) fires once for a one-shot, about once per interval
+  for a repeating one (0.05 s over 0.5 s: 5 to 12 times) and stops after -invalidate (isValid NO); a
+  timer added with addTimer:forMode: to a custom mode fires only when that mode is run.
+returns:
+  success: "the thread's run loop"
+errors: {}
+side_effects: "creates the thread's run loop on first use"
+threading: "per thread"
+ordering: []
+timing:
+  typical: "a timed run lasts about the time asked"
+  guarantees: "timers fire within a few milliseconds of due"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

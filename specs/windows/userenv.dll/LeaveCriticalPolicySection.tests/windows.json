@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "cps_leave",
+      "exe_sha256": "81fc530f89be12349224229d2622ed4cf0512a4a9791a1a2b404b0026b78d268",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dHdvIGVudGVycyBvZiB0aGUgbWFjaGluZSBzZWN0aW9uOiBoYW5kbGVzIG5vdCBOVUxMIDEgYW5kIDEsIGVxdWFsIDAKbGVhdmUgdGhlIHNlY29uZCBlbnRlciBmaXJzdDogMQpsZWF2ZSB0aGUgZmlyc3QgZW50ZXI6IDEKbGVhdmUgaW4gdGhlIG9yZGVyIG9mIGVudGVyaW5nOiB0aGUgZmlyc3Q6IDEKbGVhdmUgaW4gdGhlIG9yZGVyIG9mIGVudGVyaW5nOiB0aGUgc2Vjb25kOiAxCmxlYXZlIGZyb20gYW5vdGhlciB0aHJlYWQ6IHJlc3VsdCAxICgxID0gc3VjY2VzcywgZWxzZSAyICsgdGhlIGVycm9yKQpsZWF2ZSBhZ2FpbiBmcm9tIHRoZSBlbnRlcmluZyB0aHJlYWQgYWZ0ZXIgdGhlIG90aGVyIHRocmVhZCBsZWZ0OiAwIChlcnJvciA2KQpsZWF2ZSBhZnRlciBDbG9zZUhhbmRsZSBvZiB0aGUgc2VjdGlvbiBoYW5kbGU6IDEKbGVhdmUgd2l0aCB0aGUgaGFuZGxlIG9mIGFuIGV2ZW50OiAwIChlcnJvciA2KQpsZWF2ZSB3aXRoIE5VTEw6IDAgKGVycm9yIDg3KQpsZWF2ZSB3aXRoIElOVkFMSURfSEFORExFX1ZBTFVFOiAwIChlcnJvciA2KQpsZWF2ZSB3aXRoIHRoZSBwc2V1ZG8gaGFuZGxlIG9mIHRoZSBwcm9jZXNzOiAwIChlcnJvciA2KQp0aGUgdXNlciBzZWN0aW9uOiBoYW5kbGUgbm90IE5VTEwgMQpsZWF2ZSB0aGUgdXNlciBzZWN0aW9uOiAxCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "two enters of the machine section: handles not NULL 1 and 1, equal 0\nleave the second enter first: 1\nleave the first enter: 1\nleave in the order of entering: the first: 1\nleave in the order of entering: the second: 1\nleave from another thread: result 1 (1 = success, else 2 + the error)\nleave again from the entering thread after the other thread left: 0 (error 6)\nleave after CloseHandle of the section handle: 1\nleave with the handle of an event: 0 (error 6)\nleave with NULL: 0 (error 87)\nleave with INVALID_HANDLE_VALUE: 0 (error 6)\nleave with the pseudo handle of the process: 0 (error 6)\nthe user section: handle not NULL 1\nleave the user section: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 58
+    }
+  ]
+}

@@ -1835,18 +1835,6 @@ pub const SYSTEM_DLLS: &[SystemDll] = &[
         forwards: &[],
     },
     SystemDll {
-        file: "mmdevapi.dll",
-        exports: &[
-            ("#17", Fail::Hresult),
-            ("ActivateAudioInterfaceAsync", Fail::Hresult),
-            ("DriverProc", Fail::Hresult),
-            ("auxMessage", Fail::Hresult),
-            ("midMessage", Fail::Hresult),
-            ("modMessage", Fail::Hresult),
-        ],
-        forwards: &[],
-    },
-    SystemDll {
         file: "tdh.dll",
         exports: &[
             ("TdhAggregatePayloadFilters", Fail::Value(120)),

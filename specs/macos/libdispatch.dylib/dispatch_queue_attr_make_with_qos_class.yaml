@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_queue_attr_make_with_qos_class.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_queue_attr_make_with_qos_class.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_queue_attr_make_with_qos_class
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_queue_attr_make_with_qos_class(base, qos_class, relative_priority) returns an attribute that combines the serial
+  (NULL / DISPATCH_QUEUE_SERIAL) or concurrent choice of base with a QoS class and a relative priority; it is a shared constant (the
+  same arguments give the same pointer, different arguments different ones; nothing to release). QoS classes: user-interactive 33,
+  user-initiated 25, default 21, utility 17, background 9, unspecified 0. A queue made from it reports them through
+  dispatch_queue_get_qos_class (utility with -3 gives 17 and -3; priorities 0, -5, -10 and -15 are kept), and qos_class_self() inside
+  its blocks is that class (utility 17, user-interactive 33; the background global queue 9; qos_class_main() is 33). The
+  serial/concurrent choice survives: a concurrent attribute with a class makes a queue that runs two blocks at once, a serial or NULL base
+  does not. Invalid arguments return NULL: a relative priority above 0 or below -15, and a class value that is none of the above (12345).
+  QOS_CLASS_UNSPECIFIED is accepted.
+returns:
+  "attribute": "constant attribute pointer"
+  "invalid": "NULL"
+errors:
+  "invalid_arguments": "NULL: relative priority > 0 or < -15, unknown class"
+side_effects: "none"
+threading: "see the summary"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

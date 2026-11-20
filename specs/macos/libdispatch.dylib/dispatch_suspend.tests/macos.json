@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_suspend_basic",
+      "source_sha256": "4b2eff00db1dc433fdc32d7fac45f71345662a6b86bd21b6d60e575c4a4791a7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ff7985db17292644cefcc394de1e93d559608bd21bfeb5074adbee431fe7b681",
+          "exit_code": 0,
+          "stdout": "ok a suspended queue ran nothing\nok resume lets the block run\nok two suspends need two resumes\nok after the second resume the block runs\nok a running block finishes although the queue was suspended\nok but the next one waits\nok until resumed\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b3d165ee604303d051711ba752cd3009a06abf7858a79e059d683aea8288a9ca",
+          "exit_code": 0,
+          "stdout": "ok a suspended queue ran nothing\nok resume lets the block run\nok two suspends need two resumes\nok after the second resume the block runs\nok a running block finishes although the queue was suspended\nok but the next one waits\nok until resumed\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_suspend_more",
+      "source_sha256": "4d437b8a5deb4a7829bd297ac6bcfa3cd9dbf5e17501f51ecf3568028e39260e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "848ebfb4bca2a704c57840127e1fd4780d31fee2f29e148bf9a866ce36a20895",
+          "exit_code": 0,
+          "stdout": "ok a suspended concurrent queue ran nothing\nok after resume all ten ran\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "42ea49208364ad88994dc451eb8da0947cb478eede85dd04ccfa010981da4c2f",
+          "exit_code": 0,
+          "stdout": "ok a suspended concurrent queue ran nothing\nok after resume all ten ran\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

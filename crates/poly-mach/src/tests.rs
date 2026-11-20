@@ -257,10 +257,14 @@ fn send_errors_and_full_queues() {
         i.send(T, &msg(5, p, 0, 0, &[]), SenderInfo::default()),
         Err(SendError::Return(MACH_SEND_INVALID_HEADER))
     );
+    // The task port answers MIG requests (a request without a reply port
+    // gets none); the host port has no server yet.
     let t = i.task_self(T);
+    assert_eq!(i.send(T, &msg(MACH_MSG_TYPE_COPY_SEND, t, 0, 0, &[]), SenderInfo::default()), Ok(None));
+    let h = i.host_self(T);
     assert!(matches!(
-        i.send(T, &msg(MACH_MSG_TYPE_COPY_SEND, t, 0, 0, &[]), SenderInfo::default()),
-        Err(SendError::KernelObject(KObject::Task(T)))
+        i.send(T, &msg(MACH_MSG_TYPE_COPY_SEND, h, 0, 0, &[]), SenderInfo::default()),
+        Err(SendError::KernelObject(KObject::Host))
     ));
     for _ in 0..MACH_PORT_QLIMIT_DEFAULT {
         assert_eq!(i.send(T, &to(p), SenderInfo::default()), Ok(None));

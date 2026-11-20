@@ -19,12 +19,16 @@
 extern crate alloc;
 
 pub mod consts;
+pub mod exc;
 pub mod ipc;
 pub mod psynch;
 pub mod ulock;
 pub mod waitq;
 
-pub use ipc::{Ipc, KObject, PortId, RcvKey, Received, SendError, SenderInfo, SetId, Signal, TaskId, WakeReason};
+pub use ipc::{
+    Exception, Ipc, KObject, NoThreads, PortId, RcvKey, Received, SendError, SenderInfo, SetId, Signal, Target, TaskId,
+    ThreadServer, WakeReason,
+};
 pub use psynch::PsynchTable;
 pub use ulock::UlockTable;
 pub use waitq::{ThreadId, WaitQueue};

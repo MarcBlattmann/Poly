@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_mutex_trylock.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_mutex_trylock.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_mutex_trylock
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_mutex_lock / trylock / unlock / destroy and the attributes, for the three mutex types
+  (PTHREAD_MUTEX_NORMAL = 0 = DEFAULT, ERRORCHECK = 1, RECURSIVE = 2). trylock on a free mutex returns 0; on
+  a locked one it returns EBUSY (16), also when the caller owns a NORMAL or ERRORCHECK mutex. NORMAL: unlocking
+  an unlocked mutex returns 0 and another thread may unlock the owner's mutex (0). ERRORCHECK: locking it again
+  in the owner is EDEADLK (11); unlock by another thread or of an unlocked mutex is EPERM (1). RECURSIVE: the
+  owner may lock and trylock again (0), another thread's trylock is EBUSY until as many unlocks as locks were
+  made, one unlock too many is EPERM. pthread_mutex_destroy of a locked mutex is EBUSY, of an unlocked one 0; lock
+  and trylock on a destroyed mutex are EINVAL (22). PTHREAD_MUTEX_INITIALIZER and the recursive initialiser work
+  without init. Attributes: default type 0, settype 9 is EINVAL, default protocol PTHREAD_PRIO_NONE (0), setprotocol
+  inherit 0 and 99 EINVAL, default policy PTHREAD_MUTEX_POLICY_FIRSTFIT_NP = 3 (FAIRSHARE_NP = 1), setpolicy 77
+  is EINVAL. Structure sizes: pthread_mutex_t 64, pthread_mutexattr_t 16, pthread_cond_t 48, pthread_attr_t 64,
+  pthread_rwlock_t 200 bytes. 8 threads incrementing a counter 20000 times each under trylock/yield loops
+  gave exactly 160000. Same on both architectures.
+returns:
+  "success": "0"
+errors:
+  "EBUSY": "16"
+  "EDEADLK": "11"
+  "EPERM": "1"
+  "EINVAL": "22"
+side_effects: "locks or unlocks the mutex"
+threading: "mutual exclusion verified with 8 threads"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

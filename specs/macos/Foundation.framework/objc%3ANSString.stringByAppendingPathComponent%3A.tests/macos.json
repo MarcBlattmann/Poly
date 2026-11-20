@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsstring_stringbyappendingpathcomponent_cases",
+      "source_sha256": "0e5a9ab213e53e1e2ef98ddd6b3818b88097201fde93a4ee6f3bdbd4cc3e8cda",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b0064b01c97382ef5bbbedc4ff4cf42972caa1457eb647a0e30dc08ff5f53252",
+          "exit_code": 0,
+          "stdout": "ok /usr/local + bin\nok /usr/local/ + bin\nok /usr/local + /bin\nok /usr/local + \nok  + bin\nok /usr/local + ../x\nok /usr/local + a/b\nok /a// + b\nok rel + x\nok / + x\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "20706edd903bd871b7c30d92957eb710adb318d3aafb7768e59518867f4bd67d",
+          "exit_code": 0,
+          "stdout": "ok /usr/local + bin\nok /usr/local/ + bin\nok /usr/local + /bin\nok /usr/local + \nok  + bin\nok /usr/local + ../x\nok /usr/local + a/b\nok /a// + b\nok rel + x\nok / + x\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsstring_stringbyappendingpathcomponent_chain",
+      "source_sha256": "e12d0138698d8557289ce5fed4126725593e2842aa93de0119cafe71c7ebaaa3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5ebaa5078b84155352316158fdc7e1b0181d098a9444f2e6408bb954e76a7e4e",
+          "exit_code": 0,
+          "stdout": "ok ns_is(p, \"/usr/local/bin/tool\")\nok ns_is(p.lastPathComponent, \"tool\")\nok ns_is([p.stringByDeletingLastPathComponent stringByAppendingPathComponent:@\"other\"], \"/usr/local/bin/other\")\nok [p pathComponents].count == 5\nok ns_is([@\"rel\" stringByAppendingPathComponent:@\"a\"], \"rel/a\")\nok ns_is([[@\"a\" stringByAppendingPathComponent:@\"b\"] stringByAppendingPathComponent:@\"c\"], \"a/b/c\")\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ca5279f5cb530e8d4b6a48127b0725c2c08e3d5cdddb12fb114d53243dddb53c",
+          "exit_code": 0,
+          "stdout": "ok ns_is(p, \"/usr/local/bin/tool\")\nok ns_is(p.lastPathComponent, \"tool\")\nok ns_is([p.stringByDeletingLastPathComponent stringByAppendingPathComponent:@\"other\"], \"/usr/local/bin/other\")\nok [p pathComponents].count == 5\nok ns_is([@\"rel\" stringByAppendingPathComponent:@\"a\"], \"rel/a\")\nok ns_is([[@\"a\" stringByAppendingPathComponent:@\"b\"] stringByAppendingPathComponent:@\"c\"], \"a/b/c\")\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

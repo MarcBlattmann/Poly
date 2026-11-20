@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_c.dylib/__cxa_atexit.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in __cxa_atexit.tests/macos.json.
+id: macos/api/libsystem_c.dylib/__cxa_atexit
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  __cxa_atexit(function, argument, dso_handle) registers function(argument) to run at exit and returns 0
+  (500 registrations succeeded). It shares one list with atexit: handlers of both run in the reverse order of
+  registration (registered A, plain atexit, B, C: C, B, the atexit handler, A ran). The argument pointer
+  arrives unchanged, including NULL. The dso_handle may be the program's &__dso_handle or NULL; both are
+  accepted. A handler registered with __cxa_atexit while exit handlers run (from another handler) is run too,
+  right after the handler that registered it. Same on both architectures.
+returns:
+  "success": "0"
+errors:
+  "table_full": "not reached"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: ["reverse registration order, shared with atexit"]
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

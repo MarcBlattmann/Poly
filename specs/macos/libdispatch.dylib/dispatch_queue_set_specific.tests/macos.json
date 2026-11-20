@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_queue_set_specific_basic",
+      "source_sha256": "ce2610102b87eb0c08fea5747afd81ccc30b92e5828eec9c29bbff36dd2c1be6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "527343ac68c91fa6321e1643a2cf2c7013d150d8c17fc08847b2d8b0ce570523",
+          "exit_code": 0,
+          "stdout": "ok outside any queue (main thread) a specific is NULL\nok dispatch_queue_get_specific reads from the queue directly: NULL at first\nok dispatch_queue_get_specific gives the value\nok the main thread is not on the queue: dispatch_get_specific is still NULL\nok a block on the queue sees key1's value\nok and key2's\nok an unset key is NULL\nok replacing a value runs the old value's destructor (later, asynchronously) with the old value\nok setting NULL runs the destructor of the value removed\nok and it reads NULL\nok releasing the queue runs the destructor of the value it holds\nok three destructor calls in all\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "39800e75fbd2a6b7bdcd14fc969bcb63ef9a37847bcf6c8a5033892b6931c20c",
+          "exit_code": 0,
+          "stdout": "ok outside any queue (main thread) a specific is NULL\nok dispatch_queue_get_specific reads from the queue directly: NULL at first\nok dispatch_queue_get_specific gives the value\nok the main thread is not on the queue: dispatch_get_specific is still NULL\nok a block on the queue sees key1's value\nok and key2's\nok an unset key is NULL\nok replacing a value runs the old value's destructor (later, asynchronously) with the old value\nok setting NULL runs the destructor of the value removed\nok and it reads NULL\nok releasing the queue runs the destructor of the value it holds\nok three destructor calls in all\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_queue_set_specific_more",
+      "source_sha256": "9f3e4dbaf704796ba24d51364fe196a75c70f66404d46bdfa4a64d7eda068113",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a39c7382db6b62939b9c9b192667301a7d48ab2086447313b90d2f691bb1a7c2",
+          "exit_code": 0,
+          "stdout": "ok the key is its address: k1 finds the value\nok another array with the same text is another key\nok a block sees the value pointer as given\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8e7bcf6bebc36d75adb8210118075c20fd0221267c417a313a65af9c2c31fb61",
+          "exit_code": 0,
+          "stdout": "ok the key is its address: k1 finds the value\nok another array with the same text is another key\nok a block sees the value pointer as given\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

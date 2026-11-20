@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_group_create_async",
+      "source_sha256": "a2080bf0fe7a277960778adc0d415e4a806c434bb8197b973eafe160f8c82988",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3a036738abd27c762f820b0eed06a6488d1525a75be3935cd6e03bdc54989d4d",
+          "exit_code": 0,
+          "stdout": "ok wait returns 0 once all blocks finished\nok all 50 blocks had finished\nok a second wait returns 0 at once\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3a5202785fd095b05ece66757e00a10c62273ac24f5db28f8e00f1a1d2071424",
+          "exit_code": 0,
+          "stdout": "ok wait returns 0 once all blocks finished\nok all 50 blocks had finished\nok a second wait returns 0 at once\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_group_create_more",
+      "source_sha256": "7f749583c397721afaede48f10f40efedfaa4cbef8d264cc5c344847f95be47f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e82e59b7db3b1087cdb7f9e5352f2b502d64d813ac6fa21d61db18bb62c18ee9",
+          "exit_code": 0,
+          "stdout": "ok each round: the group emptied\nok each round: the group emptied\nok each round: the group emptied\nok each round: the group emptied\nok each round: the group emptied\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "10dd65544d600ca2dab13f4e808bfb2e7da92d3df8488251fd3c936248c1eae6",
+          "exit_code": 0,
+          "stdout": "ok each round: the group emptied\nok each round: the group emptied\nok each round: the group emptied\nok each round: the group emptied\nok each round: the group emptied\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

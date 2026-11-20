@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_source_cancel_io",
+      "source_sha256": "0ee33dc15d1322adf00fe04b73e03244eaf4221cff1d9ec579f48b260ee8c51d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7910e6374005b3031a5a1d0ac26f2dfc79fa4187e07521a48d375aa8cfa2e8b3",
+          "exit_code": 0,
+          "stdout": "ok the cancel handler ran\nok and closed the descriptor\nok a source cancelled before it was resumed has not run its cancel handler\nok after the resume it does\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b6a617bebff08bb58194d6b05dc0fcffd210e4bf7ff221c647d08a940ddf5814",
+          "exit_code": 0,
+          "stdout": "ok the cancel handler ran\nok and closed the descriptor\nok a source cancelled before it was resumed has not run its cancel handler\nok after the resume it does\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_source_cancel_more",
+      "source_sha256": "497788c405e7849cd252b4a83d581fd0d0daedfd10cd6c7b2777886e3c3e4620",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2492ef338bfcdeac5454bb3142879540febfee01bcd4bf82e88dfe08184af5ba",
+          "exit_code": 0,
+          "stdout": "ok the cancel handler ran\nok the order: event handler start, end, then the cancel handler\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2e42ffdee79b0b0b98b66c1d0d601a5c9131575d504595c5d25ef01bb035e900",
+          "exit_code": 0,
+          "stdout": "ok the cancel handler ran\nok the order: event handler start, end, then the cancel handler\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

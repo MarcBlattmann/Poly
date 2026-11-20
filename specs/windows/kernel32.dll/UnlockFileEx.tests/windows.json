@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "unlock_ranges",
+      "exe_sha256": "99b686131b664fa61657853d7765522ab8c4c7fdfaf874c9cad383c7632b79a7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bG9jayAwLi44OiAxCmxvY2sgOC4uMTY6IDEKdW5sb2NrIDAuLjE2ICh0d28gYWRqYWNlbnQgbG9ja3MgYXMgb25lKTogMCAoZXJyb3IgMTU4KQp1bmxvY2sgNC4uOCAoaW5zaWRlKTogMCAoZXJyb3IgMTU4KQp1bmxvY2sgMC4uMTIgKGJpZ2dlciB0aGFuIHRoZSBmaXJzdCk6IDAgKGVycm9yIDE1OCkKdW5sb2NrIDEuLjkgKHNoaWZ0ZWQpOiAwIChlcnJvciAxNTgpCnVubG9jayA4Li4xNjogMQp1bmxvY2sgOC4uMTYgYWdhaW46IDAgKGVycm9yIDE1OCkKdW5sb2NrIDAuLjg6IDEKbG9jayA0IEdpQiAuLiA0IEdpQiArIDE2OiAxCnVubG9jayA0IEdpQiAuLiA0IEdpQiArIDg6IDAgKGVycm9yIDE1OCkKdW5sb2NrIDQgR2lCIC4uIDQgR2lCICsgMTY6IDEKbG9jayAwIC4uIDggR2lCOiAxCnVubG9jayAwIC4uIDQgR2lCOiAwIChlcnJvciAxNTgpCnVubG9jayAwIC4uIDggR2lCOiAxCmxvY2sgdGhlIGxhcmdlc3Qgb2Zmc2V0IDB4N0ZGRkZGRkZGRkZGRkZGRSwgbGVuZ3RoIDE6IDEKdW5sb2NrIHRoZSBsYXJnZXN0IG9mZnNldCAweDdGRkZGRkZGRkZGRkZGRkUsIGxlbmd0aCAxOiAxCmxvY2sgb2Zmc2V0IDB4RkZGRkZGRkZGRkZGRkZGRiwgbGVuZ3RoIDE6IDEKdW5sb2NrIG9mZnNldCAweEZGRkZGRkZGRkZGRkZGRkYsIGxlbmd0aCAxOiAxCmxvY2sgb2Zmc2V0IDB4RkZGRkZGRkZGRkZGRkYwMCwgbGVuZ3RoIDB4MjAwICh3cmFwcyk6IDAgKGVycm9yIDMwNykKdW5sb2NrIG9mZnNldCAweEZGRkZGRkZGRkZGRkZGMDAsIGxlbmd0aCAweDIwMDogMCAoZXJyb3IgMzA3KQpsb2NrIDIwLi4yNDogMQpsb2NrIDMwLi4zNDogMQp1bmxvY2sgMjAuLjI0IGZpcnN0OiAxCnVubG9jayAzMC4uMzQgc2Vjb25kOiAxCmxvY2sgNDAuLjQ0OiAxCnVubG9jayA0MC4uNDQgd2l0aCByZXNlcnZlZCAxOiAwIChlcnJvciA4NykKdW5sb2NrIDQwLi40NCB3aXRoIHJlc2VydmVkIDB4RkZGRkZGRkY6IDAgKGVycm9yIDg3KQp1bmxvY2sgNDAuLjQ0OiAxCnVubG9jayB3aXRoIHRoZSBOVUxMIGhhbmRsZTogMCAoZXJyb3IgNikKdW5sb2NrIHdpdGggSU5WQUxJRF9IQU5ETEVfVkFMVUU6IDAgKGVycm9yIDYpCnVubG9jayB3aXRoIGEgaGFuZGxlIHZhbHVlIHRoYXQgaXMgbm90IG9wZW46IDAgKGVycm9yIDYpCmxvY2sgNTAuLjU0IGJlZm9yZSBjbG9zaW5nOiAxCnVubG9jayB3aXRoIHRoZSBjbG9zZWQgaGFuZGxlOiAwIChlcnJvciA2KQpsb2NrIHdpdGggYSBoYW5kbGUgdGhhdCBoYXMgb25seSBGSUxFX1JFQURfQVRUUklCVVRFUzogMCAoZXJyb3IgNSkKdW5sb2NrIHdpdGggYSBoYW5kbGUgdGhhdCBoYXMgb25seSBGSUxFX1JFQURfQVRUUklCVVRFUzogMCAoZXJyb3IgNSkKbG9jayB3aXRoIGEgcmVhZC1vbmx5IGhhbmRsZTogMQp1bmxvY2sgd2l0aCBhIHJlYWQtb25seSBoYW5kbGU6IDEKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "lock 0..8: 1\nlock 8..16: 1\nunlock 0..16 (two adjacent locks as one): 0 (error 158)\nunlock 4..8 (inside): 0 (error 158)\nunlock 0..12 (bigger than the first): 0 (error 158)\nunlock 1..9 (shifted): 0 (error 158)\nunlock 8..16: 1\nunlock 8..16 again: 0 (error 158)\nunlock 0..8: 1\nlock 4 GiB .. 4 GiB + 16: 1\nunlock 4 GiB .. 4 GiB + 8: 0 (error 158)\nunlock 4 GiB .. 4 GiB + 16: 1\nlock 0 .. 8 GiB: 1\nunlock 0 .. 4 GiB: 0 (error 158)\nunlock 0 .. 8 GiB: 1\nlock the largest offset 0x7FFFFFFFFFFFFFFE, length 1: 1\nunlock the largest offset 0x7FFFFFFFFFFFFFFE, length 1: 1\nlock offset 0xFFFFFFFFFFFFFFFF, length 1: 1\nunlock offset 0xFFFFFFFFFFFFFFFF, length 1: 1\nlock offset 0xFFFFFFFFFFFFFF00, length 0x200 (wraps): 0 (error 307)\nunlock offset 0xFFFFFFFFFFFFFF00, length 0x200: 0 (error 307)\nlock 20..24: 1\nlock 30..34: 1\nunlock 20..24 first: 1\nunlock 30..34 second: 1\nlock 40..44: 1\nunlock 40..44 with reserved 1: 0 (error 87)\nunlock 40..44 with reserved 0xFFFFFFFF: 0 (error 87)\nunlock 40..44: 1\nunlock with the NULL handle: 0 (error 6)\nunlock with INVALID_HANDLE_VALUE: 0 (error 6)\nunlock with a handle value that is not open: 0 (error 6)\nlock 50..54 before closing: 1\nunlock with the closed handle: 0 (error 6)\nlock with a handle that has only FILE_READ_ATTRIBUTES: 0 (error 5)\nunlock with a handle that has only FILE_READ_ATTRIBUTES: 0 (error 5)\nlock with a read-only handle: 1\nunlock with a read-only handle: 1\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

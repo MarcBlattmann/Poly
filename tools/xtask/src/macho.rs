@@ -26,7 +26,7 @@ use crate::initramfs::{self, Tree};
 use crate::programs::run_as_init;
 use crate::symbols::Symbols;
 use crate::{Result, root};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 const DATA: &str = "crates/poly-dyld/tests/data";
@@ -102,6 +102,11 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
 /// (`personalities/xnu/tests/data`, ADR 0238).
 const MACH_DATA: &str = "personalities/xnu/tests/data";
 
+/// Poly's own Mach exception tests (`personalities/xnu/tests/data/exc`,
+/// built with MIG stubs from the SDK's `.defs`): no macOS recording, so
+/// every check must pass and the program exit 0.
+const OWN_TESTS: &[&str] = &["exc_state", "exc_default"];
+
 /// Tests whose x86-64 build checks less than the arm64 one (a part under
 /// `POLY_ARM64`): only their own checks must pass, not the recording.
 const ARM64_ONLY_PARTS: &[&str] = &["ulock_wait2_timeout"];
@@ -142,13 +147,18 @@ pub fn mach_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         let bytes = std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?;
         files.push((name, bytes, root().join(src).parent().ok_or("a test directory")?.to_path_buf()));
     }
+    for name in OWN_TESTS {
+        let p = root().join(MACH_DATA).join(name);
+        let bytes = std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+        files.push((name.to_string(), bytes, PathBuf::new()));
+    }
     let programs: Vec<(&str, &[u8])> = files.iter().map(|(n, b, _)| (n.as_str(), b.as_slice())).collect();
     let mut tree = Tree::default();
     tree.files.push(("usr/lib/libSystem.B.dylib".into(), 0o755, read("libSystem_x64.dylib")?));
     let image =
         initramfs::write(&root(), "poly-macho-mach-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))?;
     for (name, _, dir) in &files {
-        eprintln!("==> boot test: Mach core spec test {name} (x86-64) as the first process");
+        eprintln!("==> boot test: Mach test {name} (x86-64) as the first process");
         let b = run_as_init(kernel, syms, &image, name, "summary ")?;
         let got = protocol_lines(&b.output);
         if let Some(line) = got.iter().find(|l| l.starts_with("not ok ")) {
@@ -157,7 +167,7 @@ pub fn mach_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         if let Some(line) = b.output.lines().find(|l| l.contains(" not implemented")) {
             return Err(format!("/bin/{name}: {line}"));
         }
-        if ARM64_ONLY_PARTS.contains(&name.as_str()) {
+        if ARM64_ONLY_PARTS.contains(&name.as_str()) || OWN_TESTS.contains(&name.as_str()) {
             continue;
         }
         let want = recorded(dir, name)?;
