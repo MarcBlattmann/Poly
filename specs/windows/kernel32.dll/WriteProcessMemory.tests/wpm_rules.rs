@@ -324,9 +324,10 @@ impl Child {
         let mut code = 0u32;
         // SAFETY: the handles of the process this test started, closed once.
         unsafe {
-            if WaitForSingleObject(self.process, 10_000) != 0 {
+            // 40 s and 15 s: CI's emulated machines are slow and loaded (a child was still running after 10 s + 5 s there)
+            if WaitForSingleObject(self.process, 40_000) != 0 {
                 TerminateProcess(self.process, 0xDEAD);
-                WaitForSingleObject(self.process, 5_000);
+                WaitForSingleObject(self.process, 15_000);
             }
             GetExitCodeProcess(self.process, &mut code);
             CloseHandle(self.thread);
