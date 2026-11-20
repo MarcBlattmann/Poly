@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:50:53",
+  "tests": [
+    {
+      "name": "arc_retainautoreleasereturnvalue_arcfn",
+      "source_sha256": "48aa444972d946e694b6835d90aeb16b1554174d678dc0d9ac1e3df1233e5950",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4e48d8a8aab477c0b9797e03c1b9b21e3c187da247a2b089e45b0d71cd9e2bc7",
+          "exit_code": 0,
+          "stdout": "value retainCount with two strong variables 2\nvalue deallocs while both live 0\nvalue deallocs at the end of the scope 1\nvalue deallocs after the pop 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "faf739faaef4ea469b0fb67fa8e84496412e997475aba939f01fced154f424e3",
+          "exit_code": 0,
+          "stdout": "value retainCount with two strong variables 2\nvalue deallocs while both live 0\nvalue deallocs at the end of the scope 1\nvalue deallocs after the pop 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_retainautoreleasereturnvalue_basic",
+      "source_sha256": "0faf702e29e10b8177a783da168878a65cd268b968c3c7be24370c7d5b5a72c3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8bdcf1536697491e79f0200bc34fc84ebc2c51c65e6c38546ac6abba1d6a5305",
+          "exit_code": 0,
+          "stdout": "ok returns its argument\nvalue retainCount after the call 2\nvalue retainCount after the pop 1\nvalue deallocs after the pop 0\nvalue deallocs after the release 1\nok nil in, nil out\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "59755a99bb4d8a94b4ebbbd0f3f585d1703dfe36918e97f554cf6b5c023529b5",
+          "exit_code": 0,
+          "stdout": "ok returns its argument\nvalue retainCount after the call 2\nvalue retainCount after the pop 1\nvalue deallocs after the pop 0\nvalue deallocs after the release 1\nok nil in, nil out\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_retainautoreleasereturnvalue_paired",
+      "source_sha256": "b2065970f661a35284a53382f5edb20c15680004eb218964b9276e42afd4119e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c5f2a9e83a4703f5b6f870ed4a9fbd1f48ff966b447e91d886f83c51d160518b",
+          "exit_code": 0,
+          "stdout": "value paired: retainCount 2\nvalue paired: retainCount after the pop 2\nvalue paired: deallocs after one release 0\nvalue paired: deallocs after two releases 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "aeca41cd8d639abb2754c9bd9eda0b2ccdf54a693457641b798d8e6fe948d7cb",
+          "exit_code": 0,
+          "stdout": "value paired: retainCount 2\nvalue paired: retainCount after the pop 2\nvalue paired: deallocs after one release 0\nvalue paired: deallocs after two releases 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

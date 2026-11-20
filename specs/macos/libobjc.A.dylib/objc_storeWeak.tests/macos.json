@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:50:53",
+  "tests": [
+    {
+      "name": "arc_storeweak_arcweak",
+      "source_sha256": "9cdac9ff08903a889d11f2aa40e11baea9896409fcee3340be8f1fe51b356ae1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "767c8a4635b5e735221f51529d65722d34da296dff99d870c222c1a652cbd65f",
+          "exit_code": 0,
+          "stdout": "value the global reads the object 1\nvalue the ivar reads the object 1\nvalue the local reads the object 1\nvalue a weak read gives a strong reference 1\nvalue deallocs while the weak read result is held 0\nvalue deallocs once it is dropped 1\nvalue the global is nil 1\nvalue the ivar is nil 1\nvalue the local is nil 1\nvalue a weak local reads the object 1\nvalue deallocs after a function with a weak local 2\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "82f4b15b6840a49c4982da8be1c780b538c45c0c7ee6a9718924f958c333e2ae",
+          "exit_code": 0,
+          "stdout": "value the global reads the object 1\nvalue the ivar reads the object 1\nvalue the local reads the object 1\nvalue a weak read gives a strong reference 1\nvalue deallocs while the weak read result is held 0\nvalue deallocs once it is dropped 1\nvalue the global is nil 1\nvalue the ivar is nil 1\nvalue the local is nil 1\nvalue a weak local reads the object 1\nvalue deallocs after a function with a weak local 2\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_storeweak_basic",
+      "source_sha256": "92f7d7dfbc6db693633316d9af8b54836c280c82c7e4e967976ebb8319cc5a48",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bafb41a99f6f551926f92cd4b642734e71b14bcef7edbec3a9c8a0ce22b72ff3",
+          "exit_code": 0,
+          "stdout": "ok returns the object\nok the location holds the object\nvalue retainCount unchanged by the store 1\nvalue deallocs 1\nok the first location was zeroed\nok the second location was zeroed\nok storing nil returns nil\nok the location is nil\nok the cleared location stays nil\nok storing nil in a nil location\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b9d63e10d44ed1b7cd28074750425a2321948704aec7f48837bc4b60374df316",
+          "exit_code": 0,
+          "stdout": "ok returns the object\nok the location holds the object\nvalue retainCount unchanged by the store 1\nvalue deallocs 1\nok the first location was zeroed\nok the second location was zeroed\nok storing nil returns nil\nok the location is nil\nok the cleared location stays nil\nok storing nil in a nil location\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_storeweak_switch",
+      "source_sha256": "292c2ca7f65731a54727d95182e6a6f4b82a62cec37ce07d1ad40ee989440dea",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "21800488d0cf6396805fb032fc8aa8c1114cebc309b5152d95a36056838c3171",
+          "exit_code": 0,
+          "stdout": "ok returns the new object\nok location holds the new object\nvalue deallocs after a is gone 1\nok s still refers to b\nok s2 was zeroed\nok storing the same object again\nok s zeroed once b is gone\nvalue deallocs 2\nvalue locations set 50\nvalue locations zeroed 50\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b6fac33bf5fbf3f85a81de7a19188f6b2f647c6a5ef62ecfa5e82900a1a35516",
+          "exit_code": 0,
+          "stdout": "ok returns the new object\nok location holds the new object\nvalue deallocs after a is gone 1\nok s still refers to b\nok s2 was zeroed\nok storing the same object again\nok s zeroed once b is gone\nvalue deallocs 2\nvalue locations set 50\nvalue locations zeroed 50\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

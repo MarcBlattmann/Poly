@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "getclassof_runtime",
+      "source_sha256": "5b5c0066f1e9d7a74afe3d13cf48a684028d596570c8aa678fd3a5a720971fce",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f243879cff15bae93b2cf7ab9837ea75427f8c32e2fea94ead8894cb33c03b67",
+          "exit_code": 0,
+          "stdout": "ok before registration the class has a metaclass\nok registration does not change it\nok metaclass's class is the root metaclass\nok class_createInstance: object_getClass\nok -class agrees\nok object_setClass returns the previous class\nok object_getClass now answers the new class\nok -class too\nok class_getName follows\nok -class on the metaclass-bearing class\nok object five levels deep\nvalue metaclass hops to the root metaclass 5\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0fd4022ebdf9ac96af5120d859b56dadbe08078f076b8a32f66ec2f5c164a3ca",
+          "exit_code": 0,
+          "stdout": "ok before registration the class has a metaclass\nok registration does not change it\nok metaclass's class is the root metaclass\nok class_createInstance: object_getClass\nok -class agrees\nok object_setClass returns the previous class\nok object_getClass now answers the new class\nok -class too\nok class_getName follows\nok -class on the metaclass-bearing class\nok object five levels deep\nvalue metaclass hops to the root metaclass 5\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

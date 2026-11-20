@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_poolpop_dealloc",
+      "source_sha256": "abab71acc2fd8a703f1ced62b7b024dfc823dbf5b891391b417299fe249112e6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "55d6dbe5fa77469a771285433c044a213e276f149f8ad03a97de877111f4a914",
+          "exit_code": 0,
+          "stdout": "value outer deallocated 1\nvalue the object it autoreleased while being popped is gone too 1\nvalue a pool opened inside -dealloc drained inside it 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "df07ea7bfc6f2dd7398e6c5cb225eacc3a954c480ea7ae99e5c1d027a6121630",
+          "exit_code": 0,
+          "stdout": "value outer deallocated 1\nvalue the object it autoreleased while being popped is gone too 1\nvalue a pool opened inside -dealloc drained inside it 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_poolpop_null",
+      "source_sha256": "67db129b74206934c58ffabc0af74cf7dca0c293380aecf84e705f56a70b5e54",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "072939666286c26bbfa38277ee061426fa6f3eb6541d2bb04ded1b83f013c417",
+          "exit_code": 0,
+          "stdout": "ok the child was killed by a signal\nvalue signal 11\nvalue a normal pop afterwards 1\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d6485059efad44f883564132c6f43d9952c0caacaa20f8017821cf67a9e6823a",
+          "exit_code": 0,
+          "stdout": "ok the child was killed by a signal\nvalue signal 11\nvalue a normal pop afterwards 1\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_poolpop_order",
+      "source_sha256": "7723c27bbb49772bd4d8112dd8c8dbcf109e2dbbfbc664d4daf00046429fa558",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ce99fee2897350eda2ebeef9a170b17209e75b7b22fd242d13ecd2263136f5c1",
+          "exit_code": 0,
+          "stdout": "value events after the inner pop 2\nvalue event 4\nvalue event 3\nvalue events after the outer pop 5\nvalue event 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "eaaf4e21ffe02ad78899ff7dab6cc4f179840cbe8d04d9b67d437b5bed0110d3",
+          "exit_code": 0,
+          "stdout": "value events after the inner pop 2\nvalue event 4\nvalue event 3\nvalue events after the outer pop 5\nvalue event 1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

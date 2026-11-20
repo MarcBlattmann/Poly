@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_copyweak_basic",
+      "source_sha256": "d09dd38681c437bcf90f6a7a8c429014586184be5a5695da6f1271d5a7678957",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "63eb068ad19fe39eaa5c97fd78d0300dfe77e59119641c0df83bb0f884e59eee",
+          "exit_code": 0,
+          "stdout": "ok the destination holds the object\nok the source is unchanged\nvalue retainCount unchanged 1\nvalue deallocs 1\nok the source was zeroed\nok the destination was zeroed\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "268a96d71c0d8d1168494e5a926ec0dbab9837abc9709a52a80647b96233d192",
+          "exit_code": 0,
+          "stdout": "ok the destination holds the object\nok the source is unchanged\nvalue retainCount unchanged 1\nvalue deallocs 1\nok the source was zeroed\nok the destination was zeroed\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_copyweak_many",
+      "source_sha256": "f8c3056de19324159001c7504edb9f6110a296a6f188cb6372f2f0bdef0b90c3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "37ffc5ae8d261439c7a17afc637b3721597f6e1dac6d0f2b5ea741551394ef2c",
+          "exit_code": 0,
+          "stdout": "value copies holding the object 20\nvalue copies zeroed 20\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "679ac5aa7a5e0874c1fd9d500504a26cfd63963e927a471e52e5000308831156",
+          "exit_code": 0,
+          "stdout": "value copies holding the object 20\nvalue copies zeroed 20\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

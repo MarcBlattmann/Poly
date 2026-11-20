@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "methodenc_nsobject",
+      "source_sha256": "5f213bb3823bbf2e726cee70f0457a77144279037c0c343222d85bf299c9d5ac",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c228e79137ed4ffbfd384554c2d92456c05c29834b697f038d53d5ac459d430b",
+          "exit_code": 0,
+          "stdout": "value init @16@0:8\nvalue dealloc v16@0:8\nvalue hash Q16@0:8\nvalue isEqual: B24@0:8@16\nvalue self @16@0:8\nvalue class #16@0:8\nvalue superclass #16@0:8\nvalue isKindOfClass: B24@0:8#16\nvalue isMemberOfClass: B24@0:8#16\nvalue respondsToSelector: B24@0:8:16\nvalue conformsToProtocol: B24@0:8@16\nvalue retain @16@0:8\nvalue release Vv16@0:8\nvalue autorelease @16@0:8\nvalue retainCount Q16@0:8\nvalue zone ^{_NSZone=}16@0:8\nvalue copy @16@0:8\nvalue mutableCopy @16@0:8\nvalue description @16@0:8\nvalue performSelector: @24@0:8:16\nvalue performSelector:withObject: @32@0:8:16@24\nvalue isProxy B16@0:8\nvalue forwardingTargetForSelector: @24@0:8:16\nvalue doesNotRecognizeSelector: v24@0:8:16\nvalue +alloc @16@0:8\nvalue +new @16@0:8\nvalue +allocWithZone: @24@0:8^{_NSZone=}16\nvalue +initialize v16@0:8\nvalue +instancesRespondToSelector: B24@0:8:16\nvalue +isSubclassOfClass: B24@0:8#16\nok NSObject has an encoding for every method asked\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0437b01b16c8ceb8ebd8448947e489963a9b88ef3592a1e2875b4e3d6827325a",
+          "exit_code": 0,
+          "stdout": "value init @16@0:8\nvalue dealloc v16@0:8\nvalue hash Q16@0:8\nvalue isEqual: c24@0:8@16\nvalue self @16@0:8\nvalue class #16@0:8\nvalue superclass #16@0:8\nvalue isKindOfClass: c24@0:8#16\nvalue isMemberOfClass: c24@0:8#16\nvalue respondsToSelector: c24@0:8:16\nvalue conformsToProtocol: c24@0:8@16\nvalue retain @16@0:8\nvalue release Vv16@0:8\nvalue autorelease @16@0:8\nvalue retainCount Q16@0:8\nvalue zone ^{_NSZone=}16@0:8\nvalue copy @16@0:8\nvalue mutableCopy @16@0:8\nvalue description @16@0:8\nvalue performSelector: @24@0:8:16\nvalue performSelector:withObject: @32@0:8:16@24\nvalue isProxy c16@0:8\nvalue forwardingTargetForSelector: @24@0:8:16\nvalue doesNotRecognizeSelector: v24@0:8:16\nvalue +alloc @16@0:8\nvalue +new @16@0:8\nvalue +allocWithZone: @24@0:8^{_NSZone=}16\nvalue +initialize v16@0:8\nvalue +instancesRespondToSelector: c24@0:8:16\nvalue +isSubclassOfClass: c24@0:8#16\nok NSObject has an encoding for every method asked\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "methodenc_runtime",
+      "source_sha256": "f37649427762fcccacb7a92aee6b775f963e89c7bb805f35fd7398f338606fea",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bfec8c7ded7ba5e2073eab77a5fbc1d610e891e39463a9303859528680ade0ab",
+          "exit_code": 0,
+          "stdout": "ok m0\nvalue m0 v@:\nok m1\nvalue m1 q@:q\nok m2\nvalue m2 @@:@@\nok m3\nvalue m3 {S=dd}@:{S=dd}\nok m4\nvalue m4 v32@0:8@16q24\nok m5\nvalue m5 i\nok m6\nvalue m6   \nok m7\nvalue m7 ^{_NSZone=}\nok m8\nvalue m8 b4i12\nok a NULL type string reads back as a non-NULL empty string\nok pointer stable\nvalue NSObject -hash Q16@0:8\nvalue override -hash q@:\nok two Methods, two strings\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cfd8f312bbbb4711dd6dfcfa4a074099fa2c00fb6da95d0564441919d87fb79c",
+          "exit_code": 0,
+          "stdout": "ok m0\nvalue m0 v@:\nok m1\nvalue m1 q@:q\nok m2\nvalue m2 @@:@@\nok m3\nvalue m3 {S=dd}@:{S=dd}\nok m4\nvalue m4 v32@0:8@16q24\nok m5\nvalue m5 i\nok m6\nvalue m6   \nok m7\nvalue m7 ^{_NSZone=}\nok m8\nvalue m8 b4i12\nok a NULL type string reads back as a non-NULL empty string\nok pointer stable\nvalue NSObject -hash Q16@0:8\nvalue override -hash q@:\nok two Methods, two strings\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

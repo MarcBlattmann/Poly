@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_getAssociatedObject.yaml. Observed with Objective-C test programs built for x86_64 and arm64
+# (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in objc_getAssociatedObject.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_getAssociatedObject
+oracle:
+  os: "macOS 27.0 (26A428)"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 (26A428), Darwin 27.0.0; tests are single C files compiled as Objective-C by `pipeline mac build` (clang, without ARC) and linked with /usr/lib/libobjc.A.dylib and libSystem; each runs 3 times per architecture in a fresh empty scratch directory with an empty environment. arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); no output differed between the two architectures in any test of this entry. No Foundation: the root class NSObject exported by libobjc itself is the only class used."
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  objc_getAssociatedObject(object, key) returns the value stored under (object, key) by
+  objc_setAssociatedObject, or nil when there is none. A nil object gives nil (no crash), as does an
+  object that never had an association, a key that was never used, or a key whose association was
+  removed (by setting nil or by objc_removeAssociatedObjects). The key is compared by pointer value
+  (NULL, the integer 1 and a selector are valid distinct keys; equal strings at different addresses
+  are different keys). A class object has associations of its own: they are not seen through its
+  metaclass or through its instances. For a COPY policy the value returned is the copy made at set
+  time (the same copy on every get; -copyWithZone: is not called again by get). Retain counts: for
+  the atomic policies (OBJC_ASSOCIATION_RETAIN, OBJC_ASSOCIATION_COPY) the value is retained and
+  autoreleased on behalf of the caller before the call returns, so its retain count is 1 higher
+  until the pool that was innermost at the call is popped (observed 4, then 5 inside a pushed pool,
+  then 4 after the pop). For the nonatomic policies and ASSIGN nothing is retained or autoreleased:
+  the retain count does not change. The value read with an atomic policy stays alive until that pool
+  is popped even if another thread or the same thread replaces the association in the meantime: the
+  old value was not deallocated before the pool was popped and its fields could still be read. Reads
+  from four threads at once, each in its own autorelease pool, 5000 iterations on a shared and a
+  private key, always returned the right value. While the owner's -dealloc runs the associations can
+  still be read.
+returns:
+  found: "the stored value (the copy for COPY policies); retained and autoreleased for the atomic policies"
+  not_found: "nil"
+  nil_object: "nil"
+errors:
+  none: "no error is reported"
+side_effects: >
+  For atomic policies: one retain and one autorelease into the calling thread's current pool (its
+  implicit top pool when none was pushed). Nothing else.
+threading: >
+  Safe to call concurrently with itself. The autorelease goes to the calling thread's own pool.
+ordering:
+  - "the autorelease of an atomic get is drained when the pool that was innermost at the call pops"
+  - "a value replaced after the get returned remains valid until that pool pops"
+timing:
+  typical: "microseconds per call (a hash table lookup under a lock)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
