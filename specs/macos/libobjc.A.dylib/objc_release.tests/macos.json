@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_release_basic",
+      "source_sha256": "b49e67cdeec967f42c155aa4333e6544cd6b0a06057cbb1525006d186aa37535",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "83fd4ee10928c1ab1acf9fa127fe447dbc5e0c7696942ef88152a1cf2a34d61d",
+          "exit_code": 0,
+          "stdout": "value deallocs after a non-final release 0\nvalue deallocs after the final release 1\nvalue deallocs after the second object 2\nvalue order[0] 1\nvalue order[1] 2\nvalue nil release survived 1\nvalue deallocs unchanged by nil 2\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "13f4e2491d0dbca7aa80272e3049a7858c1747d667d7765bd8cf14f7e91f49d6",
+          "exit_code": 0,
+          "stdout": "value deallocs after a non-final release 0\nvalue deallocs after the final release 1\nvalue deallocs after the second object 2\nvalue order[0] 1\nvalue order[1] 2\nvalue nil release survived 1\nvalue deallocs unchanged by nil 2\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_release_chain",
+      "source_sha256": "342f44647949d1bb41758b572a56f0bbc8596fc49c780aed319c48f1315d5a8c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7990465b7477605c6d99fb65acbe5d1d2d6ced7e0ba9d885d940e09ae81145eb",
+          "exit_code": 0,
+          "stdout": "value events 5\nvalue event 100\nvalue event 1\nvalue event 101\nvalue event 102\nvalue event 103\nok the extra reference kept the second child alive\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a3d6069a689210a7ede67fc5c46c18ad1f2144a59022363163a35cd9933efcae",
+          "exit_code": 0,
+          "stdout": "value events 5\nvalue event 100\nvalue event 1\nvalue event 101\nvalue event 102\nvalue event 103\nok the extra reference kept the second child alive\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

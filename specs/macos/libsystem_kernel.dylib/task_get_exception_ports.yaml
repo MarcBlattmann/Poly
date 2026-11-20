@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/task_get_exception_ports.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mexc.h; ADR 0182);
+# results per architecture in task_get_exception_ports.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/task_get_exception_ports
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mexc.h, poly_mlibc.h) so that they call libSystem; each makes its own faults in its own threads or child processes and catches them with exception ports of its own, in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); results are equal on both except where the sheet names a difference"
+  observed_by: spec-macos-mach-exc
+  date: 2026-11-20
+summary: >
+  task_get_exception_ports(task, mask, masks[], &count, ports[], behaviors[], flavors[]) gives the task's exception ports for the exceptions in mask as
+  entries: one entry for each distinct (port, behavior, flavor) among them, its mask holding the exceptions of the request that have it; exceptions
+  without a port come together in an entry with a null port, behavior 0 and flavor 0. The entries come in the order of the lowest exception bit of each.
+  A fresh task has one entry with a null port for the classic mask. Asking for one exception gives just that bit. Each call returns send rights and adds a user reference
+  to each port's send right. A mask of 0 succeeds with no entries; 0x80000000 is KERN_INVALID_ARGUMENT (4); an invalid task is MACH_SEND_INVALID_DEST
+  (0x10000003); the thread port instead of the task port is KERN_INVALID_ARGUMENT. For a thread (thread_get_exception_ports) a thread that has never had
+  a port set gives no entries for any mask; after a set it gives entries as the task does, with a null-port entry for the others.
+  Observations of both architectures agree unless a difference is named (x86_64 was observed under Rosetta 2: a few answers there are the
+  translator's, named below). Exception ports: a task starts with no port for the classic exceptions 1 to 9 (EXC_MASK_CLASSIC, 0x3fe); on arm64 the
+  harness's processes also inherited a port for EXC_RESOURCE (mask 0x800, behavior 0xa0000004), which the tests never look at.
+returns:
+  success: "KERN_SUCCESS (0); the count and the arrays set"
+errors:
+  invalid_argument: "KERN_INVALID_ARGUMENT (4)"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "user references are added to the ports' send rights"
+threading: "no thread-specific behaviour observed besides what is said"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call (an exception round trip is some tens of microseconds)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

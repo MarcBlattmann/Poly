@@ -18,7 +18,7 @@ use poly_mach::exc::ThreadState64;
 use poly_mach::{TaskId, ThreadId, ulock};
 use poly_personality_xnu::exc;
 use poly_personality_xnu::kernel::{
-    Arch, Backing, Fault, Inherit, MachState, PageInfo, Region, ThreadStart, Wakeup, XnuKernel,
+    Arch, Backing, Fault, Inherit, MachState, PageInfo, Peer, Region, ThreadStart, Wakeup, XnuKernel,
 };
 
 static MACH: SpinLock<Option<MachState>> = SpinLock::new(None);
@@ -129,10 +129,17 @@ impl XnuKernel for MachThread<'_> {
             m.ipc.create_thread(task, thread);
         } else {
             m.ipc.create_task(task, thread);
-            // A child inherits its parent's task exception handlers.
-            m.ipc.inherit_exception_ports(u64::from(self.process.ppid), task);
+            // A child inherits its parent's task exception handlers and
+            // special ports.
+            m.ipc.inherit_from(u64::from(self.process.ppid), task);
         }
         f(m, self);
+    }
+
+    fn peer(&self, pid: i32) -> Option<Peer> {
+        let pid = u32::try_from(pid).ok()?;
+        let p = process::find(pid)?;
+        Some(Peer { running: !p.has_ended(), related: pid == self.process.ppid || p.ppid == self.process.pid })
     }
 
     fn kill_self(&mut self, signal: u32) {

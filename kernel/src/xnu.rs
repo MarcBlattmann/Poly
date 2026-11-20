@@ -162,6 +162,11 @@ fn map_start(memory: &Memory, program: &Program, entry: poly_dyld::Entry) -> Res
         mode,
         exit: program.exit_function().map_err(|e| e.to_string())?.unwrap_or(0),
         initializers: program.initializers(),
+        images: program
+            .images
+            .iter()
+            .map(|im| start::ImageInfo { header: im.base, slide: im.slide, path: im.path.clone() })
+            .collect(),
     }
     .to_bytes();
     let len = start::DATA_OFFSET + page_up(data.len() as u64);
@@ -591,6 +596,10 @@ impl BsdKernel for Thread<'_> {
 
     fn random(&mut self, buf: &mut [u8]) {
         crate::random::fill(buf);
+    }
+
+    fn wall_clock_ns(&self) -> u64 {
+        crate::time::realtime_ns()
     }
 
     fn system(&self) -> bsd::sysctl::System {

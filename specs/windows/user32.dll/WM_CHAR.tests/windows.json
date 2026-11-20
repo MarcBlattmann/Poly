@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "2c44ff600c90",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:21:59Z",
+  "tests": [
+    {
+      "name": "fk_char_ctrl",
+      "exe_sha256": "372650c57322a332be97c314b797053381e01f6d43466fe684dac0bc5ac75f2c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBDdHJsK0EsIHRoZW4gYSwgdGhlbiBTaGlmdCthCiAgRSBXTV9LRVlET1dOIHZrPTB4MTEgbD0weDAwMWQwMDAxCiAgRSBXTV9LRVlET1dOIHZrPTB4NDEgbD0weDAwMWUwMDAxCiAgRSBXTV9DSEFSIGNoPTB4MDAwMSBsPTB4MDAxZTAwMDEKICBFIFdNX0tFWVVQIHZrPTB4NDEgbD0weGMwMWUwMDAxCiAgRSBXTV9LRVlVUCB2az0weDExIGw9MHhjMDFkMDAwMQogIEUgV01fS0VZRE9XTiB2az0weDQxIGw9MHgwMDFlMDAwMQogIEUgV01fQ0hBUiBjaD0weDAwNjEgbD0weDAwMWUwMDAxCiAgRSBXTV9LRVlVUCB2az0weDQxIGw9MHhjMDFlMDAwMQogIEUgV01fS0VZRE9XTiB2az0weDEwIGw9MHgwMDJhMDAwMQogIEUgV01fS0VZRE9XTiB2az0weDQxIGw9MHgwMDFlMDAwMQogIEUgV01fQ0hBUiBjaD0weDAwNDEgbD0weDAwMWUwMDAxCiAgRSBXTV9LRVlVUCB2az0weDQxIGw9MHhjMDFlMDAwMQogIEUgV01fS0VZVVAgdms9MHgxMCBsPTB4YzAyYTAwMDEKICB0ZXh0czogRSAiYUEiIEYgIiIgRyAiIjsgZm9jdXMgRTsgZm9yZWdyb3VuZCBvdXJzIHRydWUKPT0gdGhlIFdNX0NIQVIgb2YgeCBtb3ZlcyB0aGUgZm9jdXMgdG8gRjsgeCBhbmQgeSBxdWV1ZWQgMTIwIG1zCiAgRSBXTV9LRVlET1dOIHZrPTB4NTggbD0weDAwMmQwMDAxCiAgRSBXTV9DSEFSIGNoPTB4MDA3OCBsPTB4MDAyZDAwMDEKICBFIFdNX0tJTExGT0NVUyBvdGhlcj1GCiAgRiBXTV9TRVRGT0NVUyBvdGhlcj1FCiAgRSBoYW5kbGVyOiBTZXRGb2N1cyhlZGl0IDEpIGluIHRoZSBXTV9DSEFSCiAgRiBXTV9LRVlVUCB2az0weDU4IGw9MHhjMDJkMDAwMQogIEYgV01fS0VZRE9XTiB2az0weDU5IGw9MHgwMDJjMDAwMQogIEYgV01fQ0hBUiBjaD0weDAwNzkgbD0weDAwMmMwMDAxCiAgRiBXTV9LRVlVUCB2az0weDU5IGw9MHhjMDJjMDAwMQogIHRleHRzOiBFICJ4IiBGICJ5IiBHICIiOyBmb2N1cyBGOyBmb3JlZ3JvdW5kIG91cnMgdHJ1ZQo9PSB0aGUgc2FtZSB3aXRoIGEgcHVtcCBiZXR3ZWVuIHRoZSBrZXlzLCB0aGUgZm9jdXMgZ29lcyB0byBHCiAgRSBXTV9LRVlET1dOIHZrPTB4NTggbD0weDAwMmQwMDAxCiAgRSBXTV9DSEFSIGNoPTB4MDA3OCBsPTB4MDAyZDAwMDEKICBFIFdNX0tJTExGT0NVUyBvdGhlcj1HCiAgRyBXTV9TRVRGT0NVUyBvdGhlcj1FCiAgRSBoYW5kbGVyOiBTZXRGb2N1cyhlZGl0IDIpIGluIHRoZSBXTV9DSEFSCiAgRyBXTV9LRVlVUCB2az0weDU4IGw9MHhjMDJkMDAwMQogIEcgV01fS0VZRE9XTiB2az0weDU5IGw9MHgwMDJjMDAwMQogIEcgV01fQ0hBUiBjaD0weDAwNzkgbD0weDAwMmMwMDAxCiAgRyBXTV9LRVlVUCB2az0weDU5IGw9MHhjMDJjMDAwMQogIHRleHRzOiBFICJ4IiBGICIiIEcgInkiOyBmb2N1cyBHOyBmb3JlZ3JvdW5kIG91cnMgdHJ1ZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== Ctrl+A, then a, then Shift+a\n  E WM_KEYDOWN vk=0x11 l=0x001d0001\n  E WM_KEYDOWN vk=0x41 l=0x001e0001\n  E WM_CHAR ch=0x0001 l=0x001e0001\n  E WM_KEYUP vk=0x41 l=0xc01e0001\n  E WM_KEYUP vk=0x11 l=0xc01d0001\n  E WM_KEYDOWN vk=0x41 l=0x001e0001\n  E WM_CHAR ch=0x0061 l=0x001e0001\n  E WM_KEYUP vk=0x41 l=0xc01e0001\n  E WM_KEYDOWN vk=0x10 l=0x002a0001\n  E WM_KEYDOWN vk=0x41 l=0x001e0001\n  E WM_CHAR ch=0x0041 l=0x001e0001\n  E WM_KEYUP vk=0x41 l=0xc01e0001\n  E WM_KEYUP vk=0x10 l=0xc02a0001\n  texts: E \"aA\" F \"\" G \"\"; focus E; foreground ours true\n== the WM_CHAR of x moves the focus to F; x and y queued 120 ms\n  E WM_KEYDOWN vk=0x58 l=0x002d0001\n  E WM_CHAR ch=0x0078 l=0x002d0001\n  E WM_KILLFOCUS other=F\n  F WM_SETFOCUS other=E\n  E handler: SetFocus(edit 1) in the WM_CHAR\n  F WM_KEYUP vk=0x58 l=0xc02d0001\n  F WM_KEYDOWN vk=0x59 l=0x002c0001\n  F WM_CHAR ch=0x0079 l=0x002c0001\n  F WM_KEYUP vk=0x59 l=0xc02c0001\n  texts: E \"x\" F \"y\" G \"\"; focus F; foreground ours true\n== the same with a pump between the keys, the focus goes to G\n  E WM_KEYDOWN vk=0x58 l=0x002d0001\n  E WM_CHAR ch=0x0078 l=0x002d0001\n  E WM_KILLFOCUS other=G\n  G WM_SETFOCUS other=E\n  E handler: SetFocus(edit 2) in the WM_CHAR\n  G WM_KEYUP vk=0x58 l=0xc02d0001\n  G WM_KEYDOWN vk=0x59 l=0x002c0001\n  G WM_CHAR ch=0x0079 l=0x002c0001\n  G WM_KEYUP vk=0x59 l=0xc02c0001\n  texts: E \"x\" F \"\" G \"y\"; focus G; foreground ours true\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2855
+    }
+  ]
+}

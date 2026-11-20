@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextAddArc.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextAddArc.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextAddArc
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextAddArc(context, x, y, radius, startAngle, endAngle, clockwise) appends an arc (a line from the current point to the arc's start when there is a current point). The flag follows the y-up user space: clockwise = 0 runs counterclockwise (0 to pi/2 is the upper right quarter), clockwise = 1 goes the other way round (0 to pi/2 with flag 1 covers the three other quarters). An angle span over a full turn (0 to 4 pi) draws the one circle. A pie slice (move to the centre, arc, close) filled: alpha grids in the tests. The arc is made of cubic curves: CGPathAddArc of radius 5 at (10,10) from 0 to pi/2 is one move to (15,10) and one curve with control points (15, 12.761423749153968) and (12.761423749153968, 15) and end point (10,15); the clockwise 0..pi arc of radius 1 at the origin (flag 1) starts at (1, -2.4492935982947064e-16) and is two curves whose points are not exact in the last bit (the exact bits of all points are in the test), bounding box (10, 10, 5, 5) and current point (10,15) for the first arc.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "appends to the current path"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

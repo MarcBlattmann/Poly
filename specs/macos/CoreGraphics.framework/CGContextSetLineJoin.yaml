@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextSetLineJoin.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextSetLineJoin.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextSetLineJoin
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextSetLineJoin(context, join) sets the corner style of strokes: kCGLineJoinMiter 0 (the default), Round 1, Bevel 2. For a right angle corner of a width 4 line the miter corner is a full square, the round corner has the outer pixels e3/49 (alpha) and the bevel cuts the corner diagonally (80 on the diagonal pixels: row 10: ... ff 80, row 11: ... 80 00). CGContextSetMiterLimit sets when a miter becomes a bevel (default 10): for a sharp corner (about 28 degrees, width 2) limits 1 to 20 give the recorded hashes. Stroking a rect with each join shows the same corners. The setting is part of the graphics state.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "changes the graphics state"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

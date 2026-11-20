@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgsave_basic",
+      "source_sha256": "29dfe1ed9e2dd8a25c6c31fd7a14ff1e1fb58bb3e8ab2eca9082a7be28e1e26f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "53751fde4d2dc47a968af1123b758b9d83bfcc5d44b88e78fb9a5fefa46ca971",
+          "exit_code": 0,
+          "stdout": "value a green half-alpha multiply fill under a translate and clip, 00 00000000 00800080 00800080 00800080 00000000 ff0000ff ff0000ff ff0000ff\nvalue a green half-alpha multiply fill under a translate and clip, 01 00000000 00800080 00800080 00800080 00000000 ff0000ff ff0000ff ff0000ff\nvalue a green half-alpha multiply fill under a translate and clip, 02 00000000 00800080 00800080 00800080 00000000 ff0000ff ff0000ff ff0000ff\nvalue a green half-alpha multiply fill under a translate and clip, 03 00000000 00800080 00800080 00800080 00000000 ff0000ff ff0000ff ff0000ff\nok the CTM is the original after the restore\nvalue CTM tx after restore 0000000000000000\nvalue CTM ty after restore 0000000000000000\nvalue a restore without a save changes nothing (still blue) 0000ffff\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "dd10ea3220111f8274b822affaa1e03475b223c1345c2fb8e049b2c6179d95dd",
+          "exit_code": 0,
+          "stdout": "value a green half-alpha multiply fill under a translate and clip, 00 00000000 00800080 00800080 00800080 00000000 ff0000ff ff0000ff ff0000ff\nvalue a green half-alpha multiply fill under a translate and clip, 01 00000000 00800080 00800080 00800080 00000000 ff0000ff ff0000ff ff0000ff\nvalue a green half-alpha multiply fill under a translate and clip, 02 00000000 00800080 00800080 00800080 00000000 ff0000ff ff0000ff ff0000ff\nvalue a green half-alpha multiply fill under a translate and clip, 03 00000000 00800080 00800080 00800080 00000000 ff0000ff ff0000ff ff0000ff\nok the CTM is the original after the restore\nvalue CTM tx after restore 0000000000000000\nvalue CTM ty after restore 0000000000000000\nvalue a restore without a save changes nothing (still blue) 0000ffff\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

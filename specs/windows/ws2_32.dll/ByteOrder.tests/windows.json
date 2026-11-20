@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d45892328ab7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:26:42Z",
+  "tests": [
+    {
+      "name": "cnet_bo_b",
+      "exe_sha256": "7eb54b649b923266f1f0891326be99c64f5b52ea4c011b70038513c5f287bdc7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aHRvbmwoMHgxMTIyMzM0NCkgPSAweDQ0MzMyMjExLCBudG9obCgweDExMjIzMzQ0KSA9IDB4NDQzMzIyMTEsIGh0b25zKDApID0gMCwgaHRvbnMoMHhGRkZGKSA9IDB4ZmZmZgpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "htonl(0x11223344) = 0x44332211, ntohl(0x11223344) = 0x44332211, htons(0) = 0, htons(0xFFFF) = 0xffff\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "cnet_bo_c",
+      "exe_sha256": "c7c26a6d1120d71fe9c0713b0d713d1d57043c62a6e7e9a30536db742c7703b5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bnRvaHMoaHRvbnMoeCkpID09IHggZm9yIDQgdmFsdWVzOiB5ZXMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ntohs(htons(x)) == x for 4 values: yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    }
+  ]
+}

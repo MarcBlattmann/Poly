@@ -82,6 +82,11 @@ pub struct NtRegistry {
     completions: Vec<Completion>,
     /// The hives programs loaded from their own files ([`hivefile`]).
     pub external: Vec<hivefile::External>,
+    /// The registry view each open key (by its instance's bits) was opened or made in
+    /// ([`apply_view`]): keys below it with no view bit are in that view
+    /// (`RegCreateKeyExW.yaml` `inheritance`). Keys opened otherwise (the `\REGISTRY` object)
+    /// have the caller's default view.
+    views: BTreeMap<u64, View>,
 }
 
 impl NtRegistry {
@@ -94,6 +99,7 @@ impl NtRegistry {
             next_request: 1,
             completions: Vec::new(),
             external: Vec::new(),
+            views: BTreeMap::new(),
         }
     }
 
@@ -125,6 +131,7 @@ impl NtRegistry {
     /// `STATUS_NOTIFY_CLEANUP`.
     pub fn object_deleted(&mut self, cookie: u64, om: &mut ObjectManager) {
         if cookie != NO_INSTANCE {
+            self.views.remove(&cookie);
             self.reg.close(OpenId::from_bits(cookie));
         }
         self.deliver(om, None);
@@ -348,11 +355,18 @@ pub const fn key_access(desired: u64) -> AccessMask {
     desired as u32 & !KEY_WOW64_RES
 }
 
-/// Apply the registry view of the call (ADR 0186, stage 2) to the key name `attrs` gives:
-/// when the call's view is the 32-bit one ([`wow64::view_of`]: a 32-bit caller, or
-/// `KEY_WOW64_32KEY` in `access`) and the full path (the root key's path and the relative name,
-/// or the absolute name) is a redirected key ([`wow64_view`]), the name becomes the absolute
-/// physical path and the root handle is dropped. A root that is no key, or whose name does not
+/// Apply the registry view of the call (ADR 0186, stage 2; `RegCreateKeyExW.yaml` `views`,
+/// `inheritance`) to the key name `attrs` gives, and return the view chosen for the key it
+/// reaches (for [`remember_view`]; `None`: no bit chose one, the caller's default view).
+///
+/// The view: `KEY_WOW64_32KEY` in `access` is the 32-bit one; `KEY_WOW64_64KEY` the native one,
+/// except below an open key that physically lies below a `Wow6432Node` (the view is part of the
+/// open key's place: a vendor key below `Software` opened in the 32-bit view stays there); no
+/// bit, the view of the open key the name is relative to, or the caller's default for an
+/// absolute name (a 32-bit caller's is the 32-bit view). In the 32-bit view the full path (the
+/// open key's physical path and the relative name, or the absolute name) becomes the physical
+/// key of that view ([`wow64::x86_target`]): when that is another path, the name becomes it,
+/// absolute, and the root handle is dropped. A root that is no key, or whose name does not
 /// resolve, is left to the object manager as it is.
 pub fn apply_view(
     sys: &mut crate::system::NtSystem,
@@ -360,28 +374,55 @@ pub fn apply_view(
     wow64: bool,
     access: u64,
     attrs: &mut crate::abi::Attributes,
-) {
-    if view_of(wow64, access) != View::X86 {
-        return;
-    }
-    let name = attrs.name.as_deref().unwrap_or(&[]);
-    let mut full = Vec::new();
-    match attrs.root {
+) -> Option<View> {
+    let default = view_of(wow64, 0);
+    let name = attrs.name.clone().unwrap_or_default();
+    let sep = u16::from(b'\\');
+    let (base, base_view) = match attrs.root {
         Some(h) => {
-            if name.first() == Some(&u16::from(b'\\')) {
-                return;
+            if name.first() == Some(&sep) {
+                return None;
             }
-            let Ok((_, _, key)) = key_of_handle(sys, caller, h, 0) else { return };
-            let Ok(root) = sys.registry.reg.full_path(key) else { return };
-            full.extend_from_slice(&root);
-            full.push(u16::from(b'\\'));
-            full.extend_from_slice(name);
+            let Ok((_, open, key)) = key_of_handle(sys, caller, h, 0) else { return None };
+            let Ok(path) = sys.registry.reg.full_path(key) else { return None };
+            (Some(path), sys.registry.views.get(&open.to_bits()).copied())
         }
-        None => full.extend_from_slice(name),
+        None => (None, None),
+    };
+    if base.is_some() && name.iter().all(|&c| c == sep) {
+        // The open key itself again, in its view (`RegCreateKeyExW.yaml` `empty_subkey`).
+        return base_view;
     }
-    if let Some(physical) = wow64_view(&full, wow64, access) {
+    let inside = base.as_deref().is_some_and(wow64::has_node);
+    let chosen = match access as u32 & KEY_WOW64_RES {
+        KEY_WOW64_32KEY => Some(View::X86),
+        KEY_WOW64_64KEY if inside => Some(View::X86),
+        KEY_WOW64_64KEY => Some(View::Native),
+        _ => base_view,
+    };
+    if chosen.unwrap_or(default) == View::Native {
+        return chosen;
+    }
+    let mut full = Vec::new();
+    if let Some(b) = &base {
+        full.extend_from_slice(b);
+        full.push(sep);
+    }
+    full.extend_from_slice(&name);
+    let target = wow64::x86_target(&full);
+    if target != full {
         attrs.root = None;
-        attrs.name = Some(physical);
+        attrs.name = Some(target);
+    }
+    chosen
+}
+
+/// Keep the view [`apply_view`] chose for the key behind the new handle `h` (`None`: the
+/// caller's default view, which is not kept: the key follows the view of whoever uses it).
+pub fn remember_view(sys: &mut crate::system::NtSystem, caller: &Caller, h: Handle, view: Option<View>) {
+    let Some(view) = view else { return };
+    if let Ok((_, open, _)) = key_of_handle(sys, caller, h, 0) {
+        sys.registry.views.insert(open.to_bits(), view);
     }
 }
 

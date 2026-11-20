@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_lookUpClass.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in objc_lookUpClass.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_lookUpClass
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  Class objc_lookUpClass(const char *name). The lookup that never asks a class-lookup hook: for the
+  programs observed (no hook installed) it returns exactly what objc_getClass returns. It finds
+  compiled classes and registered run-time classes by exact, case-sensitive name and returns nil for
+  anything else: an unknown name, the empty string, a wrong case, a prefix or longer name, and a class
+  that was allocated with objc_allocateClassPair but not registered yet. A subclass allocated from a
+  registered class becomes findable when it is registered, independently of its superclass. A second
+  objc_allocateClassPair under a registered name returns nil and leaves the first class findable. A
+  NULL name returns nil. It does not send +initialize.
+returns:
+  found: "the Class registered under that name; equal to objc_getClass(name)"
+  not_found: "nil"
+errors:
+  none: "nothing is logged for an unknown name"
+  not_observed: "behaviour with an installed class-lookup hook (the one difference to objc_getClass) was not observed"
+side_effects: "none"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "a class is found as soon as objc_registerClassPair returns for it"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,33 @@
+# Poly's own CoreFoundation.framework (ADR 0260): a real Mach-O dylib with
+# Apple's install name, built from Rust for x86_64-apple-darwin with
+# -Zbuild-std and linked by rust-lld's Mach-O flavour against Poly's
+# libSystem (`cargo xtask corefoundation`). Its own workspace, like
+# libsystem's. The logic lives in crates/poly-cf. No third-party crates.
+[workspace]
+
+[package]
+name = "corefoundation"
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+name = "corefoundation"
+crate-type = ["staticlib"]
+
+[dependencies]
+poly-cf = { path = "../../../crates/poly-cf" }
+poly-libsystem = { path = "../../../crates/poly-libsystem" }
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+codegen-units = 1
+debug = false
+
+[profile.dev]
+panic = "abort"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

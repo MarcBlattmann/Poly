@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "selreg_basic",
+      "source_sha256": "a24774e1bbd86c78eb39317e01d896b99518dbc4851067b5dd3f3559e578a3eb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7139a5d0ad9074c639e26cab4bb3ae6d0f5aa11757da01331b8454438f59663a",
+          "exit_code": 0,
+          "stdout": "ok same name, same selector\nok same name in another buffer, same selector\nok a different name differs\nok case matters\nok a prefix differs\nok a longer name differs\nok a selector with a colon differs from without\nok @selector equals the registered one\nok a built-in selector: init\nok a built-in selector: dealloc\nok sel_getUid is the same function in effect\nok sel_isEqual\nok never NULL\nok the empty string is a selector\nok ... always the same one\nok ... different from others\nvalue name of a selregAlpha\nvalue empty name round trip \nok the name was copied\nok 200 distinct names give 200 distinct selectors\nok and look up again\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1057ddee74d7b71614b511bcf7a9a51b9603af346b1f710e02940520894e9d1c",
+          "exit_code": 0,
+          "stdout": "ok same name, same selector\nok same name in another buffer, same selector\nok a different name differs\nok case matters\nok a prefix differs\nok a longer name differs\nok a selector with a colon differs from without\nok @selector equals the registered one\nok a built-in selector: init\nok a built-in selector: dealloc\nok sel_getUid is the same function in effect\nok sel_isEqual\nok never NULL\nok the empty string is a selector\nok ... always the same one\nok ... different from others\nvalue name of a selregAlpha\nvalue empty name round trip \nok the name was copied\nok 200 distinct names give 200 distinct selectors\nok and look up again\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

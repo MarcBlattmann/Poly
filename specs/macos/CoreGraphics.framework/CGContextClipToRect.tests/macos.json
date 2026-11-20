@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgclip_rect",
+      "source_sha256": "080d69051e277a1fa5ddf876e0bd0389c84788a0eb77bb11d0677c28b3367b63",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7620ce003b3aa333da171384884fdba36ce2181d3c7f5f48074fcf9be9d7f4b8",
+          "exit_code": 0,
+          "stdout": "value whole-pixel clip (2,1,4,3) then a full fill 00 00 00 00 00 00 00 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 01 00 00 00 00 00 00 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 02 00 00 ff ff ff ff 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 03 00 00 ff ff ff ff 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 04 00 00 ff ff ff ff 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 05 00 00 00 00 00 00 00 00\nok the clip box is the rect\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 00 00 00 00 00 00 00 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 01 00 5f bf bf bf 8f 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 02 00 7f ff ff ff bf 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 03 00 7f ff ff ff bf 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 04 00 5f bf bf bf 8f 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 05 00 00 00 00 00 00 00 00\nvalue clip box x 3ff8000000000000\nvalue clip box y 3ff4000000000000\nvalue clip box w 4011000000000000\nvalue clip box h 400c000000000000\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 00 00 00 00 00 00 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 01 00 00 00 00 00 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 02 00 00 00 ff ff 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 03 00 00 00 ff ff 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 04 00 00 00 00 00 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 05 00 00 00 00 00 00 00 00\nvalue disjoint clips: nothing is drawn (hash of an empty buffer) fea2d2bd51234c83\nvalue clip box of an empty clip: width 0\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f4faee1ea2d706609034868332a1a0a8a7f10e6d232303db6d867f6bae0988e5",
+          "exit_code": 0,
+          "stdout": "value whole-pixel clip (2,1,4,3) then a full fill 00 00 00 00 00 00 00 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 01 00 00 00 00 00 00 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 02 00 00 ff ff ff ff 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 03 00 00 ff ff ff ff 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 04 00 00 ff ff ff ff 00 00\nvalue whole-pixel clip (2,1,4,3) then a full fill 05 00 00 00 00 00 00 00 00\nok the clip box is the rect\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 00 00 00 00 00 00 00 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 01 00 5f bf bf bf 8f 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 02 00 7f ff ff ff bf 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 03 00 7f ff ff ff bf 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 04 00 5f bf bf bf 8f 00 00\nvalue fractional clip (1.5,1.25,4.25,3.5): antialiased edges 05 00 00 00 00 00 00 00 00\nvalue clip box x 3ff8000000000000\nvalue clip box y 3ff4000000000000\nvalue clip box w 4011000000000000\nvalue clip box h 400c000000000000\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 00 00 00 00 00 00 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 01 00 00 00 00 00 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 02 00 00 00 ff ff 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 03 00 00 00 ff ff 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 04 00 00 00 00 00 00 00 00\nvalue two clips intersect: (0,0,5,4) and (3,2,5,4) 05 00 00 00 00 00 00 00 00\nvalue disjoint clips: nothing is drawn (hash of an empty buffer) fea2d2bd51234c83\nvalue clip box of an empty clip: width 0\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgclip_state",
+      "source_sha256": "359fd5442857b87639f2667837096a88164ad5e45da79a143d1ff6e10960a18a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9715cf78817af826f0491acf4ba3f79ec0bbd9124f2fa44ec5af1549346e202a",
+          "exit_code": 0,
+          "stdout": "value a clip inside save/restore, then another clip, each followed 00 ff ff 00 00 00 00 ff ff\nvalue a clip inside save/restore, then another clip, each followed 01 ff ff 00 00 00 00 ff ff\nvalue a clip inside save/restore, then another clip, each followed 02 ff ff 00 00 00 00 ff ff\nvalue a clip inside save/restore, then another clip, each followed 03 ff ff 00 00 00 00 ff ff\nvalue an empty clip rect: nothing drawn 306c537b2ff38983\nvalue a clip (0,0,4,4) then the CTM moved by 4: the fill is clippe 00 00 00 00 00 00 00 00 00\nvalue a clip (0,0,4,4) then the CTM moved by 4: the fill is clippe 01 00 00 00 00 00 00 00 00\nvalue a clip (0,0,4,4) then the CTM moved by 4: the fill is clippe 02 00 00 00 00 00 00 00 00\nvalue a clip (0,0,4,4) then the CTM moved by 4: the fill is clippe 03 00 00 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "096e371899ceee988159c9548d12887daaeea46cff69d85faecc102a73fbdca4",
+          "exit_code": 0,
+          "stdout": "value a clip inside save/restore, then another clip, each followed 00 ff ff 00 00 00 00 ff ff\nvalue a clip inside save/restore, then another clip, each followed 01 ff ff 00 00 00 00 ff ff\nvalue a clip inside save/restore, then another clip, each followed 02 ff ff 00 00 00 00 ff ff\nvalue a clip inside save/restore, then another clip, each followed 03 ff ff 00 00 00 00 ff ff\nvalue an empty clip rect: nothing drawn 306c537b2ff38983\nvalue a clip (0,0,4,4) then the CTM moved by 4: the fill is clippe 00 00 00 00 00 00 00 00 00\nvalue a clip (0,0,4,4) then the CTM moved by 4: the fill is clippe 01 00 00 00 00 00 00 00 00\nvalue a clip (0,0,4,4) then the CTM moved by 4: the fill is clippe 02 00 00 00 00 00 00 00 00\nvalue a clip (0,0,4,4) then the CTM moved by 4: the fill is clippe 03 00 00 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

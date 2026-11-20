@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_mach_msg_receive_limits",
+      "source_sha256": "c2f35832ac5a7ea3389104e3f7bfef5f67c7fde8f1b79ef971037ff957f70252",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ce348d9118fa2431f19d3a2694e36dc181f5ec635e350cadc6783095f3460c67",
+          "exit_code": 0,
+          "stdout": "ok a buffer of a header only: MACH_RCV_TOO_LARGE\nok the header has the message's id\nvalue the size the header holds after that 24\nok the message is gone: a timeout follows\nok with MACH_RCV_LARGE too: MACH_RCV_TOO_LARGE\nok the header says the size the buffer has to have (message and trailer 8)\nok the message was kept and a bigger buffer gets it\nok an empty queue with a timeout of 0: MACH_RCV_TIMED_OUT\nok with a timeout of 50 ms: MACH_RCV_TIMED_OUT\nok a name that is nothing: MACH_RCV_INVALID_NAME\nok MACH_PORT_NULL: MACH_RCV_INVALID_NAME\nok a send right only: MACH_RCV_INVALID_NAME\nok the port destroyed during the wait: MACH_RCV_PORT_CHANGED\nok a member of the port set destroyed during the wait: the wait goes on to its timeout\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2e8804fcf48b7c242464f58a34ef689fd5cc36c9164f010b3605b21163312695",
+          "exit_code": 0,
+          "stdout": "ok a buffer of a header only: MACH_RCV_TOO_LARGE\nok the header has the message's id\nvalue the size the header holds after that 24\nok the message is gone: a timeout follows\nok with MACH_RCV_LARGE too: MACH_RCV_TOO_LARGE\nok the header says the size the buffer has to have (message and trailer 8)\nok the message was kept and a bigger buffer gets it\nok an empty queue with a timeout of 0: MACH_RCV_TIMED_OUT\nok with a timeout of 50 ms: MACH_RCV_TIMED_OUT\nok a name that is nothing: MACH_RCV_INVALID_NAME\nok MACH_PORT_NULL: MACH_RCV_INVALID_NAME\nok a send right only: MACH_RCV_INVALID_NAME\nok the port destroyed during the wait: MACH_RCV_PORT_CHANGED\nok a member of the port set destroyed during the wait: the wait goes on to its timeout\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_mach_msg_reply_and_trailers",
+      "source_sha256": "a9744b59ea1f68929551c9686281dde8d6a2cf680d15bea1e316ed8c1272df33",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "923c80745cd7958be1bbf2ee2e1c49031b574691c85574b1612b377a7dfd6304",
+          "exit_code": 0,
+          "stdout": "ok a message with a reply port arrives\nok the reply port arrives as a new name in the remote port field\nok with a send-once disposition (18) in the remote slot and the send disposition in the local slot\nok the name is a send-once right here\nok trailer elements 0: a trailer of 8 bytes\nok trailer elements 1: a trailer of 12 bytes\nok trailer elements 2: a trailer of 20 bytes\nok trailer elements 3: a trailer of 52 bytes\nok trailer elements 4: a trailer of 60 bytes\nok trailer elements 7: a trailer of 68 bytes\nok a request and its reply in one call: the reply comes back in the same buffer\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "49a01708c18206a11605cadc27bebdb51f59d3e7b5b4b9ca63690dd8941bcaad",
+          "exit_code": 0,
+          "stdout": "ok a message with a reply port arrives\nok the reply port arrives as a new name in the remote port field\nok with a send-once disposition (18) in the remote slot and the send disposition in the local slot\nok the name is a send-once right here\nok trailer elements 0: a trailer of 8 bytes\nok trailer elements 1: a trailer of 12 bytes\nok trailer elements 2: a trailer of 20 bytes\nok trailer elements 3: a trailer of 52 bytes\nok trailer elements 4: a trailer of 60 bytes\nok trailer elements 7: a trailer of 68 bytes\nok a request and its reply in one call: the reply comes back in the same buffer\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_mach_msg_send_receive",
+      "source_sha256": "2bfa3967ed067d458dcd1467ed88f64f7fa999650e0d2a15249e67545602507a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "347f56ed0fc790940bcb7b352d42ad7f2889b019ee19d086f21e08b15f1b3c3d",
+          "exit_code": 0,
+          "stdout": "ok a send succeeds\nok the receive succeeds\nok id 5, size 40\nok the bytes arrived\nok remote port MACH_PORT_NULL, local port the receive right's name\nok the bits: a send disposition in the local slot, nothing in the remote slot\nok the default trailer is 8 bytes of format 0\nok three messages come in the order sent\nok a receive on a port set gets a member's message, naming the member\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5a8595ef0f7411a8c9405c1fc1791728382debdb15a6c7415a77ef6709dfcd41",
+          "exit_code": 0,
+          "stdout": "ok a send succeeds\nok the receive succeeds\nok id 5, size 40\nok the bytes arrived\nok remote port MACH_PORT_NULL, local port the receive right's name\nok the bits: a send disposition in the local slot, nothing in the remote slot\nok the default trailer is 8 bytes of format 0\nok three messages come in the order sent\nok a receive on a port set gets a member's message, naming the member\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

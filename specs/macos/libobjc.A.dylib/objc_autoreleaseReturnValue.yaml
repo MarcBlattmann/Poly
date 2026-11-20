@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_autoreleaseReturnValue.yaml. Observed with Objective-C test programs built with
+# clang for x86_64 and arm64 (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in
+# objc_autoreleaseReturnValue.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_autoreleaseReturnValue
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively and x86_64 under Rosetta 2; every test printed the same bytes on both architectures and on every run. Test programs are built with `poly-mac: libobjc` (linked against libobjc and the root class NSObject only, no Foundation)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  A "count" below is what the root class's retainCount method reports: 1 for a new object, one per
+  owning reference. objc_autoreleaseReturnValue(obj) is what a function calls to return an object
+  at +0: it returns obj. It has two behaviours chosen by what the caller does next. If the caller
+  does not pair it (unmatched: called from ordinary code), it is exactly objc_autorelease: the
+  object goes into the pool, the count is unchanged, the pop frees it. If the caller takes the
+  result with objc_retainAutoreleasedReturnValue right after the call returns (the handshake of
+  compiled ARC code), neither side does anything: the object is not put into the pool and the
+  caller's retain does not happen, so the result is owned once by the caller with count 1, the
+  pool stays empty, and the caller's own release frees it. An implementation that always
+  autoreleases here and always retains in objc_retainAutoreleasedReturnValue is distinguishable
+  (count 2 instead of 1, the object alive after the pop), so the optimisation is part of the
+  observable behaviour. How the caller marks the pairing differs by architecture: on arm64 the
+  instruction right after the call must be the one that moves register x29 to itself (the marker),
+  and on x86_64 the code after the call must go straight to objc_retainAutoreleasedReturnValue
+  (observed with a test that places the call there directly). 100 paired calls in a row each die
+  at their own release before any pop. nil is accepted and returned. The pairing appears to be
+  thread state, not object identity; a retainAutoreleasedReturnValue of an unrelated object right
+  after an unpaired call behaved differently on the two architectures (not covered by tests, do
+  not rely on it). Compiled by clang with ARC (tests built with `poly-mac: arc`): a non-inlined
+  function returning a new object to a caller that keeps it in a strong variable leaves count 1,
+  nothing in the pool, and the object dies at the end of the caller's scope; 100 such calls each
+  die before the pop. The compiler ends such a callee with this function (x86_64 and arm64 alike).
+returns:
+  object: "the argument"
+  nil: "nil"
+errors:
+  none: "no error"
+side_effects: >
+  Unpaired: one release queued in the innermost pool. Paired: none, and the next
+  objc_retainAutoreleasedReturnValue does not retain.
+threading: >
+  No thread-specific behaviour was observed; every test ran on the main thread of one process.
+  Behaviour with several threads is not observed.
+ordering:
+  - "the decision is made at the call, by looking at what the caller does immediately after returning"
+timing:
+  typical: "microseconds: a few memory operations, no system call in the common case"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

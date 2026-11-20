@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:17",
+  "tests": [
+    {
+      "name": "imageload_load_context",
+      "source_sha256": "432053162095e45c177a52a48d2fbd473249d8ea3cc75aa03a33e9f4946e2c6f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "babc79f39affb070b7bea49c30fb14c9699d8872b013788c1d9f5701d691d33f",
+          "exit_code": 0,
+          "stdout": "ok both +load methods ran before main\nok self in +load is the class\nok self in a category's +load is the class\nok _cmd is load\nok +load runs on the main thread\nok another class of the image answers messages from +load\nok and can be instantiated\nok whose own +load had not run yet\nok and runs afterwards\nok its +initialize ran on the first message, once\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7c4bcb81ff5e24783d2139e33242aa8e1a2bdc0d3afcea77351bf169d15feaa6",
+          "exit_code": 0,
+          "stdout": "ok both +load methods ran before main\nok self in +load is the class\nok self in a category's +load is the class\nok _cmd is load\nok +load runs on the main thread\nok another class of the image answers messages from +load\nok and can be instantiated\nok whose own +load had not run yet\nok and runs afterwards\nok its +initialize ran on the first message, once\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "imageload_load_supercat",
+      "source_sha256": "9b0fe187f4a9afd93a3296f3ea83eb186baea4e78e9f22f25e2694c5b05c44f0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1d084b1dd6e78434bb575954a870172747fbf962e3e020f1a47b5add1774116e",
+          "exit_code": 0,
+          "stdout": "value order Q P R(C2) S Q(C4) S(C3) P(C1) \nok Q P, R(C2) before its subclass S, then the other categories in image order\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7ce56c820ea1180dc29b83bb2ef6320646e25eec8bf8181118e24325fc01e722",
+          "exit_code": 0,
+          "stdout": "value order Q P R(C2) S Q(C4) S(C3) P(C1) \nok Q P, R(C2) before its subclass S, then the other categories in image order\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "imageload_order",
+      "source_sha256": "03ce21df0d46317d38ac263478c26f718a8fc647d02f308448a440f9ecf40638",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "37ef3358f1ca9699c2da77d9d37d423055c3a2f1cab9f405f4c434d74db47015",
+          "exit_code": 0,
+          "stdout": "value +load order Zeta Mid Alpha Zeta(CatZ) Alpha(CatB) Alpha(CatA) \nvalue +load calls 6\nok each +load ran once\nok no +initialize ran at load time\nok the order: Zeta before Mid, then Alpha, then the categories in source order\nok the first message runs +initialize\nvalue log after the first message to Lazy Zeta Mid Alpha Zeta(CatZ) Alpha(CatB) Alpha(CatA) initialize(Lazy) \nok and only once\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "76586a43df37853ab34d618443b04bfa9754d6436d765ac933e0be9a68ad4b1a",
+          "exit_code": 0,
+          "stdout": "value +load order Zeta Mid Alpha Zeta(CatZ) Alpha(CatB) Alpha(CatA) \nvalue +load calls 6\nok each +load ran once\nok no +initialize ran at load time\nok the order: Zeta before Mid, then Alpha, then the categories in source order\nok the first message runs +initialize\nvalue log after the first message to Lazy Zeta Mid Alpha Zeta(CatZ) Alpha(CatB) Alpha(CatA) initialize(Lazy) \nok and only once\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

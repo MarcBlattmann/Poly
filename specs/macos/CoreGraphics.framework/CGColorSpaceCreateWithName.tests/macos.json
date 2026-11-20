@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgcsn_conversion",
+      "source_sha256": "85cfff0ac3ef802205f9b0fac6f0311653f5c507dfaf8a5787dbbeb116287774",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "066fae2f0b7314d1c5f40c183aff50530db960843bf97d23c2ed73149e55d4de",
+          "exit_code": 0,
+          "stdout": "value sRGB (0.2, 0.4, 0.6) into sRGB 336699ff\nvalue DisplayP3 (0.2, 0.4, 0.6) into sRGB 1b689dff\nvalue DisplayP3 (1, 0, 0) into sRGB (out of gamut: clamped) ff0000ff\nvalue GenericRGB (0.2, 0.4, 0.6) into sRGB 407aaaff\nvalue LinearSRGB (0.2, 0.4, 0.6) into sRGB 7caacbff\nvalue ExtendedSRGB (1.2, -0.1, 0.5) into sRGB (clamped) ff0080ff\nvalue sRGB white ffffffff\nvalue DisplayP3 white ffffffff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "959a05fc547b0644a6128fc5a37c42ade6d59db97c80bac12eb6200484ac41f2",
+          "exit_code": 0,
+          "stdout": "value sRGB (0.2, 0.4, 0.6) into sRGB 336699ff\nvalue DisplayP3 (0.2, 0.4, 0.6) into sRGB 1b689dff\nvalue DisplayP3 (1, 0, 0) into sRGB (out of gamut: clamped) ff0000ff\nvalue GenericRGB (0.2, 0.4, 0.6) into sRGB 407aaaff\nvalue LinearSRGB (0.2, 0.4, 0.6) into sRGB 7caacbff\nvalue ExtendedSRGB (1.2, -0.1, 0.5) into sRGB (clamped) ff0080ff\nvalue sRGB white ffffffff\nvalue DisplayP3 white ffffffff\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgcsn_names",
+      "source_sha256": "226a60d16c5d4d6bf52cd0c655989b3d0085106d9d5e41daa86627ddf7ea1272",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a1f6fda82804f851202bc99e12047390f13c1974adbf084d32962d2dcd75dffe",
+          "exit_code": 0,
+          "stdout": "value sRGB model 1 components 3 name kCGColorSpaceSRGB\nvalue DisplayP3 model 1 components 3 name kCGColorSpaceDisplayP3\nvalue GenericRGB model 1 components 3 name kCGColorSpaceGenericRGB\nvalue GenericGray model 0 components 1 name kCGColorSpaceGenericGray\nvalue GenericCMYK model 2 components 4 name kCGColorSpaceGenericCMYK\nvalue ExtendedSRGB model 1 components 3 name kCGColorSpaceExtendedSRGB\nvalue LinearSRGB model 1 components 3 name kCGColorSpaceLinearSRGB\nvalue ExtendedLinearSRGB model 1 components 3 name kCGColorSpaceExtendedLinearSRGB\nvalue ExtendedLinearITUR_2020 model 1 components 3 name kCGColorSpaceExtendedLinearITUR_2020\nvalue ITUR_2100_PQ model 1 components 3 name kCGColorSpaceITUR_2100_PQ\nvalue ITUR_2100_HLG model 1 components 3 name kCGColorSpaceITUR_2100_HLG\nvalue GenericRGBLinear model 1 components 3 name kCGColorSpaceGenericRGBLinear\nvalue AdobeRGB1998 model 1 components 3 name kCGColorSpaceAdobeRGB1998\nvalue an unknown name NULL\nok sRGB is the same object on every call\nok an unknown name gives NULL\nok the name of sRGB is kCGColorSpaceSRGB\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ad6d9e9f3ca95c13c6d6f8c93e9ad148639d1dc4be22c3da3df150132a8f2db9",
+          "exit_code": 0,
+          "stdout": "value sRGB model 1 components 3 name kCGColorSpaceSRGB\nvalue DisplayP3 model 1 components 3 name kCGColorSpaceDisplayP3\nvalue GenericRGB model 1 components 3 name kCGColorSpaceGenericRGB\nvalue GenericGray model 0 components 1 name kCGColorSpaceGenericGray\nvalue GenericCMYK model 2 components 4 name kCGColorSpaceGenericCMYK\nvalue ExtendedSRGB model 1 components 3 name kCGColorSpaceExtendedSRGB\nvalue LinearSRGB model 1 components 3 name kCGColorSpaceLinearSRGB\nvalue ExtendedLinearSRGB model 1 components 3 name kCGColorSpaceExtendedLinearSRGB\nvalue ExtendedLinearITUR_2020 model 1 components 3 name kCGColorSpaceExtendedLinearITUR_2020\nvalue ITUR_2100_PQ model 1 components 3 name kCGColorSpaceITUR_2100_PQ\nvalue ITUR_2100_HLG model 1 components 3 name kCGColorSpaceITUR_2100_HLG\nvalue GenericRGBLinear model 1 components 3 name kCGColorSpaceGenericRGBLinear\nvalue AdobeRGB1998 model 1 components 3 name kCGColorSpaceAdobeRGB1998\nvalue an unknown name NULL\nok sRGB is the same object on every call\nok an unknown name gives NULL\nok the name of sRGB is kCGColorSpaceSRGB\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
