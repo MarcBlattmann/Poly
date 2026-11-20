@@ -34,8 +34,6 @@ const STATUS_INVALID_PARAMETER: NtStatus = NtStatus(0xC000_000D);
 /// `ObjectBasicInformation`, `ObjectTypeInformation` (`winternl.h`'s `OBJECT_INFORMATION_CLASS`).
 const OBJECT_BASIC_INFORMATION: u32 = 0;
 const OBJECT_TYPE_INFORMATION: u32 = 2;
-/// `ThreadAffinityMask` (`ntddk.h`'s `THREADINFOCLASS`).
-const THREAD_AFFINITY_MASK: u32 = 4;
 
 #[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
@@ -128,6 +126,19 @@ unsafe fn create_remote(
     attributes: &attrlist::ThreadParsed,
     thread_id: *mut u32,
 ) -> Handle {
+    // The attributes name processors the system has (specs/windows/kernel32.dll/
+    // GetThreadIdealProcessorEx.yaml and GetThreadGroupAffinity.yaml,
+    // `attribute_of_createremotethreadex`), else no thread is made.
+    let mask = match attributes.affinity {
+        Some(g) => match crate::affinity::valid_affinity(&g) {
+            Some(m) => Some(m),
+            None => return fail_nt(STATUS_INVALID_PARAMETER),
+        },
+        None => None,
+    };
+    if attributes.ideal.is_some_and(|p| !crate::affinity::valid_processor(p)) {
+        return fail_nt(STATUS_INVALID_PARAMETER);
+    }
     let (target, copied) = match process_handle(process) {
         Ok(t) => t,
         Err(st) => return fail_nt(st),
@@ -163,10 +174,11 @@ unsafe fn create_remote(
     if !st.is_success() {
         return fail_nt(st);
     }
-    if let Some(mask) = attributes.affinity {
-        let mask = mask as u64;
-        // SAFETY: valid pointers.
-        unsafe { nt::NtSetInformationThread(h, THREAD_AFFINITY_MASK, (&raw const mask).cast(), 8) };
+    if let Some(mask) = mask {
+        crate::affinity::set_mask(h, mask);
+    }
+    if let Some(p) = attributes.ideal {
+        crate::affinity::set_ideal(h, p, None);
     }
     if !thread_id.is_null() {
         let mut info = [0u8; 48];
