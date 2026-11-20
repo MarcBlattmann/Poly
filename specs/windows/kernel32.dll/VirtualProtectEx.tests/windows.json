@@ -2,17 +2,17 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "a1cf84e98d3a",
+  "bundle": "398805815985",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-15T17:48:34Z",
+  "started": "2026-11-20T06:20:57Z",
   "tests": [
     {
       "name": "vpe_acg",
-      "exe_sha256": "27d75df752abb3a7e3792f47159eff3e3ee5eaac7d552f8f9623ca96806c4cde",
+      "exe_sha256": "78f3fc4322f56221d6282edf44768d7afedcd729bf46fb8e90dbdcd76f8e69aa",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -22,11 +22,11 @@
       "output": "no policy: VirtualAllocEx PAGE_EXECUTE_READWRITE: non-null=true error=\nno policy: image code to PAGE_WRITECOPY: ok=true old=0x20 error=0\nno policy: stub page type=MEM_IMAGE state=0x1000 protect=0x20 allocprotect=0x80\nprohibit dynamic code: VirtualAllocEx PAGE_EXECUTE_READWRITE: non-null=true error=\nprohibit dynamic code: image code to PAGE_WRITECOPY: ok=true old=0x20 error=0\nprohibit dynamic code: stub page type=MEM_IMAGE state=0x1000 protect=0x20 allocprotect=0x80\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 66
+      "ms": 65
     },
     {
       "name": "vpe_acg_b",
-      "exe_sha256": "20c80ff7724f47cd3cf1fdf7c03ce59b3ee8d73a0a6cc7928ad522fcea8c44e3",
+      "exe_sha256": "e86bc7ba8024f9223c3a10ddac8e9ab4ceae2f0410b699499172c802e3584ea6",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -40,7 +40,7 @@
     },
     {
       "name": "vpe_acg_c",
-      "exe_sha256": "5f322961cd3c235797f39020556a51c55ae12c3d9c7c8cabfa4ca0ca0c0b9e02",
+      "exe_sha256": "a00a2519395a99d9e3d7f0f8b11fe6d8ecc0cd25a4df9d1e522c96cb9af664dc",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -50,11 +50,11 @@
       "output": "no policy: private page to PAGE_EXECUTE_READ: ok=true old=0x4 error=0\nno policy: back to PAGE_EXECUTE_READ: ok=true old=0x4 error=0\nno policy: child ran: exit code 8200\nprohibit dynamic code: private page to PAGE_EXECUTE_READ: ok=true old=0x4 error=0\nprohibit dynamic code: back to PAGE_EXECUTE_READ: ok=true old=0x4 error=0\nprohibit dynamic code: child ran: exit code 8200\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 69
+      "ms": 65
     },
     {
       "name": "vpe_patch_c",
-      "exe_sha256": "8690d3c0e841a60b55db3c7d53f84124dff042ba21dd2c24df7b874c0d759c57",
+      "exe_sha256": "821827c15e3abd5e1c2cd1d75bab85bee92879bbf11540a8e26bc0531a502f94",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -64,7 +64,7 @@
       "output": "reserve 64 KiB PAGE_NOACCESS: non-null=true 64KiB-aligned=true\ncommitted page: type=MEM_PRIVATE state=0x1000 protect=0x40 allocprotect=0x1 size=0x1000\nVirtualProtectEx(stub, 16, PAGE_WRITECOPY): ok=true old=0x20 error=0\nstub page after the write: type=MEM_IMAGE state=0x1000 protect=0x4 allocprotect=0x80\nchild's stub now: copied=32 first 16 = the patch: true last 16 unchanged: true\nFlushInstructionCache: true\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 60
+      "ms": 61
     },
     {
       "name": "vpe_rules",
@@ -92,7 +92,7 @@
       "output": "image code back to PAGE_EXECUTE_READ: ok=true old=0x8 error=0 then protect=0x20 type=0x1000000\nimage code PAGE_READONLY: ok=true old=0x80 error=0 then protect=0x2 type=0x1000000\n16 bytes across a page boundary to PAGE_WRITECOPY: ok=true old=0x20 first page 0x8 second page 0x8\nafter size 0 the page is 0x20\nreserved, not committed: ok=false old=0x1 error=487\nprivate page PAGE_EXECUTE_WRITECOPY: ok=false old=0x1 error=87 then protect=0x20 type=0x20000\ntwo protections at once: ok=false old=0xeeee error=87\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 59
+      "ms": 56
     }
   ]
 }

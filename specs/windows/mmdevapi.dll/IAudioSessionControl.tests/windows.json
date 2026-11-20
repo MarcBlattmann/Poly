@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_session_register",
+      "exe_sha256": "5e0b239e80cd4139de45ed4743e32efdbdcb41a67ca18d53c2e2ade376aa30f4",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UmVnaXN0ZXIoTlVMTCkgPSBFX1BPSU5URVIgKDB4ODAwMDQwMDMpCm9rIFJlZ2lzdGVyKE5VTEwpClVucmVnaXN0ZXIoTlVMTCkgPSBFX1BPSU5URVIgKDB4ODAwMDQwMDMpCm9rIFVucmVnaXN0ZXIoTlVMTCkKVW5yZWdpc3RlciBiZWZvcmUgUmVnaXN0ZXIgPSBFX05PVEZPVU5EICgweDgwMDcwNDkwKQpvayBVbnJlZ2lzdGVyIGJlZm9yZSBSZWdpc3RlcgpSZWdpc3Rlciwgcm91bmQgMCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFJlZ2lzdGVyLCByb3VuZCAwClVucmVnaXN0ZXIsIHJvdW5kIDAgPSBTX09LICgweDAwMDAwMDAwKQpvayBVbnJlZ2lzdGVyLCByb3VuZCAwClJlZ2lzdGVyLCByb3VuZCAxID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgUmVnaXN0ZXIsIHJvdW5kIDEKVW5yZWdpc3Rlciwgcm91bmQgMSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFVucmVnaXN0ZXIsIHJvdW5kIDEKUmVnaXN0ZXIsIHJvdW5kIDIgPSBTX09LICgweDAwMDAwMDAwKQpvayBSZWdpc3Rlciwgcm91bmQgMgpVbnJlZ2lzdGVyLCByb3VuZCAyID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgVW5yZWdpc3Rlciwgcm91bmQgMgpSZWdpc3RlciA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFJlZ2lzdGVyClJlZ2lzdGVyIHRoZSBzYW1lIG9iamVjdCBhZ2FpbiA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFJlZ2lzdGVyIHRoZSBzYW1lIG9iamVjdCBhZ2FpbgpVbnJlZ2lzdGVyID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgVW5yZWdpc3RlcgpVbnJlZ2lzdGVyIHRoZSBzZWNvbmQgcmVnaXN0cmF0aW9uID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgVW5yZWdpc3RlciB0aGUgc2Vjb25kIHJlZ2lzdHJhdGlvbgpVbnJlZ2lzdGVyIGEgdGhpcmQgdGltZSA9IEVfTk9URk9VTkQgKDB4ODAwNzA0OTApCm9rIFVucmVnaXN0ZXIgYSB0aGlyZCB0aW1lCnN1bW1hcnkgMTQgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Register(NULL) = E_POINTER (0x80004003)\nok Register(NULL)\nUnregister(NULL) = E_POINTER (0x80004003)\nok Unregister(NULL)\nUnregister before Register = E_NOTFOUND (0x80070490)\nok Unregister before Register\nRegister, round 0 = S_OK (0x00000000)\nok Register, round 0\nUnregister, round 0 = S_OK (0x00000000)\nok Unregister, round 0\nRegister, round 1 = S_OK (0x00000000)\nok Register, round 1\nUnregister, round 1 = S_OK (0x00000000)\nok Unregister, round 1\nRegister, round 2 = S_OK (0x00000000)\nok Register, round 2\nUnregister, round 2 = S_OK (0x00000000)\nok Unregister, round 2\nRegister = S_OK (0x00000000)\nok Register\nRegister the same object again = S_OK (0x00000000)\nok Register the same object again\nUnregister = S_OK (0x00000000)\nok Unregister\nUnregister the second registration = S_OK (0x00000000)\nok Unregister the second registration\nUnregister a third time = E_NOTFOUND (0x80070490)\nok Unregister a third time\nsummary 14 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 162
+    },
+    {
+      "name": "ws_session_state",
+      "exe_sha256": "0ded1d4ec68fab634b76f2c7794051992a587998442d9cef2a7868e3a427ed81",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0U3RhdGUgYmVmb3JlIFN0YXJ0ID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0U3RhdGUgYmVmb3JlIFN0YXJ0Cm9rIGluYWN0aXZlCnByZWZpbGwgPSBTX09LICgweDAwMDAwMDAwKQpvayBwcmVmaWxsCm9rIGluYWN0aXZlIGFmdGVyIHRoZSBwcmVmaWxsClN0YXJ0ID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RhcnQKR2V0U3RhdGUgYWZ0ZXIgU3RhcnQgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRTdGF0ZSBhZnRlciBTdGFydApvayBhY3RpdmUKU3RvcCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFN0b3AKR2V0U3RhdGUgYWZ0ZXIgU3RvcCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldFN0YXRlIGFmdGVyIFN0b3AKb2sgaW5hY3RpdmUKUmVzZXQgPSBTX09LICgweDAwMDAwMDAwKQpvayBSZXNldApvayBpbmFjdGl2ZSBhZnRlciBSZXNldApHZXRTdGF0ZShOVUxMKSA9IFJQQ19YX05VTExfUkVGX1BPSU5URVIgKDB4ODAwNzA2ZjQpCm9rIEdldFN0YXRlKE5VTEwpCnN1bW1hcnkgMTMgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetState before Start = S_OK (0x00000000)\nok GetState before Start\nok inactive\nprefill = S_OK (0x00000000)\nok prefill\nok inactive after the prefill\nStart = S_OK (0x00000000)\nok Start\nGetState after Start = S_OK (0x00000000)\nok GetState after Start\nok active\nStop = S_OK (0x00000000)\nok Stop\nGetState after Stop = S_OK (0x00000000)\nok GetState after Stop\nok inactive\nReset = S_OK (0x00000000)\nok Reset\nok inactive after Reset\nGetState(NULL) = RPC_X_NULL_REF_POINTER (0x800706f4)\nok GetState(NULL)\nsummary 13 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 157
+    }
+  ]
+}

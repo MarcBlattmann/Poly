@@ -29,6 +29,5 @@ poly_win32_rt::fail_exports!(
         _TrackMouseEvent,
         ord_17,
         ord_345,
-        ord_381,
     ]
 );

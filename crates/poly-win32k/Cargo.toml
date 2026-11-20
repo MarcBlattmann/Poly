@@ -9,6 +9,7 @@ rust-version.workspace = true
 
 [dependencies]
 poly-nls = { workspace = true }
+poly-png = { workspace = true }
 
 [lints]
 workspace = true
