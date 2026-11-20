@@ -204,6 +204,25 @@ pub fn is_coretext_symbol(name: &str) -> bool {
     is_corefoundation_symbol(name) || ["_CT", "_kCT", "_CG", "_kCG"].iter().any(|p| name.starts_with(p))
 }
 
+/// The IOSurface and IOKit frameworks' install names.
+pub const IOSURFACE_DYLIB: &str = "/System/Library/Frameworks/IOSurface.framework/Versions/A/IOSurface";
+pub const IOKIT_DYLIB: &str = "/System/Library/Frameworks/IOKit.framework/Versions/A/IOKit";
+
+/// A test about IOSurface or IOKit says so with this line; it is then linked with
+/// `-framework IOSurface -framework IOKit -framework CoreFoundation` and may import
+/// those frameworks' symbols and libSystem's (the sharing tests make two processes
+/// and pass Mach ports), and loads no other library (`tests/macos/include/poly_miosurface.h`).
+pub const IOSURFACE_DIRECTIVE: &str = "poly-mac: iosurface";
+
+/// Whether `source` carries [`IOSURFACE_DIRECTIVE`] in a comment line among
+/// its first 30 lines.
+pub fn uses_iosurface(source: &str) -> bool {
+    source.lines().take(30).any(|l| {
+        let l = l.trim_start();
+        (l.starts_with("//") || l.starts_with('*') || l.starts_with("/*")) && l.contains(IOSURFACE_DIRECTIVE)
+    })
+}
+
 /// A test that needs font files says so with `poly-mac: fonts NAME.ttf ...`
 /// (in a comment among its first 30 lines); the runner puts those files, found in
 /// `$POLY_FONT_DIR` or the `dejavu-*` directory of `target/fonts` (`cargo xtask fonts
@@ -280,6 +299,8 @@ pub enum Imports {
     CoreGraphics,
     /// CoreText's, CoreGraphics' and CoreFoundation's ([`CORETEXT_DIRECTIVE`]).
     CoreText,
+    /// IOSurface's, IOKit's and CoreFoundation's, and libSystem's ([`IOSURFACE_DIRECTIVE`]).
+    IoSurface,
 }
 
 impl Imports {
@@ -292,6 +313,8 @@ impl Imports {
             Imports::CoreGraphics
         } else if uses_coretext(source) {
             Imports::CoreText
+        } else if uses_iosurface(source) {
+            Imports::IoSurface
         } else if uses_corefoundation(source) {
             Imports::CoreFoundation
         } else if uses_libsystem(source) {
@@ -459,8 +482,13 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
         ALLOWED_DYLIBS.contains(&d)
             || (matches!(
                 imports_kind,
-                Imports::CoreFoundation | Imports::Foundation | Imports::CoreGraphics | Imports::CoreText
+                Imports::CoreFoundation
+                    | Imports::Foundation
+                    | Imports::CoreGraphics
+                    | Imports::CoreText
+                    | Imports::IoSurface
             ) && d == COREFOUNDATION_DYLIB)
+            || (imports_kind == Imports::IoSurface && (d == IOSURFACE_DYLIB || d == IOKIT_DYLIB))
             || (imports_kind == Imports::CoreGraphics && d == COREGRAPHICS_DYLIB)
             || (imports_kind == Imports::CoreText && (d == CORETEXT_DYLIB || d == COREGRAPHICS_DYLIB))
             || (imports_kind == Imports::Foundation && (d == FOUNDATION_DYLIB || d == OBJC_DYLIB))
@@ -469,7 +497,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
     if let Some(d) = dylibs.iter().find(|d| !allowed(d)) {
         return Err(format!("loads {d}; a test may load only {}", ALLOWED_DYLIBS.join(", ")));
     }
-    let any_symbol = matches!(imports_kind, Imports::LibSystem | Imports::Objc { .. });
+    let any_symbol = matches!(imports_kind, Imports::LibSystem | Imports::Objc { .. } | Imports::IoSurface);
     if let (false, Some(symtab)) = (any_symbol, m.symtab().map_err(|e| format!("{e:?}"))?) {
         let mut imports = Vec::new();
         for sym in symtab.iter() {
@@ -478,7 +506,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
             }
         }
         match imports_kind {
-            Imports::Raw | Imports::LibSystem | Imports::Objc { .. } => {}
+            Imports::Raw | Imports::LibSystem | Imports::Objc { .. } | Imports::IoSurface => {}
             Imports::CoreFoundation => imports.retain(|i| !is_corefoundation_symbol(i)),
             Imports::Foundation => imports.retain(|i| !is_foundation_symbol(i)),
             Imports::CoreGraphics => imports.retain(|i| !is_coregraphics_symbol(i)),
@@ -489,7 +517,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
                 "imports {}; a test makes raw system calls only (poly_mtest.h) and imports nothing{}",
                 imports.join(", "),
                 match imports_kind {
-                    Imports::Raw | Imports::LibSystem | Imports::Objc { .. } => "",
+                    Imports::Raw | Imports::LibSystem | Imports::Objc { .. } | Imports::IoSurface => "",
                     Imports::CoreFoundation => " but CoreFoundation's own symbols",
                     Imports::Foundation => " but those of Foundation, CoreFoundation and the Objective-C runtime",
                     Imports::CoreGraphics => " but CoreGraphics's and CoreFoundation's own symbols",
@@ -593,6 +621,9 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
                 }
                 Imports::CoreText => {
                     cc.args(["-framework", "CoreText", "-framework", "CoreGraphics", "-framework", "CoreFoundation"]);
+                }
+                Imports::IoSurface => {
+                    cc.args(["-framework", "IOSurface", "-framework", "IOKit", "-framework", "CoreFoundation"]);
                 }
             }
             let o = cc
@@ -1202,6 +1233,15 @@ mod tests {
         for name in ["_getpid", "_NSLog", "_objc_msgSend", "_CTLineCreate"] {
             assert!(!is_coregraphics_symbol(name), "{name}");
         }
+    }
+
+    #[test]
+    fn the_iosurface_directive_is_found_in_comments_only() {
+        assert!(uses_iosurface("/* x\n * poly-mac: iosurface\n */\nint main(void) { return 0; }\n"));
+        assert!(uses_iosurface("// poly-mac: iosurface\n"));
+        assert!(!uses_iosurface("int main(void) { return 0; }\n"));
+        assert!(!uses_iosurface("const char *s = \"poly-mac: iosurface\";\n"));
+        assert_eq!(Imports::of_source("// poly-mac: iosurface\n"), Imports::IoSurface);
     }
 
     #[test]
