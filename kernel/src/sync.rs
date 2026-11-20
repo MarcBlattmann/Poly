@@ -233,6 +233,11 @@ impl<T> Mutex<T> {
         self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok()
     }
 
+    /// The address of the queue its waiters sleep on, as timeline records name it (ADR 0247).
+    pub fn queue_address(&self) -> u64 {
+        &self.waiters as *const WaitQueue as u64
+    }
+
     /// Take the mutex, blocking until it is free. Panics if this thread
     /// already holds it (that would never return).
     pub fn lock(&self) -> MutexGuard<'_, T> {

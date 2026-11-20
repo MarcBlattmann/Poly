@@ -59,6 +59,14 @@ pub struct ViewMap {
 /// Addresses and lengths are page-aligned and inside user space; the
 /// personality never asks for a mapping over one it has not released.
 pub trait Backend {
+    /// Whether the kernel wants [`image_mapped`](Self::image_mapped) (its timeline, ADR 0247).
+    fn wants_image_names(&self) -> bool {
+        false
+    }
+
+    /// Image (executable or DLL) `path` was mapped in process `pid` at `base`, `size` bytes.
+    fn image_mapped(&mut self, _pid: u32, _base: u64, _size: u64, _path: &[u16]) {}
+
     /// Map fresh zero-filled private pages at `[addr, addr + len)`.
     fn commit(&mut self, addr: u64, len: u64, prot: HwProt) -> Result<(), NtStatus>;
 

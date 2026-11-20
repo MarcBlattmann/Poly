@@ -163,6 +163,14 @@ impl MemBackend<'_> {
 }
 
 impl Backend for MemBackend<'_> {
+    fn wants_image_names(&self) -> bool {
+        crate::timeline::on()
+    }
+
+    fn image_mapped(&mut self, pid: u32, base: u64, size: u64, path: &[u16]) {
+        crate::timeline::name_module(pid, base, size, &alloc::string::String::from_utf16_lossy(path));
+    }
+
     fn commit(&mut self, addr: u64, len: u64, p: HwProt) -> Result<(), NtStatus> {
         self.memory.map_anonymous(Placement::Fixed(addr), len, prot(p)).map(drop).map_err(|_| STATUS_NO_MEMORY)
     }

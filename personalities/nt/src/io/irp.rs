@@ -359,6 +359,7 @@ impl IoState {
             .filter(|_| irp.apc.is_none() && irp.apc_context != 0)
             .filter(|_| !(immediate && irp.skip_port && status == STATUS_SUCCESS))
             .map(|port| PacketPost { port, context: irp.apc_context, status, information: info });
+        self.completions_queued += 1;
         self.completions.push_back(Completion {
             irp: id,
             process: irp.process,
@@ -467,6 +468,11 @@ impl IoState {
 
     pub fn has_completions(&self) -> bool {
         !self.completions.is_empty()
+    }
+
+    /// How many completions were ever queued: a change across a piece of work says it queued one.
+    pub fn completions_queued(&self) -> u64 {
+        self.completions_queued
     }
 
     /// The kernel wrote `c`'s data and status block: set its event, signal

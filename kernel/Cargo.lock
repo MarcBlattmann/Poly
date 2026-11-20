@@ -176,6 +176,7 @@ dependencies = [
  "poly-smp",
  "poly-squashfs",
  "poly-term",
+ "poly-timeline",
  "poly-tty",
  "poly-unix",
  "poly-vdso",
@@ -404,6 +405,10 @@ dependencies = [
  "poly-gfx",
  "poly-input",
 ]
+
+[[package]]
+name = "poly-timeline"
+version = "0.0.1"
 
 [[package]]
 name = "poly-tty"

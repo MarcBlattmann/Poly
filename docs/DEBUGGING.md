@@ -1687,6 +1687,47 @@ server for key events, `POLY_CHROMIUM_APPEND="poly.debug.profile"` adds kernel
 arguments, `POLY_CHROMIUM_QEMU="..."` adds QEMU arguments. The guest's
 shell reads QEMU's standard input (`poweroff` prints the profile).
 
+## One key press, thread by thread: the timeline (ADR 0247)
+
+**Which threads ran after this key, what did they wait for, and who woke them?**
+`poly.debug.timeline` (`=<MiB>`, default 32) records, in a ring of guest
+memory and without writing to the serial port, every context switch (and what
+the thread switched away from became), every wake-up (and which thread, in
+which system call, did it), every system call of every personality (entry,
+first argument, result), every block on a wait queue (the NT state's lock and
+the I/O drain's are named), keys, the display's frames, and a user-mode sample
+of the running thread at every timer tick. The names the records leave out go
+to the serial log as they become known (`timeline: name`, `proc`, `module`,
+`queue`, `sys`): kernel threads, the names Windows programs give their threads
+(`SetThreadDescription`) and Linux ones theirs (`prctl(PR_SET_NAME)`),
+command lines, where each DLL is mapped, the system calls' names.
+
+The **Pause** key freezes the ring (and reaches no program); copy it out of
+the guest's memory while it is frozen, then press Pause again:
+
+```text
+# with a QMP connection to QEMU (`cargo xtask desktop --qmp-port=4444 ... poly.debug.timeline`):
+import sys; sys.path.insert(0, 'tools/timeline'); import timeline
+timeline.grab(lambda name, **args: qmp.cmd(name, **args), serial_log_text, '/tmp/ring.bin')
+```
+
+`grab` finds `timeline: ring at phys ... bytes ...` in the log and runs QEMU's
+`pmemsave`. Then `tools/timeline/timeline.py RING SERIAL.log`:
+
+| Option | Prints |
+|---|---|
+| (none) | for the last key press: the frames after it; for the first ones, the chain of wake-ups that led to each, back to the key (per step: running, waiting for a CPU, blocked, woken by whom in which call); every thread busy in the window; blocked time by call (`[nt-state-lock]`, `[nt-io-drain]` mark lock waits); CPU use |
+| `--summary` | one line per key press: its first frame, the CPU used until then and the lock waits; medians per key |
+| `--calls NAME` | per system call of the threads whose name has `NAME` in it (`""`: all threads, summed): count, time inside, time running inside, and the time running outside calls |
+| `--samples` | the user-mode samples by module (`chrome.dll`, `ntdll.dll`, ...): where the programs' own time went |
+| `--lane NAME`, `--key N`, `--ms W`, `--min-bytes B` | one thread's events; another key press; the window; frames at least that big |
+
+Threads are named `role/thread` (`browser/CrBrowserMain`,
+`gpu-process/VizCompositorThread`, `renderer/Compositor`; Linux Chromium's
+zygote children by pid). The ring holds about 14 s of a busy Chrome at 32 MiB.
+The same commands work for Linux Chromium, so the two can be compared call by
+call.
+
 ## Attaching a debugger
 
 ```sh

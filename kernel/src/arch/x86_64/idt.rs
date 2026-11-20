@@ -604,6 +604,9 @@ extern "C" fn irq_entry(frame: *mut TrapFrame) {
         // SAFETY: as above.
         let (rip, rbp) = unsafe { ((*frame).rip, (*frame).rbp) };
         crate::profile::sample(from_user, rip, || super::backtrace::stack_word(rbp.checked_add(8)?));
+        if from_user {
+            crate::timeline::sample(rip);
+        }
     }
     super::irq::dispatch(vector as u8);
 }

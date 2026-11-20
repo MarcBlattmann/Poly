@@ -294,6 +294,7 @@ pub unsafe extern "system" fn SetThreadDescription(thread: Handle, description: 
                     m.insert(id, text.to_vec());
                 }
             });
+            poly_win32_rt::timeline_thread_name(id, &text);
             0
         }
         Err(e) => hresult(e),
