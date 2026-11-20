@@ -446,6 +446,13 @@ fn spawn(
     let tid_u32 = tref.0 as u32;
     match super::spawn_thread(process, memory, entry, teb, user::DEFAULT_HOOK, Some(tid_u32)) {
         Ok(kid) => {
+            // An affinity set while it waited (created suspended) applies from its start.
+            if let Some(mask) = with(|s| s.sys.thread_records.get(&tref).and_then(|r| r.affinity)) {
+                let cpus = thread::CpuSet::from_bits(mask).intersection(thread::online_cpus());
+                if !cpus.is_empty() {
+                    let _ = thread::set_affinity(kid, cpus);
+                }
+            }
             let _ = thread::detach(kid);
             if let Some(f) = process.thread_flags(tid_u32) {
                 with(|s| s.ctl.entry(tref).or_default().flags = Some(f));

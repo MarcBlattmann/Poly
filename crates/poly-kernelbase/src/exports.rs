@@ -318,6 +318,11 @@ pub const KERNEL32_FORWARDS: &[(&str, &str)] = &[
     ("CreateRemoteThread", "api-ms-win-core-processthreads-l1-1-0"),
     ("CreateRemoteThreadEx", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetProcessIdOfThread", "api-ms-win-core-processthreads-l1-1-0"),
+    // specs/windows/kernel32.dll/GetThreadIdealProcessorEx.yaml, GetThreadGroupAffinity.yaml.
+    ("GetThreadIdealProcessorEx", "api-ms-win-core-processthreads-l1-1-2"),
+    ("SetThreadIdealProcessorEx", "api-ms-win-core-processthreads-l1-1-2"),
+    ("GetThreadGroupAffinity", "api-ms-win-core-processtopology-l1-1-0"),
+    ("SetThreadGroupAffinity", "api-ms-win-core-processtopology-l1-1-0"),
     ("GetProcessTimes", "api-ms-win-core-processthreads-l1-1-0"),
     ("GetStartupInfoW", "api-ms-win-core-processthreads-l1-1-0"),
     ("IsProcessorFeaturePresent", "api-ms-win-core-processthreads-l1-1-1"),

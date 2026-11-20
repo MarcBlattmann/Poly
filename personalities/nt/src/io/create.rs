@@ -423,6 +423,14 @@ impl CreateHook<'_> {
         if matches!(info, FILE_SUPERSEDED | FILE_OVERWRITTEN) {
             self.io.drop_streams(volume, &node);
         }
+        // A new file or directory gets its creator's owner, and its creator's default DACL where
+        // its directory passes nothing down (ADR 0253).
+        if info == FILE_CREATED
+            && let Some(c) = caller
+        {
+            let key = poly_ntobj::path_key(&alloc::format!("F{volume}"), &found.path);
+            om.created_path_security(c, &key, node.kind().is_ok_and(|k| k == FileType::Directory));
+        }
         self.finish(om, volume, found, node, open, info, None)
     }
 
