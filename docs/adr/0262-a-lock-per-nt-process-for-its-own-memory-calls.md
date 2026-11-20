@@ -39,6 +39,12 @@ charge and the job limits.
      full path instead; the personality's test kernel fails any test whose own-memory path reaches a section.
    - Everything else (other processes' memory, views, placeholders, the other information classes) runs as before:
      the NT state's lock, then the process's.
+   - **These four calls skip the end-of-call work** (`dispatch_own_memory`, next to ADR 0247's lock-free
+     `NtQueryPerformanceCounter`). After every call the kernel delivered registry notifications (`registry::finish`)
+     and woke the threads the call satisfied (`drain_wakes`), each under the NT state's lock. The first A/B
+     measurement showed `NtAllocateVirtualMemory` still waiting about 800 ms per Chrome start on that lock, with the
+     call itself already off it. A memory call signals nothing and changes no key. A registry notification completed
+     for the process meanwhile is delivered at the end of its next other call.
 3. **The lock order is the NT state, then a process; never the reverse.**
    - Code that holds the NT state locks processes through the table.
    - The own-memory path holds a process's lock alone and takes no other NT lock: not the NT state's, not another
