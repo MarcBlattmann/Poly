@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "2c44ff600c90",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:21:59Z",
+  "tests": [
+    {
+      "name": "fk_set_keys",
+      "exe_sha256": "c7f5df954e4b4c08eaf8a96a748cf24db79c2b97853a042967e5889bce37e115",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBGIGdldHMgV01fU0VURk9DVVMgKFNldEZvY3VzKEYpIGZyb20gdGhlIHRlc3QpOiBpdHMgaGFuZGxlciBzZW5kcyBiIGFuZCBzbGVlcHMgMTAwIG1zCiAgRSBXTV9LSUxMRk9DVVMgb3RoZXI9RgogIEYgV01fU0VURk9DVVMgb3RoZXI9RQogIEYgaGFuZGxlcjogc2VudCAyIGV2ZW50cwogIEYgV01fS0VZRE9XTiB2az0weDQyIGw9MHgwMDMwMDAwMQogIEYgV01fQ0hBUiBjaD0weDAwNjIgbD0weDAwMzAwMDAxCiAgRiBXTV9LRVlVUCB2az0weDQyIGw9MHhjMDMwMDAwMQogIHRleHRzOiBFICIiIEYgImIiIEcgIiI7IGZvY3VzIEY7IGZvcmVncm91bmQgb3VycyB0cnVlCj09IHRoZSBzYW1lIHdpdGhvdXQgdGhlIHNsZWVwCiAgRSBXTV9LSUxMRk9DVVMgb3RoZXI9RgogIEYgV01fU0VURk9DVVMgb3RoZXI9RQogIEYgaGFuZGxlcjogc2VudCAyIGV2ZW50cwogIEYgV01fS0VZRE9XTiB2az0weDQyIGw9MHgwMDMwMDAwMQogIEYgV01fQ0hBUiBjaD0weDAwNjIgbD0weDAwMzAwMDAxCiAgRiBXTV9LRVlVUCB2az0weDQyIGw9MHhjMDMwMDAwMQogIHRleHRzOiBFICIiIEYgImIiIEcgIiI7IGZvY3VzIEY7IGZvcmVncm91bmQgb3VycyB0cnVlCj09IHRoZSBmb2N1cyBtb3ZlcyBieSBDdHJsK0wsIHRoZW4gYWJjOyBGIHNlbmRzIHggaW4gV01fU0VURk9DVVMKICBFIFdNX0tFWURPV04gdms9MHgxMSBsPTB4MDAxZDAwMDEKICBFIFdNX0tFWURPV04gdms9MHg0YyBsPTB4MDAyNjAwMDEKICBFIFdNX0tJTExGT0NVUyBvdGhlcj1GCiAgRiBXTV9TRVRGT0NVUyBvdGhlcj1FCiAgRiBoYW5kbGVyOiBzZW50IDIgZXZlbnRzCiAgRSBoYW5kbGVyOiBTZXRGb2N1cyhlZGl0IDEpCiAgRSBXTV9DSEFSIGNoPTB4MDAwYyBsPTB4MDAyNjAwMDEKICBGIFdNX0tFWVVQIHZrPTB4NGMgbD0weGMwMjYwMDAxCiAgRiBXTV9LRVlVUCB2az0weDExIGw9MHhjMDFkMDAwMQogIEYgV01fS0VZRE9XTiB2az0weDQxIGw9MHgwMDFlMDAwMQogIEYgV01fQ0hBUiBjaD0weDAwNjEgbD0weDAwMWUwMDAxCiAgRiBXTV9LRVlVUCB2az0weDQxIGw9MHhjMDFlMDAwMQogIEYgV01fS0VZRE9XTiB2az0weDQyIGw9MHgwMDMwMDAwMQogIEYgV01fQ0hBUiBjaD0weDAwNjIgbD0weDAwMzAwMDAxCiAgRiBXTV9LRVlVUCB2az0weDQyIGw9MHhjMDMwMDAwMQogIEYgV01fS0VZRE9XTiB2az0weDQzIGw9MHgwMDJlMDAwMQogIEYgV01fQ0hBUiBjaD0weDAwNjMgbD0weDAwMmUwMDAxCiAgRiBXTV9LRVlVUCB2az0weDQzIGw9MHhjMDJlMDAwMQogIEYgV01fS0VZRE9XTiB2az0weDU4IGw9MHgwMDJkMDAwMQogIEYgV01fQ0hBUiBjaD0weDAwNzggbD0weDAwMmQwMDAxCiAgRiBXTV9LRVlVUCB2az0weDU4IGw9MHhjMDJkMDAwMQogIHRleHRzOiBFICIiIEYgImFiY3giIEcgIiI7IGZvY3VzIEY7IGZvcmVncm91bmQgb3VycyB0cnVlCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== F gets WM_SETFOCUS (SetFocus(F) from the test): its handler sends b and sleeps 100 ms\n  E WM_KILLFOCUS other=F\n  F WM_SETFOCUS other=E\n  F handler: sent 2 events\n  F WM_KEYDOWN vk=0x42 l=0x00300001\n  F WM_CHAR ch=0x0062 l=0x00300001\n  F WM_KEYUP vk=0x42 l=0xc0300001\n  texts: E \"\" F \"b\" G \"\"; focus F; foreground ours true\n== the same without the sleep\n  E WM_KILLFOCUS other=F\n  F WM_SETFOCUS other=E\n  F handler: sent 2 events\n  F WM_KEYDOWN vk=0x42 l=0x00300001\n  F WM_CHAR ch=0x0062 l=0x00300001\n  F WM_KEYUP vk=0x42 l=0xc0300001\n  texts: E \"\" F \"b\" G \"\"; focus F; foreground ours true\n== the focus moves by Ctrl+L, then abc; F sends x in WM_SETFOCUS\n  E WM_KEYDOWN vk=0x11 l=0x001d0001\n  E WM_KEYDOWN vk=0x4c l=0x00260001\n  E WM_KILLFOCUS other=F\n  F WM_SETFOCUS other=E\n  F handler: sent 2 events\n  E handler: SetFocus(edit 1)\n  E WM_CHAR ch=0x000c l=0x00260001\n  F WM_KEYUP vk=0x4c l=0xc0260001\n  F WM_KEYUP vk=0x11 l=0xc01d0001\n  F WM_KEYDOWN vk=0x41 l=0x001e0001\n  F WM_CHAR ch=0x0061 l=0x001e0001\n  F WM_KEYUP vk=0x41 l=0xc01e0001\n  F WM_KEYDOWN vk=0x42 l=0x00300001\n  F WM_CHAR ch=0x0062 l=0x00300001\n  F WM_KEYUP vk=0x42 l=0xc0300001\n  F WM_KEYDOWN vk=0x43 l=0x002e0001\n  F WM_CHAR ch=0x0063 l=0x002e0001\n  F WM_KEYUP vk=0x43 l=0xc02e0001\n  F WM_KEYDOWN vk=0x58 l=0x002d0001\n  F WM_CHAR ch=0x0078 l=0x002d0001\n  F WM_KEYUP vk=0x58 l=0xc02d0001\n  texts: E \"\" F \"abcx\" G \"\"; focus F; foreground ours true\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2838
+    }
+  ]
+}

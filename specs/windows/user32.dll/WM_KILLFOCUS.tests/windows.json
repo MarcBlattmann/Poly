@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "2c44ff600c90",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:21:59Z",
+  "tests": [
+    {
+      "name": "fk_kill_state",
+      "exe_sha256": "214e3b96d6063c186cc6e4ffda3565a8930aed0b37314ffcad5fb992153db096",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBTZXRGb2N1cyhGKSBmcm9tIHRoZSB0ZXN0CiAgRSBXTV9LSUxMRk9DVVMgb3RoZXI9RgogICAgICBHZXRGb2N1cyBGIGFjdGl2ZSBQCiAgRiBXTV9TRVRGT0NVUyBvdGhlcj1FCiAgICAgIEdldEZvY3VzIEYgYWN0aXZlIFAKICB0ZXh0czogRSAiIiBGICIiIEcgIiI7IGZvY3VzIEY7IGZvcmVncm91bmQgb3VycyB0cnVlCj09IFNldEZvY3VzKEcpLCB0aGVuIFNldEZvY3VzKE5VTEwpLCB0aGVuIFNldEZvY3VzKEUpCiAgRSBXTV9LSUxMRk9DVVMgb3RoZXI9RwogICAgICBHZXRGb2N1cyBHIGFjdGl2ZSBQCiAgRyBXTV9TRVRGT0NVUyBvdGhlcj1FCiAgICAgIEdldEZvY3VzIEcgYWN0aXZlIFAKICBHIFdNX0tJTExGT0NVUyBvdGhlcj1udWxsCiAgICAgIEdldEZvY3VzIG51bGwgYWN0aXZlIFAKICBFIFdNX1NFVEZPQ1VTIG90aGVyPW51bGwKICAgICAgR2V0Rm9jdXMgRSBhY3RpdmUgUAogIHRleHRzOiBFICIiIEYgIiIgRyAiIjsgZm9jdXMgRTsgZm9yZWdyb3VuZCBvdXJzIHRydWUKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== SetFocus(F) from the test\n  E WM_KILLFOCUS other=F\n      GetFocus F active P\n  F WM_SETFOCUS other=E\n      GetFocus F active P\n  texts: E \"\" F \"\" G \"\"; focus F; foreground ours true\n== SetFocus(G), then SetFocus(NULL), then SetFocus(E)\n  E WM_KILLFOCUS other=G\n      GetFocus G active P\n  G WM_SETFOCUS other=E\n      GetFocus G active P\n  G WM_KILLFOCUS other=null\n      GetFocus null active P\n  E WM_SETFOCUS other=null\n      GetFocus E active P\n  texts: E \"\" F \"\" G \"\"; focus E; foreground ours true\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2032
+    }
+  ]
+}

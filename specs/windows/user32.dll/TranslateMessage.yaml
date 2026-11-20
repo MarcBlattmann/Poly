@@ -26,6 +26,7 @@ rules:
   other: "WM_CHAR and WM_USER: 0, nothing posted"
   queue_position: "the WM_CHAR goes at the end of the queue (after messages already posted)"
   key_state: "no keys are down in the oracle's session (GetKeyState of Shift/Control not negative)"
+  char_goes_to_message_window: "The WM_CHAR is posted to the window of the message passed in, not to the window that has the focus when TranslateMessage runs: a key-down read for E, the focus moved to F, then TranslateMessage: E gets the WM_CHAR. A WM_KEYDOWN posted to F while E has the focus is translated for F. Ctrl+A gives WM_CHAR 0x01, Ctrl+L 0x0c, Shift+a 0x41. See WM_CHAR."
 errors:
   none: "no error cases observed"
 side_effects: "none beyond the rules above"
