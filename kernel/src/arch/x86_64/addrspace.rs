@@ -263,6 +263,12 @@ impl UserFrame {
     /// A zeroed frame, or `None` if memory ran out (or only the kernel's reserve is left,
     /// ADR 0250).
     pub fn zeroed() -> Option<UserFrame> {
+        // One an idle CPU zeroed already, if the pool has one (ADR 0263).
+        if let Some(phys) = crate::zeropool::take(crate::frames::user_floor()) {
+            crate::frames::after_user_allocation(true);
+            USER_FRAMES.fetch_add(1, Ordering::Relaxed);
+            return Some(UserFrame { phys });
+        }
         let timer = crate::profile::start();
         let phys = crate::frames::allocate_user_frame()?;
         crate::profile::since(crate::profile::Event::AllocFrame, timer);

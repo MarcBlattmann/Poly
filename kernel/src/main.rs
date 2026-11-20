@@ -58,6 +58,7 @@ mod virtio_gpu;
 mod virtio_input;
 mod xnu;
 mod xnu_mach;
+mod zeropool;
 
 use alloc::boxed::Box;
 use core::panic::PanicInfo;
@@ -170,6 +171,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     fs::init(&boot, initrd);
     // The out-of-memory policy (ADR 0250), once the page cache is there.
     oom::init(&boot);
+    // Idle CPUs zero frames ahead of the page faults that need them (ADR 0263).
+    zeropool::init();
     // Frees what unmaps without waiting kept for their shootdowns (ADR 0254).
     arch::user::start_reaper();
     // /dev/dri on the virtio GPU the display found (ADR 0108).

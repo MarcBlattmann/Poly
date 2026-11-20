@@ -15,6 +15,7 @@ mod buddy;
 mod direct_map;
 pub mod pressure;
 mod stack_area;
+pub mod zeropool;
 
 pub use buddy::{BuddyAllocator, FreeError, MAX_ORDER, MetadataTooSmall, RangeError};
 pub use direct_map::DirectMap;

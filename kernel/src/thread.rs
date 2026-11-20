@@ -404,6 +404,14 @@ fn idle_main(_: usize) -> usize {
         if !switched {
             // Another CPU runs alone for a while (`smp::Exclusive`).
             arch::smp::park_if_stopped();
+            // Nothing to run: zero a frame for the page faults to come (ADR 0263), one per pass
+            // with interrupts on, so a thread made runnable meanwhile runs at once.
+            if arch::interrupts_ready() && crate::zeropool::wants() {
+                // SAFETY: as below: the idle thread owns this CPU's interrupt state.
+                unsafe { cpu::enable_interrupts() };
+                crate::zeropool::refill_one();
+                continue;
+            }
         }
         // With interrupts off, nothing can make a thread runnable here
         // between that check and the halt: whatever does is an interrupt

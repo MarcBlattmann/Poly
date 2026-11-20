@@ -68,6 +68,8 @@ pub fn after_user_allocation(got: bool) {
     if free <= low_watermark() {
         crate::fs::cache::kick();
     }
+    // The pre-zeroed frames go back to the allocator too (ADR 0263).
+    crate::zeropool::after_user_allocation(free);
     if !got {
         REFUSED.fetch_add(1, Ordering::Relaxed);
         crate::oom::wake();

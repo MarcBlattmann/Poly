@@ -188,6 +188,17 @@ pub fn input(events: &[(u16, u16, i32)]) -> bool {
         if ty != EV_KEY {
             continue;
         }
+        // TEMP-AB (prezeroed-pages, removed before the PR): Scroll Lock switches the pool off/on.
+        if code == 70 {
+            pause = true;
+            if value == 1 {
+                let on = !crate::zeropool::TEMP_AB.load(Ordering::Relaxed);
+                crate::zeropool::TEMP_AB.store(on, Ordering::Relaxed);
+                crate::kprintln!("TEMP-AB pool={on}");
+                push(Kind::Key, current(), 70, 1);
+            }
+            continue;
+        }
         if code == KEY_PAUSE {
             pause = true;
             if value == 1

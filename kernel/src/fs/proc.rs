@@ -594,8 +594,10 @@ impl ProcSource for KernelProc {
 
     fn system(&self) -> SystemInfo {
         let now = time::now_ns();
-        let (total, free) =
-            crate::frames::FRAMES.lock().as_ref().map_or((0, 0), |f| (f.total_frames() * PAGE, f.free_frames() * PAGE));
+        let (total, free) = crate::frames::FRAMES
+            .lock()
+            .as_ref()
+            .map_or((0, 0), |f| (f.total_frames() * PAGE, (f.free_frames() + crate::zeropool::len() as u64) * PAGE));
         let c = super::cache::cache().stats();
         let cached = c.pages as u64 * PAGE;
         let dirty = c.dirty as u64 * PAGE;

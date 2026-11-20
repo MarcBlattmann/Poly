@@ -534,13 +534,16 @@ fn start_waits_reporter() {
 
 /// One `poly.nt.mem` report: the frame allocator's frames by user, then every NT process's pages.
 pub fn log_memory() {
+    // Pre-zeroed frames (ADR 0263) are free memory too.
     let (free, total) = crate::frames::FRAMES.lock().as_ref().map_or((0, 0), |f| (f.free_frames(), f.total_frames()));
+    let free = free + crate::zeropool::len() as u64;
     let user = user::user_frames();
     let cache = crate::fs::cache::frames();
     let heap = crate::heap::stats().pages_held as u64;
     let rest = total.saturating_sub(free + user + cache + heap);
+    let (pooled, (taken, zeroed)) = (crate::zeropool::len(), crate::zeropool::stats());
     crate::kprintln!(
-        "nt-mem: at {} ms frames total {total} free {free} user {user} cache {cache} heap {heap} rest {rest} MiB: free {} user {} cache {} heap {} rest {}",
+        "nt-mem: at {} ms frames total {total} free {free} user {user} cache {cache} heap {heap} rest {rest} zeroed-pool {pooled} (taken {taken}, zeroed {zeroed}) MiB: free {} user {} cache {} heap {} rest {}",
         crate::time::now_ns() / 1_000_000,
         free / 256,
         user / 256,
@@ -1178,8 +1181,10 @@ impl NtKernel for Kernel {
 
     fn physical_memory(&self) -> Option<(u64, u64)> {
         const PAGE: u64 = 4096;
-        let (total, free) =
-            crate::frames::FRAMES.lock().as_ref().map_or((0, 0), |f| (f.total_frames() * PAGE, f.free_frames() * PAGE));
+        let (total, free) = crate::frames::FRAMES
+            .lock()
+            .as_ref()
+            .map_or((0, 0), |f| (f.total_frames() * PAGE, (f.free_frames() + crate::zeropool::len() as u64) * PAGE));
         // As `/proc/meminfo`'s MemAvailable: free memory and the clean pages of the cache.
         let c = crate::fs::cache::cache().stats();
         let clean = (c.pages as u64).saturating_sub(c.dirty as u64) * PAGE;

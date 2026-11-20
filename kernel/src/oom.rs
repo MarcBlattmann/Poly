@@ -68,7 +68,8 @@ pub fn init(boot: &crate::boot_info::BootInfo) {
 }
 
 fn free_frames() -> u64 {
-    frames::FRAMES.lock().as_ref().map_or(0, |f| f.free_frames())
+    // The pre-zeroed frames (ADR 0263) count: user memory may take them under the same rule.
+    frames::FRAMES.lock().as_ref().map_or(0, |f| f.free_frames()) + crate::zeropool::len() as u64
 }
 
 fn oom_main(_: usize) -> usize {
