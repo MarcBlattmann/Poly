@@ -466,6 +466,7 @@
 </g>
 <g><title>CoreText: 0 / 1,481 done (0.0%)</title>
 <rect x="677.9" y="329.4" width="20.0" height="20.0" fill="#21262d"/>
+<rect x="677.9" y="329.4" width="0.4" height="20.0" fill="#388bfd"/>
 <rect x="676.9" y="328.4" width="22.0" height="22.0" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>_StoreKit_SwiftUI: 0 / 1,450 done (0.0%)</title>
