@@ -75,6 +75,24 @@ impl TextMetric {
         b[56] = self.char_set;
         b
     }
+
+    /// The 56-byte `TEXTMETRICA`: the characters as bytes (0xFF for one beyond).
+    pub fn to_bytes_a(&self) -> [u8; 56] {
+        let w = self.to_bytes();
+        let mut a = [0u8; 56];
+        a[..44].copy_from_slice(&w[..44]);
+        let byte = |c: u16| if c > 0xFF { 0xFF } else { c as u8 };
+        a[44] = byte(self.first_char);
+        a[45] = byte(self.last_char);
+        a[46] = byte(self.default_char);
+        a[47] = byte(self.break_char);
+        a[48] = self.italic;
+        a[49] = self.underlined;
+        a[50] = self.struck_out;
+        a[51] = self.pitch_and_family;
+        a[52] = self.char_set;
+        a
+    }
 }
 
 impl Face {

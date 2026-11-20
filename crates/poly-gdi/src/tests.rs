@@ -1903,6 +1903,8 @@ fn draw_text_tab_stops_and_ellipsis_flags_follow_learn() {
     assert_eq!(ell(&mut g, "AB\nAAAA\\BBBB\\AAAA\\BBB.AB", 100, 60, DT_PATH_ELLIPSIS), "AB\nAA...\\BBB.AB");
 }
 
+mod glyphs;
+mod otm;
 mod sheets_last_line;
 mod sheets_text;
 mod world;

@@ -14,6 +14,9 @@ fn main() {
     ] {
         println!("cargo:rustc-link-arg=/EXPORT:{name},@{ordinal}");
     }
+    // The icon loaders by name and by the ordinals of Windows' own comctl32.dll (Notepad++ imports `LoadIconWithScaleDown` by 381).
+    println!("cargo:rustc-link-arg=/EXPORT:LoadIconWithScaleDown,@381");
+    println!("cargo:rustc-link-arg=/EXPORT:LoadIconMetric,@380");
     // BEGIN generated: the names the Windows applications of the survey import (ADR 0155, step 10).
     // The 32-bit modules (ADR 0186) carry none of these: a fail-only stub takes no arguments and `stdcall` would leave them.
     if std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|a| a == "x86_64") {
@@ -29,6 +32,5 @@ fn main() {
 #[rustfmt::skip]
 const APPS_ORDINALS: &[u32] = &[
     345,
-    381,
 ];
 // END generated consts
