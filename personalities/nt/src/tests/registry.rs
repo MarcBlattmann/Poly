@@ -185,8 +185,12 @@ fn create_set_query_enumerate() {
         let n = f.u32_at(buf + 12) as usize;
         subs.push(utf16(&f.bytes_at(buf + 16, n)));
     }
-    // (`Wow6432Node` is the 32-bit view of the software hive, ADR 0186 stage 2: a 64-bit caller lists it.)
-    assert_eq!(subs, ["Classes", "Microsoft", "PolyTest", "WOW6432Node"]);
+    // (`Wow6432Node` is the 32-bit view of the software hive, ADR 0186 stage 2: a 64-bit caller
+    // lists it; the other names are a Windows machine's defaults, `RegistryDefaults.Wow6432Node.yaml`.)
+    assert_eq!(
+        subs,
+        ["Classes", "Clients", "Microsoft", "Policies", "PolyTest", "RegisteredApplications", "WOW6432Node"]
+    );
     let buf = f.alloc(64);
     assert_eq!(
         f.call(Service::EnumerateKey, &[sw, 0, u64::from(KEY_NAME_INFORMATION), buf, 64, 0]),
@@ -465,13 +469,49 @@ fn subkeys(f: &mut Fake, h: u64) -> Vec<String> {
 }
 
 #[test]
-fn the_default_software_hive_has_an_empty_wow6432node() {
+fn the_default_software_hive_has_the_wow6432node_keys_of_windows() {
     let mut f = Fake::new();
+    // `RegistryDefaults.Wow6432Node.yaml` `software_64`, `classes_wow`.
     let node = open_ok(&mut f, "\\Registry\\Machine\\SOFTWARE\\WOW6432Node");
-    assert!(subkeys(&mut f, node).is_empty());
+    assert_eq!(subkeys(&mut f, node), ["Classes", "Clients", "Microsoft", "Policies", "RegisteredApplications"]);
+    let classes_node = open_ok(&mut f, "\\Registry\\Machine\\SOFTWARE\\Classes\\WOW6432Node");
+    let mut names = subkeys(&mut f, classes_node);
+    names.sort();
+    assert_eq!(names, ["AppID", "CLSID", "DirectShow", "Interface", "Media Type", "MediaFoundation", "TypeLib"]);
     // A 64-bit process lists it below HKLM\SOFTWARE.
     let sw = open_ok(&mut f, SOFTWARE);
     assert!(subkeys(&mut f, sw).iter().any(|n| n == "WOW6432Node"));
+}
+
+/// `RegistryDefaults.Wow6432Node.yaml` `one_key_64`, `software_32`: the physical registry's names
+/// for one key (links), and the 32-bit view's own reading of a leftover `Wow6432Node`.
+#[test]
+fn the_wow6432node_names_of_one_key() {
+    let mut f = Fake::new();
+    let name = |f: &mut Fake, path: &str| {
+        let (s, h) = open_key(f, 0, path, KEY_READ);
+        (s == STATUS_SUCCESS).then(|| key_name(f, h))
+    };
+    let classes_node = "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node";
+    // 64-bit view: Wow6432Node\Classes is Classes\Wow6432Node; its TypeLib and AppID are the shared ones.
+    let p = "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Classes\\CLSID";
+    assert_eq!(name(&mut f, p).as_deref(), Some(alloc::format!("{classes_node}\\CLSID").as_str()));
+    let p = "\\Registry\\Machine\\SOFTWARE\\Classes\\Wow6432Node\\TypeLib";
+    assert_eq!(name(&mut f, p).as_deref(), Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\TypeLib"));
+    let p = "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Classes\\AppID";
+    assert_eq!(name(&mut f, p).as_deref(), Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\AppID"));
+    assert_eq!(name(&mut f, "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Wow6432Node"), None);
+    // 32-bit view: SOFTWARE\Wow6432Node is SOFTWARE, so its Wow6432Node child does not exist.
+    f.proc.wow64 = true;
+    assert_eq!(name(&mut f, "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Wow6432Node"), None);
+    let p = "\\Registry\\Machine\\SOFTWARE\\Classes\\Wow6432Node\\Wow6432Node";
+    assert_eq!(name(&mut f, p).as_deref(), Some(classes_node));
+    // Its CurrentVersion has the (x86) folders.
+    let p = "\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion";
+    assert_eq!(
+        name(&mut f, p).as_deref(),
+        Some("\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion")
+    );
 }
 
 #[test]
