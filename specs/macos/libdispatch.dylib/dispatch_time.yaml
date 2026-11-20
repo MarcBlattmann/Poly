@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_time.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_time.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_time
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_time(base, delta_ns) returns a monotonic dispatch_time_t: DISPATCH_TIME_NOW (0) as base reads the clock, which is mach_absolute_time (within 1 s of it). The
+  unit of the value is the mach absolute time tick; the delta is in nanoseconds and converted with the timebase (numer/denom): x86_64 has 1/1 (a delta of 1e9 adds 1e9) and arm64 125/3 (adds 24000000). Two half
+  second steps add one second's ticks; a negative delta goes back (a - 0.5 s). Adding 0 keeps the time; a later delta gives a later value; the clock does not run backwards over a 20 ms
+  sleep. DISPATCH_TIME_FOREVER is ~0 and stays FOREVER with any delta; a huge delta (INT64_MAX) saturates at FOREVER. dispatch_walltime(NULL, delta) (or with a timespec) is a wall-clock time:
+  it differs from the monotonic one and has the top bit set (the monotonic ones do not); a wait with dispatch_walltime(NULL, 100 ms) times out after at least about 100 ms; a wall time in the past times out at once.
+  NSEC_PER_SEC is 1000000000, NSEC_PER_MSEC 1000000, USEC_PER_SEC 1000000.
+returns:
+  "time": "dispatch_time_t"
+errors:
+  "none": "no error result"
+side_effects: "none"
+threading: "see the summary"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "unit of the value: x86_64 1 ns per tick (timebase 1/1), arm64 1/24 microsecond per tick (125/3)"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

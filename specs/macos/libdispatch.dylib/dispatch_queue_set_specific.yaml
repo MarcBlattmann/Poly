@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_queue_set_specific.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_queue_set_specific.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_queue_set_specific
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_queue_set_specific(queue, key, value, destructor) stores a value under a key (compared by address: another array with the same text is another key) on a queue; dispatch_queue_get_specific(queue, key) reads it directly; dispatch_get_specific(key) inside a block reads it
+  from the queue the block runs on and then its target chain, nearest first (the queue's own value wins over a target's; two levels down found the outer queue's), and returns NULL outside any queue block (on the main thread) or for an unset key. The value pointer comes back as given. Replacing a value, setting NULL and releasing the queue each call the
+  destructor of the value that went away with that value, later and asynchronously (waited for with a semaphore; three calls in all: 100, 101, 102). A block run by dispatch_sync into a queue sees that queue's specifics.
+returns:
+  "value": "the stored pointer, NULL when not set"
+errors:
+  "none": "no error result"
+side_effects: "stores the value on the queue"
+threading: "see the summary"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

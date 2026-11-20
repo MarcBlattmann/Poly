@@ -1,0 +1,112 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_source_create_errors",
+      "source_sha256": "da6316783f5a73cc4a27a2a81062d2f869b1fc68dbdc096d8f7f3e0bdc9b606b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4664522512d6449a2b0559530e087e3abe11006cec88dda8607ef9f996c00767",
+          "exit_code": 0,
+          "stdout": "ok a signal number of 0: NULL\nok a signal number above 31: NULL\nok a nonzero mask for a signal source: NULL\nvalue a timer source with a nonzero handle is made (1) or refused (0) 1\nok a nonzero handle for a data source: NULL\nok a timer with mask 0 is valid\nok a data source's handle is 0\nok its mask is 0\nok its data is 0 before anything was merged\nok it is not cancelled\nok a DATA_OR source with a nonzero mask (0xff) is refused: NULL\nok with mask 0 it is made\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fe75280de338bdbc0554d0b654f17b488c142720f88875271a49e13aae6b140f",
+          "exit_code": 0,
+          "stdout": "ok a signal number of 0: NULL\nok a signal number above 31: NULL\nok a nonzero mask for a signal source: NULL\nvalue a timer source with a nonzero handle is made (1) or refused (0) 1\nok a nonzero handle for a data source: NULL\nok a timer with mask 0 is valid\nok a data source's handle is 0\nok its mask is 0\nok its data is 0 before anything was merged\nok it is not cancelled\nok a DATA_OR source with a nonzero mask (0xff) is refused: NULL\nok with mask 0 it is made\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_source_create_io",
+      "source_sha256": "ed6ff7db2e595d79f676a3610ba889fbcb820a4c8e7f1c74e8d2e9a6431443e1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a87139e591fe21d4bf30041b5902283b0bbb86e867271f040870bcdfa63d8564",
+          "exit_code": 0,
+          "stdout": "ok a read source is made\nok get_handle is the descriptor\nok nothing to read: the read source did not fire\nok after a write: it fired\nok with the number of bytes available as data (5)\nok a write source on a pipe with room fires\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "44a224a7291631dc5970a8aa30b4cdf047988956177bcd55ef05e98c1a136068",
+          "exit_code": 0,
+          "stdout": "ok a read source is made\nok get_handle is the descriptor\nok nothing to read: the read source did not fire\nok after a write: it fired\nok with the number of bytes available as data (5)\nok a write source on a pipe with room fires\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_source_create_mach",
+      "source_sha256": "55d1d20943ae10eb6d457d3ca27ff907674951f08ba227e83bf626c1c2a08178",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d9e8a74aa6439c734ffde3baa17dde6df8cce6e880c3854a415af4eb328c13ae",
+          "exit_code": 0,
+          "stdout": "ok allocate a receive right\nok add a send right\nok a mach receive source is made\nok no message yet: the source did not fire\nok send a message to the port\nok the source fired\nok the handler received the message with mach_msg\nok its payload (99) and id (1234)\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "12a664a5cbc26d7bd5dcbf641587ab2e660036eb1723e1f29e637b92e4291f25",
+          "exit_code": 0,
+          "stdout": "ok allocate a receive right\nok add a send right\nok a mach receive source is made\nok no message yet: the source did not fire\nok send a message to the port\nok the source fired\nok the handler received the message with mach_msg\nok its payload (99) and id (1234)\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_source_create_proc",
+      "source_sha256": "2fc38137df882e3a423ef490c66de06bcee4b5b9ef8ce3efdec259d753e864b6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "105fb30199da981863869b8b8dd7390486aa70f870f1e8baba6f573dd7f79faa",
+          "exit_code": 0,
+          "stdout": "ok a proc source is made\nok get_handle is the pid\nok get_mask is what was asked for\nok the child has not exited: no event\nok the child exited: the handler ran\nok the data has the exit flag\nok the child's status is still collectable by waitpid (7)\nvalue DISPATCH_PROC_EXIT 2147483648\nvalue DISPATCH_PROC_FORK 1073741824\nvalue DISPATCH_PROC_EXEC 536870912\nvalue DISPATCH_PROC_SIGNAL 134217728\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a474483871e1aff48f9ec241513a48b862037c03dc149e7048c3eabab87aaabb",
+          "exit_code": 0,
+          "stdout": "ok a proc source is made\nok get_handle is the pid\nok get_mask is what was asked for\nok the child has not exited: no event\nok the child exited: the handler ran\nok the data has the exit flag\nok the child's status is still collectable by waitpid (7)\nvalue DISPATCH_PROC_EXIT 2147483648\nvalue DISPATCH_PROC_FORK 1073741824\nvalue DISPATCH_PROC_EXEC 536870912\nvalue DISPATCH_PROC_SIGNAL 134217728\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
