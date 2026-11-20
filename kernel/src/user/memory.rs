@@ -777,6 +777,17 @@ impl Memory {
         result
     }
 
+    /// Whether the page table maps `addr` with the rights `access` needs (a present user page for
+    /// a read, a writable one for a write).
+    fn mapped_for(&self, addr: u64, access: Access) -> bool {
+        let need = match access {
+            Access::Write => PageProt::WRITE,
+            Access::Read => PageProt::READ,
+            Access::Execute => PageProt::EXEC,
+        };
+        self.space.translate(addr).is_some_and(|m| m.prot.contains(need))
+    }
+
     fn resolve(&self, inner: &mut Inner, addr: u64, access: Access, forced: bool) -> Result<(), FaultError> {
         let page = poly_vm::page_down(addr);
         // The memory's own frames have a single user until fork shares
@@ -980,7 +991,16 @@ impl Memory {
         while off < len {
             let at = addr + off as u64;
             let n = ((PAGE_SIZE - at % PAGE_SIZE) as usize).min(len - off);
-            self.resolve(&mut inner, at, access, forced)?;
+            // A page the page table already maps with the rights the access needs is copied as it
+            // is: the copy goes through the direct map. Resolving it anyway changed its rights to
+            // what they were, and that change flushed the page from the TLB of every CPU running
+            // this space: an IPI and a wait for each page of each I/O completion the kernel wrote
+            // into a process whose threads were running (Chrome's IPC, chrome-typing-latency).
+            // Pages still to be copied on write, made writable or brought in are not mapped
+            // with those rights, so they are resolved as before; a forced write always is.
+            if forced || !self.mapped_for(at, access) {
+                self.resolve(&mut inner, at, access, forced)?;
+            }
             copy(&self.space, at, off, n).map_err(map_error)?;
             off += n;
         }

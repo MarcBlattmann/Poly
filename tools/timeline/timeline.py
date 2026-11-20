@@ -20,6 +20,7 @@ Thread names come from the serial log (`timeline: name`, `timeline: proc`, `time
 """
 
 import argparse
+import bisect
 import collections
 import re
 import struct
@@ -394,13 +395,59 @@ def calls(recs, names, match, t0, t1):
             print(f'  {name:<40} {n:>6} {ms(wall):>9} {ms(run):>9}')
 
 
-def samples(recs, names, t0, t1, top):
-    """The timer's samples of threads in user mode, by module: where the programs' own time went."""
+class KernelSyms:
+    """The kernel's functions from `nm -C --defined-only <kernel ELF>` output, by address."""
+
+    def __init__(self, path):
+        rows = []
+        for line in open(path, encoding='utf-8', errors='replace'):
+            parts = line.rstrip('\n').split(' ', 2)
+            if len(parts) == 3 and parts[1] in 'tTwW':
+                try:
+                    rows.append((int(parts[0], 16), parts[2]))
+                except ValueError:
+                    pass
+        rows.sort()
+        self.addrs = [a for a, _ in rows]
+        self.names = [n for _, n in rows]
+
+    def name(self, addr):
+        i = bisect.bisect_right(self.addrs, addr) - 1
+        if i < 0:
+            return f'kernel {addr:#x}'
+        # Generic instantiations: the function's path without its hash and type arguments.
+        n = re.sub(r'::h[0-9a-f]{16}$', '', self.names[i])
+        return n if len(n) <= 90 else n[:87] + '...'
+
+
+def samples(recs, names, t0, t1, top, ksyms=None, args_callers=False):
+    """The timer's samples by module (user mode) and, with the kernel's symbols, by kernel function
+    and by the system call the thread was in: where the programs' and the kernel's time went."""
     by_module = collections.Counter()
     by_thread = collections.defaultdict(collections.Counter)
-    n = 0
+    by_function = collections.Counter()
+    by_call = collections.defaultdict(collections.Counter)
+    in_call = {}  # thread -> the system call it is in
+    n = kn = 0
     for r in recs:
-        if r.kind != 'sample' or not t0 <= r.t <= t1:
+        if r.t > t1:
+            break
+        if r.kind == 'enter':
+            in_call[r.ident] = names.call(r.a)
+            continue
+        if r.kind == 'exit':
+            in_call.pop(r.ident, None)
+            continue
+        if r.kind != 'sample' or r.t < t0:
+            continue
+        if r.b != 0:
+            kn += 1
+            f = ksyms.name(r.a) if ksyms else 'kernel'
+            if ksyms and args_callers and r.b > 1:
+                f += '  <- ' + ksyms.name(r.b)
+            by_function[f] += 1
+            by_call[in_call.get(r.ident, '(not in a call)')][f] += 1
+            by_thread[names.who(r.ident)]['kernel'] += 1
             continue
         n += 1
         m = names.module(r.ident >> 32, r.a)
@@ -412,6 +459,14 @@ def samples(recs, names, t0, t1, top):
     print('busiest threads, by module:')
     for who, ctr in sorted(by_thread.items(), key=lambda kv: -sum(kv[1].values()))[:8]:
         print(f'  {who:<44} {sum(ctr.values()):>5}: ' + ', '.join(f'{m} {c}' for m, c in ctr.most_common(4)))
+    if kn:
+        print(f'\nkernel-mode samples in the window (idle loop included): {kn}'
+              + ('' if ksyms else ' (--kernel-syms names the functions)'))
+        for f, c in by_function.most_common(3 * top):
+            print(f'  {c:>5} {100 * c / kn:5.1f}%  {f}')
+        print('by system call (the samples taken inside it):')
+        for call, ctr in sorted(by_call.items(), key=lambda kv: -sum(kv[1].values()))[:top]:
+            print(f'  {call:<40} {sum(ctr.values()):>5}: ' + '; '.join(f'{f} {c}' for f, c in ctr.most_common(4)))
 
 
 def main():
@@ -425,10 +480,15 @@ def main():
     ap.add_argument('--top', type=int, default=25, help='threads in the summary')
     ap.add_argument('--summary', action='store_true', help='one line per key press')
     ap.add_argument('--min-bytes', type=int, default=0, help='--summary: the first frame of at least this size')
-    ap.add_argument('--samples', action='store_true', help='user-mode samples by module')
+    ap.add_argument('--samples', action='store_true',
+                    help='timer samples: user mode by module, kernel mode by function and system call')
+    ap.add_argument('--kernel-syms', help="`nm -C --defined-only` of the kernel ELF, to name kernel samples")
+    ap.add_argument('--callers', action='store_true', help='--samples: kernel functions with their callers')
     ap.add_argument('--calls', help='per system call, the time of the threads whose name has this in it')
     ap.add_argument('--lane', help='show the lanes of the threads whose name has this in it')
     ap.add_argument('--big', type=float, default=1.0, help='chain steps of this many ms or more get a line')
+    ap.add_argument('--at', type=float,
+                    help='a window starting this many ms into the ring instead of at a key (idle stretches)')
     args = ap.parse_args()
 
     data = open(args.ring, 'rb').read()
@@ -442,15 +502,21 @@ def main():
     span_ms = (recs[-1].t - recs[0].t) / 1e6
     print(f'ring: {len(recs)} records over {span_ms:.0f} ms, {"frozen" if frozen else "running"}, '
           f'{len(downs)} key presses, {len(frames)} frames')
-    if not downs:
-        raise SystemExit('no key press in the ring')
-    if args.summary:
+    if args.at is not None:
+        t0 = recs[0].t + int(args.at * 1e6)
+        t1 = t0 + int(args.ms * 1e6)
+        print(f'window {args.ms:.0f} ms from {args.at:.0f} ms into the ring')
+    elif not downs:
+        raise SystemExit('no key press in the ring (--at MS reads a window anyway)')
+    elif args.summary:
         summary(recs, threads, frames, downs, names, args)
         return
-    key = downs[args.key]
-    t0 = key.t
-    t1 = t0 + int(args.ms * 1e6)
-    print(f'key {key.a} pressed at {ms(t0 - recs[0].t)} ms into the ring; window {args.ms:.0f} ms\n')
+    else:
+        key = downs[args.key]
+        t0 = key.t
+        t1 = t0 + int(args.ms * 1e6)
+    if args.at is None:
+        print(f'key {key.a} pressed at {ms(t0 - recs[0].t)} ms into the ring; window {args.ms:.0f} ms\n')
 
     after = [f for f in frames if t0 <= f.t <= t1]
     print('frames after the key (ms, bytes, by):')
@@ -506,7 +572,7 @@ def main():
     print('\nCPU busy in the window: ' + ', '.join(f'{c} {100 * v / (t1 - t0):.0f}%' for c, v in sorted(busy.items())))
 
     if args.samples:
-        samples(recs, names, t0, t1, 16)
+        samples(recs, names, t0, t1, 16, KernelSyms(args.kernel_syms) if args.kernel_syms else None, args.callers)
     if args.calls is not None:
         calls(recs, names, args.calls, t0, t1)
     lanes = list(on_chain)[:args.lanes]

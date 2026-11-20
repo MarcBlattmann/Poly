@@ -1695,8 +1695,9 @@ memory and without writing to the serial port, every context switch (and what
 the thread switched away from became), every wake-up (and which thread, in
 which system call, did it), every system call of every personality (entry,
 first argument, result), every block on a wait queue (the NT state's lock and
-the I/O drain's are named), keys, the display's frames, and a user-mode sample
-of the running thread at every timer tick. The names the records leave out go
+the I/O drain's are named), keys, the display's frames, and a sample of the
+running thread at every timer tick: its user-mode instruction pointer, or in the
+kernel the interrupted function and its caller. The names the records leave out go
 to the serial log as they become known (`timeline: name`, `proc`, `module`,
 `queue`, `sys`): kernel threads, the names Windows programs give their threads
 (`SetThreadDescription`) and Linux ones theirs (`prctl(PR_SET_NAME)`),
@@ -1719,8 +1720,9 @@ timeline.grab(lambda name, **args: qmp.cmd(name, **args), serial_log_text, '/tmp
 | (none) | for the last key press: the frames after it; for the first ones, the chain of wake-ups that led to each, back to the key (per step: running, waiting for a CPU, blocked, woken by whom in which call); every thread busy in the window; blocked time by call (`[nt-state-lock]`, `[nt-io-drain]` mark lock waits); CPU use |
 | `--summary` | one line per key press: its first frame, the CPU used until then and the lock waits; medians per key |
 | `--calls NAME` | per system call of the threads whose name has `NAME` in it (`""`: all threads, summed): count, time inside, time running inside, and the time running outside calls |
-| `--samples` | the user-mode samples by module (`chrome.dll`, `ntdll.dll`, ...): where the programs' own time went |
+| `--samples` | the user-mode samples by module (`chrome.dll`, `ntdll.dll`, ...): where the programs' own time went; and the kernel-mode samples by function and by the system call they were taken in (name them with `--kernel-syms FILE`, the output of `nm -C --defined-only` on the kernel ELF the guest booted, e.g. `kernel/target/x86_64-unknown-none/release/poly-kernel`; `--callers` adds each function's caller) |
 | `--lane NAME`, `--key N`, `--ms W`, `--min-bytes B` | one thread's events; another key press; the window; frames at least that big |
+| `--at MS` | a window that starts this many ms into the ring instead of at a key press (idle stretches, rings without keys) |
 
 Threads are named `role/thread` (`browser/CrBrowserMain`,
 `gpu-process/VizCompositorThread`, `renderer/Compositor`; Linux Chromium's

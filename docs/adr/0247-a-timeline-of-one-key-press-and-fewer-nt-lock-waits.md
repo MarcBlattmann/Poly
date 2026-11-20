@@ -76,3 +76,47 @@ What is left, from the same tool on Debian's Chromium in the same guest:
 
 The timeline costs nothing while off (one load of a flag per hook). On, a busy Chrome writes about
 60,000 records a second; the ring's 32 MiB hold about 14 s.
+
+## Addendum (2026-11-20): kernel samples, and the kernel's writes into a process (`chrome-typing-latency`)
+
+**The timeline samples the kernel too.** A timer tick that interrupts kernel code records the
+interrupted function and its caller (the frame's return address) in the sample record's `b`
+(user-mode samples keep `b` = 0). `timeline.py --samples --kernel-syms FILE [--callers]` names
+them from `nm -C --defined-only` of the kernel ELF and sums them by function and by the system
+call the thread was in. `--at MS` reads a window without a key press. The samples cost about a
+sixth of the ring (35–60 s of a busy Chrome in 32 MiB).
+
+**What it showed.** Inside `NtWriteFile` on Chrome's IPC pipes, `AddressSpace::protect` called from
+`Memory::resolve_action`. Every kernel copy into another process's memory (`Memory::read`/`write`:
+an I/O completion's data and status block, written by the thread whose call completed it) ran the
+page fault decision for each page, also for a page the page table already mapped with the needed
+rights; the decision for a present page is "set its permissions", which re-wrote the same rights
+and flushed the page from the TLB of every CPU running that process (an IPI and a wait for the
+acknowledgements), and reset the process's PCIDs on the others. While Chrome's renderer and GPU
+processes run, that is a shootdown per completed pipe read.
+
+**Decision.** `Memory::access` copies a page that the page table maps with the rights the access
+needs (present for a read, writable for a write) without resolving it: the copy goes through the
+direct map anyway. Pages that are absent, read-only for copy on write, page-cache pages not yet
+writable, parked (`PROT_NONE`) or forced (a debugger's write) are mapped without those rights and
+are resolved as before. Kernel test: `kernel_writes_keep_writable_pages_and_still_copy_shared_ones`.
+
+**Measured** (same session, the old path switched on and off in four rounds of 10+10 keys by a
+temporary key, removed; Chrome for Windows, a page text field, key to the next display frame):
+
+| | Old path | Fast path |
+|---|---|---|
+| Median | 15.9 ms | 15.1 ms |
+| Mean | 42.6 ms | 25.9 ms |
+| 90th percentile | 153.7 ms | 45.3 ms |
+| `NtWriteFile`, kernel running time, median / p90 / p99 | 97 µs / 1.19 ms / 15.4 ms | 74 µs / 0.21 ms / 4.5 ms |
+
+The address bar's median went from 29.5 to 23.5 ms; its tail (Chrome's suggestion work) did not
+change.
+
+**About the QA's typing number.** The QA driver's `lat … type X` counts its own key press, hold and
+gap (60–80 ms) before its first screendump, and one screendump of a 2560x1600 screen takes 40–50 ms:
+it cannot report less than about 100 ms, for any browser. Its "105 ms" for the address bar was the
+suggestion box changing, measured that way; Linux Chromium measured the same way in the same week
+gives 107–123 ms. The guest's own key-to-frame time is the timeline's (or `--compositor-stats`'s
+`key_to_frame`).
