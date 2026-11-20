@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "xpc_dictionary_get_int64_missing",
+      "source_sha256": "3dfde1d53e70e7d53856910a5852b73766d1e19a548af18fd9d1afe9cd9c2f1c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "485655dcac7b2d5aee46f5059cdfdeabc3c814321729d329cc5626cc029a79ea",
+          "exit_code": 0,
+          "stdout": "ok missing: 0\nok a string: 0\nok a bool: 0\nok a double: 0\nok a uint64: 0\nok a dictionary: 0\nok a stored zero is a value, a missing key is not\nok the empty dictionary: 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "746b7506b99861f444a672fcf83d81e5ab86dc0f12e1c8b2629dde2293eb9a7d",
+          "exit_code": 0,
+          "stdout": "ok missing: 0\nok a string: 0\nok a bool: 0\nok a double: 0\nok a uint64: 0\nok a dictionary: 0\nok a stored zero is a value, a missing key is not\nok the empty dictionary: 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "xpc_dictionary_get_int64_nested",
+      "source_sha256": "25550dcf35e685a60295b3f88e05a19897a51991b5ef5eff0a336f14716e176f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2bf341e027d0f61242fb9f62469b50f32f8b0b168ec2eaa91704a52f286786fe",
+          "exit_code": 0,
+          "stdout": "ok after the owner released it, it is still there\nok a change through the inner object shows in the outer one\nok a missing key gives NULL\nok a value that is not a dictionary gives NULL\nok a non-dictionary object gives 0 for get_int64\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "71122a2767827b5ceb9dfcbe2cff126a4a132c26de9b0b294e3d83c4f2a85990",
+          "exit_code": 0,
+          "stdout": "ok after the owner released it, it is still there\nok a change through the inner object shows in the outer one\nok a missing key gives NULL\nok a value that is not a dictionary gives NULL\nok a non-dictionary object gives 0 for get_int64\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/mach/task_for_pid.yaml. Observed with C tests (raw Mach traps, tests/macos/include/poly_mtest.h; ADR 0182);
+# results per architecture in task_for_pid.tests/macos.json.
+id: macos/syscall/mach/task_for_pid
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) with raw Mach traps and no libSystem call (tests/macos/include/poly_mtest.h), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  Mach trap 45 (task_for_pid_trap), no libSystem: x86_64 `syscall` with rax = 0x1000000 | 45; arm64 `svc #0x80` with
+  x16 = -45; arguments target task port, pid, pointer to the out name. The result is a kern_return_t. For the caller's own
+  pid it succeeds and stores the caller's own task port name (the one task_self_trap gives; a send right, the same name
+  every time). For any other pid an unprivileged, unentitled caller gets KERN_FAILURE (5): the parent, pid 1, pid 0, a
+  pid that does not exist, -1, and the caller's own child both while it runs and after it ended. On failure the out name is
+  set to MACH_PORT_NULL (0), not left alone. The first argument has to be a task port: MACH_PORT_NULL and a name that is
+  nothing give KERN_FAILURE too, even for the own pid (not an invalid-destination error); with a NULL out pointer the own pid
+  returns KERN_SUCCESS. task_name_for_pid (44) and pid_for_task (46) have their own sheets.
+returns:
+  success: "KERN_SUCCESS (0); *t = the task's own port name, only for the caller's own pid"
+errors:
+  refused: "KERN_FAILURE (5): any other pid; *t = MACH_PORT_NULL"
+side_effects: "none on failure"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

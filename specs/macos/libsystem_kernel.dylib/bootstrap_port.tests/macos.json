@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "bootstrap_port_inherited",
+      "source_sha256": "e66714384cd69e3fb1e79237931adb6944ce93881e8572723f1b0d40d7fc950a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "34e873cd8ca7406e818e83691793a3c8427a9e737bd67f99ada93416695c1edb",
+          "exit_code": 0,
+          "stdout": "ok child: bootstrap_port is a send right\nok child: finds the parent's name\nok child: and not one nobody has\nsummary 3 passed, 0 failed\nok the child ends with status 0\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4543e985c2f3510492849ae6963046ebf4d3a9175bdc3534aa8b605f4789c6f5",
+          "exit_code": 0,
+          "stdout": "ok child: bootstrap_port is a send right\nok child: finds the parent's name\nok child: and not one nobody has\nsummary 3 passed, 0 failed\nok the child ends with status 0\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "bootstrap_port_special_port_refs",
+      "source_sha256": "cfa5c980968953de0b7d4e0b3befe3645ad976ca97abcbf4f85f007214ceb9a1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4dd5970ee551bdd0cdbf507e943cd478d220afbd4e1e85b5e2568c0cd39c3f12",
+          "exit_code": 0,
+          "stdout": "ok it holds at least one user reference\nok two calls give the same name\nok and add two user references\nok giving them back restores the count\nok bootstrap_port still works\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cb5f87cc19090e40986610a4fe2a9f5ae93eeae1566527df63e845d31673d732",
+          "exit_code": 0,
+          "stdout": "ok it holds at least one user reference\nok two calls give the same name\nok and add two user references\nok giving them back restores the count\nok bootstrap_port still works\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

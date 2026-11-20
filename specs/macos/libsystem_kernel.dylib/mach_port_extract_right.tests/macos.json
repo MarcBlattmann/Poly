@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_extract_right_errors",
+      "source_sha256": "2c59f85254412c15a565e29462aff6a21553ee8fa6f57b32a4d462ff74a4ba66",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8d24c6a500a4ef796dbbd291d58be34984c1fb0d14c4217411531c378ae39ec1",
+          "exit_code": 0,
+          "stdout": "ok a name not in the task: KERN_INVALID_NAME\nok MACH_PORT_NULL: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok message type 99: KERN_INVALID_VALUE\nok COPY_RECEIVE: KERN_INVALID_VALUE\nok MAKE_SEND_ONCE of a send-only name: KERN_INVALID_RIGHT\nok MOVE_RECEIVE of a send-only name: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2a1f630b74248d7b2433c280cfe10118eecace9460d75cdd8eea438207fbe4ee",
+          "exit_code": 0,
+          "stdout": "ok a name not in the task: KERN_INVALID_NAME\nok MACH_PORT_NULL: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok message type 99: KERN_INVALID_VALUE\nok COPY_RECEIVE: KERN_INVALID_VALUE\nok MAKE_SEND_ONCE of a send-only name: KERN_INVALID_RIGHT\nok MOVE_RECEIVE of a send-only name: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_extract_right_send",
+      "source_sha256": "aad5d5747dc29c033e9a1aacc052662e8ee29099ac48685ac26cba96442188ca",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8b2a9d5b80f95cd2b117162cdd1b2fbdaa0cb9138648f82ffc5538c3a54d9528",
+          "exit_code": 0,
+          "stdout": "ok MAKE_SEND succeeds\nok the right found is the name itself\nok acquired as MACH_MSG_TYPE_PORT_SEND\nok receive+send, one user reference\nok make-send count 1\nok COPY_SEND succeeds with the same name and PORT_SEND\nok two user references\nok make-send count still 1\nok MOVE_SEND succeeds, same name, PORT_SEND\nok the send right is still two references\nok COPY_SEND of a send-only name works\nok MAKE_SEND of a send-only name: KERN_INVALID_RIGHT\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "72990ca350a3dd6e8326cb6a185a6a8876c38551bf0be4254817c381d9465ef1",
+          "exit_code": 0,
+          "stdout": "ok MAKE_SEND succeeds\nok the right found is the name itself\nok acquired as MACH_MSG_TYPE_PORT_SEND\nok receive+send, one user reference\nok make-send count 1\nok COPY_SEND succeeds with the same name and PORT_SEND\nok two user references\nok make-send count still 1\nok MOVE_SEND succeeds, same name, PORT_SEND\nok the send right is still two references\nok COPY_SEND of a send-only name works\nok MAKE_SEND of a send-only name: KERN_INVALID_RIGHT\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

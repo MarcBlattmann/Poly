@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/liblaunch.dylib/bootstrap_look_up.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in bootstrap_look_up.tests/macos.json.
+id: macos/api/liblaunch.dylib/bootstrap_look_up
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  bootstrap_look_up(bp, name, &port) asks the bootstrap server (bp, normally bootstrap_port) for the port registered under
+  name and stores a send right to it in *port. name is a C string; any length tried (the empty string, 127, 129, 199
+  characters) is accepted by the call and compared whole: two names that differ only past character 128 are different
+  names. A name nobody holds is BOOTSTRAP_UNKNOWN_SERVICE (1102) and *port is left as it was. A name that this process
+  holds (see bootstrap_check_in) is found too: the right returned is the receive right's own name here, now receive and send,
+  with one more user reference each time. A child that inherited the bootstrap port finds a name its parent holds and gets a
+  send right and nothing else (type 0x10000); a message it sends arrives on the holder's receive right. A name belongs to the
+  process that holds the receive right: when that process exits (a moment later: the server learns of it asynchronously, so
+  poll) or when the receive right is destroyed, the name is unknown again. When bp is not a send right in the task
+  (MACH_PORT_NULL, a name that does not exist, a dead name, a receive right only) the message cannot be sent and the result
+  is MACH_SEND_INVALID_DEST (0x10000003). Services of the real system (for example com.apple.cfprefsd.daemon) exist on
+  macOS and are found; Poly has no such services and the tests use only names they make themselves.
+returns:
+  success: "KERN_SUCCESS (0); *port is a send right to the registered port (for a name this process holds: the receive right's name, now also a send right)"
+errors:
+  unknown_service: "BOOTSTRAP_UNKNOWN_SERVICE (1102): no process holds the name; *port untouched"
+  bad_bootstrap_port: "MACH_SEND_INVALID_DEST (0x10000003): bp is MACH_PORT_NULL, no name in the task, a dead name or a receive right only"
+side_effects: "a send right is added to the task (a user reference when the task already had one)"
+threading: "no thread-specific behaviour observed; the call blocks until the server answers"
+ordering: []
+timing:
+  typical: "under a millisecond when the server answers"
+  guarantees: "none; a name vanishes up to a fraction of a second after its holder exits, so tests wait for it"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner
