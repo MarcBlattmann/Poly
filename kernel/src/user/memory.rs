@@ -989,21 +989,28 @@ impl Memory {
 
     /// Unmap the pages of regions the region map removed, freeing their
     /// frames (parked ones too) and letting go of page-cache pages.
+    ///
+    /// Without waiting for the other CPUs that run this memory (ADR 0254):
+    /// the frames, and the page-cache and shared pages these regions held,
+    /// are let go of once those CPUs have dropped their translations.
     fn release(&self, inner: &mut Inner, regions: &[Vma<FileRef>]) {
+        crate::arch::user::reap_or_wait();
         for v in regions {
-            self.space.unmap(v.start, v.size()).expect("regions lie in user space and are page-aligned");
-            let mut inside = inner.parked.split_off(&v.start);
-            let mut after = inside.split_off(&v.end);
+            let ticket =
+                self.space.unmap_async(v.start, v.size()).expect("regions lie in user space and are page-aligned");
+            let mut parked = inner.parked.split_off(&v.start);
+            let mut after = parked.split_off(&v.end);
             inner.parked.append(&mut after);
-            drop(inside);
-            let mut inside = inner.cached.split_off(&v.start);
-            let mut after = inside.split_off(&v.end);
+            let mut cached = inner.cached.split_off(&v.start);
+            let mut after = cached.split_off(&v.end);
             inner.cached.append(&mut after);
-            drop(inside);
-            let mut inside = inner.shared.split_off(&v.start);
-            let mut after = inside.split_off(&v.end);
+            let mut shared = inner.shared.split_off(&v.start);
+            let mut after = shared.split_off(&v.end);
             inner.shared.append(&mut after);
-            drop(inside);
+            match ticket {
+                Some(t) => crate::arch::user::defer_drop(t, alloc::boxed::Box::new((parked, cached, shared))),
+                None => drop((parked, cached, shared)),
+            }
         }
     }
 }

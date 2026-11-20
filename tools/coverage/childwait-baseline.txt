@@ -1,0 +1,22 @@
+# Reviewed: these tests read a process or thread exit code before any wait on purpose (STILL_ACTIVE of a suspended or running process, or a poll loop).
+# One line per `path:function`; held-out tests as `heldout/<dll>/<entry>/<file>`. `coverage check` warns about every other early read.
+heldout/advapi32.dll/CreateProcessAsUserW/cpau_flags_inherit.rs:test
+heldout/ntdll.dll/NtSuspendProcess/ntsp_counts.rs:test
+heldout/ntdll.dll/NtTerminateJobObject/nttjo_access.rs:test
+heldout/ole32.dll/CLSID_GlobalOptions/go_scope.rs:first_server_state
+heldout/ole32.dll/GlobalOptions.ExceptionHandling/go_exc_div.rs:first_server_state
+heldout/ole32.dll/GlobalOptions.ExceptionHandling/go_exc_sw5.rs:first_server_state
+heldout/ole32.dll/IGlobalOptions.Query/go_q_args.rs:first_server_state
+heldout/ole32.dll/IGlobalOptions.Set/go_set_order.rs:first_server_state
+heldout/ole32.dll/IGlobalOptions.Set/go_set_ro.rs:first_server_state
+specs/windows/kernel32.dll/CreateRemoteThread.tests/rmt_suspended.rs:test
+specs/windows/kernel32.dll/OpenProcess.tests/op_basic.rs:test
+specs/windows/ole32.dll/CLSID_GlobalOptions.tests/go_create.rs:first_server_state
+specs/windows/ole32.dll/GlobalOptions.ExceptionHandling.tests/go_exc_av.rs:first_server_state
+specs/windows/ole32.dll/GlobalOptions.ExceptionHandling.tests/go_exc_sta_av.rs:first_server_state
+specs/windows/ole32.dll/GlobalOptions.ExceptionHandling.tests/go_exc_sta_sw.rs:first_server_state
+specs/windows/ole32.dll/GlobalOptions.ExceptionHandling.tests/go_exc_sw.rs:first_server_state
+specs/windows/ole32.dll/IGlobalOptions.Query.tests/go_q_defaults.rs:first_server_state
+specs/windows/ole32.dll/IGlobalOptions.Set.tests/go_set_eh.rs:first_server_state
+specs/windows/ole32.dll/IGlobalOptions.Set.tests/go_set_misc.rs:first_server_state
+specs/windows/ole32.dll/IGlobalOptions.Set.tests/go_set_pools.rs:first_server_state
