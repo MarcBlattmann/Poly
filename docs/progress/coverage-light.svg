@@ -1301,7 +1301,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#1f2328" text-anchor="end">1.8%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">1,107 / 63,142 entries · 69,296 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#59636e" text-anchor="start">1,108 / 63,142 entries · 69,296 app-provided not counted</text>
 <g><title>MSVC runtimes: 44 / 20,419 done (0.2%)</title>
 <rect x="16.0" y="469.0" width="182.3" height="218.0" fill="#e6eaef"/>
 <rect x="16.0" y="469.0" width="0.4" height="218.0" fill="#2da44e"/>
@@ -1492,11 +1492,11 @@
 <rect x="458.1" y="496.9" width="24.8" height="22.0" fill="#e6eaef"/>
 <rect x="457.1" y="495.9" width="26.8" height="24.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
-<g><title>ole32: 44 / 319 done (13.8%)</title>
+<g><title>ole32: 45 / 319 done (14.1%)</title>
 <rect x="484.9" y="496.9" width="24.4" height="22.0" fill="#e6eaef"/>
 <rect x="484.9" y="496.9" width="3.4" height="22.0" fill="#2da44e"/>
-<rect x="488.2" y="496.9" width="5.2" height="22.0" fill="#d4a72c"/>
-<rect x="493.4" y="496.9" width="1.6" height="22.0" fill="#218bff"/>
+<rect x="488.3" y="496.9" width="5.2" height="22.0" fill="#d4a72c"/>
+<rect x="493.5" y="496.9" width="1.5" height="22.0" fill="#218bff"/>
 <rect x="483.9" y="495.9" width="26.4" height="24.0" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>msvcm80: 0 / 306 done (0.0%)</title>
