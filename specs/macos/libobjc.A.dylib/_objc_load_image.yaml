@@ -1,0 +1,49 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/_objc_load_image.yaml. Observed with Objective-C test programs (tests/macos/include/poly_mobjc.h,
+# ADR 0182); results per architecture in _objc_load_image.tests/macos.json.
+id: macos/api/libobjc.A.dylib/_objc_load_image
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, 3 runs per architecture with identical output; arm64 observed natively, x86_64 under Rosetta 2 (no native Intel Mac was available, so a difference between Rosetta and real Intel hardware would not show); the programs are Objective-C compiled with Apple clang, loading /usr/lib/libobjc.A.dylib, with no Foundation except where a sheet says so (poly-mac: libobjc, poly_mobjc.h)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  The runtime's work of sending +load, seen through the order and context of
+  +load calls (the entry point itself is internal). After an image's classes and
+  categories are registered, +load is sent once to each class and each category
+  that implements it (a class's inherited +load is not sent again: a subclass
+  without its own +load gets none; the method is looked up in the class itself,
+  not its superclasses). It happens before main for the executable's image
+  (and before dlopen returns for a later one). Order: a class's superclasses
+  first, then the classes in the order of the image's class list (the
+  source order of the @implementation blocks, not the alphabet: Zeta Mid
+  Alpha for implementations written Mid, Zeta, Alpha); then the categories'
+  +load in the order of the image's category list (categories written in source
+  order CatZ, CatB, CatA ran in that order), all after every class's +load. One
+  exception observed: the +load of a category on a class that has no +load of
+  its own and is the superclass of a class that does (R(C2) for R, which S
+  inherits from) runs right before that subclass's +load, i.e. in the superclass
+  chain, while categories on classes with their own +load, or on classes
+  nobody here derives from, wait until all classes are done. Inside +load
+  self is the class (for a category's +load too), _cmd is "load", the thread is
+  the main thread (pthread_main_np 1); other classes of the image are
+  already usable: they answer messages, can be instantiated, and get their
+  +initialize on that first message, once, even though their own +load has not
+  run yet. +initialize is not sent at load time to a class that is merely
+  loaded: only by the first message. Each +load runs once.
+returns:
+  order_example_1: "implementations Mid, Zeta(super of Mid), Leaf(no load), Alpha, Lazy, Quiet and categories Zeta(CatZ), Alpha(CatB), Alpha(CatA), Quiet(CatQ, no load): Zeta Mid Alpha Zeta(CatZ) Alpha(CatB) Alpha(CatA)"
+  order_example_2: "L4:L3:L2:L1 chain implemented in reverse, only L1, L2, L4 with +load, L3 with a category: L1 L2 L3(Extra) L4 Other Bare(OnlyCat)"
+  order_example_3: "classes Q P S(sub of R), R without +load, categories Q(C4) R(C2) S(C3) P(C1) written in that order: Q P R(C2) S Q(C4) S(C3) P(C1)"
+errors:
+side_effects: "runs the programs' +load methods; no other observable effect"
+threading: "on the main thread, one at a time, before main; no concurrency"
+ordering:
+  - "superclass +load before subclass +load; classes before categories (with the one exception above)"
+  - "a class's +initialize is not run by its +load being sent, only by the first message sent to it (one of those messages may come from another +load)"
+timing:
+  typical: "microseconds per +load, plus what the method does"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

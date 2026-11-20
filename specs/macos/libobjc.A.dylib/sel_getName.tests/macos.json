@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "selname_more",
+      "source_sha256": "942f6aa57da06c4894c9da790a91dcd8a4cd5fe87075e71539b9b165e4d720b1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "49eb316ee1f137577368107ebf6b299023a06adff95b949858e24cc19d622275",
+          "exit_code": 0,
+          "stdout": "value own methods listed 3\nok all three names read back from listed methods\nok runtime name\nok getName then register gives the same selector\nok the null selector's text\nok an empty-name selector gives an empty string\nok a message selector sent through the runtime keeps its name\nok the registry keeps its own copy of the name\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "76acdb8a29e6816706623b58b19e68bc522ddf03df433a5774c207e3b531b435",
+          "exit_code": 0,
+          "stdout": "value own methods listed 3\nok all three names read back from listed methods\nok runtime name\nok getName then register gives the same selector\nok the null selector's text\nok an empty-name selector gives an empty string\nok a message selector sent through the runtime keeps its name\nok the registry keeps its own copy of the name\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

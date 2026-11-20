@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:48",
+  "tests": [
+    {
+      "name": "alloc_basic",
+      "source_sha256": "0dca784586abd93a81d494b303908f007bdd87799eeb2ca2edfad9522b879e38",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f35fff8e3ba0eb553361d17c173849f2eab508b7602b21ea7cd5ed6f1a72f99a",
+          "exit_code": 0,
+          "stdout": "ok alloc returns object\nvalue class Cnt\nvalue retainCount 1\nvalue instance size 8\nok distinct objects\nvalue NSObject class NSObject\nvalue NSObject size 8\nok nil class gives nil\nok init returns same\nvalue dealloc ran once 1\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ee7076a1ac50cf19ebec3773cfd77281c9e932b8a7f68dbc35dc3c1c577b8ba2",
+          "exit_code": 0,
+          "stdout": "ok alloc returns object\nvalue class Cnt\nvalue retainCount 1\nvalue instance size 8\nok distinct objects\nvalue NSObject class NSObject\nvalue NSObject size 8\nok nil class gives nil\nok init returns same\nvalue dealloc ran once 1\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "alloc_compiler",
+      "source_sha256": "fec32859e5d73fd407d6045fb4b26c0f3a9f791c03a118910f4c3e59c356b1b2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ba393912b6b17cfed31a8615dc0e6bc1f076413dabafc55267d97cdde095d794",
+          "exit_code": 0,
+          "stdout": "ok [[C alloc] init] makes an instance\nvalue +alloc calls 1\nvalue -init calls 1\nvalue +alloc calls after +new 2\nvalue -init calls after +new 2\nvalue +alloc calls after objc_alloc and objc_alloc_init on a subclass 4\nvalue -init calls after those 3\nvalue class of d Ar2\nok c and d are distinct\nvalue deallocs after four releases 4\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "36113147137e15738f1f43ed819bf33bdd7dd25dde21828bb3400e9d63abd86a",
+          "exit_code": 0,
+          "stdout": "ok [[C alloc] init] makes an instance\nvalue +alloc calls 1\nvalue -init calls 1\nvalue +alloc calls after +new 2\nvalue -init calls after +new 2\nvalue +alloc calls after objc_alloc and objc_alloc_init on a subclass 4\nvalue -init calls after those 3\nvalue class of d Ar2\nok c and d are distinct\nvalue deallocs after four releases 4\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "alloc_zone",
+      "source_sha256": "7c0b9bc0acdc978d98931fb82f1b1d04b4a2ecf362eacea82f425f01f08f84d9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b5ccb370e585bc194c51ce439a5f70a2bd676ef30a42cc92e2bf100553e73a21",
+          "exit_code": 0,
+          "stdout": "value +allocWithZone: calls for W 1\nvalue after objc_allocWithZone 2\nok objc_allocWithZone made an instance\nvalue runtime class RtCls\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9c6f628c251016aa318cfff4b90c1fc89be2f02c488ec7b3edd69654f7598eca",
+          "exit_code": 0,
+          "stdout": "value +allocWithZone: calls for W 1\nvalue after objc_allocWithZone 2\nok objc_allocWithZone made an instance\nvalue runtime class RtCls\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

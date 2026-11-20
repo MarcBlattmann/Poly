@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "methset_basic",
+      "source_sha256": "2955134903e0d9e09c0b04afdff942ed271a460c5f747c5702ca2cb36d49ccdf",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a0883054fec728ac495339c9cceba24285c44161570b95363a6e0f9f157fe68c",
+          "exit_code": 0,
+          "stdout": "ok returns the previous IMP\nok the Method has the new IMP\nok the next message (warm cache) calls it\nok again\nok and calls the newest\nok setting the same IMP returns it\nok the type encoding is kept\nok the selector is kept\nok class_getMethodImplementation sees it\nok before: base\nok before: leaf\nok the old IMP can be called\nok base uses the new one\nok a subclass that inherits the method uses it too\nok restoring the old IMP restores the behaviour\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9dd1900137681c46a57e47ebf45dbbf9176cc24e2db8845813eea72044fc421a",
+          "exit_code": 0,
+          "stdout": "ok returns the previous IMP\nok the Method has the new IMP\nok the next message (warm cache) calls it\nok again\nok and calls the newest\nok setting the same IMP returns it\nok the type encoding is kept\nok the selector is kept\nok class_getMethodImplementation sees it\nok before: base\nok before: leaf\nok the old IMP can be called\nok base uses the new one\nok a subclass that inherits the method uses it too\nok restoring the old IMP restores the behaviour\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

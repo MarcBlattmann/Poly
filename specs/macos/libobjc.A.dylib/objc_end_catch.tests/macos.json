@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:03",
+  "tests": [
+    {
+      "name": "exc_endcatch_leave",
+      "source_sha256": "4bbd4fb0c39910683fbf2e72dfa74c8164d02de5a910a54fcbbbe8748152ce31",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e925ce09a383f0c2c60c2856b3ee9f7538b64ceda4535cb33062956435090cc4",
+          "exit_code": 0,
+          "stdout": "value return from inside a handler 11\nvalue deallocs: the runtime's reference went with the return 1\nvalue goto out of a handler 22\nvalue deallocs after goto 1\nvalue return from @finally after a handler 33\nvalue deallocs after @finally return 1\nvalue deallocs inside the outer handler (a is gone, b is held) 1\nvalue deallocs after both 2\nok the original exception arrives\nvalue deallocs for the replaced pair 2\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "15e48874822fedbf2fc53102a90c8b55bbd11ef443c558ed47898ce84940a73e",
+          "exit_code": 0,
+          "stdout": "value return from inside a handler 11\nvalue deallocs: the runtime's reference went with the return 1\nvalue goto out of a handler 22\nvalue deallocs after goto 1\nvalue return from @finally after a handler 33\nvalue deallocs after @finally return 1\nvalue deallocs inside the outer handler (a is gone, b is held) 1\nvalue deallocs after both 2\nok the original exception arrives\nvalue deallocs for the replaced pair 2\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_endcatch_sequence",
+      "source_sha256": "9d8255b8ed0ed4017c130a8671b028244e7d5112ba82471fc10c8f86fb628a81",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2e6c18ef6acd37c92d4874d8e8b31edd17688a36591a3521fdd7f2dbbef78d6d",
+          "exit_code": 0,
+          "stdout": "value objects made 1000\nvalue objects deallocated by the end of the loop 1000\nvalue live at the end 0\nvalue most live at once 1\nvalue deepest nesting reached 50\nvalue live objects after the nested handlers ended (all released inside) -50\nvalue gone 1050\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6db3f39bef8ab41925abd817e6ee8d33b231c1235a33aaf299ed8fac9f43a993",
+          "exit_code": 0,
+          "stdout": "value objects made 1000\nvalue objects deallocated by the end of the loop 1000\nvalue live at the end 0\nvalue most live at once 1\nvalue deepest nesting reached 50\nvalue live objects after the nested handlers ended (all released inside) -50\nvalue gone 1050\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

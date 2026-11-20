@@ -57,7 +57,8 @@ pub const LIBOBJC: &str = "/usr/lib/libobjc.A.dylib";
 pub const LIBOBJC_DIRECTIVE: &str = "poly-mac: libobjc";
 
 /// With [`LIBOBJC_DIRECTIVE`], this line (`poly-mac: arc`) compiles the
-/// test with `-fobjc-arc`.
+/// test with `-fobjc-arc`. Clang then links Foundation on its own;
+/// `-dead_strip_dylibs` drops it again, as the program uses nothing of it.
 pub const ARC_DIRECTIVE: &str = "poly-mac: arc";
 
 /// Whether `source` carries `directive` in a comment line among its first 30
@@ -314,7 +315,7 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
                 .arg(format!("-ffile-prefix-map={}=.", repo.display()))
                 .arg("-I")
                 .arg(&include)
-                .args(if arc { &["-fobjc-arc"][..] } else { &[] })
+                .args(if arc { &["-fobjc-arc", "-Wl,-dead_strip_dylibs"][..] } else { &[] })
                 .args(if objc { &["-x", "objective-c"][..] } else { &[] })
                 .arg(&s.path)
                 .args(if objc { &["-lobjc"][..] } else { &[] })

@@ -33,6 +33,7 @@
 #pragma clang diagnostic ignored "-Wunused-function"
 #pragma clang diagnostic ignored "-Wundeclared-selector"
 #pragma clang diagnostic ignored "-Wobjc-method-access"
+#pragma clang diagnostic ignored "-Wobjc-protocol-method-implementation"
 
 #if defined(__x86_64__)
 #define POLY_ARCH "x86_64"
@@ -67,7 +68,9 @@ extern id objc_constructInstance(Class, void *);
 
 /* Message sends, cast to the signature of the method called. */
 #define SEL_(name) sel_registerName(name)
-#define SEND(ret, obj, name, ...) ((ret(*)(id, SEL, ...))objc_msgSend)((id)(obj), SEL_(name), ##__VA_ARGS__)
+/* objc_msgSend must be called through a pointer of the exact type of the
+ * method (a variadic type puts the arguments in the wrong place on arm64):
+ * `((long (*)(id, SEL, long))objc_msgSend)(obj, sel, 5)`. */
 static inline id send0(id o, const char *sel) { return ((id(*)(id, SEL))objc_msgSend)(o, sel_registerName(sel)); }
 static inline id send1(id o, const char *sel, id a) {
     return ((id(*)(id, SEL, id))objc_msgSend)(o, sel_registerName(sel), a);

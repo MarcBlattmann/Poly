@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_autorelease_basic",
+      "source_sha256": "51905e7d4b7464cf9147928204386c71da6298ce6b7f022653b7b81ad9ed396b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b30272a085ebddc566ee59388e8443776f2ca20658a28601e2e1f1507e5c5b91",
+          "exit_code": 0,
+          "stdout": "ok returns its argument\nvalue retainCount unchanged by autorelease 1\nvalue deallocs before pop 0\nvalue deallocs after pop 1\nok nil in, nil out\nvalue deallocs: retained object survives 1\nvalue retainCount 1\nvalue deallocs after the explicit release 2\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "794232786c0b53c3c56fb4a6eda5033489347788ddd32764d23e28834cc6ae1f",
+          "exit_code": 0,
+          "stdout": "ok returns its argument\nvalue retainCount unchanged by autorelease 1\nvalue deallocs before pop 0\nvalue deallocs after pop 1\nok nil in, nil out\nvalue deallocs: retained object survives 1\nvalue retainCount 1\nvalue deallocs after the explicit release 2\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_autorelease_order",
+      "source_sha256": "744619599a7537c62328867ff2ef5b3100652e391728090aa7071c681fbe2898",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7ddb131fd80c3f8177fce9e0cb8e976e4c48a4a893370d9ed7a3765d7a2e4b4f",
+          "exit_code": 0,
+          "stdout": "value events 3\nvalue order 12\nvalue order 11\nvalue order 10\nvalue double autorelease: deallocs 1\nvalue bulk before pop 0\nvalue bulk after pop 5000\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "be2b66b7fdb10e5f26da16d5447a4f90b53059de4065f24be96d4c63287be05f",
+          "exit_code": 0,
+          "stdout": "value events 3\nvalue order 12\nvalue order 11\nvalue order 10\nvalue double autorelease: deallocs 1\nvalue bulk before pop 0\nvalue bulk after pop 5000\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
