@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfstringcreatewithcharacters_basic",
+      "source_sha256": "10b608c168d7503dbf9c4ab9964e9a4bdfa3c33a8b4a59d075a64c81bc0d5f08",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "02b2c03c785baf4e621cd9bb02c7d13ad80893f15959dfc599d6043b11362117",
+          "exit_code": 0,
+          "stdout": "ok UNITS(CH(0x41, 0x42), 0x41, 0x42)\nok UNITS(CH(0x41, 0xd83d, 0xde00), 0x41, 0xd83d, 0xde00)\nok UNITS(CH(0xd83d), 0xd83d)\nok UNITS(CH(0xde00, 0xd83d), 0xde00, 0xd83d)\nok UNITS(CH(0, 0x41), 0, 0x41)\nok UNITS(CH(0x65, 0x301), 0x65, 0x301)\nok UNITS(CH(0xfeff, 0x61), 0xfeff, 0x61)\nok UNITS(CH(0xffff), 0xffff)\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "27d04d48a0c69a0a022811ab682f21a68a80caa653b4db6075c751e25e231d55",
+          "exit_code": 0,
+          "stdout": "ok UNITS(CH(0x41, 0x42), 0x41, 0x42)\nok UNITS(CH(0x41, 0xd83d, 0xde00), 0x41, 0xd83d, 0xde00)\nok UNITS(CH(0xd83d), 0xd83d)\nok UNITS(CH(0xde00, 0xd83d), 0xde00, 0xd83d)\nok UNITS(CH(0, 0x41), 0, 0x41)\nok UNITS(CH(0x65, 0x301), 0x65, 0x301)\nok UNITS(CH(0xfeff, 0x61), 0xfeff, 0x61)\nok UNITS(CH(0xffff), 0xffff)\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

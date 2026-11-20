@@ -66,6 +66,7 @@ pub mod kernel;
 pub mod layout;
 pub mod memory;
 pub mod objects;
+pub mod oomadj;
 pub mod pagemap;
 pub mod params;
 pub mod pe_writer;
@@ -86,6 +87,7 @@ pub mod trace;
 pub mod vm;
 pub mod win32k;
 pub mod winsta;
+pub mod wmgen;
 pub mod wow64;
 
 #[cfg(test)]

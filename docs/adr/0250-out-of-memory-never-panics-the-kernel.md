@@ -100,3 +100,51 @@ YouTube video every 36 s:
   - Per-cgroup or per-job limits beyond the job objects' own.
   - Windows' low-memory notifications (`CreateMemoryResourceNotification`).
   - Making the remaining large kernel allocations fallible one by one.
+
+## Addendum: which process goes first (track `oom-prefer-renderers`)
+
+**Context.** The policy ended the process holding the most memory. With many Chrome windows that can be the browser
+process, which takes every window with it (the scenario above did end Chrome's browser). Linux and Windows end a
+renderer instead: one tab shows that it crashed and the rest stay.
+
+**Decision.** The policy scores processes as Linux does (proc_pid_oom_score_adj(5)): a process's memory plus its
+adjustment, -1000 to 1000, in thousandths of all memory; -1000 is never (`poly_mem::pressure::badness`). The highest score
+goes. The desktop and the first process stay protected as before.
+
+- **Linux processes:** their own `/proc/<pid>/oom_score_adj`, which Poly already stored but did not use. Chromium writes
+  it for its children (renderers 300 and more, the browser stays 0); raising it is open to the owner, lowering it needs
+  `CAP_SYS_RESOURCE`.
+- **Windows processes** have no such file. Their adjustment comes from what Windows records about them, never from
+  their names (`poly_personality_nt::oomadj`):
+  - **+500 for a child its parent manages:** a process in a job object that another process made
+    (`NtCreateJobObject` now records its creator) while that process is still running. That is how a browser keeps its
+    renderers, GPU and utility processes; it sees one end through the job and can start it again, while ending the
+    browser ends them all.
+  - **+100 per memory priority level below normal** (`SetProcessInformation(ProcessMemoryPriority)`; Learn: pages of a
+    lower memory priority are trimmed first).
+  - Capped at 1000; nothing makes a Windows process less expendable than 0.
+- The log line of an ended process names its adjustment.
+
+**What it gives.** In a 4 GB guest an adjustment of 500 adds about 2 GB to a child's score, so any of the browser's
+children goes before the browser, whatever their sizes. Measured on Chrome for Windows (`chrome-win-sandbox`): the
+browser process and the other top-level process score 0; every renderer, GPU and utility process the browser started
+in its jobs scores 500.
+
+**Tests.**
+- Host: `poly_mem::pressure` (`the_score_adjustment_makes_children_go_first`: a 100 MiB child at 300 goes before a
+  270 MiB parent at 0; -1000 never goes), `poly_personality_nt::oomadj` (job made by a living parent, own job, parent
+  gone, memory priority, the cap).
+- Kernel: `nt_oom_ends_the_child_in_a_job_not_its_parent` (`k32test.exe --oom-job`): the parent holds 16 MiB and
+  starts a copy of itself in a job it made, which takes memory until there is none (private commits, then section views
+  the commit limit does not charge). The policy must end the child (`STATUS_NO_MEMORY`), and every page of the parent
+  must be intact. So that it runs out after tens of megabytes on any machine and quickly under emulation (CI's TCG),
+  the test raises the floor of user memory to 32 MiB above what is free (`frames::set_test_floor`; the policy counts it
+  as the reserve). Run with the whole of a 256 MiB guest before the change, the policy ended the larger parent
+  (128 MiB); with it, the child (66 MiB, adjustment 500).
+- **One victim at a time.** Running again right after ending a large child, the policy found it "ending" (still giving
+  its memory back) and took the next process, the parent. It now waits (at most 5 s) while a process that is ending
+  still holds memory, as Linux's killer does not pick another while one is dying.
+
+**Not done.** A way for a Windows program to set its own adjustment beyond its memory priority (Windows has none), and
+the many-YouTube-windows run of the scenario above (it needs the network and half an hour; the kernel test reproduces
+its decision).

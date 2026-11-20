@@ -3,7 +3,7 @@
 use super::*;
 use alloc::vec::Vec;
 use poly_com::hresult::from_win32;
-use poly_com::wire::{ACTIVATION_PIPE, Reply, Request, frame, frame_len};
+use poly_com::wire::{ACTIVATION_PIPE, RECEIVED, Reply, Request, frame, frame_len};
 
 const GENERIC_READ: u32 = 0x8000_0000;
 const GENERIC_WRITE: u32 = 0x4000_0000;
@@ -108,16 +108,29 @@ fn open(name: &[u16]) -> Result<Handle, Failure> {
 }
 
 /// Send `req` to the pipe `endpoint` and read the reply.
+///
+/// An object exporter confirms each call it has read ([`RECEIVED`]) before it runs it (sheets
+/// `CoUnmarshalInterface` rules `dead_server` and `server_crash`, `CoCopyProxy`): a call that was
+/// never confirmed did not reach a running server (`RPC_S_SERVER_UNAVAILABLE`); one that was
+/// confirmed and got no reply was cut off by the server's end (`RPC_S_CALL_FAILED`). The activation
+/// process confirms nothing; a broken connection to it is "server unavailable".
 pub(crate) fn transact(endpoint: &str, req: &Request) -> Result<Reply, Failure> {
     let name = wide(endpoint);
     let h = open(&name)?;
-    if endpoint == ACTIVATION_PIPE {
+    let activation = endpoint == ACTIVATION_PIPE;
+    if activation {
         super::security::note_activator(h);
     }
-    let ok = write_all(h, &frame(&req.encode()));
-    let reply = if ok { read_frame(h) } else { None };
+    let sent = write_all(h, &frame(&req.encode()));
+    let delivered = sent
+        && (activation || {
+            let mut b = [0u8; 1];
+            read_exact(h, &mut b) && b[0] == RECEIVED
+        });
+    let reply = if delivered { read_frame(h) } else { None };
     close(h);
-    let reply = reply.ok_or(Failure::Broken(RPC_S_SERVER_UNAVAILABLE))?;
+    let lost = if delivered && !activation { RPC_S_CALL_FAILED } else { RPC_S_SERVER_UNAVAILABLE };
+    let reply = reply.ok_or(Failure::Broken(lost))?;
     Reply::decode(&reply).map_err(|_| Failure::Broken(RPC_S_SERVER_UNAVAILABLE))
 }
 

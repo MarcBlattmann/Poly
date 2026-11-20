@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_guard_basic",
+      "source_sha256": "a1552ea454a66534016741cc96da4de21ee0dbf6a4b94cebd3ab7d7af0ff8d13",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "763a77d613b00c3ea2487b78410011a5ff0716d40b0faa75c543eab20c764344",
+          "exit_code": 0,
+          "stdout": "ok guard succeeds\nok the guard is the context\nok guarding a guarded port: KERN_INVALID_ARGUMENT (4)\nok and the guard is unchanged\nok unguard with the guard succeeds\nok the context is 0 again\nok guard anew works\nok with the new guard\nok strict guard succeeds\nok a strict guard reads as context 0\nok and unguards with its value\nok a port whose context is not 0 cannot be guarded: KERN_INVALID_ARGUMENT\nok guard value 0 is accepted\nok and destruct with guard 0 works\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6892d7e7849f2d44237cb05f37edeed516f87ba8c77f9b953bcfafb29476385d",
+          "exit_code": 0,
+          "stdout": "ok guard succeeds\nok the guard is the context\nok guarding a guarded port: KERN_INVALID_ARGUMENT (4)\nok and the guard is unchanged\nok unguard with the guard succeeds\nok the context is 0 again\nok guard anew works\nok with the new guard\nok strict guard succeeds\nok a strict guard reads as context 0\nok and unguards with its value\nok a port whose context is not 0 cannot be guarded: KERN_INVALID_ARGUMENT\nok guard value 0 is accepted\nok and destruct with guard 0 works\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_guard_violations",
+      "source_sha256": "cb8f59a49109869714f12a574c7f1f0bed1e68703e1ca2872a757610604372b6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6cc9d4faefa09d86d99cff986143ccc46ede51d001920bf312d8212b2e9545ae",
+          "exit_code": 0,
+          "stdout": "ok send rights, set membership and notifications are allowed\nok mach_port_destroy: SIGKILL\nok mach_port_mod_refs -1 of the receive right: SIGKILL\nok mach_port_destruct with guard 0: SIGKILL\nok set_context on a guarded port changes the guard\nok and the new value is the guard\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bf35f9e76a8abf7e64722a379ab3f93aa3dfcde91163ec2f86ee9bf83401993e",
+          "exit_code": 0,
+          "stdout": "ok send rights, set membership and notifications are allowed\nok mach_port_destroy: SIGKILL\nok mach_port_mod_refs -1 of the receive right: SIGKILL\nok mach_port_destruct with guard 0: SIGKILL\nok set_context on a guarded port changes the guard\nok and the new value is the guard\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

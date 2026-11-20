@@ -19,6 +19,7 @@
 extern crate alloc;
 use poly_win32_rt as _;
 
+mod affinity;
 mod ansi;
 mod appcontainer;
 mod attrlist;

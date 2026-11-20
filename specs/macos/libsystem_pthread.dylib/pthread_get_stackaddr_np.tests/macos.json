@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "pthread_get_stackaddr_np_basic",
+      "source_sha256": "c87a63384db76f71046f6ad1a4373b63ae9558f77a407a530d8b0b0a950ed6db",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "328f7aeccac2ca057580d9a23abc53a4d1e2563bf3befc27eac6fc4de9365560",
+          "exit_code": 0,
+          "stdout": "ok main thread: a local is below the address\nok main thread: the local is within the stack size\nok main thread: the main function's frame is near the top (< 1 MiB)\nok main thread: the address is page aligned\nok a thread: its local is inside [top - size, top) and near the top\nok a thread: the address is page aligned\nok the thread's stack is not the main thread's\nok the two stacks do not overlap\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d876f5743337d73bdf91c539f35df870000bf6a817cbf3da0c5f15716973c3b5",
+          "exit_code": 0,
+          "stdout": "ok main thread: a local is below the address\nok main thread: the local is within the stack size\nok main thread: the main function's frame is near the top (< 1 MiB)\nok main thread: the address is page aligned\nok a thread: its local is inside [top - size, top) and near the top\nok a thread: the address is page aligned\nok the thread's stack is not the main thread's\nok the two stacks do not overlap\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pthread_get_stackaddr_np_more",
+      "source_sha256": "6ae98e2582dd6d021b006b9ab3461f99322bcee10e8f9b9203f115647b74fa45",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b0cb76cd195e811ecc88cb3503dfbc868942801f41eee17a80a9b30531dcf8ec",
+          "exit_code": 0,
+          "stdout": "ok the same value on a second call\nok 50 nested frames stay inside the stack and the value does not move\nok the stack size is stable too\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "907f79b417b9d1a185dba720e75e9d5697d4788d11f843cfc0fc0dbcaece4a00",
+          "exit_code": 0,
+          "stdout": "ok the same value on a second call\nok 50 nested frames stay inside the stack and the value does not move\nok the stack size is stable too\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

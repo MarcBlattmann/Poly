@@ -777,6 +777,17 @@ impl Memory {
         result
     }
 
+    /// Whether the page table maps `addr` with the rights `access` needs (a present user page for
+    /// a read, a writable one for a write).
+    fn mapped_for(&self, addr: u64, access: Access) -> bool {
+        let need = match access {
+            Access::Write => PageProt::WRITE,
+            Access::Read => PageProt::READ,
+            Access::Execute => PageProt::EXEC,
+        };
+        self.space.translate(addr).is_some_and(|m| m.prot.contains(need))
+    }
+
     fn resolve(&self, inner: &mut Inner, addr: u64, access: Access, forced: bool) -> Result<(), FaultError> {
         let page = poly_vm::page_down(addr);
         // The memory's own frames have a single user until fork shares
@@ -980,7 +991,16 @@ impl Memory {
         while off < len {
             let at = addr + off as u64;
             let n = ((PAGE_SIZE - at % PAGE_SIZE) as usize).min(len - off);
-            self.resolve(&mut inner, at, access, forced)?;
+            // A page the page table already maps with the rights the access needs is copied as it
+            // is: the copy goes through the direct map. Resolving it anyway changed its rights to
+            // what they were, and that change flushed the page from the TLB of every CPU running
+            // this space: an IPI and a wait for each page of each I/O completion the kernel wrote
+            // into a process whose threads were running (Chrome's IPC, chrome-typing-latency).
+            // Pages still to be copied on write, made writable or brought in are not mapped
+            // with those rights, so they are resolved as before; a forced write always is.
+            if forced || !self.mapped_for(at, access) {
+                self.resolve(&mut inner, at, access, forced)?;
+            }
             copy(&self.space, at, off, n).map_err(map_error)?;
             off += n;
         }
@@ -989,21 +1009,28 @@ impl Memory {
 
     /// Unmap the pages of regions the region map removed, freeing their
     /// frames (parked ones too) and letting go of page-cache pages.
+    ///
+    /// Without waiting for the other CPUs that run this memory (ADR 0254):
+    /// the frames, and the page-cache and shared pages these regions held,
+    /// are let go of once those CPUs have dropped their translations.
     fn release(&self, inner: &mut Inner, regions: &[Vma<FileRef>]) {
+        crate::arch::user::reap_or_wait();
         for v in regions {
-            self.space.unmap(v.start, v.size()).expect("regions lie in user space and are page-aligned");
-            let mut inside = inner.parked.split_off(&v.start);
-            let mut after = inside.split_off(&v.end);
+            let ticket =
+                self.space.unmap_async(v.start, v.size()).expect("regions lie in user space and are page-aligned");
+            let mut parked = inner.parked.split_off(&v.start);
+            let mut after = parked.split_off(&v.end);
             inner.parked.append(&mut after);
-            drop(inside);
-            let mut inside = inner.cached.split_off(&v.start);
-            let mut after = inside.split_off(&v.end);
+            let mut cached = inner.cached.split_off(&v.start);
+            let mut after = cached.split_off(&v.end);
             inner.cached.append(&mut after);
-            drop(inside);
-            let mut inside = inner.shared.split_off(&v.start);
-            let mut after = inside.split_off(&v.end);
+            let mut shared = inner.shared.split_off(&v.start);
+            let mut after = shared.split_off(&v.end);
             inner.shared.append(&mut after);
-            drop(inside);
+            match ticket {
+                Some(t) => crate::arch::user::defer_drop(t, alloc::boxed::Box::new((parked, cached, shared))),
+                None => drop((parked, cached, shared)),
+            }
         }
     }
 }

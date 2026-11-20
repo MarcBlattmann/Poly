@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_get_stackaddr_np.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_get_stackaddr_np.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_get_stackaddr_np
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_get_stackaddr_np(thread) returns the address one past the highest byte of the thread's stack (the
+  stack grows down from it); the thread's stack lies in [addr - pthread_get_stacksize_np, addr). It is a multiple
+  of 4096 (not necessarily of the page size: threads on arm64 end at 12288 mod 16384, on x86_64 at 8192 mod 16384). For
+  the main thread a local variable is below it, within the stack size and within 1 MiB of it; for a created thread
+  within 16 KiB of it (a frame of the start routine), and for a created thread the address equals the thread's
+  pthread_t value. The value is the same on every call and from nested frames; asking about another running thread
+  gives the value that thread sees for itself; stacks of six live threads (128 KiB to 768 KiB) do not overlap, and a
+  created thread's stack is not the main thread's. Same on both architectures except for the alignment noted.
+returns:
+  "value": "address one past the top of the stack"
+errors:
+  "none": "no error result; an invalid thread is not tested"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "created threads' stack top: 12288 mod 16384 on arm64, 8192 mod 16384 on x86_64"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

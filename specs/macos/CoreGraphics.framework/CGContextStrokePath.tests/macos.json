@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgstroke_more",
+      "source_sha256": "8ca2444c83cbe10aa782b89bfcfc40c21b6aab2dc7630e5baa83713acaf18795",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "480a6ce57591a45678e256b0a121117b4a5ba3168cc337f1ffe7e8bbd6a050e5",
+          "exit_code": 0,
+          "stdout": "value a stroke uses the stroke colour (blue), not the fill (red) 00 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue a stroke uses the stroke colour (blue), not the fill (red) 01 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue a stroke uses the stroke colour (blue), not the fill (red) 02 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue a stroke uses the stroke colour (blue), not the fill (red) 03 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 00 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 01 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 02 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 03 00000000 0000ffff 0000ffff ff0000ff ff0000ff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 04 00000000 0000ffff 0000ffff ff0000ff ff0000ff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 05 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 06 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 07 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue a stroke at the default line width (1) along y = 2: rows 1 a 00 00 00 00 00 00 00 00 00\nvalue a stroke at the default line width (1) along y = 2: rows 1 a 01 00 7f 7f 7f 7f 7f 7f 00\nvalue a stroke at the default line width (1) along y = 2: rows 1 a 02 00 7f 7f 7f 7f 7f 7f 00\nvalue a stroke at the default line width (1) along y = 2: rows 1 a 03 00 00 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7660f5f96447eca34e798d36832d4ca260455ed6a6568e11a868827f37e85cce",
+          "exit_code": 0,
+          "stdout": "value a stroke uses the stroke colour (blue), not the fill (red) 00 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue a stroke uses the stroke colour (blue), not the fill (red) 01 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue a stroke uses the stroke colour (blue), not the fill (red) 02 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue a stroke uses the stroke colour (blue), not the fill (red) 03 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 00 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 01 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 02 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 03 00000000 0000ffff 0000ffff ff0000ff ff0000ff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 04 00000000 0000ffff 0000ffff ff0000ff ff0000ff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 05 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 06 00000000 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 0000ffff 00000000\nvalue fill and stroke of a rect, (2,2,4,4) width 2 07 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue a stroke at the default line width (1) along y = 2: rows 1 a 00 00 00 00 00 00 00 00 00\nvalue a stroke at the default line width (1) along y = 2: rows 1 a 01 00 7f 7f 7f 7f 7f 7f 00\nvalue a stroke at the default line width (1) along y = 2: rows 1 a 02 00 7f 7f 7f 7f 7f 7f 00\nvalue a stroke at the default line width (1) along y = 2: rows 1 a 03 00 00 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgstroke_width",
+      "source_sha256": "474312bebd6a3dccdf98ff77a6079a95a9b68b2a8576dfacaf3488903c672767",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "24ee6916f27f0f430ffcf0d8802654bbd9aa52c517ab82520225f1eb3cee4598",
+          "exit_code": 0,
+          "stdout": "value width 1 horizontal on the pixel centre y = 2.5, x 1..9 00 00 00 00 00 00 00 00 00 00 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 01 00 00 00 00 00 00 00 00 00 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 02 00 00 00 00 00 00 00 00 00 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 03 00 ff ff ff ff ff ff ff ff 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 04 00 00 00 00 00 00 00 00 00 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 05 00 00 00 00 00 00 00 00 00 00\nvalue width 1 on a pixel edge y = 3, x 1..9 00 00 00 00 00 00 00 00 00 00 00\nvalue width 1 on a pixel edge y = 3, x 1..9 01 00 00 00 00 00 00 00 00 00 00\nvalue width 1 on a pixel edge y = 3, x 1..9 02 00 7f 7f 7f 7f 7f 7f 7f 7f 00\nvalue width 1 on a pixel edge y = 3, x 1..9 03 00 7f 7f 7f 7f 7f 7f 7f 7f 00\nvalue width 1 on a pixel edge y = 3, x 1..9 04 00 00 00 00 00 00 00 00 00 00\nvalue width 1 on a pixel edge y = 3, x 1..9 05 00 00 00 00 00 00 00 00 00 00\nvalue width 2 on y = 3 00 00 00 00 00 00 00 00 00 00 00\nvalue width 2 on y = 3 01 00 00 00 00 00 00 00 00 00 00\nvalue width 2 on y = 3 02 00 ff ff ff ff ff ff ff ff 00\nvalue width 2 on y = 3 03 00 ff ff ff ff ff ff ff ff 00\nvalue width 2 on y = 3 04 00 00 00 00 00 00 00 00 00 00\nvalue width 2 on y = 3 05 00 00 00 00 00 00 00 00 00 00\nvalue width 1.5 on y = 3 00 00 00 00 00 00 00 00 00 00 00\nvalue width 1.5 on y = 3 01 00 00 00 00 00 00 00 00 00 00\nvalue width 1.5 on y = 3 02 00 bf bf bf bf bf bf bf bf 00\nvalue width 1.5 on y = 3 03 00 bf bf bf bf bf bf bf bf 00\nvalue width 1.5 on y = 3 04 00 00 00 00 00 00 00 00 00 00\nvalue width 1.5 on y = 3 05 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 00 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 01 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 02 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 03 00 7f 7f 7f 7f 7f 7f 7f 7f 00\nvalue width 0.5 on y = 2.5 04 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 05 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 00 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 01 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 02 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 03 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 04 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 05 00 00 00 00 00 00 00 00 00 00\nvalue width 1 diagonal (1,1) to (9,5) 00 00 00 00 00 00 00 00 00 4f 00\nvalue width 1 diagonal (1,1) to (9,5) 01 00 00 00 00 00 00 4f cf cf 00\nvalue width 1 diagonal (1,1) to (9,5) 02 00 00 00 00 4f cf cf 4f 00 00\nvalue width 1 diagonal (1,1) to (9,5) 03 00 00 4f cf cf 4f 00 00 00 00\nvalue width 1 diagonal (1,1) to (9,5) 04 00 cf cf 4f 00 00 00 00 00 00\nvalue width 1 diagonal (1,1) to (9,5) 05 00 4f 00 00 00 00 00 00 00 00\nvalue width 2 diagonal (1,1) to (9,5) 00 00 00 00 00 00 00 03 5e 9e 00\nvalue width 2 diagonal (1,1) to (9,5) 01 00 00 00 00 03 5e da ff ff 3c\nvalue width 2 diagonal (1,1) to (9,5) 02 00 00 03 5e da ff ff da 5e 03\nvalue width 2 diagonal (1,1) to (9,5) 03 03 5e da ff ff da 5e 03 00 00\nvalue width 2 diagonal (1,1) to (9,5) 04 3c ff ff da 5e 03 00 00 00 00\nvalue width 2 diagonal (1,1) to (9,5) 05 00 9e 5e 03 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "49f2c9d646b37702119a9e64d632ccc89890208ab2ca2536b74aaab2d6fb4203",
+          "exit_code": 0,
+          "stdout": "value width 1 horizontal on the pixel centre y = 2.5, x 1..9 00 00 00 00 00 00 00 00 00 00 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 01 00 00 00 00 00 00 00 00 00 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 02 00 00 00 00 00 00 00 00 00 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 03 00 ff ff ff ff ff ff ff ff 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 04 00 00 00 00 00 00 00 00 00 00\nvalue width 1 horizontal on the pixel centre y = 2.5, x 1..9 05 00 00 00 00 00 00 00 00 00 00\nvalue width 1 on a pixel edge y = 3, x 1..9 00 00 00 00 00 00 00 00 00 00 00\nvalue width 1 on a pixel edge y = 3, x 1..9 01 00 00 00 00 00 00 00 00 00 00\nvalue width 1 on a pixel edge y = 3, x 1..9 02 00 7f 7f 7f 7f 7f 7f 7f 7f 00\nvalue width 1 on a pixel edge y = 3, x 1..9 03 00 7f 7f 7f 7f 7f 7f 7f 7f 00\nvalue width 1 on a pixel edge y = 3, x 1..9 04 00 00 00 00 00 00 00 00 00 00\nvalue width 1 on a pixel edge y = 3, x 1..9 05 00 00 00 00 00 00 00 00 00 00\nvalue width 2 on y = 3 00 00 00 00 00 00 00 00 00 00 00\nvalue width 2 on y = 3 01 00 00 00 00 00 00 00 00 00 00\nvalue width 2 on y = 3 02 00 ff ff ff ff ff ff ff ff 00\nvalue width 2 on y = 3 03 00 ff ff ff ff ff ff ff ff 00\nvalue width 2 on y = 3 04 00 00 00 00 00 00 00 00 00 00\nvalue width 2 on y = 3 05 00 00 00 00 00 00 00 00 00 00\nvalue width 1.5 on y = 3 00 00 00 00 00 00 00 00 00 00 00\nvalue width 1.5 on y = 3 01 00 00 00 00 00 00 00 00 00 00\nvalue width 1.5 on y = 3 02 00 bf bf bf bf bf bf bf bf 00\nvalue width 1.5 on y = 3 03 00 bf bf bf bf bf bf bf bf 00\nvalue width 1.5 on y = 3 04 00 00 00 00 00 00 00 00 00 00\nvalue width 1.5 on y = 3 05 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 00 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 01 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 02 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 03 00 7f 7f 7f 7f 7f 7f 7f 7f 00\nvalue width 0.5 on y = 2.5 04 00 00 00 00 00 00 00 00 00 00\nvalue width 0.5 on y = 2.5 05 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 00 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 01 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 02 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 03 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 04 00 00 00 00 00 00 00 00 00 00\nvalue width 0 (a hairline?) on y = 2.5 05 00 00 00 00 00 00 00 00 00 00\nvalue width 1 diagonal (1,1) to (9,5) 00 00 00 00 00 00 00 00 00 4f 00\nvalue width 1 diagonal (1,1) to (9,5) 01 00 00 00 00 00 00 4f cf cf 00\nvalue width 1 diagonal (1,1) to (9,5) 02 00 00 00 00 4f cf cf 4f 00 00\nvalue width 1 diagonal (1,1) to (9,5) 03 00 00 4f cf cf 4f 00 00 00 00\nvalue width 1 diagonal (1,1) to (9,5) 04 00 cf cf 4f 00 00 00 00 00 00\nvalue width 1 diagonal (1,1) to (9,5) 05 00 4f 00 00 00 00 00 00 00 00\nvalue width 2 diagonal (1,1) to (9,5) 00 00 00 00 00 00 00 03 5e 9e 00\nvalue width 2 diagonal (1,1) to (9,5) 01 00 00 00 00 03 5e da ff ff 3c\nvalue width 2 diagonal (1,1) to (9,5) 02 00 00 03 5e da ff ff da 5e 03\nvalue width 2 diagonal (1,1) to (9,5) 03 03 5e da ff ff da 5e 03 00 00\nvalue width 2 diagonal (1,1) to (9,5) 04 3c ff ff da 5e 03 00 00 00 00\nvalue width 2 diagonal (1,1) to (9,5) 05 00 9e 5e 03 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

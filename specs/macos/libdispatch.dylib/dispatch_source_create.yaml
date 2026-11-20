@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_source_create.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_source_create.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_source_create
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_source_create(type, handle, mask, queue) makes a source that is suspended until dispatch_resume. Types seen: DATA_ADD and DATA_OR (handle 0, mask 0): merged data (dispatch_source_merge_data) is added or ORed together while the handler cannot run
+  (before resume 5 -> 5; merged 1, 2, 4 while suspended -> one call with 7; ORed 1, 2, 2, 8 -> 11); dispatch_source_get_data in the handler reads it and the next round starts from 0; merging 0 fires nothing. SIGNAL (handle: signal number): fires when the process receives the signal, also
+  when it is ignored with SIG_IGN (without it the default action would end the process), data is the number of signals since the handler last ran (three spaced signals: three counts; three sent while suspended: counted together); dispatch_source_get_handle gives the signal number.
+  READ on a descriptor: fires when data are waiting, data is the number of bytes available (5); WRITE on a pipe with room fires at once. PROC with DISPATCH_PROC_EXIT on a child's pid: fires when the child exits, data has the exit flag; waitpid still collects the status; DISPATCH_PROC_EXIT 0x80000000, FORK 0x40000000, EXEC 0x20000000, SIGNAL 0x08000000.
+  MACH_RECV on a receive right: fires when a message is queued; the handler receives it with mach_msg (payload and id intact). Refused with NULL: a SIGNAL source with signal 0, above 31 (100), or a nonzero mask; a DATA_ADD source with a nonzero handle; a DATA_OR source with a nonzero mask. A TIMER source with a nonzero
+  handle is accepted. get_handle/get_mask/get_data of a data source are 0; testcancel is 0 until cancelled.
+returns:
+  "source": "a new, suspended source; NULL for arguments it refuses"
+errors:
+  "invalid": "NULL"
+side_effects: "makes a source object (suspended)"
+threading: "handlers run on the source's queue"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

@@ -12,7 +12,9 @@
 //! A PE executable goes to the NT personality's loader (`crate::nt`), and
 //! a native Poly program (an ELF with Poly's ABI note, ADR 0125) is loaded
 //! like a static ELF into a native process. An x86-64 Mach-O program is
-//! linked by Poly's own dyld into an XNU process (`crate::xnu`, ADR 0237).
+//! linked by Poly's own dyld into an XNU process (`crate::xnu`, ADR 0237);
+//! an arm64 one too, run by the translator's runtime (`crate::xnu::arm64`,
+//! ADR 0257).
 //! Other formats are refused with a reason.
 
 use crate::boot_info::BootInfo;
@@ -126,6 +128,21 @@ impl Prepared {
     }
 }
 
+/// The arguments a `#!` script's interpreter gets: Linux's (the rest of the
+/// line as one argument), or with `darwin` each blank-separated word.
+fn script_argv(line: &shebang::Shebang, path: &[u8], argv: &[Vec<u8>], darwin: bool) -> Vec<Vec<u8>> {
+    if !darwin {
+        return shebang::script_argv(line, path, argv);
+    }
+    let mut out = alloc::vec![line.interpreter.clone()];
+    if let Some(arg) = &line.arg {
+        out.extend(arg.split(|b| *b == b' ' || *b == b'\t').filter(|w| !w.is_empty()).map(<[u8]>::to_vec));
+    }
+    out.push(path.to_vec());
+    out.extend(argv.iter().skip(1).cloned());
+    out
+}
+
 /// Everything [`exec_path`] does but starting the thread.
 pub fn prepare(path: &[u8], argv: &[&[u8]], envp: &[&[u8]], traced: bool) -> Result<Prepared, ExecPathError> {
     prepare_as(path, argv, envp, traced, None)
@@ -195,9 +212,13 @@ fn prepare_full(
             return Err(ExecPathError::Unsupported("#! scripts nested too deep".into()));
         }
         depth += 1;
+        // A macOS caller's `#!` line gives each word after the interpreter
+        // as an argument of its own ("#!prog child 3": "child", "3"; the
+        // execve sheet); Linux passes the rest of the line as one.
+        let darwin = parent.is_some_and(|p| p.xnu.is_some());
         let args = match &script {
-            Some((p, a)) => shebang::script_argv(&line, p, a),
-            None => shebang::script_argv(&line, path, &argv.iter().map(|a| a.to_vec()).collect::<Vec<_>>()),
+            Some((p, a)) => script_argv(&line, p, a, darwin),
+            None => script_argv(&line, path, &argv.iter().map(|a| a.to_vec()).collect::<Vec<_>>(), darwin),
         };
         script = Some((line.interpreter, args));
     };
@@ -254,16 +275,36 @@ fn prepare_full(
             return Ok(Prepared::Native { process, image });
         }
         Some(Personality::Xnu) => {
-            // Poly's own dyld links and maps it (ADR 0237); x86-64 only
-            // until the arm64 translator (ADR 0151).
-            if let poly_binfmt::Format::MachO { arch, .. } = format
-                && arch != poly_binfmt::Arch::X86_64
-            {
-                return Err(ExecPathError::Unsupported(format!(
-                    "a {arch:?} Mach-O program (x86-64 ones run; arm64 needs the translator, ADR 0151)"
-                )));
-            }
-            let loaded = crate::xnu::prepare(path, argv, envp).map_err(ExecPathError::Unsupported)?;
+            // Poly's own dyld links and maps it (ADR 0237): an x86-64
+            // program runs natively, an arm64 one in the translator's
+            // runtime (ADR 0257); a universal file runs its x86-64 slice if
+            // it has one.
+            let arm64 = match format {
+                poly_binfmt::Format::MachO { arch: poly_binfmt::Arch::X86_64, .. } => false,
+                poly_binfmt::Format::MachO { arch: poly_binfmt::Arch::Aarch64, .. } => true,
+                poly_binfmt::Format::MachO { arch, .. } => {
+                    return Err(ExecPathError::Unsupported(format!(
+                        "a {arch:?} Mach-O program (x86-64 and arm64 ones run)"
+                    )));
+                }
+                _ => crate::xnu::arm64::is_arm64_only(path).map_err(ExecPathError::Unsupported)?,
+            };
+            let loaded = if arm64 {
+                let runtime = open_exec(crate::xnu::arm64::RUNTIME.as_bytes(), parent).map_err(|e| {
+                    ExecPathError::Unsupported(format!(
+                        "an arm64 Mach-O program needs the translator's runtime {}: {}",
+                        crate::xnu::arm64::RUNTIME,
+                        e.name()
+                    ))
+                })?;
+                let rt_argv = [crate::xnu::arm64::RUNTIME.as_bytes(), path];
+                let params = ExecParams::new(&rt_argv, &[], crate::xnu::arm64::RUNTIME.as_bytes());
+                let image = exec::load(Arc::new(FileSource::of(&runtime)), &params).map_err(ExecPathError::Exec)?;
+                crate::xnu::arm64::prepare(image.memory, image.entry, path, argv, envp)
+                    .map_err(ExecPathError::Unsupported)?
+            } else {
+                crate::xnu::prepare(path, argv, envp).map_err(ExecPathError::Unsupported)?
+            };
             let process = crate::xnu::new_process(ppid, format, traced);
             if let Some(p) = parent {
                 process.files.adopt_context(&p.files);
@@ -358,10 +399,18 @@ pub fn run_init(boot: &BootInfo) -> bool {
     let identity = crate::testinit::identity(boot).map_err(ExecPathError::Unsupported);
     // Its arguments: one `poly.init.arg=` word each (ADR 0087).
     let args: Vec<&str> = boot.args(testrun::INIT_ARGV).collect();
-    // Its environment: the display scale for a compositor (ADR 0116).
-    let env: Vec<String> = boot.arg(DISPLAY_SCALE).map(|s| format!("POLY_DISPLAY_SCALE={s}")).into_iter().collect();
+    // Its environment: the display scale for a compositor (ADR 0116), and
+    // one `NAME=value` per `poly.init.env=` word (ADR 0257: the arm64
+    // translator's settings).
+    let env: Vec<String> = boot
+        .arg(DISPLAY_SCALE)
+        .map(|s| format!("POLY_DISPLAY_SCALE={s}"))
+        .into_iter()
+        .chain(boot.args(testrun::INIT_ENV).map(String::from))
+        .collect();
     let env: Vec<&[u8]> = env.iter().map(|s| s.as_bytes()).collect();
-    match identity.and_then(|id| run_first(path, &args, &env, traced, id.as_ref())) {
+    let cwd = boot.arg(crate::testinit::CWD_ARG);
+    match identity.and_then(|id| run_first(path, &args, &env, traced, id.as_ref(), cwd)) {
         Ok((pid, status)) => {
             crate::testinit::report_output_files(boot);
             testrun::exit(pid, status, crate::nt::take_exit_status(pid));
@@ -379,13 +428,14 @@ pub fn run_init(boot: &BootInfo) -> bool {
 }
 
 /// The first program with `args` after its path, as `identity` if the boot
-/// gave one (ADR 0081).
+/// gave one (ADR 0081), in the working directory `cwd` if one was given.
 fn run_first(
     path: &str,
     args: &[&str],
     env: &[&[u8]],
     traced: bool,
     identity: Option<&crate::testinit::Identity>,
+    cwd: Option<&str>,
 ) -> Result<(u32, ExitStatus), ExecPathError> {
     let argv: Vec<&[u8]> = core::iter::once(path).chain(args.iter().copied()).map(str::as_bytes).collect();
     // A traced program runs as the child of the kernel's init (ADR 0064).
@@ -398,6 +448,10 @@ fn run_first(
     }
     if let Some(id) = identity {
         crate::testinit::apply(prepared.process(), id);
+    }
+    // `poly.test.cwd`: the program starts in that directory, made for it.
+    if let Some(dir) = cwd {
+        crate::testinit::enter(prepared.process(), dir.as_bytes(), identity);
     }
     // An NT program's full NTSTATUS goes into its POLY-EXIT record.
     if let Prepared::Nt { process, .. } = &prepared {

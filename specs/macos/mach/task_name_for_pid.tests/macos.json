@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_task_name_for_pid_others",
+      "source_sha256": "0c7bc2f5e185fda2e0f735cc22820a06e57daafda2f3029d7b75aa42cae4d069",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1e7598014cf26b077be12710aa9f3fae6838afd11e562f24215c30b18f1a164d",
+          "exit_code": 0,
+          "stdout": "ok the parent works\nok a send right\nok a running child works\nok pid_for_task of it gives its pid\nok pid 1: KERN_FAILURE\nok pid 0: KERN_FAILURE\nok a pid that does not exist: KERN_FAILURE\nok the child that ended: KERN_FAILURE\nok the out name is set to MACH_PORT_NULL\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "361f0b1f5d5515ff59baa79e977692a0cef1a30c35226c12c25cf578741e853c",
+          "exit_code": 0,
+          "stdout": "ok the parent works\nok a send right\nok a running child works\nok pid_for_task of it gives its pid\nok pid 1: KERN_FAILURE\nok pid 0: KERN_FAILURE\nok a pid that does not exist: KERN_FAILURE\nok the child that ended: KERN_FAILURE\nok the out name is set to MACH_PORT_NULL\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_task_name_for_pid_self",
+      "source_sha256": "3ff4ac4a194e0c38749fb73dc91de07d6daeca669a44d91df296698a70c349fb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1b88834d09319fd2f77bd8ea1a0b65454426197a38ebd0926092cabfca692654",
+          "exit_code": 0,
+          "stdout": "ok succeeds for the own pid\nok a send right\nok not the task port's name\nok asked again, the same name\nok pid_for_task of the name port gives the pid\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6dc47a8a429a34f05b91eef1d2203ae10fdaaa87ca3b2e484920943c8a60ef11",
+          "exit_code": 0,
+          "stdout": "ok succeeds for the own pid\nok a send right\nok not the task port's name\nok asked again, the same name\nok pid_for_task of the name port gives the pid\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

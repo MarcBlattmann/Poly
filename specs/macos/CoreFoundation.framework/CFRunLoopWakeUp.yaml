@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFRunLoopWakeUp.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFRunLoopWakeUp.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFRunLoopWakeUp
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFRunLoopWakeUp(rl) wakes the loop if it is sleeping in a wait (typically after a source was
+  signalled from another thread). It does not end a run, run a source that was not signalled, fire a
+  timer that is not due, or change what the next run does: five wake-ups before a run, one inside a
+  timer callback (a repeating 50 ms timer goes on, 5 to 12 fires in 0.5 s, the run lasting its full
+  timeout) and one before a run in a mode holding only a far timer leave the results of
+  CFRunLoopRunInMode as they would have been (Finished for an empty mode, TimedOut after the timeout
+  for a mode with a timer, HandledSource for a signalled source with the flag). From another thread
+  (observed in a probe, not a test) a wake-up of a loop running a long timeout left the run going;
+  only CFRunLoopStop ended it (result Stopped). It may be called from any thread on any loop.
+returns:
+  success: "nothing"
+errors:
+  null: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "makes a waiting loop do another pass"
+threading: "safe to call from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

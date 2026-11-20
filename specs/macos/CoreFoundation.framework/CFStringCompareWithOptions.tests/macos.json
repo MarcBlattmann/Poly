@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfstringcomparewithoptions_options_in_range",
+      "source_sha256": "3685ac33abd4627ad627328ed86e32be743b1671d9a0e257c58f59fede9b4f47",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2b835f69389e0a1c078945a48db90258c8e330dff0e1179c4d8ac0b6d0807f51",
+          "exit_code": 0,
+          "stdout": "ok CFStringCompareWithOptions(a, b, all, 0) == -1\nok CFStringCompareWithOptions(a, b, all, kCFCompareCaseInsensitive) == -1\nok CFStringCompareWithOptions(a, b, all, kCFCompareCaseInsensitive | kCFCompareNumerically) == 1\nok CFStringCompareWithOptions(CFSTR(\"x5y\"), CFSTR(\"5\"), CFRangeMake(1, 1), kCFCompareNumerically) == 0\nok CFStringCompareWithOptions(CFSTR(\"x50\"), CFSTR(\"9\"), CFRangeMake(1, 2), kCFCompareNumerically) == 1\nok CFStringCompareWithOptions(x, y, CFRangeMake(0, 10), kCFCompareCaseInsensitive) == CFStringCompare(x, y, kCFCompareCaseInsensitive)\nok CFStringCompareWithOptions(x, y, CFRangeMake(0, 10), 0) == CFStringCompare(x, y, 0)\nok CFStringCompareWithOptions(x, y, CFRangeMake(0, 5), kCFCompareCaseInsensitive) == -1\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0994d55d78cc13cecd55cf9e891e1ac19e6e969707c6fd8bca04ab2ae7d0298f",
+          "exit_code": 0,
+          "stdout": "ok CFStringCompareWithOptions(a, b, all, 0) == -1\nok CFStringCompareWithOptions(a, b, all, kCFCompareCaseInsensitive) == -1\nok CFStringCompareWithOptions(a, b, all, kCFCompareCaseInsensitive | kCFCompareNumerically) == 1\nok CFStringCompareWithOptions(CFSTR(\"x5y\"), CFSTR(\"5\"), CFRangeMake(1, 1), kCFCompareNumerically) == 0\nok CFStringCompareWithOptions(CFSTR(\"x50\"), CFSTR(\"9\"), CFRangeMake(1, 2), kCFCompareNumerically) == 1\nok CFStringCompareWithOptions(x, y, CFRangeMake(0, 10), kCFCompareCaseInsensitive) == CFStringCompare(x, y, kCFCompareCaseInsensitive)\nok CFStringCompareWithOptions(x, y, CFRangeMake(0, 10), 0) == CFStringCompare(x, y, 0)\nok CFStringCompareWithOptions(x, y, CFRangeMake(0, 5), kCFCompareCaseInsensitive) == -1\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -36,6 +36,11 @@ rules:
   flags_zero: "flags 0 returns 1"
   other_thread: "TME_LEAVE for a window of another thread of the process returned 1, error 0"
   nonclient: "TME_NONCLIENT | TME_LEAVE with the cursor in the client area returns 1 and the window gets WM_NCMOUSELEAVE at once; DefWindowProc tracks the non-client area by itself: a framed window whose caption the cursor enters gets WM_SETCURSOR (hit 2), WM_NCMOUSEMOVE (hit 2) and, if a client TME_LEAVE was pending, WM_MOUSELEAVE; moving from the caption into the client area sends WM_NCHITTEST, WM_SETCURSOR, WM_MOUSEMOVE, then WM_NCMOUSELEAVE"
+  tracking_is_per_thread: "The request is per thread: TME_QUERY of any window of the thread returns the tracking that exists (a window B that was never tracked: flags 2, window A when A is tracked); TrackMouseEvent(TME_LEAVE) for B while the pointer is over A posts WM_MOUSELEAVE to B at once and does not replace A's tracking."
+  query_combinations: "TME_HOVER | TME_LEAVE with 150 ms: query flags 3, window A, hover time 150; TME_CANCEL | TME_HOVER leaves flags 2 and hover time 0; TME_CANCEL | TME_LEAVE leaves flags 0 and window NULL."
+  after_cover: "When a popup covers the tracked window (WM_MOUSELEAVE posted) the query reads flags 0, window NULL, hover time 0; a new request for A (after the popup is hidden again) returns 1 and the query says flags 2, window A. A request for A made while the pointer is over a popup returns 1 and posts WM_MOUSELEAVE at once (query flags 0)."
+  destroyed_window: "After the tracked window is destroyed a new window at the same place can be tracked: TrackMouseEvent returns 1, flags 2."
+  see_also: "The cases in which Windows posts WM_MOUSELEAVE without a pointer move are in the sheets of WM_MOUSELEAVE, WM_NCMOUSELEAVE, WM_MOUSEHOVER and WM_MOUSEMOVE."
 errors:
   cbsize: "cbSize 0, 16 or 32: 0, ERROR_INVALID_PARAMETER (87)"
   window: "hwndTrack NULL or a made-up handle: 0, ERROR_INVALID_WINDOW_HANDLE (1400)"

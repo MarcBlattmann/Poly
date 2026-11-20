@@ -2,8 +2,9 @@
 //! (ADR 0075), the counterpart of `tests/linux/include/poly_test.h`.
 //!
 //! A test is one Rust file, `#![no_std]` and `#![no_main]`, built by
-//! `cargo xtask pipeline win build` for `x86_64-pc-windows-msvc` into a
-//! self-contained console `.exe` that imports from `ntdll.dll` (and, once
+//! `cargo xtask pipeline win build` for `x86_64-pc-windows-msvc` (or, for a
+//! test with the line `// poly-arch: x86`, for `i686-pc-windows-msvc`, ADR 0259)
+//! into a self-contained console `.exe` that imports from `ntdll.dll` (and, once
 //! Poly has it, `kernel32.dll`) by name only, through `raw-dylib`
 //! declarations: no C runtime, no import libraries, no Microsoft SDK.
 //!
@@ -62,6 +63,11 @@
 
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicPtr, Ordering};
+
+// The 32-bit helper routines MSVC-style code calls (`__chkstk`, 64-bit division): a 32-bit test
+// links Poly's own, the ones the i686 system modules use (ADR 0186).
+#[cfg(target_arch = "x86")]
+extern crate poly_msvc32;
 
 pub type NTSTATUS = i32;
 pub type HANDLE = *mut c_void;
@@ -218,7 +224,8 @@ impl Default for IoStatusBlock {
     }
 }
 
-#[link(name = "ntdll", kind = "raw-dylib")]
+#[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
+#[cfg_attr(target_arch = "x86", link(name = "ntdll", kind = "raw-dylib", import_name_type = "undecorated"))]
 unsafe extern "system" {
     /// Learn: `NtCreateFile` (winternl.h) / `ZwCreateFile` (wdm.h).
     pub fn NtCreateFile(
@@ -336,16 +343,30 @@ pub fn image_path() -> &'static [u16] {
     // SAFETY: on x64 Windows (and Poly's NT personality, ADR 0063) GS
     // points at the current thread's TEB, whose ProcessEnvironmentBlock
     // field (winternl.h) is at 0x60; reading it has no side effects.
-    unsafe { core::arch::asm!("mov {}, gs:[0x60]", out(reg) peb, options(nostack, readonly, preserves_flags)) };
-    // SAFETY: the PEB and the process parameters it points at live as long
-    // as the process; the offsets are winternl.h's x64 layout, and
-    // ImagePathName's buffer holds `Length` bytes.
+    #[cfg(not(target_arch = "x86"))]
     unsafe {
-        let params = *(peb.add(0x20) as *const *const u8);
+        core::arch::asm!("mov {}, gs:[0x60]", out(reg) peb, options(nostack, readonly, preserves_flags))
+    };
+    // SAFETY: in a 32-bit process (WOW64, ADR 0186) FS points at the current thread's TEB,
+    // whose ProcessEnvironmentBlock field (winternl.h, 32-bit layout) is at 0x30.
+    #[cfg(target_arch = "x86")]
+    unsafe {
+        core::arch::asm!("mov {}, fs:[0x30]", out(reg) peb, options(nostack, readonly, preserves_flags))
+    };
+    // SAFETY: the PEB and the process parameters it points at live as long
+    // as the process; the offsets are winternl.h's layout (x64: ProcessParameters at 0x20,
+    // ImagePathName at 0x60; 32-bit: 0x10 and 0x38), and ImagePathName's buffer holds `Length`
+    // bytes.
+    unsafe {
+        #[cfg(not(target_arch = "x86"))]
+        let (params_at, name_at) = (0x20, 0x60);
+        #[cfg(target_arch = "x86")]
+        let (params_at, name_at) = (0x10, 0x38);
+        let params = *(peb.add(params_at) as *const *const u8);
         if params.is_null() {
             return &[];
         }
-        let name = &*(params.add(0x60) as *const UnicodeString);
+        let name = &*(params.add(name_at) as *const UnicodeString);
         if name.buffer.is_null() {
             return &[];
         }
@@ -772,7 +793,9 @@ impl Test {
 macro_rules! main {
     ($test:path) => {
         #[unsafe(no_mangle)]
-        pub extern "system" fn mainCRTStartup() -> ! {
+        // `C`, not `system`: on x86 `system` is stdcall, whose symbol is decorated (`_mainCRTStartup@0`)
+        // and not the linker's `/ENTRY:mainCRTStartup`; on x64 there is one convention.
+        pub extern "C" fn mainCRTStartup() -> ! {
             if $crate::open_output().is_err() {
                 $crate::exit($crate::EXIT_NO_OUTPUT);
             }
@@ -802,6 +825,7 @@ pub static _fltused: i32 = 0;
 // (Learn: "/Gs (Control stack checking calls)", "x64 prolog and epilog":
 // RAX = the frame size, every register but R10/R11 preserved, RSP
 // unchanged; the caller subtracts RAX itself). Written from that contract.
+#[cfg(target_arch = "x86_64")]
 core::arch::global_asm!(
     r#"
     .text

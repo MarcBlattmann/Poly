@@ -1050,6 +1050,9 @@ pub fn set_information_thread<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Res
     if info_class == crate::threads::THREAD_AFFINITY_MASK {
         return crate::threads::set_thread_affinity(k, Handle(h), info, length);
     }
+    if info_class == u64::from(crate::threads::THREAD_IDEAL_PROCESSOR_EX) {
+        return crate::threads::set_thread_ideal(k, Handle(h), info, length);
+    }
     if info_class != THREAD_IMPERSONATION_TOKEN {
         return Err(STATUS_INVALID_INFO_CLASS);
     }
@@ -1190,7 +1193,23 @@ pub fn set_security_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
                 return Err(SecErr::InvalidAcl.nt());
             }
         }
-        sys.objects.replace_security(obj, kind, merged);
+        // A file's DACL is kept as given unless the descriptor asks for automatic inheritance
+        // (`SE_DACL_AUTO_INHERIT_REQ`, which `SetSecurityInfo` sets): `SetFileSecurityW` and
+        // `SetKernelObjectSecurity` store exactly what they were given, its protection the
+        // descriptor's own (specs/windows/advapi32.dll/SetFileSecurityW.yaml: `dacl_replaced`,
+        // `protection`).
+        let mode = if kind != ObjectType::File || info & sd::DACL_SECURITY_INFORMATION == 0 {
+            poly_ntobj::StoreMode::Keep
+        } else if new.control & sd::SE_DACL_AUTO_INHERIT_REQ != 0 {
+            poly_ntobj::StoreMode::Inherit
+        } else {
+            poly_ntobj::StoreMode::Verbatim
+        };
+        let mut merged = merged;
+        if mode == poly_ntobj::StoreMode::Verbatim {
+            merged.control = (merged.control & !sd::SE_DACL_PROTECTED) | (new.control & sd::SE_DACL_PROTECTED);
+        }
+        sys.objects.replace_security_as(obj, kind, merged, mode);
         let _ = b;
         Ok(())
     })?;

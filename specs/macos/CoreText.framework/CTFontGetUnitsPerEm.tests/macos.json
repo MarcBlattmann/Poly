@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontgetunitsperem_dejavu",
+      "source_sha256": "83eb4778004f8c64eacdf3bca8ed909c01e7086bb7ff06b93354fda1205f2af4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fc9da7f885fd880e242de7e9f96e11f504aa7fa6ec21db29f59b1663fb80928a",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetUnitsPerEm(pt_file_font(\"DejaVuSans.ttf\", 12)) == 2048\nok CTFontGetUnitsPerEm(pt_file_font(\"DejaVuSans.ttf\", 500)) == 2048\nok CTFontGetUnitsPerEm(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)) == 2048\nok CTFontGetUnitsPerEm(pt_file_font(\"DejaVuSansMono.ttf\", 12)) == 2048\nok CTFontGetUnitsPerEm(big) == 2048 && CTFontGetUnitsPerEm(CTFontCreateCopyWithAttributes(big, 9, NULL, NULL)) == 2048\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "56f25efd842a48c9c7df67f1751d6b8e0d783802f40b426ed194a26d5d9423c4",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetUnitsPerEm(pt_file_font(\"DejaVuSans.ttf\", 12)) == 2048\nok CTFontGetUnitsPerEm(pt_file_font(\"DejaVuSans.ttf\", 500)) == 2048\nok CTFontGetUnitsPerEm(pt_file_font(\"DejaVuSans-Bold.ttf\", 12)) == 2048\nok CTFontGetUnitsPerEm(pt_file_font(\"DejaVuSansMono.ttf\", 12)) == 2048\nok CTFontGetUnitsPerEm(big) == 2048 && CTFontGetUnitsPerEm(CTFontCreateCopyWithAttributes(big, 9, NULL, NULL)) == 2048\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontgetunitsperem_variants",
+      "source_sha256": "7b0f6fe1bf1f353026997b71f44a18ac6fcdc439d86d5f7fb255540ae74c246f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b90515a942983157e659850b19371830cce55ead601b3cb53cb89d662d558643",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetUnitsPerEm(CTFontCreateWithFontDescriptor(pt_descriptor(0), 0, &rot)) == 1000\nok CTFontGetUnitsPerEm(CTFontCreateCopyWithSymbolicTraits(r, 0, NULL, 0, 0)) == 1000\nok CTFontGetUnitsPerEm(pt_font(0, 30)) == CTFontGetUnitsPerEm(pt_font(0, 31))\nok CTFontGetUnitsPerEm(pt_font(1, 12)) == CTFontGetUnitsPerEm(pt_font(0, 12))\nok CTFontGetUnitsPerEm(pt_font(0, 12)) > 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d382d8f3d51bdc25d551bd89bea59c1ca146924f12b89ffeb2b8c63d3003eb86",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetUnitsPerEm(CTFontCreateWithFontDescriptor(pt_descriptor(0), 0, &rot)) == 1000\nok CTFontGetUnitsPerEm(CTFontCreateCopyWithSymbolicTraits(r, 0, NULL, 0, 0)) == 1000\nok CTFontGetUnitsPerEm(pt_font(0, 30)) == CTFontGetUnitsPerEm(pt_font(0, 31))\nok CTFontGetUnitsPerEm(pt_font(1, 12)) == CTFontGetUnitsPerEm(pt_font(0, 12))\nok CTFontGetUnitsPerEm(pt_font(0, 12)) > 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

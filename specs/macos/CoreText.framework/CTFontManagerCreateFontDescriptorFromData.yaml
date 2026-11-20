@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreText.framework/CTFontManagerCreateFontDescriptorFromData.yaml. Observed with C test programs linked against CoreText
+# (tests/macos/include/poly_mct.h, ADR 0182); results per architecture in CTFontManagerCreateFontDescriptorFromData.tests/macos.json.
+id: "macos/api/CoreText.framework/CTFontManagerCreateFontDescriptorFromData"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the CoreText, CoreGraphics and CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes, and the two architectures gave the same results. Tests are C programs that link CoreText (the line `poly-mac: coretext`, tests/macos/include/poly_mct.h). The results do not depend on Apple's fonts: tests use the PolyTest TrueType fonts embedded in poly_mct.h (made by tests/macos/fonts/mkfont.py) and DejaVu Sans 2.37 files the runner copies into the scratch directory (`poly-mac: fonts`); the few tests about Apple's own fonts are named sys_ and described as SYSTEM-DEPENDENT; results and output go through raw system calls"
+  observed_by: spec-macos-coretext
+  date: 2026-11-20
+summary: >
+  CTFontManagerCreateFontDescriptorFromData(data) makes a CTFontDescriptor from the bytes of one
+  TrueType or OpenType font, without registering anything: the descriptor answers the font's names
+  through CTFontDescriptorCopyAttribute (kCTFontNameAttribute is the PostScript name
+  'PolyTest-Regular', kCTFontFamilyNameAttribute 'PolyTest', kCTFontStyleNameAttribute 'Regular',
+  kCTFontDisplayNameAttribute the full name 'PolyTest Regular'; for DejaVu Sans 2.37 'DejaVuSans',
+  'DejaVu Sans', 'Book'; the bold data 'DejaVuSans-Bold', 'Bold'), and CTFontCreateWithFontDescriptor
+  on it gives a font with the data's own metrics (units per em, hhea ascent and descent, glyph count
+  6253 for DejaVu Sans). The font is not found by name afterwards: CTFontCreateWithName of the same
+  PostScript name gives another font (the default one), because nothing was registered. Data that is
+  not a usable font gives NULL: text, empty data, a zero-filled block, the first 12 bytes or 100 bytes
+  of a real font, half a font; a complete font right after such calls still works. The data is read at
+  the call (the CFData may be a no-copy one over static bytes).
+returns:
+  success: "a new CTFontDescriptor"
+  not_a_font: "NULL"
+errors:
+  invalid_data: "NULL, no error reported"
+  null_data: "NULL or invalid arguments not listed here are not supported (the process may crash)"
+side_effects: "none (no registration)"
+threading: "CoreText objects are immutable once made and may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds to a millisecond; linear in the data"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

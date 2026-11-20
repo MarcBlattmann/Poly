@@ -155,12 +155,13 @@ unsafe extern "C" fn valloc(size: usize) -> *mut c_void {
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn malloc_size(p: *const c_void) -> usize {
-    // SAFETY: as for `free`; a pointer malloc did not return gives 0.
+    // SAFETY: the heap reads nothing outside its arenas; a pointer malloc
+    // did not return, or a freed one, gives 0.
     unsafe { heap().usable_size(p as *mut u8) }.unwrap_or(0)
 }
 
 /// `malloc_good_size`: the size a request of `size` bytes really gets.
 #[unsafe(no_mangle)]
 extern "C" fn malloc_good_size(size: usize) -> usize {
-    size.saturating_add(16).max(32).checked_next_power_of_two().map_or(size, |b| b - 16)
+    poly_libsystem::heap::good_size(size)
 }

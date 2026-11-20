@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "xpc_dictionary_set_string_basic",
+      "source_sha256": "7b98ad8089f00e21141ef8eaf375d1b3e583a540b537635d1f5fbb39712e3519",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "767004826dda80b2cbc347c7205fd9df5e37a6c8ee6ff5667209d731cb9d3a25",
+          "exit_code": 0,
+          "stdout": "ok stored as a copy\nok a string object\nok the empty string is stored\nok again replaces\nok UTF-8 bytes are kept\nok a 1000-character string\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "87e6c4d1f2c3912ade82aafe7c3458fe3360f27a170a5d9e804794e6a0edf011",
+          "exit_code": 0,
+          "stdout": "ok stored as a copy\nok a string object\nok the empty string is stored\nok again replaces\nok UTF-8 bytes are kept\nok a 1000-character string\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "xpc_dictionary_set_string_object",
+      "source_sha256": "d7c0b0dbe6620f9b853c521caeb6f1af5255a6f0cd2f4b2cbebdeaafb7e64cb0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5b362ed9e8f6b325694f465bd58cd90d23ff205a5a7526dc44baf6cd20c58ac8",
+          "exit_code": 0,
+          "stdout": "ok equal to xpc_string_create of the same text\nok not equal to a different text\nok create_with_format\nok the pointer is the same while it is stored\nok and after other keys were added\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4e0ab3404f3fbe2f93562948fcebe8930519acfe347edef75712b080bdc8851d",
+          "exit_code": 0,
+          "stdout": "ok equal to xpc_string_create of the same text\nok not equal to a different text\nok create_with_format\nok the pointer is the same while it is stored\nok and after other keys were added\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

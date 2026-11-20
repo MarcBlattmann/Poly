@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "pthread_cond_timedwait_relative_np_more",
+      "source_sha256": "2df70ef96a5bd66be0ebf8e68c18d3f75f6420ce25fc2b4aa86c2e02ee07a460",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "361170a996a8e6ff35a397fce82f846ae144261eaecda5d96dc8bee94af2e1f4",
+          "exit_code": 0,
+          "stdout": "ok ten 10 ms waits all time out\nok together they took at least 100 ms\nok one second: ETIMEDOUT\nok after at least 1000 ms\nok one nanosecond: ETIMEDOUT\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "50059d9d2bc87a24b37e8f273f576c5195d8a29b9eb329bc0710ed929b4b33a9",
+          "exit_code": 0,
+          "stdout": "ok ten 10 ms waits all time out\nok together they took at least 100 ms\nok one second: ETIMEDOUT\nok after at least 1000 ms\nok one nanosecond: ETIMEDOUT\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pthread_cond_timedwait_relative_np_timeout",
+      "source_sha256": "7950c7bed07d621ab91976f96f250e1385993d5e778df9a181fd9d4e3a22cfa9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "84a9bdc2c57590fdd44d3803af852a5db3098644ad910156a0143caf8d847f4b",
+          "exit_code": 0,
+          "stdout": "ok 50 ms with nobody signalling: ETIMEDOUT (60)\nok it waited at least 50 ms\nok and less than 2 s\nok the mutex is held again (trylock: EBUSY)\nok zero time: ETIMEDOUT\nok zero time returns at once (< 500 ms)\nok tv_nsec == 1e9: EINVAL (22)\nok tv_nsec == -1: EINVAL\nok the mutex is still held after the errors\nvalue ETIMEDOUT 60\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "efc4cdb0cadfe2794cbaabbcbedbf0f415aa65b94a22aa5824ae16734f2cd381",
+          "exit_code": 0,
+          "stdout": "ok 50 ms with nobody signalling: ETIMEDOUT (60)\nok it waited at least 50 ms\nok and less than 2 s\nok the mutex is held again (trylock: EBUSY)\nok zero time: ETIMEDOUT\nok zero time returns at once (< 500 ms)\nok tv_nsec == 1e9: EINVAL (22)\nok tv_nsec == -1: EINVAL\nok the mutex is still held after the errors\nvalue ETIMEDOUT 60\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

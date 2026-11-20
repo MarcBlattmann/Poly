@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_cond_timedwait_relative_np.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_cond_timedwait_relative_np.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_cond_timedwait_relative_np
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_cond_timedwait_relative_np(&cond, &mutex, &timespec) waits at most the relative time. With nobody
+  signalling it returns ETIMEDOUT (60) after at least the time (50 ms: elapsed 50..55 ms; ten waits of 10 ms
+  took at least 100 ms; 1 s took at least 1000 ms) and with the mutex held again. A zero time returns ETIMEDOUT
+  at once; one nanosecond also ETIMEDOUT. tv_nsec of 1000000000 or -1 is EINVAL (22), the mutex still held. A
+  signal ends the wait early with 0 (a 30 s limit was left after about 20 ms). The absolute pthread_cond_timedwait
+  takes a wall-clock time (gettimeofday based): +30 ms gave ETIMEDOUT after at least 25 ms; a time in the past
+  gave ETIMEDOUT at once; tv_nsec of 1e9 gave EINVAL. A negative tv_sec made a probe wait without returning (not
+  specified; do not test).
+returns:
+  "signalled": "0"
+  "timed_out": "ETIMEDOUT (60)"
+errors:
+  "EINVAL": "22: tv_nsec out of range"
+side_effects: "none"
+threading: "the mutex is held again on return in both cases"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

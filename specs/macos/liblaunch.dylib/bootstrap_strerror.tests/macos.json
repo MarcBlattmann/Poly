@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "bootstrap_strerror_codes",
+      "source_sha256": "c74d3245fc89990303ffc76ece84347ad375baf942e5bb7eef1ea95e6c73fa5b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ee97db669c5fe82737accb287714b5855c8e19511d1538980e9ba24435d76a7f",
+          "exit_code": 0,
+          "stdout": "ok 0 is Success\nok 1100 is Permission denied (BOOTSTRAP_NOT_PRIVILEGED)\nok 1101 is Service name already exists\nok 1102 is Unknown service name\nok 1103 is Service is already active\nok 1104 is Too many lookups were requested in one request\nok 1105 is Out of memory\nok 1099 is unknown error code\nok 1106 is unknown error code\nok 2000 is unknown error code\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2f09a098ca7da886942317dd222d45ff4c2db2323040bf4b5bd603a303015654",
+          "exit_code": 0,
+          "stdout": "ok 0 is Success\nok 1100 is Permission denied (BOOTSTRAP_NOT_PRIVILEGED)\nok 1101 is Service name already exists\nok 1102 is Unknown service name\nok 1103 is Service is already active\nok 1104 is Too many lookups were requested in one request\nok 1105 is Out of memory\nok 1099 is unknown error code\nok 1106 is unknown error code\nok 2000 is unknown error code\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "bootstrap_strerror_kern",
+      "source_sha256": "92d01f4b73f1b737c42702a4276fabea3bf5ab87c2fd06ec7196ce2f53ddf4b6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4bf8af5e8d462d31a0e01989bc6360dc31b6d20fbf73bbfea9e30bd065f0aacf",
+          "exit_code": 0,
+          "stdout": "ok 1 is (os/kern) invalid address\nok 5 is (os/kern) failure\nok 15 is (os/kern) invalid name\nok 17 is (os/kern) invalid right\nok 18 is (os/kern) invalid value\nok MACH_SEND_INVALID_DEST is (ipc/send) invalid destination port\nok MACH_RCV_TIMED_OUT is (ipc/rcv) timed out\nok it is the same text mach_error_string gives\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "85b1ead2d29249269ca7dcf046a1992ba138f5e00ea0349cb282f7b6604406ea",
+          "exit_code": 0,
+          "stdout": "ok 1 is (os/kern) invalid address\nok 5 is (os/kern) failure\nok 15 is (os/kern) invalid name\nok 17 is (os/kern) invalid right\nok 18 is (os/kern) invalid value\nok MACH_SEND_INVALID_DEST is (ipc/send) invalid destination port\nok MACH_RCV_TIMED_OUT is (ipc/rcv) timed out\nok it is the same text mach_error_string gives\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

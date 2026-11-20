@@ -9,7 +9,6 @@ use crate::sim::{
     CommonRegs, ConfigRegs, DmaMemory, ERR_INVALID_PARAMETER, ERR_INVALID_RESOURCE_ID, ERR_INVALID_SCANOUT_ID,
     NotifyRegs, Sim,
 };
-use core::sync::atomic::{AtomicU64, Ordering};
 use poly_virtio::{DescState, Layout, PciTransport, Region, status};
 extern crate std;
 use std::{vec, vec::Vec};
@@ -38,10 +37,20 @@ fn transport() -> PciTransport {
     }
 }
 
-/// A clock that moves 1 ms each time it is read.
+/// A clock that moves 1 ms each time it is read, one per test thread: with one shared by every
+/// test, the reads of tests running beside it moved a test's clock too, and on a loaded machine
+/// a wait used up its 50 ms (50 reads) on other tests' reads (`wait_posted`'s `Timeout`, a CI
+/// flake). Now a test's clock moves only with its own reads.
+// The initializer is `const`; clippy 1.97 reports it anyway for `std::thread_local!` in this
+// `no_std` crate's tests.
+#[allow(clippy::missing_const_for_thread_local)]
 fn fake_now() -> u64 {
-    static NOW: AtomicU64 = AtomicU64::new(0);
-    NOW.fetch_add(1_000_000, Ordering::Relaxed)
+    std::thread_local!(static NOW: core::cell::Cell<u64> = const { core::cell::Cell::new(0) });
+    NOW.with(|now| {
+        let t = now.get();
+        now.set(t + 1_000_000);
+        t
+    })
 }
 
 const CLOCK: Clock = Clock { now_ns: fake_now, timeout_ns: 50_000_000 };

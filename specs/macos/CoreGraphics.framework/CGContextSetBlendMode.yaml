@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextSetBlendMode.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextSetBlendMode.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextSetBlendMode
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextSetBlendMode(context, mode) sets how source and destination combine; kCGBlendModeNormal 0 (the default), Multiply 1, Screen 2, Overlay 3, Darken 4, Lighten 5, ColorDodge 6, ColorBurn 7, SoftLight 8, HardLight 9, Difference 10, Exclusion 11, Hue 12, Saturation 13, Color 14, Luminosity 15, Clear 16, Copy 17, SourceIn 18, SourceOut 19, SourceAtop 20, DestinationOver 21, DestinationIn 22, DestinationOut 23, DestinationAtop 24, XOR 25, PlusDarker 26, PlusLighter 27. For each mode the tests record the stored pixel for an opaque and a half-transparent source (0.3, 0.6, 0.9) over an opaque and over a half-transparent destination (0.8, 0.4, 0.2): e.g. Normal opaque over opaque 4d 99 e6 ff; half over opaque 8c 80 8c ff; half over half 3f 5a 79 c0; Multiply opaque over opaque 3e 3d 2e ff; Screen db c2 eb ff; Darken 4d 66 33 ff; Lighten cc 99 e6 ff. At a fractional edge (rect 0.5..2 with the opaque colour over opaque (0.8,0.4,0.2)) multiply, screen, copy, clear, sourceIn and destinationOut each blend by coverage; an image drawn with multiply multiplies per pixel. The mode is saved with the graphics state; CGContextClearRect ignores it.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "changes the graphics state"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFBundleCopyBundleURL.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFBundleCopyBundleURL.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFBundleCopyBundleURL
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFBundleCopyBundleURL(bundle) returns a new file URL (type CFURLGetTypeID, scheme 'file') for the
+  bundle's directory with a directory path: for an application the .app directory (the URL's string
+  ends in '/T.app/', its file system path in '/T.app'), CFURLHasDirectoryPath true; equal (CFEqual) on
+  every call; for a plain directory made a bundle the directory itself. CFBundleCopyExecutableURL is
+  T.app/Contents/MacOS/<CFBundleExecutable>, CFBundleCopyResourcesDirectoryURL a relative URL
+  'Contents/Resources/' whose base is the bundle URL (its absolute form, CFURLCopyAbsoluteURL, ends in
+  '/T.app/Contents/Resources') with a directory path. CFBundleCreate on 'T.app' or 'T.app/' (relative
+  or with a trailing slash) gives the same bundle with the same identifier and URL; on a file or on a
+  missing path NULL; on T.app/Contents/Resources a bundle of its own, with no identifier, whose bundle
+  URL is that directory.
+returns:
+  success: "a new URL the caller releases"
+errors:
+  null_bundle: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "allocates the URL"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

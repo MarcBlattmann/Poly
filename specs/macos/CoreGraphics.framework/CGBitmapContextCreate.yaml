@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGBitmapContextCreate.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGBitmapContextCreate.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGBitmapContextCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGBitmapContextCreate(data, width, height, bitsPerComponent, bytesPerRow, space, bitmapInfo) makes a context drawing into the caller's buffer in place (no copy; padding bytes after each row are never written). Accessors report what was asked (width, height, bits per component, bits per pixel, bytes per row, data pointer, alpha info, bitmap info, colour space). Formats that make a context (bytes of the first pixel after a fill of (1.0, 0.5, 0.25) with alpha 0.5 into a zeroed buffer): 8 bit RGBA premultiplied last 80 40 20 80; premultiplied first (ARGB order) 80 80 40 20; first + 32 little (BGRA) 20 40 80 80; last + 32 little (ABGR) 80 20 40 80; NoneSkipLast 80 40 20 80; NoneSkipFirst 80 80 40 20; 16 bit premultiplied last 8000 4000 2000 8000 (big endian words; with 16 little the words are little endian); 32 bit float components 3f000000 3e800000 3e000000 3f000000 (big endian floats: 0.5, 0.25, 0.125, 0.5); 16 bit float 0038 0034 0030 0038 ; 5 bits per component NoneSkipFirst 3d04 (16 bit pixel); gray + alpha 8 -> 53 80 (gray of the colour is 0x53); gray 8 none -> 53; alpha only (NULL colour space) -> 80; gray 16 -> 5319; CMYK 8 -> 00 47 5e 00. Refused with NULL: non-premultiplied alpha (kCGImageAlphaLast, First) for an 8 bit bitmap, kCGImageAlphaNone with 4 bytes per pixel RGB, 4 bits per component, 3 bits, bytes per row smaller than width * pixel size, width or height 0, a NULL colour space unless alpha only, kCGImageAlphaOnly with RGB. Stored colours are premultiplied: fill colour (1, .8, .4) at alpha 128/255 stores 80 66 33 80; alpha 1/255 stores 01 01 00 01; alpha 0 stores 00 00 00 00; repeated 50% red fills give alpha 80, c0, e0, f0, f8. Components are rounded to nearest, halves up (0.5/255 -> 1, 0.49/255 -> 0); out-of-range values are clamped. Orientation: the origin is the lower left, row 0 of the buffer is the top of the picture; CGContextTranslateCTM(0, h) with ScaleCTM(1, -1) flips it. The default CTM is the identity. The default fill colour is opaque black.
+returns:
+  "context": "a new context; NULL for unsupported arguments"
+errors:
+  "bad_arguments": "NULL (see the summary)"
+side_effects: "draws into the caller's buffer"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+arch_differences: "none observed"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

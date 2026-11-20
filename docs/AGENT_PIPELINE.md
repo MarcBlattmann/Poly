@@ -371,6 +371,15 @@ cargo xtask pipeline win show <results.json>        # the observations in a resu
 cargo xtask pipeline win diff --reference <windows results.json> [--build-kernel] [--target <file.json>]
 ```
 
+**A 32-bit test** (ADR 0259) has the line `// poly-arch: x86` (anywhere in the
+file). `win build` builds it for `i686-pc-windows-msvc` (its own package under
+`target/pipeline/windows/build32`, linked as a legacy image with `/safeseh:no`, with
+Poly's own `poly-msvc32` helper routines); it runs under WOW64 on Windows and in
+compatibility mode on Poly (ADR 0186). The declarations use
+`import_name_type = "undecorated"` in `#[link]` (x86 `stdcall` names are decorated
+otherwise). The manifest says `"arch": "x86"`. Use it for what only a 32-bit process
+shows (the registry views, `Wow6432Node`, `IsWow64Process`); every other test stays x64.
+
 A test that imports `dwrite.dll` is booted with the DejaVu fonts in
 `C:\Windows\Fonts` (ADR 0170): `win poly` puts the files of `$POLY_FONT_DIR` or
 `target/fonts/dejavu-*` (`cargo xtask fonts fetch`) in its initramfs. A test
@@ -517,6 +526,18 @@ with them without the PC). The hand-off works as for Linux entries.
 
 **Test names are unique** (`coverage check`, run by `ci coverage` and `ci lint`): `win build` builds the tests of every entry it is given, and the corpus, as one Cargo package with one binary per file, and results are looked up by name, so two files with the same name (`uc_basic` of two entries ended a CI run once) cannot live together. The check lists every name used by two entries among the visible tests and the corpus (an error); where the held-out store is present it also warns about held-out names shared with another entry (`--strict-heldout` makes those errors), reading only the manifests. Prefix a test's name with something of its entry.
 
+**Named pipes: a client that starts right after the server's `DisconnectNamedPipe` must retry** (test-hygiene-3). After a
+disconnect the instance is not listening until the server calls `ConnectNamedPipe`, so a client thread that opens the pipe in
+that window gets `ERROR_PIPE_BUSY` (231; Poly: `STATUS_PIPE_NOT_AVAILABLE`). A client that opens once, with no retry, loses
+the race when its thread runs first (CI runners with overcommitted vCPUs; Windows never loses it in practice): the open fails
+and the server's `ConnectNamedPipe` then waits for ever, a whole-test timeout. The clients of `ImpersonateNamedPipeClient`'s
+tests (#409) loop on 231 with `Sleep(5)` (as callers of `WaitNamedPipeW` do). Proof that it works: with a `Sleep(300)` put
+between the client start and the server's `ConnectNamedPipe`, the old tests hang on Windows and on Poly, the retrying ones pass
+with the recorded output. Tests that open a pipe from the same thread as the server (the kernel32 pipe entries) are not
+affected: they are sequential, and `dnp_basic` asserts the busy answer on purpose.
+
+**A test waits for its child before it reads the child's exit code** (`coverage check` warns): `GetExitCodeProcess` answers 259 (`STILL_ACTIVE`) until the process has ended, so a read that comes before any wait in its function (`WaitForSingleObject`, `wait_exit`, `.finish()`, ...) depends on timing and fails on a loaded CI runner. The check lists such reads (`tools/coverage/src/childwait.rs`); a read on purpose (a suspended or running process answering 259) goes into `tools/coverage/childwait-baseline.txt` as `path:function` once someone has looked at it. The check does not look at the length of the wait: a bound of 5 or 10 s for a child is short under CI load (`finish()` of the copied child helper waits 10 s, then ends the child and waits 5 s); give a wait for a child 30 s or more.
+
 **Keeping green Windows entries green** ([ADR 0099](adr/0099-cpp-exception-handling-in-msvcrt.md)):
 `cargo xtask pipeline win polycheck` (in `cargo xtask ci pipeline`) builds
 the visible tests of every green Windows entry that has a `windows.json`,
@@ -658,6 +679,31 @@ between x86_64 and arm64 (the page size); each architecture is recorded on
 its own. A test starts in a fresh, empty scratch directory (use relative
 paths), with an empty environment.
 
+**Tests of libSystem's own functions** (entries `macos/api/libsystem_c.dylib/...`,
+`libsystem_pthread`, `libsystem_malloc`, `libdyld`) are the exception: such a
+test says `poly-mac: libsystem` in a comment among its first 30 lines, includes
+`poly_mlibc.h` (`tests/macos/include`; the bootstrap, `mach_port_*`, XPC and spawn-attribute tests include
+`poly_mapi.h`, same rules) instead and calls the function under test
+through libSystem. It still reports with raw `write` calls only (`check`,
+`check_str`, `value`, `finish`, the same output format), so a broken function
+cannot hide behind its own output. `mac build` lets exactly these tests import
+libSystem symbols and still refuses every other library; all other tests import
+nothing.
+
+libdispatch's tests (`macos/api/libdispatch.dylib/...`) also include `poly_mgcd.h`
+(timing, semaphore wait and thread helpers); they assert lower bounds on time only,
+never exact times, and synchronise with semaphores rather than sleeps. `poly_mlibc.h`
+starts every such program with a 30 second `alarm`, so a test that hangs is killed
+and fails instead of blocking the run. A test about the main queue and run loops
+carries both `poly-mac: libsystem` and `poly-mac: corefoundation`.
+
+CoreGraphics' tests (`macos/api/CoreGraphics.framework/...`) say `poly-mac: coregraphics`
+and include `poly_mcg.h`: they are linked with `-framework CoreGraphics -framework
+CoreFoundation` and may import CoreGraphics's and CoreFoundation's own symbols. They
+draw into a `CGBitmapContext` over a static buffer and print the bytes of chosen pixels
+(alpha grids, whole-pixel dumps, hashes of the buffer), so what is recorded is pixel
+exact; doubles are printed as the hex of their bits.
+
 ```sh
 cargo xtask pipeline mac build [--tests-dir DIR]... [--tests a,b]   # target/pipeline/macos/bin/<arch>/, manifest.json
 cargo xtask pipeline mac run [--tests-dir DIR]... [--tests a,b] [--runs 3] [--record]
@@ -686,6 +732,45 @@ cargo xtask pipeline tests split macos/syscall/bsd/write <dir> --spec-agent spec
 cargo xtask pipeline mac run --tests-dir specs/macos/bsd/write.tests --record
 cargo xtask pipeline mac run --tests-dir ~/poly-heldout/macos/syscall/bsd/write --record
 ```
+
+**Tests about CoreFoundation itself** (`specs/macos/CoreFoundation.framework/<symbol>.tests/`): a
+test whose header comment has the line `poly-mac: corefoundation` is linked with
+`-framework CoreFoundation`, may load that one library besides libSystem and may import
+CoreFoundation's own symbols (`CF...`, `kCF...`, `__CFConstantStringClassReference`); `mac
+build` still refuses every other import. It includes `poly_mcf.h` (`tests/macos/include`),
+which has the same `check`/`value`/`finish` output through raw system calls as `poly_mtest.h`
+(the two headers cannot be included together: `poly_mtest.h` redefines system constants) and a
+few helpers: a counting allocator, `cf_enter_app` (builds `T.app` in the scratch directory and
+starts a copy of the test from inside it, so that the main bundle is a real application) and
+`cf_prefs_clean`. Preferences tests use domains named `test.poly.cfspec.<name>` only and remove
+their keys.
+
+**Tests about Foundation** (`specs/macos/Foundation.framework/<symbol>.tests/`; entry ids of methods are
+`objc:Class.method:`, `objc:Class+classMethod:` and `objc:Class.@property` as in the coverage map, written
+with `:` as `%3A` in file names): a test whose header comment has the line `poly-mac: foundation` stays a
+`.c` file but is compiled as Objective-C with ARC (`-x objective-c -fobjc-arc`, `-framework Foundation`),
+may load Foundation, CoreFoundation and libobjc and import their symbols (`NS...`, `CF...`,
+`_OBJC_...`, `_objc_...`, plus the blocks and unwinder symbols the compiler emits); everything else is
+refused as before. A second line `poly-mac: no-arc` builds it without ARC (NSAutoreleasePool is not
+available under ARC). It includes `poly_mfn.h`, which pulls in `poly_mcf.h` and wraps `test_main` in an
+autorelease pool; `ns_is` compares strings through CoreFoundation, so a test of an NSString method does not
+rest on that method. Tests that need a real bundle, arguments or an environment start a copy of themselves
+inside `T.app` with `cf_enter_app` / `cf_enter_app_ex(plist, extra_argument, envp)`. The defaults tests use
+suites named `test.poly.nsspec.<name>` only and remove them with `removePersistentDomainForName:`.
+
+**Tests about CoreText** (`specs/macos/CoreText.framework/<symbol>.tests/`): a test whose header comment
+has the line `poly-mac: coretext` is linked with `-framework CoreText -framework CoreGraphics -framework
+CoreFoundation` and may import their own symbols (`CT...`, `kCT...`, `CG...`, `kCG...`, `CF...`). It includes
+`poly_mct.h` (on top of `poly_mcf.h`), which embeds two small TrueType fonts, "PolyTest Regular" and
+"PolyTest Bold" (made by `tests/macos/fonts/mkfont.py` from the public table formats: box glyphs on whole
+units so that drawn pixels are exactly black or white; their design is in the header), so results do not
+depend on Apple's fonts. A test that needs real fonts adds `poly-mac: fonts DejaVuSans.ttf ...`: `mac run`
+copies those files from `$POLY_FONT_DIR` or the `dejavu-*` directory of `target/fonts` (`cargo xtask fonts
+fetch`; worktrees use the main checkout's) into the test's scratch directory, where the test opens them
+by their relative name. Tests that touch Apple's own fonts (the default font, the system UI font, fallback
+for a character) have `sys_` in their names and say SYSTEM-DEPENDENT: their recorded names are Apple's
+choices, which Poly need not copy. Drawing tests render into an 8-bit gray `CGBitmapContext` and print the
+pixels row by row.
 
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.

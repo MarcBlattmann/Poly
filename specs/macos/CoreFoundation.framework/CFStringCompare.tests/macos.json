@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfstringcompare_nonliteral_and_insensitive",
+      "source_sha256": "df64ed9e831ad450841a1e59b393db9b73ec1db16746841a99d5a53cd811a189",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fddd897a1df1b9277f9a4541f414610647dda54c69e7dfc16401a3d7476ae925",
+          "exit_code": 0,
+          "stdout": "ok cmp(\"\\xc3\\xa9\", \"e\\xcc\\x81\", 0) == 1\nok cmp(\"\\xc3\\xa9\", \"e\\xcc\\x81\", kCFCompareNonliteral) == 0\nok cmp(\"\\xc3\\xa9\", \"e\", kCFCompareDiacriticInsensitive) == 0\nok cmp(\"resume\", \"r\\xc3\\xa9sum\\xc3\\xa9\", kCFCompareDiacriticInsensitive) == 0\nok cmp(\"\\xef\\xbc\\xa1\", \"A\", 0) == 1\nok cmp(\"\\xef\\xbc\\xa1\", \"A\", kCFCompareWidthInsensitive) == 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "89ee12756fd3fdb9e8e57d1bf9913bacfa9eb6a385320b47d85fc79eb0750e06",
+          "exit_code": 0,
+          "stdout": "ok cmp(\"\\xc3\\xa9\", \"e\\xcc\\x81\", 0) == 1\nok cmp(\"\\xc3\\xa9\", \"e\\xcc\\x81\", kCFCompareNonliteral) == 0\nok cmp(\"\\xc3\\xa9\", \"e\", kCFCompareDiacriticInsensitive) == 0\nok cmp(\"resume\", \"r\\xc3\\xa9sum\\xc3\\xa9\", kCFCompareDiacriticInsensitive) == 0\nok cmp(\"\\xef\\xbc\\xa1\", \"A\", 0) == 1\nok cmp(\"\\xef\\xbc\\xa1\", \"A\", kCFCompareWidthInsensitive) == 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringcompare_numerically",
+      "source_sha256": "52b3d2c944aa995b195e3eccac4b141a42354c813a9a94a8558b05e5353a6dde",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4ded7b012137d273c09ef0c1481f4c53d2f7df43af284ac6aa4efcf7a61292ec",
+          "exit_code": 0,
+          "stdout": "ok num(\"a2\", \"a10\") == -1\nok num(\"a10\", \"a2\") == 1\nok num(\"a02\", \"a2\") == 0\nok num(\"a1\", \"a01\") == 0\nok num(\"file9.txt\", \"file10.txt\") == -1\nok num(\"1.5\", \"1.10\") == -1\nok num(\"abc\", \"abd\") == -1\nok num(\"100\", \"99\") == 1\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3b8f0d5796833d7da2abe969e659f6653d21ec1073f749de025c201e617f4da8",
+          "exit_code": 0,
+          "stdout": "ok num(\"a2\", \"a10\") == -1\nok num(\"a10\", \"a2\") == 1\nok num(\"a02\", \"a2\") == 0\nok num(\"a1\", \"a01\") == 0\nok num(\"file9.txt\", \"file10.txt\") == -1\nok num(\"1.5\", \"1.10\") == -1\nok num(\"abc\", \"abd\") == -1\nok num(\"100\", \"99\") == 1\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringcompare_ordering",
+      "source_sha256": "905ff2baec39fa0568897d1d1c80de5eae740528fb13cc133751058ccabd7a14",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1731c9835e1f0d4bfe515bba720657a30d9c66b3404c914fe8e12c1ff6efdaaf",
+          "exit_code": 0,
+          "stdout": "ok kCFCompareLessThan == -1 && kCFCompareEqualTo == 0 && kCFCompareGreaterThan == 1\nok cmp(\"a\", \"b\", 0) == -1\nok cmp(\"b\", \"a\", 0) == 1\nok cmp(\"a\", \"a\", 0) == 0\nok cmp(\"a\", \"B\", 0) == 1\nok cmp(\"Z\", \"a\", 0) == -1\nok cmp(\"ab\", \"abc\", 0) == -1\nok cmp(\"abc\", \"ab\", 0) == 1\nok cmp(\"\", \"a\", 0) == -1\nok cmp(\"\", \"\", 0) == 0\nok cmp(\"a2\", \"a10\", 0) == 1\nok cmp(\"\\xf0\\x9f\\x98\\x80\", \"\\xef\\xbd\\xa1\", 0) == -1\nok cmp(\"\\xc3\\xa9\", \"e\", 0) == 1\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6d461e02523ce6cab9ea7c980096b5cba1199683e3aabdf5fb570a2ffa03fad0",
+          "exit_code": 0,
+          "stdout": "ok kCFCompareLessThan == -1 && kCFCompareEqualTo == 0 && kCFCompareGreaterThan == 1\nok cmp(\"a\", \"b\", 0) == -1\nok cmp(\"b\", \"a\", 0) == 1\nok cmp(\"a\", \"a\", 0) == 0\nok cmp(\"a\", \"B\", 0) == 1\nok cmp(\"Z\", \"a\", 0) == -1\nok cmp(\"ab\", \"abc\", 0) == -1\nok cmp(\"abc\", \"ab\", 0) == 1\nok cmp(\"\", \"a\", 0) == -1\nok cmp(\"\", \"\", 0) == 0\nok cmp(\"a2\", \"a10\", 0) == 1\nok cmp(\"\\xf0\\x9f\\x98\\x80\", \"\\xef\\xbd\\xa1\", 0) == -1\nok cmp(\"\\xc3\\xa9\", \"e\", 0) == 1\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

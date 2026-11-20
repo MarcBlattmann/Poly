@@ -288,6 +288,18 @@ fn read_at(open: &OpenFile, offset: u64, buf: &mut [u8]) -> Result<usize> {
     .map_err(|e| if e == Errno::EAGAIN { STATUS_PENDING } else { status_of(e) })
 }
 
+/// `buf` at the end of the file, atomically with respect to other appends: two processes (or
+/// threads) appending through handles with only `FILE_APPEND_DATA` each find their bytes whole at
+/// the end, as on Windows. Reading the size and then writing there let two such writes land on the
+/// same offset and overwrite each other (a COM server's log, `spb_scope`).
+fn append_at_end(open: &OpenFile, buf: &[u8]) -> Result<usize> {
+    match open.write_with(Some(0), Some(true), buf) {
+        Err(Errno::ESPIPE) => open.write(buf),
+        r => r,
+    }
+    .map_err(status_of)
+}
+
 fn write_at(open: &OpenFile, offset: u64, buf: &[u8]) -> Result<usize> {
     match open.write_at(offset, buf) {
         Err(Errno::ESPIPE) => open.write(buf),
@@ -824,8 +836,11 @@ fn write_file_whole<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
             while total < len {
                 let want = chunk.len().min(len - total);
                 abi::read(k, buf + total as u64, &mut chunk[..want])?;
-                let at = if append { open.stat().map_err(status_of)?.size } else { offset + total as u64 };
-                let put = write_at(&open, at, &chunk[..want])?;
+                let put = if append {
+                    append_at_end(&open, &chunk[..want])?
+                } else {
+                    write_at(&open, offset + total as u64, &chunk[..want])?
+                };
                 total += put;
                 if put < want {
                     break;

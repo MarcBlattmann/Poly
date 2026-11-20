@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/GetFileAttributesExW.yaml
+id: windows/api/kernel32.dll/GetFileAttributesExW
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave the same output except where a sheet says what a 32-bit caller sees."
+  observed_by: spec-win-updater-services
+  date: 2026-11-20
+sources: >
+  Observations of our own 64-bit test programs on the machine above (each test ran at least twice with identical output). Microsoft Learn pages of the functions (kernel32 / fileapi.h, winbase.h, processthreadsapi.h, wow64apiset.h, memoryapi.h, synchapi.h, combaseapi.h, objbase.h, userenv.h) for names, parameters and the error values in winerror.h. What the documentation does not say (error codes, edge cases, the effect of access rights) is taken from the observations only. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Gets the attributes, the three times and the size of a file or directory by name, without opening a handle that others can see. Level 0 (GetFileExInfoStandard) is the only one.
+interface:
+  signature: "BOOL GetFileAttributesExW(LPCWSTR lpFileName, GET_FILEEX_INFO_LEVELS fInfoLevelId, LPVOID lpFileInformation)"
+installer: "Google's updater 157 and 159 (32-bit) import this function; their run on Poly reaches it while they install and start their two services and register their update service and scheduled task. What they pass is not known beyond the import. Chrome's setup.exe imports it as well."
+rules:
+  success: "TRUE for a file (attributes 0x20, the size from the two size fields), an empty file (size 0), a hidden file (0x2), a read-only file (0x1) and a directory (0x10, size 0); the three times are set; a file that another handle holds open without any sharing is still answered"
+  names: "a name in another letter case and a name with a trailing dot give the answer of the file; a directory name with a trailing backslash succeeds; a file name with a trailing backslash fails with ERROR_DIRECTORY 267"
+  missing: "a name that does not exist: ERROR_FILE_NOT_FOUND 2; a name in a directory that does not exist: ERROR_PATH_NOT_FOUND 3; an empty name: ERROR_PATH_NOT_FOUND 3; a wildcard name: ERROR_INVALID_NAME 123; on every failure the output record is left unchanged"
+  forms: "a \\\\?\\ prefix, a \\\\.\\ prefix, a '\\.' component, a 'nosuch\\..' component (resolved without looking at the directory), doubled backslashes and a slash all give the answer for the file; the suffix ::$DATA (default stream) works; a stream that does not exist fails with ERROR_FILE_NOT_FOUND 2; after the \\\\?\\ prefix a '..' component is not resolved: ERROR_PATH_NOT_FOUND 3"
+  times: "the creation and write times equal what GetFileTime reports for the file; after the file is appended to the size is larger, the write time later and the creation time unchanged; SetFileAttributes changes the attributes and not the size; after the file is deleted ERROR_FILE_NOT_FOUND 2"
+  level: "an info level of 1 or 0x80000000: ERROR_INVALID_PARAMETER 87 and the record is left alone"
+  null_output: "a NULL output pointer raises an access violation in the process; not run"
+errors:
+  file_not_found: "ERROR_FILE_NOT_FOUND 2"
+  path_not_found: "ERROR_PATH_NOT_FOUND 3"
+  invalid_name: "ERROR_INVALID_NAME 123"
+  directory: "ERROR_DIRECTORY 267"
+  invalid_parameter: "ERROR_INVALID_PARAMETER 87"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, run on the oracle with the elevated token in the interactive session. Scenarios that could end the process (a NULL pointer where the function reads or writes through it) run in a child process of the same image (`--child ...`) and the parent prints the exit code. Observations are results, error codes, booleans and counts; never addresses, process or thread ids, times or the name of the machine. Files the tests make live next to the test program and are deleted by the test.
+not_covered: >
+  reparse points (the link itself or its target), network paths, device names (NUL, COM1), the values of the times, very long and \\?\ paths.

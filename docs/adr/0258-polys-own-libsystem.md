@@ -56,7 +56,10 @@ three-function stand-in for the dyld tests. A program linked the ordinary way ag
    (0x1000000 | number) return their `kern_return_t`. They cover every call that has a sheet, under
    the names the SDK exports them by (`stat$INODE64`, `__psynch_mutexwait`, `__ulock_wait`,
    `mach_msg_trap` …; `$NOCANCEL` forms are the plain calls); arguments past the sixth stay on
-   the stack where the caller put them. Functions the SDK declares over a trap with the same
+   the stack where the caller put them. `posix_spawn` maps the C call's six arguments (pid, path,
+   file actions, attributes, argv, envp) to BSD call 244's five (pid, path, descriptor, argv,
+   envp), with descriptor 0 (v0 has no file actions or attributes; a non-empty one is `EINVAL`),
+   and returns the errno itself as POSIX has it. Functions the SDK declares over a trap with the same
    arguments (`mach_port_allocate`, `mach_vm_allocate`, `semaphore_signal` …) are the trap;
    `semaphore_timedwait*` split their `mach_timespec_t`. `mach_task_self_` is read at start.
 6. **`errno` is a Mach-O thread-local variable** of libsystem_kernel, reached through
@@ -88,15 +91,32 @@ three-function stand-in for the dyld tests. A program linked the ordinary way ag
     mutexes of the three kinds the SDK's initializers name, `pthread_once`, 512 keys).
     `os_unfair_lock` and `OSSpinLock` spin; `setjmp`/`sigsetjmp` do not save the signal mask.
 
-## Choices the libc sheets (spec-macos-5) are to confirm
+## The libc sheets
 
-No public document settles these; the code says so where they are made: a null `%p` prints `0x0`, a
-null `%s` `(null)`; a NaN keeps its sign; `%a` normalizes subnormals and carries a rounding overflow
-into the exponent; a wide character outside ASCII fails with `EILSEQ`; an unknown conversion and
-positional arguments (`%1$d`) fail with `EINVAL`; `long double` goes through `double`; `puts` and
-`fputs` return 0; `abort` sends SIGABRT and, if that returns, exits with 134; the stack protector's
-canary has a zero low byte; the messages of `__stack_chk_fail`, the `__*_chk` checks and a bad
-`free` are Poly's own. The coverage entries stay `claimed` until those sheets land and pass.
+spec-macos-5's sheets (`specs/macos/libsystem_c.dylib`, `libsystem_malloc.dylib`,
+`libsystem_pthread.dylib`, `libdyld.dylib`) landed while this change was open; where they cover
+what this change implements, it follows them:
+
+- `snprintf`: positional arguments work (an unnumbered conversion after a numbered one takes the
+  next number); an unknown conversion prints its letter (`%5%` pads); a format that ends inside a
+  conversion prints nothing more; `%lc`/`%ls` keep a character up to 0xFF as its byte and fail
+  with `EILSEQ` above; a null `%p` is `0x0`, a null `%s` `(null)` cut by the precision; `%La`
+  prints the 80-bit value as it is (`0x8p-3` for 1.0).
+- `malloc_size`/`malloc_good_size`: x86-64's classes (multiples of 16 up to 1024, of 512 up to
+  32 KiB, then of 32 KiB); `malloc_size(malloc(n))` is `malloc_good_size(n)`; 0 for a freed block
+  or an address malloc does not own, which the heap tests against its arenas before reading.
+- `pthread_key_create`/`pthread_setspecific`: keys are numbered from 258, 509 of them; a deleted
+  key reads NULL and is `EINVAL` to set. `pthread_mutex_trylock`: a mutex the caller holds is
+  `EBUSY` to trylock (normal and error-checking), a destroyed one `EINVAL`.
+- `atexit`/`__cxa_atexit`: one list of 4096 (the sheet saw 1000 succeed). `getenv`: an empty name
+  or one with `=` is NULL.
+
+The entries those sheets cover stay claimed by spec-macos-5 until their hand-off; the rest of this
+change's entries are claimed by `impl-macos-libsystem`. Poly's own choices the sheets do not
+show: a NaN keeps its sign; `%a` normalizes a subnormal `double`; `long double` conversions other
+than `%La` go through `double`; `puts` and `fputs` return 0; `abort` sends SIGABRT and, if that
+returns, exits with 134; the stack protector's canary has a zero low byte; the messages of
+`__stack_chk_fail`, the `__*_chk` checks and a bad `free` are Poly's own.
 
 ## Tests
 
@@ -109,16 +129,17 @@ canary has a zero low byte; the messages of `__stack_chk_fail`, the `__*_chk` ch
   by `generate.sh` with clang and Apple's ld against the SDK, as `/bin/mhello-libsystem` with
   Poly's seven dylibs in `/usr/lib`; it prints through `printf`, `puts`, `putchar` and `stderr`,
   uses `malloc`/`calloc`/`realloc`, `snprintf` (fortified), `asprintf`, `errno`, the number and
-  string functions, `getenv`, the dyld and `crt_externs` accessors, the stack protector and
-  `atexit`, and must exit 0.
+  string functions, `getenv`, the dyld and `crt_externs` accessors, the stack protector,
+  `posix_spawn` (it runs itself as a child, which checks the argv it was given, and `wait4`s for
+  it) and `atexit`, and must exit 0.
 
 ## Waiting for other work
 
-- The kernel side of the BSD layer (PR #390, ADR 0246): `mmap` (malloc uses its own area until
-  then), `getentropy` (the canary is mixed from the time stamp counter until then), `getpid` and
-  `kill` (`abort` exits with 134 until then), `read` (stdin), `sigaction` and the rest of the
-  wrappers. The wrappers are there; they return `ENOSYS` through `errno` until the kernel answers.
-- Mach traps in the kernel (PR #420, ADR 0238): `mach_task_self_` is whatever `task_self_trap`
-  answers (an error code on main today).
+- The BSD layer in the kernel (ADR 0246) has landed: `mmap`, `getentropy`, `getpid`, `kill`,
+  `read` and the other wrapped calls reach the kernel. Until then malloc used its own 8 MiB area,
+  the canary was mixed from the time stamp counter and `abort` ended with status 134; those
+  fallbacks stay for a kernel that answers `ENOSYS`.
 - Threads (`bsdthread_create`): locks, per-thread `errno` blocks and keys.
-- The libc, pthread and malloc sheets (spec-macos-5) for the choices above.
+- `sigaction` with its trampoline and `sigreturn`, `fork`, `posix_spawn`'s attribute objects.
+- Running the libc sheets' visible tests on Poly (they need the macOS test harness on Poly) and the
+  hand-off of their entries.

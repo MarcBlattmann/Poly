@@ -65,11 +65,13 @@ fn name(p: &Path) -> String {
     p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
 }
 
-/// Every green entry with visible tests. Only the coverage files of
+/// Every green Linux entry with visible tests (what the diff runner and
+/// `polycheck` run on Linux and Poly). Only the coverage files of
 /// components that have a `specs/` directory are read (the Windows and
-/// macOS API files are large).
+/// macOS API files are large). macOS entries have `.c` tests too, but they
+/// are Mach-O programs (`poly_mtest.h`, `pipeline mac`), not Linux ones.
 pub fn entries(repo: &Path) -> Result<Vec<GreenEntry>> {
-    entries_with(repo, c_stems)
+    Ok(entries_with(repo, c_stems)?.into_iter().filter(|g| g.id.starts_with("linux/")).collect())
 }
 
 /// A green Windows entry (ADR 0075, 0098) with visible tests and their
@@ -262,6 +264,13 @@ mod tests {
             }
         }
         assert!(entries(&repo).unwrap().iter().all(|g| !g.id.starts_with("windows/")));
+    }
+
+    /// macOS entries have `.c` tests, but they are not Linux programs.
+    #[test]
+    fn green_macos_entries_are_not_run_as_linux_tests() {
+        let repo = crate::repo_root();
+        assert!(entries(&repo).unwrap().iter().all(|g| g.id.starts_with("linux/")));
     }
 
     /// The real repository: every green entry found has its tests directory

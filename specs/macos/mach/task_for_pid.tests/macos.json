@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_task_for_pid_bad_target",
+      "source_sha256": "76da22da119f09056cc2937a494197bed71b63273db678896cc3c1051804c922",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "01baaec3a5feeb8fa8a20cce7d1a8adc7a1e29d2a644b516ccbf6c53b0b4809a",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL as the target: KERN_FAILURE\nok a name that is nothing as the target: KERN_FAILURE\nok the out name is set to MACH_PORT_NULL\nvalue own pid with a NULL out pointer 0\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7db6e8e37ace10cec58870d12be41d8ef2d5c080ee9765bdc8a43c70d9278790",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL as the target: KERN_FAILURE\nok a name that is nothing as the target: KERN_FAILURE\nok the out name is set to MACH_PORT_NULL\nvalue own pid with a NULL out pointer 0\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_task_for_pid_refused",
+      "source_sha256": "7cef514ceb772441ec160a99f0dfb1be5d4367ce75c736214e25055b24311f6b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f0c54df988ebd8698d790a8f1f3c68a00b276a0d1cc1d5b4972306bdf7e0a12f",
+          "exit_code": 0,
+          "stdout": "ok the parent: KERN_FAILURE\nok pid 1: KERN_FAILURE\nok pid 0: KERN_FAILURE\nok a pid that does not exist: KERN_FAILURE\nok pid -1: KERN_FAILURE\nok the out name is set to MACH_PORT_NULL\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "de8d26bc9c10748cc688c7efb942238a4f44011708ea01bfc010ff32bd5ea5e9",
+          "exit_code": 0,
+          "stdout": "ok the parent: KERN_FAILURE\nok pid 1: KERN_FAILURE\nok pid 0: KERN_FAILURE\nok a pid that does not exist: KERN_FAILURE\nok pid -1: KERN_FAILURE\nok the out name is set to MACH_PORT_NULL\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_task_for_pid_self",
+      "source_sha256": "fa0b11b11059cc9cc90bf79ddf99ee0e69980d438161f0c94f7f5d82b276e763",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "89af15cd973382af373c1037c12adf197c116a964652b27076c5bad9bffa6d61",
+          "exit_code": 0,
+          "stdout": "ok task_for_pid of the caller's own pid succeeds\nok the port is the name task_self_trap gives\nok a send right\nok asked again, the same name\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4146f562c8a7ed7dae1546d0508dbc641c1821b6acf83278f05de07b9147349c",
+          "exit_code": 0,
+          "stdout": "ok task_for_pid of the caller's own pid succeeds\nok the port is the name task_self_trap gives\nok a send right\nok asked again, the same name\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgfr_aligned",
+      "source_sha256": "b64b11eef1c09f379966abf768756e725d2327f9216b6263c6fccf6b3dd04ca3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3d6e9a12b638ec6b486e27831442e55bc936cba7932d398d178bbe882f2c7fe4",
+          "exit_code": 0,
+          "stdout": "value rect (2,1,4,3) in an 8x6 bitmap; rows from the top 00 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 01 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 02 00000000 00000000 ff8040ff ff8040ff ff8040ff ff8040ff 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 03 00000000 00000000 ff8040ff ff8040ff ff8040ff ff8040ff 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 04 00000000 00000000 ff8040ff ff8040ff ff8040ff ff8040ff 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 05 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue hash 9851234941567b51\nvalue pixel (0, last row) ff8040ff\nvalue pixel (3, last row): just outside the rect (x from -3 to 3) 00000000\nvalue a rect far past the upper right corner ad5c97ac4fc29cf7\nvalue a rect of width 0 draws nothing (hash of an empty buffer) fea2d2bd51234c83\nvalue a rect with negative width and height: the same as the standardised rect (2,1,3,3) 2853868ec1962491\nvalue CGRectNull draws nothing fea2d2bd51234c83\nvalue CGRectInfinite fills everything 70ed83c15925c923\nok every pixel of the bitmap is set by the infinite rect\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "df0708b4f1425e549564bb3f4aeacc35dad8b52f7da88cffdce6f7ac7aae1a86",
+          "exit_code": 0,
+          "stdout": "value rect (2,1,4,3) in an 8x6 bitmap; rows from the top 00 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 01 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 02 00000000 00000000 ff8040ff ff8040ff ff8040ff ff8040ff 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 03 00000000 00000000 ff8040ff ff8040ff ff8040ff ff8040ff 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 04 00000000 00000000 ff8040ff ff8040ff ff8040ff ff8040ff 00000000 00000000\nvalue rect (2,1,4,3) in an 8x6 bitmap; rows from the top 05 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000\nvalue hash 9851234941567b51\nvalue pixel (0, last row) ff8040ff\nvalue pixel (3, last row): just outside the rect (x from -3 to 3) 00000000\nvalue a rect far past the upper right corner ad5c97ac4fc29cf7\nvalue a rect of width 0 draws nothing (hash of an empty buffer) fea2d2bd51234c83\nvalue a rect with negative width and height: the same as the standardised rect (2,1,3,3) 2853868ec1962491\nvalue CGRectNull draws nothing fea2d2bd51234c83\nvalue CGRectInfinite fills everything 70ed83c15925c923\nok every pixel of the bitmap is set by the infinite rect\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgfr_coverage",
+      "source_sha256": "cb32a87b3a711febed0e9047d280aaa8e9c0f4bcdc8594f14431462313542cb9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ad273e4e694eeeb73923f1b5efa239daee94d74e4056554f6b986d7cd32df22e",
+          "exit_code": 0,
+          "stdout": "value alpha of the first column for a rect of width k/16, k = 0..16 00 0f 1f 2f 3f 4f 5f 6f 7f 8f 9f af bf cf df ef ff\nvalue alpha of the first column for a rect from k/16 to 1 ff ef df cf bf af 9f 8f 7f 6f 5f 4f 3f 2f 1f 0f 00\nvalue a 0.5 x 0.5 square in a pixel corner: a quarter of the pixel 0000003f\nvalue a 1.5 x 1.5 rect at (0.25, 0.25): alpha rows 0..3 (lower row 00 00 00 00 00\nvalue a 1.5 x 1.5 rect at (0.25, 0.25): alpha rows 0..3 (lower row 01 00 00 00 00\nvalue a 1.5 x 1.5 rect at (0.25, 0.25): alpha rows 0..3 (lower row 02 8f 8f 00 00\nvalue a 1.5 x 1.5 rect at (0.25, 0.25): alpha rows 0..3 (lower row 03 8f 8f 00 00\nvalue 50% red at 50% coverage 40000040\nvalue 50% red at 25% coverage 20000020\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bb8fbb1d21c08c9dcca3013a258c0d90aa9244010cbaec892f09f32de5fa6f13",
+          "exit_code": 0,
+          "stdout": "value alpha of the first column for a rect of width k/16, k = 0..16 00 0f 1f 2f 3f 4f 5f 6f 7f 8f 9f af bf cf df ef ff\nvalue alpha of the first column for a rect from k/16 to 1 ff ef df cf bf af 9f 8f 7f 6f 5f 4f 3f 2f 1f 0f 00\nvalue a 0.5 x 0.5 square in a pixel corner: a quarter of the pixel 0000003f\nvalue a 1.5 x 1.5 rect at (0.25, 0.25): alpha rows 0..3 (lower row 00 00 00 00 00\nvalue a 1.5 x 1.5 rect at (0.25, 0.25): alpha rows 0..3 (lower row 01 00 00 00 00\nvalue a 1.5 x 1.5 rect at (0.25, 0.25): alpha rows 0..3 (lower row 02 8f 8f 00 00\nvalue a 1.5 x 1.5 rect at (0.25, 0.25): alpha rows 0..3 (lower row 03 8f 8f 00 00\nvalue 50% red at 50% coverage 3f00003f\nvalue 50% red at 25% coverage 1f00001f\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

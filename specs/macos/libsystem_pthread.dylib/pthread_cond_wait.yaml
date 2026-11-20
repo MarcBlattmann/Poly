@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_cond_wait.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_cond_wait.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_cond_wait
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_cond_wait(&cond, &mutex) releases the locked mutex, waits for a signal and relocks the mutex
+  before returning 0 (the mutex is held by the caller on return: trylock gives EBUSY). pthread_cond_signal and
+  broadcast return 0 also with no waiter (the signal is lost). With four threads waiting, one signal let exactly
+  one proceed (one token available) and a broadcast let the others proceed. Used as a bounded queue (4 slots) between
+  a producer and a consumer thread, 5000 items passed in order and none was lost. One condition variable can be
+  used with different mutexes at different times. pthread_cond_init and destroy return 0. Same on both
+  architectures.
+returns:
+  "success": "0"
+errors:
+  "none": "not observed"
+side_effects: "none"
+threading: "the mutex is held again when the call returns"
+ordering: ["wait releases the mutex atomically with starting to wait"]
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

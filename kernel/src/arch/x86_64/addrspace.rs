@@ -71,6 +71,18 @@
 //! but it is synced the same way, which costs little and keeps the rule
 //! simple.
 //!
+//! **Unmapping without waiting** (ADR 0254, [`AddressSpace::unmap_async`]):
+//! the shootdown is posted and not waited for. What the old translations
+//! led to (the frames, the page tables that became empty, and whatever the
+//! caller hands to [`defer_drop`]) is kept until every target has carried
+//! the shootdown out, then freed by the next unmap or by the `tlb-reaper`
+//! thread; and a mapping put into the range before then
+//! ([`map_zeroed`](AddressSpace::map_zeroed), [`map_frames`](AddressSpace::map_frames),
+//! [`map_owned`](AddressSpace::map_owned)) first waits for it, so no CPU
+//! sees the new page through an old translation. Narrowing a translation
+//! (`protect`, copy on write, taking a page out) still waits: a stale
+//! writable entry must not reach a frame that is shared from then on.
+//!
 //! # Locking
 //!
 //! Each space's tables are behind a spinlock, taken before `FRAMES`.
@@ -353,6 +365,9 @@ pub struct AddressSpace {
     pcid: [AtomicU16; MAX_CPUS],
     /// The CPUs that have it loaded now (bit = CPU number).
     active: AtomicU64,
+    /// Ranges unmapped by [`AddressSpace::unmap_async`] whose shootdown may
+    /// still be out (ADR 0254): a mapping into one waits for it.
+    pending: SpinLock<alloc::vec::Vec<Pending>>,
     root: u64,
     /// Pages mapped with a frame the space owns.
     resident: AtomicU64,
@@ -374,6 +389,7 @@ impl AddressSpace {
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
             pcid: [const { AtomicU16::new(0) }; MAX_CPUS],
             active: AtomicU64::new(0),
+            pending: SpinLock::new(alloc::vec::Vec::new()),
             root,
             resident: AtomicU64::new(0),
         })
@@ -398,6 +414,7 @@ impl AddressSpace {
         let floor = crate::frames::user_floor();
         let mut tables = self.tables.lock();
         free_slots(&tables, virt, end)?;
+        self.wait_pending(virt, end);
         let mut frames = FRAMES.lock();
         let alloc = frames.as_mut().ok_or(MapError::OutOfMemory)?;
         for page in (virt..end).step_by(PAGE_SIZE as usize) {
@@ -447,6 +464,7 @@ impl AddressSpace {
         let flags = prot.flags().ok_or(MapError::NoAccess)?;
         let mut tables = self.tables.lock();
         free_slots(&tables, virt, end)?;
+        self.wait_pending(virt, end);
         let mut frames = FRAMES.lock();
         let alloc = frames.as_mut().ok_or(MapError::OutOfMemory)?;
         for (page, frame) in (virt..end).step_by(PAGE_SIZE as usize).zip((phys..).step_by(PAGE_SIZE as usize)) {
@@ -471,6 +489,7 @@ impl AddressSpace {
         let flags = prot.flags().ok_or(MapError::NoAccess)? | OWNED;
         let mut tables = self.tables.lock();
         free_slots(&tables, virt, virt + PAGE_SIZE)?;
+        self.wait_pending(virt, virt + PAGE_SIZE);
         let mut frames = FRAMES.lock();
         let alloc = frames.as_mut().ok_or(MapError::OutOfMemory)?;
         if tables.map(virt, frame.phys(), PageSize::Size4K, flags, &mut BuddyFrames(alloc)).is_err() {
@@ -588,6 +607,61 @@ impl AddressSpace {
         }
         reclaim.finish(self);
         Ok(())
+    }
+
+    /// [`unmap`](Self::unmap) without waiting for the other CPUs (ADR 0254):
+    /// the pages are gone here and the shootdown is posted. The frames and
+    /// page tables are freed once every target has carried it out, and a
+    /// mapping put into the range waits for that. The ticket, if a shootdown
+    /// went out, lets the caller keep more alive until then ([`defer_drop`]).
+    pub fn unmap_async(&self, virt: u64, len: u64) -> Result<Option<tlb::Ticket>, MapError> {
+        let end = check_range(virt, len)?;
+        let mut tables = self.tables.lock();
+        let mut pages = alloc::vec::Vec::new();
+        tables.mapped(virt, end, |page, _| pages.push(page));
+        let mut flush = Flush::None;
+        let mut freed = alloc::vec::Vec::new();
+        let mut user = 0;
+        for page in pages {
+            let Ok((old, tables_freed)) = tables.unmap_and_prune(page) else { continue };
+            flush.add_page(page);
+            if old.flags.contains(OWNED) {
+                self.resident.fetch_sub(1, Ordering::Relaxed);
+                freed.push(old.frame);
+                user += 1;
+            }
+            freed.extend_from_slice(tables_freed.as_slice());
+        }
+        // Nobody is interrupted: the targets drop the translations at their next tick or switch,
+        // together with other unmaps; a mapping into the range hurries them ([`Self::wait_pending`]).
+        let ticket = self.post_tlb_as(flush, true);
+        match ticket {
+            None => free_frames_now(&freed, user),
+            Some(t) => {
+                let mut p = self.pending.lock();
+                p.retain(|e| !tlb::complete(&e.ticket));
+                p.push(Pending { start: virt, end, ticket: t });
+                drop(p);
+                defer(t, freed, user, None);
+            }
+        }
+        Ok(ticket)
+    }
+
+    /// Wait for the shootdowns of unmapped ranges that overlap `[start, end)`
+    /// (ADR 0254), forgetting those that are done. With the tables locked.
+    fn wait_pending(&self, start: u64, end: u64) {
+        loop {
+            let out = {
+                let mut p = self.pending.lock();
+                p.retain(|e| !tlb::complete(&e.ticket));
+                p.iter().find(|e| e.start < end && start < e.end).map(|e| e.ticket)
+            };
+            match out {
+                Some(t) => tlb::wait(&t),
+                None => return,
+            }
+        }
     }
 
     /// Change the rights of every page of `[virt, virt + len)`, all of
@@ -726,8 +800,22 @@ impl AddressSpace {
     /// PCID here too), and shoot down the CPUs that have it loaded. Returns
     /// once no CPU can use the old entries.
     pub fn sync_tlb(&self, flush: Flush) {
+        if let Some(t) = self.post_tlb(flush) {
+            tlb::wait(&t);
+        }
+    }
+
+    /// [`sync_tlb`](Self::sync_tlb) up to the shootdown, which is posted and
+    /// not waited for: its ticket, if one went out.
+    fn post_tlb(&self, flush: Flush) -> Option<tlb::Ticket> {
+        self.post_tlb_as(flush, false)
+    }
+
+    /// [`post_tlb`](Self::post_tlb), `quiet`: without interrupting the
+    /// targets ([`tlb::post_quiet`]).
+    fn post_tlb_as(&self, flush: Flush, quiet: bool) -> Option<tlb::Ticket> {
         if flush.is_none() {
-            return;
+            return None;
         }
         let _irq = cpu::InterruptsOff::new();
         let me = percpu::cpu_index();
@@ -745,9 +833,8 @@ impl AddressSpace {
         }
         let mut targets = self.active_cpus();
         targets.remove(me);
-        if !targets.is_empty() {
-            tlb::shoot(targets, tlb::Request { space: self.root, flush });
-        }
+        let req = tlb::Request { space: self.root, flush };
+        if quiet { tlb::post_quiet(targets, req) } else { tlb::post(targets, req) }
     }
 
     fn sync_page(&self, page: u64) {
@@ -799,6 +886,118 @@ impl Reclaim {
         USER_FRAMES.fetch_sub(self.user, Ordering::Relaxed);
         self.n = 0;
         self.user = 0;
+    }
+}
+
+/// A range [`AddressSpace::unmap_async`] unmapped, until its shootdown is done.
+#[derive(Debug)]
+struct Pending {
+    start: u64,
+    end: u64,
+    ticket: tlb::Ticket,
+}
+
+/// What an unmap without waiting keeps until its shootdown is done (ADR 0254).
+struct Deferred {
+    ticket: tlb::Ticket,
+    /// Frames and page tables to free.
+    frames: alloc::vec::Vec<u64>,
+    /// How many of them are user frames (counted in `USER_FRAMES`).
+    user: u64,
+    /// What the caller handed over ([`defer_drop`]): dropped then too.
+    extra: Option<alloc::boxed::Box<dyn Send>>,
+}
+
+static DEFERRED: SpinLock<alloc::vec::Vec<Deferred>> = SpinLock::new(alloc::vec::Vec::new());
+/// Wakes `tlb-reaper` when something is deferred.
+static REAPER: crate::thread::WaitQueue = crate::thread::WaitQueue::new();
+/// Entries in [`DEFERRED`], for the reaper's wait (which must not take a lock).
+static DEFERRED_LEN: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+/// Deferred entries above which an unmapping thread waits for the oldest
+/// first ([`reap_or_wait`]), so what waits for shootdowns stays small.
+const DEFERRED_LIMIT: usize = 512;
+
+fn free_frames_now(frames: &[u64], user: u64) {
+    if !frames.is_empty() {
+        let mut f = FRAMES.lock();
+        let alloc = f.as_mut().expect("address spaces need the frame allocator");
+        for &frame in frames {
+            alloc.free(frame, 0).expect("user frame or page table freed twice");
+        }
+    }
+    USER_FRAMES.fetch_sub(user, Ordering::Relaxed);
+}
+
+fn defer(ticket: tlb::Ticket, frames: alloc::vec::Vec<u64>, user: u64, extra: Option<alloc::boxed::Box<dyn Send>>) {
+    let was_empty = {
+        let mut d = DEFERRED.lock();
+        let was_empty = d.is_empty();
+        d.push(Deferred { ticket, frames, user, extra });
+        DEFERRED_LEN.store(d.len(), Ordering::SeqCst);
+        was_empty
+    };
+    if was_empty {
+        REAPER.wake_one();
+    }
+}
+
+/// Keep `what` (pages an unmapped range shared with others: the page cache's,
+/// a shared frame) until the shootdown of `ticket` is done, then drop it.
+pub fn defer_drop(ticket: tlb::Ticket, what: alloc::boxed::Box<dyn Send>) {
+    defer(ticket, alloc::vec::Vec::new(), 0, Some(what));
+}
+
+/// Free what waited for shootdowns that are done. Not with a spinlock held:
+/// dropping what [`defer_drop`] kept may sleep.
+pub fn reap() {
+    let done: alloc::vec::Vec<Deferred> = {
+        let mut d = DEFERRED.lock();
+        let mut done = alloc::vec::Vec::new();
+        let mut i = 0;
+        while i < d.len() {
+            if tlb::complete(&d[i].ticket) {
+                done.push(d.swap_remove(i));
+            } else {
+                i += 1;
+            }
+        }
+        DEFERRED_LEN.store(d.len(), Ordering::SeqCst);
+        done
+    };
+    for e in done {
+        free_frames_now(&e.frames, e.user);
+        drop(e.extra);
+    }
+}
+
+/// [`reap`], and if too much still waits, wait for the oldest shootdown first.
+pub fn reap_or_wait() {
+    let oldest = {
+        let d = DEFERRED.lock();
+        (d.len() > DEFERRED_LIMIT).then(|| d[0].ticket)
+    };
+    if let Some(t) = oldest {
+        tlb::wait(&t);
+    }
+    reap();
+}
+
+/// The `tlb-reaper` thread: frees what waited for shootdowns soon after they
+/// are done, also when nothing is unmapped for a while.
+fn reaper(_: usize) -> usize {
+    loop {
+        REAPER.wait_until(|| DEFERRED_LEN.load(Ordering::SeqCst) != 0);
+        while DEFERRED_LEN.load(Ordering::SeqCst) != 0 {
+            reap();
+            crate::thread::sleep(core::time::Duration::from_millis(2));
+        }
+    }
+}
+
+/// Start `tlb-reaper` (once threads run).
+pub fn start_reaper() {
+    if let Err(e) = crate::thread::spawn_named("tlb-reaper", reaper, 0) {
+        crate::kprintln!("tlb: no reaper thread ({e:?}): unmapped frames are freed by later unmaps");
     }
 }
 

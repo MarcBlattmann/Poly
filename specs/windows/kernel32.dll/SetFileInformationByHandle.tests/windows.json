@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "sfi_basic",
+      "exe_sha256": "1801090ecfbd1f6fa54dfef4a50398c4f474a00d03f6a4f3e49409b971844b7f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "RmlsZUJhc2ljSW5mbywgYXR0cmlidXRlcyBoaWRkZW46IDEKICBhdHRyaWJ1dGVzIG5vdyAyCkZpbGVCYXNpY0luZm8sIGF0dHJpYnV0ZXMgbm9ybWFsOiAxCiAgYXR0cmlidXRlcyBub3cgMApGaWxlQmFzaWNJbmZvLCBhdHRyaWJ1dGVzIHJlYWQtb25seTogMQogIGF0dHJpYnV0ZXMgbm93IDEKRmlsZUJhc2ljSW5mbywgYnVmZmVyIHNpemUgMzk6IDAgKGVycm9yIDI0KQpGaWxlQmFzaWNJbmZvLCBidWZmZXIgc2l6ZSAwOiAwIChlcnJvciAyNCkKRmlsZUJhc2ljSW5mbywgcmVzdG9yZSBub3JtYWw6IDEKRmlsZUVuZE9mRmlsZUluZm8sIDUgYnl0ZXM6IDEKICBzaXplIG5vdyA1CkZpbGVFbmRPZkZpbGVJbmZvLCAyMCBieXRlczogMQogIHNpemUgbm93IDIwCkZpbGVFbmRPZkZpbGVJbmZvLCBidWZmZXIgc2l6ZSA0OiAwIChlcnJvciAyNCkKRmlsZUFsbG9jYXRpb25JbmZvLCA0MDk2OiAxCiAgc2l6ZSBub3cgMjAKdW5rbm93biBjbGFzcyAweDdGOiAwIChlcnJvciA4NykKY2xhc3MgMSAoRmlsZVN0YW5kYXJkSW5mbywgbm90IHNldHRhYmxlKTogMCAoZXJyb3IgODcpCkZpbGVEaXNwb3NpdGlvbkluZm8sIGJ1ZmZlciBzaXplIDQgd2l0aCB2YWx1ZSAwOiAwIChlcnJvciA1KQpGaWxlRW5kT2ZGaWxlSW5mbyBvbiBhIGhhbmRsZSBvcGVuZWQgZm9yIHJlYWRpbmc6IDAgKGVycm9yIDUpCkZpbGVCYXNpY0luZm8gb24gYSBoYW5kbGUgb3BlbmVkIGZvciByZWFkaW5nOiAwIChlcnJvciA1KQpGaWxlRGlzcG9zaXRpb25JbmZvLCBkZWxldGU6IDEKICBhdHRyaWJ1dGVzIHdoaWxlIHRoZSBoYW5kbGUgaXMgb3BlbiAtMQogIGZpbGUgYWZ0ZXIgdGhlIGhhbmRsZSBpcyBjbG9zZWQgZXhpc3RzIDAKRmlsZURpc3Bvc2l0aW9uSW5mbywgZGVsZXRlIHdpdGhvdXQgdGhlIERFTEVURSByaWdodDogMCAoZXJyb3IgNSkKRmlsZURpc3Bvc2l0aW9uSW5mbywgZGVsZXRlOiAxCkZpbGVEaXNwb3NpdGlvbkluZm8sIGNhbmNlbDogMQogIGZpbGUgYWZ0ZXIgZGVsZXRlIGFuZCBjYW5jZWwgZXhpc3RzIDEKRmlsZURpc3Bvc2l0aW9uSW5mbyBvbiBhIHJlYWQtb25seSBmaWxlOiAwIChlcnJvciA1KQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "FileBasicInfo, attributes hidden: 1\n  attributes now 2\nFileBasicInfo, attributes normal: 1\n  attributes now 0\nFileBasicInfo, attributes read-only: 1\n  attributes now 1\nFileBasicInfo, buffer size 39: 0 (error 24)\nFileBasicInfo, buffer size 0: 0 (error 24)\nFileBasicInfo, restore normal: 1\nFileEndOfFileInfo, 5 bytes: 1\n  size now 5\nFileEndOfFileInfo, 20 bytes: 1\n  size now 20\nFileEndOfFileInfo, buffer size 4: 0 (error 24)\nFileAllocationInfo, 4096: 1\n  size now 20\nunknown class 0x7F: 0 (error 87)\nclass 1 (FileStandardInfo, not settable): 0 (error 87)\nFileDispositionInfo, buffer size 4 with value 0: 0 (error 5)\nFileEndOfFileInfo on a handle opened for reading: 0 (error 5)\nFileBasicInfo on a handle opened for reading: 0 (error 5)\nFileDispositionInfo, delete: 1\n  attributes while the handle is open -1\n  file after the handle is closed exists 0\nFileDispositionInfo, delete without the DELETE right: 0 (error 5)\nFileDispositionInfo, delete: 1\nFileDispositionInfo, cancel: 1\n  file after delete and cancel exists 1\nFileDispositionInfo on a read-only file: 0 (error 5)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 60
+    }
+  ]
+}

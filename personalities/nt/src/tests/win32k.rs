@@ -303,3 +303,35 @@ fn the_desktop_links_units_set_the_system_dpi() {
         assert_eq!(work.top, ridge);
     }
 }
+
+/// ADR 0249: a `Window` (or `Desktop`) request is answered without counting as a change of the
+/// window manager, a change raises the generation before it is made, and `SharedPage` is 0 where
+/// the kernel has no window-state page (this fake).
+#[test]
+fn reads_leave_the_window_state_generation_and_changes_raise_it() {
+    use core::sync::atomic::{AtomicU64, Ordering};
+    use poly_win32k::proto::{ClassRef, CreateSpec};
+    static BUMPS: AtomicU64 = AtomicU64::new(0);
+    fn bump() {
+        BUMPS.fetch_add(1, Ordering::SeqCst);
+    }
+    let mut f = Fake::new();
+    f.with_state(|sys, _, _| sys.win32k.wm.set_hook(bump));
+    let call = |f: &mut Fake, req: Request| user_call(f, &req, 4096).1.expect("a reply");
+    let name: alloc::vec::Vec<u16> = "Gen".encode_utf16().collect();
+    call(
+        &mut f,
+        Request::RegisterClass { spec: ClassSpec { name: name.clone(), wndproc: 0x1000, ..ClassSpec::default() } },
+    );
+    let spec =
+        CreateSpec { class: ClassRef::Name { name }, style: 0x00CF_0000, cx: 300, cy: 200, ..CreateSpec::default() };
+    let Reply::Created { created } = call(&mut f, Request::CreateWindow { spec }) else { panic!("not created") };
+    let h = u64::from(created.hwnd);
+    let before = BUMPS.load(Ordering::SeqCst);
+    assert!(matches!(call(&mut f, Request::Window { hwnd: h }), Reply::Window { .. }));
+    assert!(matches!(call(&mut f, Request::Desktop {}), Reply::Desktop { .. }));
+    assert_eq!(call(&mut f, Request::SharedPage {}), Reply::Value { value: 0 });
+    assert_eq!(BUMPS.load(Ordering::SeqCst), before, "reads");
+    call(&mut f, Request::SetText { hwnd: created.hwnd, text: "x".encode_utf16().collect() });
+    assert!(BUMPS.load(Ordering::SeqCst) > before, "a change");
+}

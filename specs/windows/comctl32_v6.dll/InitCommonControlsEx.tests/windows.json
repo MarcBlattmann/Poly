@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "c6_icc_masks",
+      "exe_sha256": "933ad4827a16c7781101b79ed7c21101b18ec91e5277dc7c9525be07c3340cde",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Yml0IDB4MSAtPiAxCm9rIGJpdCAweDEKYml0IDB4MiAtPiAxCm9rIGJpdCAweDIKYml0IDB4NCAtPiAxCm9rIGJpdCAweDQKYml0IDB4OCAtPiAxCm9rIGJpdCAweDgKYml0IDB4MTAgLT4gMQpvayBiaXQgMHgxMApiaXQgMHgyMCAtPiAxCm9rIGJpdCAweDIwCmJpdCAweDQwIC0+IDEKb2sgYml0IDB4NDAKYml0IDB4ODAgLT4gMQpvayBiaXQgMHg4MApiaXQgMHgxMDAgLT4gMQpvayBiaXQgMHgxMDAKYml0IDB4MjAwIC0+IDEKb2sgYml0IDB4MjAwCmJpdCAweDQwMCAtPiAxCm9rIGJpdCAweDQwMApiaXQgMHg4MDAgLT4gMQpvayBiaXQgMHg4MDAKYml0IDB4MTAwMCAtPiAxCm9rIGJpdCAweDEwMDAKYml0IDB4MjAwMCAtPiAxCm9rIGJpdCAweDIwMDAKYml0IDB4NDAwMCAtPiAxCm9rIGJpdCAweDQwMDAKYml0IDB4ODAwMCAtPiAxCm9rIGJpdCAweDgwMDAKSUNDX1NUQU5EQVJEX0NMQVNTRVMgLT4gMQpvayBJQ0NfU1RBTkRBUkRfQ0xBU1NFUwpJQ0NfTElOS19DTEFTUyAtPiAxCm9rIElDQ19MSU5LX0NMQVNTCnRoZSB1cGRhdGVyJ3MgMHg0MDIwIC0+IDEKb2sgdGhlIHVwZGF0ZXIncyAweDQwMjAKSUNDX1dJTjk1X0NMQVNTRVMgLT4gMQpvayBJQ0NfV0lOOTVfQ0xBU1NFUwoweDdGRiAtPiAxCm9rIDB4N0ZGCjB4M0ZGRiAtPiAxCm9rIDB4M0ZGRgoweEZGRkYgLT4gMQpvayAweEZGRkYKMCAtPiAxCm9rIDAKYml0IDE2ICgweDEwMDAwKSAtPiAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9rIGJpdCAxNiAoMHgxMDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDE3ICgweDIwMDAwKSAtPiAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9rIGJpdCAxNyAoMHgyMDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDE4ICgweDQwMDAwKSAtPiAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9rIGJpdCAxOCAoMHg0MDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDE5ICgweDgwMDAwKSAtPiAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9rIGJpdCAxOSAoMHg4MDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDIwICgweDEwMDAwMCkgLT4gMCBsYXN0IGVycm9yIHVuY2hhbmdlZApvayBiaXQgMjAgKDB4MTAwMDAwKQpvayBsYXN0IGVycm9yIHVuY2hhbmdlZApiaXQgMjEgKDB4MjAwMDAwKSAtPiAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9rIGJpdCAyMSAoMHgyMDAwMDApCm9rIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCmJpdCAyMiAoMHg0MDAwMDApIC0+IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb2sgYml0IDIyICgweDQwMDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDIzICgweDgwMDAwMCkgLT4gMCBsYXN0IGVycm9yIHVuY2hhbmdlZApvayBiaXQgMjMgKDB4ODAwMDAwKQpvayBsYXN0IGVycm9yIHVuY2hhbmdlZApiaXQgMjQgKDB4MTAwMDAwMCkgLT4gMCBsYXN0IGVycm9yIHVuY2hhbmdlZApvayBiaXQgMjQgKDB4MTAwMDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDI1ICgweDIwMDAwMDApIC0+IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb2sgYml0IDI1ICgweDIwMDAwMDApCm9rIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCmJpdCAyNiAoMHg0MDAwMDAwKSAtPiAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9rIGJpdCAyNiAoMHg0MDAwMDAwKQpvayBsYXN0IGVycm9yIHVuY2hhbmdlZApiaXQgMjcgKDB4ODAwMDAwMCkgLT4gMCBsYXN0IGVycm9yIHVuY2hhbmdlZApvayBiaXQgMjcgKDB4ODAwMDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDI4ICgweDEwMDAwMDAwKSAtPiAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9rIGJpdCAyOCAoMHgxMDAwMDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDI5ICgweDIwMDAwMDAwKSAtPiAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9rIGJpdCAyOSAoMHgyMDAwMDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDMwICgweDQwMDAwMDAwKSAtPiAwIGxhc3QgZXJyb3IgdW5jaGFuZ2VkCm9rIGJpdCAzMCAoMHg0MDAwMDAwMCkKb2sgbGFzdCBlcnJvciB1bmNoYW5nZWQKYml0IDMxICgweDgwMDAwMDAwKSAtPiAxCm9rIGJpdCAzMQpvayBiaXQgMzEgd2l0aCBJQ0NfU1RBTkRBUkRfQ0xBU1NFUwoweDFGRkZGIC0+IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb2sgMHgxRkZGRgpvayBsYXN0IGVycm9yIHVuY2hhbmdlZAoweEZGRkYwMDAwIC0+IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb2sgMHhGRkZGMDAwMApvayBsYXN0IGVycm9yIHVuY2hhbmdlZAoweEZGRkZGRkZGIC0+IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb2sgMHhGRkZGRkZGRgpvayBsYXN0IGVycm9yIHVuY2hhbmdlZAoweDdGRkZGRkZGIC0+IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb2sgMHg3RkZGRkZGRgpvayBsYXN0IGVycm9yIHVuY2hhbmdlZAoweEMwMDAwMDAwIC0+IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb2sgMHhDMDAwMDAwMApvayBsYXN0IGVycm9yIHVuY2hhbmdlZAoweDQwMDAgfCAweDEwMDAwIC0+IDAgbGFzdCBlcnJvciB1bmNoYW5nZWQKb2sgMHg0MDAwIHwgMHgxMDAwMApvayBsYXN0IGVycm9yIHVuY2hhbmdlZApvayAweDQwMjAgYWZ0ZXIgdGhlIGZhaWx1cmVzCnN1bW1hcnkgNjkgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "bit 0x1 -> 1\nok bit 0x1\nbit 0x2 -> 1\nok bit 0x2\nbit 0x4 -> 1\nok bit 0x4\nbit 0x8 -> 1\nok bit 0x8\nbit 0x10 -> 1\nok bit 0x10\nbit 0x20 -> 1\nok bit 0x20\nbit 0x40 -> 1\nok bit 0x40\nbit 0x80 -> 1\nok bit 0x80\nbit 0x100 -> 1\nok bit 0x100\nbit 0x200 -> 1\nok bit 0x200\nbit 0x400 -> 1\nok bit 0x400\nbit 0x800 -> 1\nok bit 0x800\nbit 0x1000 -> 1\nok bit 0x1000\nbit 0x2000 -> 1\nok bit 0x2000\nbit 0x4000 -> 1\nok bit 0x4000\nbit 0x8000 -> 1\nok bit 0x8000\nICC_STANDARD_CLASSES -> 1\nok ICC_STANDARD_CLASSES\nICC_LINK_CLASS -> 1\nok ICC_LINK_CLASS\nthe updater's 0x4020 -> 1\nok the updater's 0x4020\nICC_WIN95_CLASSES -> 1\nok ICC_WIN95_CLASSES\n0x7FF -> 1\nok 0x7FF\n0x3FFF -> 1\nok 0x3FFF\n0xFFFF -> 1\nok 0xFFFF\n0 -> 1\nok 0\nbit 16 (0x10000) -> 0 last error unchanged\nok bit 16 (0x10000)\nok last error unchanged\nbit 17 (0x20000) -> 0 last error unchanged\nok bit 17 (0x20000)\nok last error unchanged\nbit 18 (0x40000) -> 0 last error unchanged\nok bit 18 (0x40000)\nok last error unchanged\nbit 19 (0x80000) -> 0 last error unchanged\nok bit 19 (0x80000)\nok last error unchanged\nbit 20 (0x100000) -> 0 last error unchanged\nok bit 20 (0x100000)\nok last error unchanged\nbit 21 (0x200000) -> 0 last error unchanged\nok bit 21 (0x200000)\nok last error unchanged\nbit 22 (0x400000) -> 0 last error unchanged\nok bit 22 (0x400000)\nok last error unchanged\nbit 23 (0x800000) -> 0 last error unchanged\nok bit 23 (0x800000)\nok last error unchanged\nbit 24 (0x1000000) -> 0 last error unchanged\nok bit 24 (0x1000000)\nok last error unchanged\nbit 25 (0x2000000) -> 0 last error unchanged\nok bit 25 (0x2000000)\nok last error unchanged\nbit 26 (0x4000000) -> 0 last error unchanged\nok bit 26 (0x4000000)\nok last error unchanged\nbit 27 (0x8000000) -> 0 last error unchanged\nok bit 27 (0x8000000)\nok last error unchanged\nbit 28 (0x10000000) -> 0 last error unchanged\nok bit 28 (0x10000000)\nok last error unchanged\nbit 29 (0x20000000) -> 0 last error unchanged\nok bit 29 (0x20000000)\nok last error unchanged\nbit 30 (0x40000000) -> 0 last error unchanged\nok bit 30 (0x40000000)\nok last error unchanged\nbit 31 (0x80000000) -> 1\nok bit 31\nok bit 31 with ICC_STANDARD_CLASSES\n0x1FFFF -> 0 last error unchanged\nok 0x1FFFF\nok last error unchanged\n0xFFFF0000 -> 0 last error unchanged\nok 0xFFFF0000\nok last error unchanged\n0xFFFFFFFF -> 0 last error unchanged\nok 0xFFFFFFFF\nok last error unchanged\n0x7FFFFFFF -> 0 last error unchanged\nok 0x7FFFFFFF\nok last error unchanged\n0xC0000000 -> 0 last error unchanged\nok 0xC0000000\nok last error unchanged\n0x4000 | 0x10000 -> 0 last error unchanged\nok 0x4000 | 0x10000\nok last error unchanged\nok 0x4020 after the failures\nsummary 69 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "c6_icc_threads",
+      "exe_sha256": "c11f1ed28507caa255d2239ed922abca4a5ee9b504cb711057435bc74e22809c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgY2FsbCAwCm9rIGNhbGwgMQpvayBjYWxsIDIKb2sgY2FsbCAzCm9rIGNhbGwgNApvbiBhbm90aGVyIHRocmVhZDogSW5pdENvbW1vbkNvbnRyb2xzRXggMSBhbmQgYSBwcm9ncmVzcyBiYXIgd2luZG93IDEKb2sgSW5pdENvbW1vbkNvbnRyb2xzRXggb24gYW5vdGhlciB0aHJlYWQKb2sgYSB3aW5kb3cgb2YgYSBjb21tb24tY29udHJvbCBjbGFzcyBvbiBhbm90aGVyIHRocmVhZApzdW1tYXJ5IDcgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok call 0\nok call 1\nok call 2\nok call 3\nok call 4\non another thread: InitCommonControlsEx 1 and a progress bar window 1\nok InitCommonControlsEx on another thread\nok a window of a common-control class on another thread\nsummary 7 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 54
+    },
+    {
+      "name": "c6_icc_updater",
+      "exe_sha256": "ba0ba73b13280bbb44c502efed43b210396c5cfd69286029f16985d617158e38",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SW5pdENvbW1vbkNvbnRyb2xzRXgoezgsIDB4NDAyMH0pIC0+IDEKb2sgSW5pdENvbW1vbkNvbnRyb2xzRXgoMHg0MDIwKQpvayB0aGUgZGlhbG9nIGlzIGNyZWF0ZWQKb2sgV01fSU5JVERJQUxPRyBjYW1lIG9uY2UKZGlhbG9nIGNsYXNzICMzMjc3MApvayB0aGUgZGlhbG9nIGNsYXNzIGlzICMzMjc3MAppdGVtIDEwMCBjbGFzcyBTdGF0aWMKaXRlbSAxMDEgY2xhc3MgQnV0dG9uCml0ZW0gMTAyIGNsYXNzIEJ1dHRvbgppdGVtIDEwMyBjbGFzcyBCdXR0b24KaXRlbSAxMDQgY2xhc3MgQnV0dG9uCm9rIHRoZSBzdGF0aWMgYW5kIHRoZSBmb3VyIGJ1dHRvbnMgZXhpc3QKcHJvZ3Jlc3MgYmFyIGNyZWF0ZWQgaW5zaWRlIFdNX0lOSVRESUFMT0c6IHRydWUKb2sgcHJvZ3Jlc3MgYmFyIGNyZWF0ZWQKb2sgaXRzIHBhcmVudCBpcyB0aGUgZGlhbG9nCml0cyBjbGFzcyBpcyBtc2N0bHNfcHJvZ3Jlc3MzMgpvayBjbGFzcyBuYW1lCnBvc2l0aW9uIGluIHRoZSBkaWFsb2c6IHggNTMgeSAxOTAgd2lkdGggNjUzCm9rIHgKb2sgeQpvayB3aWR0aApvayBQQk1fU0VUUE9TIHJldHVybnMgdGhlIG9sZCBwb3NpdGlvbgpvayBQQk1fR0VUUE9TCm9rIHRoZSBwcm9ncmVzcyBiYXIgd2VudCB3aXRoIHRoZSBkaWFsb2cKc3VtbWFyeSAxNCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "InitCommonControlsEx({8, 0x4020}) -> 1\nok InitCommonControlsEx(0x4020)\nok the dialog is created\nok WM_INITDIALOG came once\ndialog class #32770\nok the dialog class is #32770\nitem 100 class Static\nitem 101 class Button\nitem 102 class Button\nitem 103 class Button\nitem 104 class Button\nok the static and the four buttons exist\nprogress bar created inside WM_INITDIALOG: true\nok progress bar created\nok its parent is the dialog\nits class is msctls_progress32\nok class name\nposition in the dialog: x 53 y 190 width 653\nok x\nok y\nok width\nok PBM_SETPOS returns the old position\nok PBM_GETPOS\nok the progress bar went with the dialog\nsummary 14 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 56
+    }
+  ]
+}

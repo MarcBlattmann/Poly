@@ -225,6 +225,7 @@ mod bigpipe;
 mod chrome2;
 mod inherit;
 mod oom;
+mod resume;
 mod sevenzip;
 mod slice2;
 
@@ -436,6 +437,10 @@ pub extern "system" fn k32test_main(_peb: *mut u8) -> u32 {
     if contains(cmd, b"--oom") {
         // SAFETY: as below.
         unsafe { oom::run(cmd) }
+    }
+    if contains(cmd, b"--resume-race") {
+        // SAFETY: as below.
+        unsafe { resume::run(cmd) }
     }
     if contains(cmd, b"--child") {
         // SAFETY: as below.

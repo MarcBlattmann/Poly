@@ -53,6 +53,39 @@ mod tests {
         }
     }
 
+    kernel_test! {
+        /// The out-of-memory policy's victim (ADR 0250 addendum): `k32test.exe --oom-job` holds
+        /// more memory than its child, which it started in a job of its own and which takes the
+        /// rest; the policy ends the child (`STATUS_NO_MEMORY`), and the parent's pages are intact.
+        fn nt_oom_ends_the_child_in_a_job_not_its_parent() -> TestResult {
+            // User memory stops 32 MiB above what is free now (`frames::set_test_floor`), so the
+            // two processes run out after tens of megabytes, whatever the machine's size (and
+            // quickly under emulation, as in CI): the parent holds 16 MiB, the child fewer.
+            const HEADROOM: u64 = (32 << 20) / 4096;
+            let free = crate::frames::FRAMES.lock().as_ref().map_or(0, |f| f.free_frames());
+            crate::frames::set_test_floor(free.saturating_sub(HEADROOM));
+            let r = run("--oom-job");
+            crate::frames::set_test_floor(0);
+            r
+        }
+    }
+
+    kernel_test! {
+        /// A child created suspended whose first thread ends before `ResumeThread` has given
+        /// up the creation's hold still ends as a process: its wait is satisfied at once and
+        /// its exit code is its own (the CI flakes of `vae_thunks_b`, `qij_basic`,
+        /// `wpm_rules_c`, `pbi_peb_c`: a loaded machine gave that order, and the process
+        /// object was never signalled). The resume waits at that point until the child's
+        /// threads have all left (`sched::RESUME_WAITS_FOR_CHILD`).
+        fn nt_suspended_child_that_ends_during_resume_is_signalled() -> TestResult {
+            use core::sync::atomic::Ordering;
+            super::super::sched::RESUME_WAITS_FOR_CHILD.store(true, Ordering::Relaxed);
+            let result = run("--resume-race");
+            super::super::sched::RESUME_WAITS_FOR_CHILD.store(false, Ordering::Relaxed);
+            result
+        }
+    }
+
     /// Install and run `k32test.exe` with argument `arg`; it must pass.
     fn run(arg: &str) -> crate::ktest::TestResult {
         {

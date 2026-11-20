@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSNumber+numberWithInt%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSNumber+numberWithInt%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSNumber+numberWithInt:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  +[NSNumber numberWithInt:] makes a number object. Its value reads as every scalar: intValue,
+  longLongValue, doubleValue, boolValue (nonzero is true), stringValue and description ('42'),
+  converting like C casts (2.75 gives int 2, -2.75 gives -2, 300 as char gives 44 (wraps), 2^40 stays
+  exact as long long); numbers made with different types are equal when the values are equal (@1,
+  @1LL, @1.0 are all isEqual:, 1.5 differs), have equal hashes (a number's -hash equals CFHash) and
+  compare: orders by value (Ascending for 1 < 2); NaN isEqual: NaN. objCType follows the creation
+  type: int 'i', long and long long 'q', double 'd', float 'f', char and BOOL 'c', short 's', unsigned
+  int and unsigned long long 'q'. Small numbers are shared (numberWithInt:7 twice gives one object;
+  the literal @7 too). Bridging: an NSNumber is a CFNumber (CFNumberGetValue, CFNumberGetType gives
+  kCFNumberSInt32Type for an int); a CFNumber from CFNumberCreate answers intValue and isEqual:; @YES
+  and @NO are the constants kCFBooleanTrue and kCFBooleanFalse (CFBoolean type, equal to the numbers 1
+  and 0 with isEqual:), and [NSNull null] is kCFNull.
+returns:
+  success: "an autoreleased NSNumber"
+errors: {}
+side_effects: "allocates or returns a shared small value"
+threading: "objects are immutable or the class says otherwise; immutable values may be read from any thread"
+ordering: []
+timing:
+  typical: "microseconds, no system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

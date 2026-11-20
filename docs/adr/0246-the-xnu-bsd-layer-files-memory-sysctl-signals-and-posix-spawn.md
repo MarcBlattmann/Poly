@@ -74,3 +74,48 @@ source was read.
 Signal handlers and `sigreturn`, stop/continue, `fork`/`vfork`/`execve`, `kqueue`/`kevent`,
 `getattrlist`, `proc_info`, `ioctl`, extended attributes, `KERN_PROC`, posix_spawn attributes and
 file actions, and the batch 4 sheets (PR #341).
+
+## Addendum (2026-11-20): processes, names, attributes, and the spec tests on Poly
+
+What the macOS integrator's first round (int-macos-1, PR #433) found missing or different.
+
+1. **The spec tests run on Poly, both architectures.** Boot test group `macho-specs`
+   (`tools/xtask/src/macho_specs.rs`, shard `userland`): every visible test of
+   `specs/macos/{bsd,mach}` is built with clang (`-target <arch>-apple-macos13.0`; the raw test
+   header needs no SDK) and rust-lld against Poly's stand-in libSystem, for x86-64 and for arm64
+   (the translator, ADR 0257), into `target/`; without clang the group skips. Each runs as the
+   program of a traced boot (`poly.test.capture`): its standard output comes from the kernel's
+   `POLY-OUT` records, exactly, and is compared with the arm64 recording of `macos.json`
+   (x86-64: the check lines and the exit code; `value` lines may depend on the architecture). It
+   runs as an ordinary user (uid 501, gid 20) in an empty scratch directory of its own
+   (`poly.test.cwd`, new: the test init makes the directory and gives it to that user), on 2 GiB,
+   as the oracle ran. `personalities/xnu/tests/data/specs-passing.txt` is the ratchet: a listed
+   run that fails fails the group.
+2. **Processes.** `fork` (the memory copied on write, the descriptors shared, handlers and mask
+   kept, nothing pending; the child returns its pid with 1 in the second register, and for arm64
+   the translator now passes the second result back in `x1` for the calls that have one), `vfork`
+   (no such call on macOS: the caller dies of `SIGSYS`), `execve` (the file's checks first:
+   EACCES for a directory or a file without execute permission, then the loader's ENOEXEC; the
+   new program replaces the memory and registers in place, close-on-exec descriptors close,
+   handled signals reset), `waitid` (options first, the siginfo written before the child is
+   reaped, `WNOWAIT`), process groups (`getpgrp`, `getpgid`, `setpgid`; `wait4` 0 and -pgid),
+   `kill` of an unreaped zombie, `getppid` of a process without a parent is launchd's (1).
+   `minherit(VM_INHERIT_NONE)` ranges are left out of a fork child. A process runs as a user and
+   group of its own (`XnuState::ids`, inherited; the VFS's permission checks use them).
+3. **Names and attributes.** `mkdir(at)`, `rmdir`, `unlink(at)`, `link(at)`, `symlink(at)`,
+   `readlink(at)`, `rename`, `renameat`, `renameatx_np` (`RENAME_SWAP`, `RENAME_EXCL`; other bits
+   `EINVAL`), `chmod`, `fchmod(at)`, `umask`, `mknod`, `truncate`, `ftruncate`, and the eight
+   extended attribute calls: macOS names (UTF-8, 1 to 127 bytes) are the VFS's `user.<name>`;
+   `ENOATTR` for a missing one; a size query; the resource fork read and written at a position;
+   `com.apple.FinderInfo` exactly 32 bytes, absent when all zero.
+4. **Descriptors.** `ioctl` (`FIONREAD`, `FIOCLEX`, `FIONCLEX`, `FIONBIO`; `TIOCGWINSZ` of what
+   is no terminal), `fcntl`'s `F_FULLFSYNC`, `F_BARRIERFSYNC`, `F_NOCACHE`, `F_GLOBAL_NOCACHE`,
+   `F_RDAHEAD`, `F_GETPATH_NOFIRMLINK`; a `read` whose buffer cannot be written takes nothing
+   from the file.
+5. **sysctl by architecture.** An arm64 program sees an arm64 Mac: `hw.pagesize` 16384,
+   `hw.machine` arm64, `hw.tbfrequency` 24 MHz.
+
+Still open: `kqueue` / `kevent`, signal handlers and `sigreturn` frames, stop and continue,
+`getattrlist` and friends, `clonefileat`, `proc_info`, case-insensitive names (APFS),
+attributes on symbolic links and values above 64 KiB (the VFS's limits), the `#!` path of
+`execve`.
