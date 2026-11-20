@@ -76,3 +76,80 @@ What is left, from the same tool on Debian's Chromium in the same guest:
 
 The timeline costs nothing while off (one load of a flag per hook). On, a busy Chrome writes about
 60,000 records a second; the ring's 32 MiB hold about 14 s.
+
+## Addendum (2026-11-20): kernel samples, and the kernel's writes into a process (`chrome-typing-latency`)
+
+**The timeline samples the kernel too.** A timer tick that interrupts kernel code records the
+interrupted function and its caller (the frame's return address) in the sample record's `b`
+(user-mode samples keep `b` = 0). `timeline.py --samples --kernel-syms FILE [--callers]` names
+them from `nm -C --defined-only` of the kernel ELF and sums them by function and by the system
+call the thread was in. `--at MS` reads a window without a key press. The samples cost about a
+sixth of the ring (35–60 s of a busy Chrome in 32 MiB).
+
+**What it showed.** Inside `NtWriteFile` on Chrome's IPC pipes, `AddressSpace::protect` called from
+`Memory::resolve_action`. Every kernel copy into another process's memory (`Memory::read`/`write`:
+an I/O completion's data and status block, written by the thread whose call completed it) ran the
+page fault decision for each page, also for a page the page table already mapped with the needed
+rights; the decision for a present page is "set its permissions", which re-wrote the same rights
+and flushed the page from the TLB of every CPU running that process (an IPI and a wait for the
+acknowledgements), and reset the process's PCIDs on the others. While Chrome's renderer and GPU
+processes run, that is a shootdown per completed pipe read.
+
+**Decision.** `Memory::access` copies a page that the page table maps with the rights the access
+needs (present for a read, writable for a write) without resolving it: the copy goes through the
+direct map anyway. Pages that are absent, read-only for copy on write, page-cache pages not yet
+writable, parked (`PROT_NONE`) or forced (a debugger's write) are mapped without those rights and
+are resolved as before. Kernel test: `kernel_writes_keep_writable_pages_and_still_copy_shared_ones`.
+
+**Measured** (same session, the old path switched on and off in four rounds of 10+10 keys by a
+temporary key, removed; Chrome for Windows, a page text field, key to the next display frame):
+
+| | Old path | Fast path |
+|---|---|---|
+| Median | 15.9 ms | 15.1 ms |
+| Mean | 42.6 ms | 25.9 ms |
+| 90th percentile | 153.7 ms | 45.3 ms |
+| `NtWriteFile`, kernel running time, median / p90 / p99 | 97 µs / 1.19 ms / 15.4 ms | 74 µs / 0.21 ms / 4.5 ms |
+
+The address bar's median went from 29.5 to 23.5 ms; its tail (Chrome's suggestion work) did not
+change.
+
+**About the QA's typing number.** The QA driver's `lat … type X` counts its own key press, hold and
+gap (60–80 ms) before its first screendump, and one screendump of a 2560x1600 screen takes 40–50 ms:
+it cannot report less than about 100 ms, for any browser. Its "105 ms" for the address bar was the
+suggestion box changing, measured that way; Linux Chromium measured the same way in the same week
+gives 107–123 ms. The guest's own key-to-frame time is the timeline's (or `--compositor-stats`'s
+`key_to_frame`).
+
+## Addendum (2026-11-20): the address bar's slow keys (`chrome-addressbar-tail`)
+
+Chrome for Windows' address bar, keys 400 ms apart, two sessions (10 rounds of 12 keys in each
+state, the order alternating): key to the next display frame median 24–30 ms, p90 38–80 ms; the
+slowest keys take 0.1–0.9 s. Over their windows (key to frame), summed over threads, they are:
+
+- **Chrome's bursts:** 2.7 s of running and 1.3 s of waiting for a CPU in an 870 ms window, with
+  the data decoder service busy and a utility process starting (`NtCreateNamedPipeFile`); in
+  others the browser's UI thread runs 150–200 ms in `chrome.dll` (the omnibox providers) and
+  presents nothing.
+- **The virtual machine paused.** Each CPU goes 3–30 ms without a timer tick several times a
+  second (about 3 % of the time on this host, ~18 of whose 32 cores ran other agents' builds);
+  two thirds of those gaps every CPU shares: the host stopped the whole VM. They account for the
+  NT state lock's long waits (blocks over 1 ms: half of the blocked time, p99 2–5 ms): the holder
+  stops with everyone else. `timeline.py --gaps` reports them.
+- **Not lock-holder preemption by Poly's scheduler.** Keeping the time slice from switching away
+  from a thread holding the NT state lock (tried, in-session A/B over both sessions) left the long
+  waits as they were (blocks over 1 ms: 4.9 → 7.5 s and 5.9 → 6.0 s); not kept.
+- **Writeback's dirty check walked the whole page cache.** `writeback_pass` asked
+  `CachedFs::page_counts()` every pass (every 5 s) only to know whether a page is dirty; that
+  counts every cached page of the file system with the page cache's index locked (one session: 0.8
+  s of CPU in it over 70 s, page-cache users waiting meanwhile). `CachedFs::has_dirty` looks at the
+  first dirty entry instead (disk and memfs writeback). Its effect on keys was not measurable in
+  the two A/B sessions, whose caches never made the walk show up.
+
+**Viz's software composite (about 7 ms a frame).** Its samples while typing: 44 % `chrome.dll`
+(Skia), 46 % kernel, 7 % Poly's `d3d11.dll`. The kernel part: page faults zero-filling fresh pages
+(28 %), `NtFreeVirtualMemory`/`NtAllocateVirtualMemory` (25 %: buffers freed and committed again
+every frame), `NtWriteFile` (24 %, mostly waking the reader). Poly's present path (the copy of the
+dirty rectangles, `PolyUserPresentBuffer`) is a few per cent: no cheap win there; the candidate is
+the memory churn (keeping pages of a recommitted range, a pool of zeroed frames), a change of its
+own.

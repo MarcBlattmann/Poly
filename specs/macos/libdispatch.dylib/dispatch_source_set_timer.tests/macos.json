@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:19:46",
+  "tests": [
+    {
+      "name": "dispatch_source_set_timer_more",
+      "source_sha256": "ddc075674090a504a1954bb29dcd52a3941434a81e6daf61f4050fe7a2b10dad",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3337443a76ddd8ce1d449fe0d90e6f41d25acdeb15a257e1b4b12ba5c3abca00",
+          "exit_code": 0,
+          "stdout": "ok a suspended timer calls the handler no more\nok after resume the handler's data counts at most one fire per interval gone, and at least one\nok a timer with a wall-clock start fires\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "183b79c2f95c8d7869d068301caa73ad4f9b355d75a8b976b00a5531ea1ababc",
+          "exit_code": 0,
+          "stdout": "ok a suspended timer calls the handler no more\nok after resume the handler's data counts at most one fire per interval gone, and at least one\nok a timer with a wall-clock start fires\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_source_set_timer_repeat",
+      "source_sha256": "ba05994211e6129bc004f8c41d2aa29613b03d1c38e1a0643026a7e196cc63f6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bac0305fe213820c8bc4dcfb2c4ce4714ff7e1da8bd52f03c5698482abc586fb",
+          "exit_code": 0,
+          "stdout": "ok the first fire is not before the start time (100 ms)\nok five handler calls\nok the fifth is not before start + 4 intervals (100 + 120 ms)\nok the handler runs on the source's queue\nok the data over all calls counts at least the calls (never fewer)\nok after the cancel in the handler no more calls\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b13155150e04850efd2bbca4b4588a04f33e97cb661b27cb988f722f9b0cb095",
+          "exit_code": 0,
+          "stdout": "ok the first fire is not before the start time (100 ms)\nok five handler calls\nok the fifth is not before start + 4 intervals (100 + 120 ms)\nok the handler runs on the source's queue\nok the data over all calls counts at least the calls (never fewer)\nok after the cancel in the handler no more calls\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontcopypostscriptname_dejavu",
+      "source_sha256": "5455f71c7583f7e7ab5993a5fe90b69bfe903b2a99e91ccb54168e013595fcc8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d42a0f1c6faf8a6289a4f15a9eca05aafc0399edfb89f8435ad5689dbace28e8",
+          "exit_code": 0,
+          "stdout": "ok pt_is(s, \"DejaVuSans\") && pt_is(b, \"DejaVuSans-Bold\") && pt_is(o, \"DejaVuSans-Oblique\") && pt_is(m, \"DejaVuSansMono\")\nok cf_is(CTFontCopyFullName(s), \"DejaVu Sans\") && cf_is(CTFontCopyFullName(b), \"DejaVu Sans Bold\")\nok cf_is(CTFontCopyFullName(o), \"DejaVu Sans Oblique\") && cf_is(CTFontCopyFullName(m), \"DejaVu Sans Mono\")\nok cf_is(CTFontCopyName(s, kCTFontStyleNameKey), \"Book\") && cf_is(CTFontCopyName(b, kCTFontStyleNameKey), \"Bold\")\nok cf_is(CTFontCopyName(o, kCTFontStyleNameKey), \"Oblique\") && cf_is(CTFontCopyName(m, kCTFontStyleNameKey), \"Book\")\nok cf_is(CTFontCopyName(s, kCTFontVersionNameKey), \"Version 2.37\")\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "88d6da3daaffd6a796e24e4cfff222547032498b88a4229a1ef438103cb35aee",
+          "exit_code": 0,
+          "stdout": "ok pt_is(s, \"DejaVuSans\") && pt_is(b, \"DejaVuSans-Bold\") && pt_is(o, \"DejaVuSans-Oblique\") && pt_is(m, \"DejaVuSansMono\")\nok cf_is(CTFontCopyFullName(s), \"DejaVu Sans\") && cf_is(CTFontCopyFullName(b), \"DejaVu Sans Bold\")\nok cf_is(CTFontCopyFullName(o), \"DejaVu Sans Oblique\") && cf_is(CTFontCopyFullName(m), \"DejaVu Sans Mono\")\nok cf_is(CTFontCopyName(s, kCTFontStyleNameKey), \"Book\") && cf_is(CTFontCopyName(b, kCTFontStyleNameKey), \"Bold\")\nok cf_is(CTFontCopyName(o, kCTFontStyleNameKey), \"Oblique\") && cf_is(CTFontCopyName(m, kCTFontStyleNameKey), \"Book\")\nok cf_is(CTFontCopyName(s, kCTFontVersionNameKey), \"Version 2.37\")\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontcopypostscriptname_sys_ui",
+      "source_sha256": "85108256657c90895aa5dd3dbb9550f9d77dffee1318c3a723d59721cfe659d2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "87161a11acf28c63de03dac0b811bad186fa254174c15104294f66974d1066bf",
+          "exit_code": 0,
+          "stdout": "ok cf_is(CTFontCopyPostScriptName(s), \".SFNS-Regular\")\nok cf_is(CTFontCopyFullName(s), \"System Font Regular\") && cf_is(CTFontCopyDisplayName(s), \"System Font Regular\")\nok cf_is(CTFontCopyName(s, kCTFontStyleNameKey), \"Regular\") && cf_is(CTFontCopyName(s, kCTFontDesignerNameKey), \"Apple Inc.\")\nok pt_is(CTFontCreateUIFontForLanguage(kCTFontUIFontEmphasizedSystem, 13, NULL), \".SFNS-Bold\")\nok pt_is(CTFontCreateUIFontForLanguage(kCTFontUIFontUserFixedPitch, 13, NULL), \"Menlo-Regular\")\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b0722c91c3662f79d7945d8de0b8988f4c8109d1754f82d43106b15345371ab8",
+          "exit_code": 0,
+          "stdout": "ok cf_is(CTFontCopyPostScriptName(s), \".SFNS-Regular\")\nok cf_is(CTFontCopyFullName(s), \"System Font Regular\") && cf_is(CTFontCopyDisplayName(s), \"System Font Regular\")\nok cf_is(CTFontCopyName(s, kCTFontStyleNameKey), \"Regular\") && cf_is(CTFontCopyName(s, kCTFontDesignerNameKey), \"Apple Inc.\")\nok pt_is(CTFontCreateUIFontForLanguage(kCTFontUIFontEmphasizedSystem, 13, NULL), \".SFNS-Bold\")\nok pt_is(CTFontCreateUIFontForLanguage(kCTFontUIFontUserFixedPitch, 13, NULL), \"Menlo-Regular\")\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

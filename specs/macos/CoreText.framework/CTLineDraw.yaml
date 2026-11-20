@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreText.framework/CTLineDraw.yaml. Observed with C test programs linked against CoreText
+# (tests/macos/include/poly_mct.h, ADR 0182); results per architecture in CTLineDraw.tests/macos.json.
+id: "macos/api/CoreText.framework/CTLineDraw"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the CoreText, CoreGraphics and CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes, and the two architectures gave the same results. Tests are C programs that link CoreText (the line `poly-mac: coretext`, tests/macos/include/poly_mct.h). The results do not depend on Apple's fonts: tests use the PolyTest TrueType fonts embedded in poly_mct.h (made by tests/macos/fonts/mkfont.py) and DejaVu Sans 2.37 files the runner copies into the scratch directory (`poly-mac: fonts`); the few tests about Apple's own fonts are named sys_ and described as SYSTEM-DEPENDENT; results and output go through raw system calls"
+  observed_by: spec-macos-coretext
+  date: 2026-11-20
+summary: >
+  CTLineDraw(line, context) draws the line with the context's text position (CGContextSetTextPosition)
+  as its origin (y up in the context; bitmap rows count from the top), the fill colour and the
+  context's transformation. Observed into a CGBitmapContext of 8-bit gray
+  (kCGColorSpaceGenericGrayGamma2_2, no alpha, memory row 0 the top row), white background, black
+  fill, CGContextSetShouldSmoothFonts off and antialiasing on: PolyTest's glyphs are boxes, so at size
+  10 with the text position (1,2) a whole-pixel result is pure 0x00 and 0xff: A is columns 2..5 and
+  rows 3..9 of a 12-row image (4 wide, 7 high, its bottom on the baseline row), B columns 2..4 and
+  rows 5..9 (3 x 5), 'AB' puts B 6 pixels after A (columns 8..10), O has its hole (the pixels of the
+  hole 0xff, the ring 0x00). Antialiasing is area coverage in gray values: a text position x of 1.5
+  gives half covered columns (0x7f or 0x80) on both sides of A and black columns between; at size 7 (x
+  from 1 + 0.7 to 1 + 3.5) the first column is 0xb3 and the last 0x7f; the vertical text position is
+  snapped to a whole pixel (y 2.5 gives the image of y 2); with antialiasing off every pixel is 0x00
+  or 0xff; the triangle V has intermediate gray values and is symmetric. With
+  CGContextSetShouldSmoothFonts on the glyph edges are thickened (extra rows and columns with values
+  such as 0xf1 and 0xe2 around the A): the tests keep smoothing off and Poly need not reproduce
+  smoothing. For real fonts (DejaVu Sans 'Hello' at size 20, text position (4,8)) the ink lies inside
+  the line's typographic width and between the baseline less the descent and the baseline plus the
+  ascent, the corners stay white and some pixels are dark; the exact pixels are not specified
+  (hinting, rasteriser). The text position moves with CGContextSetTextPosition only; a position left
+  of the image clips the glyph. The fonts the tests bring: PolyTest Regular and Bold (units per em
+  1000; the glyphs are boxes: A box 100..500 x 0..700, B 100..400 x 0..500, V a triangle, W two V, a,
+  g, e-acute and the accent mark U+0301 composites, .notdef a box, U+1F600 a box through a format 12
+  cmap; hhea 800/-200/line gap 100, OS/2 typo 700/-300/50, win 900/250, capHeight 700, xHeight 500, a
+  kern pair A,V -100 and V,A -80), and DejaVu Sans 2.37.
+returns:
+  success: "nothing"
+errors:
+  null_context: "NULL or invalid arguments not listed here are not supported (the process may crash)"
+side_effects: "changes the context's bitmap"
+threading: "a context is used by one thread at a time"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

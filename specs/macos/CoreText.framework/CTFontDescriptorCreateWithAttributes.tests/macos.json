@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontdescriptorcreatewithattributes_family_and_traits",
+      "source_sha256": "6b83b746b542b5f36aa1a0f27ea3055005e3c33af8297ba2261ebda00c4e820d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2e9130496c57be149b870739e0a2838934085ddd105c2b1c6989e970af619fbc",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok pt_is(CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes(fa), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes(fa), 20, NULL), \"PolyTest-Bold\")\nok nd != NULL\nok CTFontDescriptorCreateMatchingFontDescriptor(nd, NULL) == NULL\nok other != NULL && !pt_is(other, \"PolyTest-Regular\") && !pt_is(other, \"PolyTest-Bold\")\nok CTFontDescriptorCreateWithAttributes(empty) != NULL\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6d9b38c853955002310c4f8250a3f9abd5b182bc17398057b8cf3adac6ad7b3d",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok pt_is(CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes(fa), 20, NULL), \"PolyTest-Regular\")\nok pt_is(CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes(fa), 20, NULL), \"PolyTest-Bold\")\nok nd != NULL\nok CTFontDescriptorCreateMatchingFontDescriptor(nd, NULL) == NULL\nok other != NULL && !pt_is(other, \"PolyTest-Regular\") && !pt_is(other, \"PolyTest-Bold\")\nok CTFontDescriptorCreateWithAttributes(empty) != NULL\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontdescriptorcreatewithattributes_size_attribute",
+      "source_sha256": "692ff119f4d16d10b5a871bceb42ec60099238414733f579e02b28f946997169",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9c6d554adbd2c73a345893b185ad8a452cca16d3c2101170cec656b24906e2a3",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok CTFontGetSize(CTFontCreateWithFontDescriptor(plain, 0, NULL)) is 12\nok CTFontGetSize(CTFontCreateWithFontDescriptor(sized, 0, NULL)) is 25\nok CTFontGetSize(CTFontCreateWithFontDescriptor(sized, 30, NULL)) is 30\nok v != NULL && CFGetTypeID(v) == CFNumberGetTypeID() && CFNumberGetValue(v, kCFNumberDoubleType, &back) && back == 25\nok CTFontDescriptorCopyAttribute(plain, kCTFontSizeAttribute) == NULL\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "80d5c2294470f4d210e2a96263be931df048a14a222e6682806a74330ee04220",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok CTFontGetSize(CTFontCreateWithFontDescriptor(plain, 0, NULL)) is 12\nok CTFontGetSize(CTFontCreateWithFontDescriptor(sized, 0, NULL)) is 25\nok CTFontGetSize(CTFontCreateWithFontDescriptor(sized, 30, NULL)) is 30\nok v != NULL && CFGetTypeID(v) == CFNumberGetTypeID() && CFNumberGetValue(v, kCFNumberDoubleType, &back) && back == 25\nok CTFontDescriptorCopyAttribute(plain, kCTFontSizeAttribute) == NULL\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

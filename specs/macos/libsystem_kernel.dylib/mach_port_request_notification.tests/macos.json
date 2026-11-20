@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_request_notification_dead_name",
+      "source_sha256": "ac184fa3d9a9df9c00b87c1e2780c6264acfc42a544ead02c3d4a6d07d91d750",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "de327b4d2e99204648af74ddc298719353da42d771cc7995546acb4835546153",
+          "exit_code": 0,
+          "stdout": "ok the request succeeds, no previous\nok nothing while the port lives\nok the name is a dead name\nok with two user references\nok the notification comes\nok id 72, 36 bytes\nok it names the dead name\nok a second request returns the first's send-once right\nok only the second notify port hears of it\nok on a name that is already dead: KERN_INVALID_ARGUMENT (4)\nok the right given is used up: a send-once notification (71), header only\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0be8d10fc1f1ad466bb9bdf78833e47bbeab9e46b4799be1721ea9e9bd400e78",
+          "exit_code": 0,
+          "stdout": "ok the request succeeds, no previous\nok nothing while the port lives\nok the name is a dead name\nok with two user references\nok the notification comes\nok id 72, 36 bytes\nok it names the dead name\nok a second request returns the first's send-once right\nok only the second notify port hears of it\nok on a name that is already dead: KERN_INVALID_ARGUMENT (4)\nok the right given is used up: a send-once notification (71), header only\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_request_notification_errors",
+      "source_sha256": "07d45233303c04ad40ec3ea262fb39da89a143d80e7b4e1c7d046849d9655c52",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "50cb6d2079d9cad93060665d60abad52d34a42f4808f300dc2de5e7896914bba",
+          "exit_code": 0,
+          "stdout": "ok a name not in the task: KERN_INVALID_NAME\nok a notify name not in the task: KERN_INVALID_NAME\nok an unknown notification id: KERN_INVALID_VALUE\nok MACH_NOTIFY_SEND_ONCE cannot be requested: KERN_INVALID_VALUE\nok MAKE_SEND as the right's type: -300\nok MAKE_SEND leaves the notify name as it was\nok COPY_SEND: -300\nok COPY_SEND leaves it as it was\nok MOVE_SEND: -300\nok but MOVE_SEND takes the send right away: the name is a receive right only\nok NO_SENDERS on a send-only name: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nok a NULL previous pointer: KERN_MEMORY_ERROR (10)\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9115f991bdc770d6b13e9c960e35f34705af6052c50e25679e056dc0b86d4bc2",
+          "exit_code": 0,
+          "stdout": "ok a name not in the task: KERN_INVALID_NAME\nok a notify name not in the task: KERN_INVALID_NAME\nok an unknown notification id: KERN_INVALID_VALUE\nok MACH_NOTIFY_SEND_ONCE cannot be requested: KERN_INVALID_VALUE\nok MAKE_SEND as the right's type: -300\nok MAKE_SEND leaves the notify name as it was\nok COPY_SEND: -300\nok COPY_SEND leaves it as it was\nok MOVE_SEND: -300\nok but MOVE_SEND takes the send right away: the name is a receive right only\nok NO_SENDERS on a send-only name: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nok a NULL previous pointer: KERN_MEMORY_ERROR (10)\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_request_notification_no_senders_sync",
+      "source_sha256": "3e1b90eed439a6dea4984e3dda5190040fa890d968ef2230fbfebd990bd47d42",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e7970eca21fdaafb82ecb299655dc6d44584de4a154bd2561066ce122cc77fda",
+          "exit_code": 0,
+          "stdout": "ok make-send count 1 below sync 5, no senders: nothing at once\nok a send right made and dropped: the message comes\nok a send right outstanding at the request: the sync value does not hold the message back\nok first request: previous is MACH_PORT_NULL\nok second request: previous is the first one's send-once right\nok cancelling with MACH_PORT_NULL returns the second one's right\nok nothing arrives on the first notify port\nok nothing arrives on the second either\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "69352fee92927ec96e953bc1d52acfc833ba98cb7b0e6df6b934039be538a1e1",
+          "exit_code": 0,
+          "stdout": "ok make-send count 1 below sync 5, no senders: nothing at once\nok a send right made and dropped: the message comes\nok a send right outstanding at the request: the sync value does not hold the message back\nok first request: previous is MACH_PORT_NULL\nok second request: previous is the first one's send-once right\nok cancelling with MACH_PORT_NULL returns the second one's right\nok nothing arrives on the first notify port\nok nothing arrives on the second either\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

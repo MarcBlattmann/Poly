@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontgetascent_sizes",
+      "source_sha256": "3cc3790eefa270aadf2854275f821212f11d545c9db99f47dff1d8f8277d8df6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c2d823b518a2ba17f0fbda38a0884259fcea4a40d1f891d4e91b53731ed8d41d",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetAscent(pt_font(0, 10)) is 8.0000\nok CTFontGetAscent(pt_font(0, 12)) is 9.6000\nok CTFontGetAscent(pt_font(0, 16)) is 12.8000\nok CTFontGetAscent(pt_font(0, 100)) is 80.0000\nok CTFontGetAscent(pt_font(0, 1000)) is 800.0000\nok CTFontGetAscent(pt_font(0, 0)) is 9.6000\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2dafb1413fdeed648dbc145cd17e53a4abaf86d80c6e13e5484ecc33d09d51d5",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetAscent(pt_font(0, 10)) is 8.0000\nok CTFontGetAscent(pt_font(0, 12)) is 9.6000\nok CTFontGetAscent(pt_font(0, 16)) is 12.8000\nok CTFontGetAscent(pt_font(0, 100)) is 80.0000\nok CTFontGetAscent(pt_font(0, 1000)) is 800.0000\nok CTFontGetAscent(pt_font(0, 0)) is 9.6000\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontgetascent_variants",
+      "source_sha256": "f25d880fb80eb4eb215680f0188f6b4c2967ede3fcb35f7a73079338416c1efe",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "09a3dbd09cab2c550a46fc6a8546a3b3cd1ccf92c7c831e5197479bdbe6ae354",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetAscent(pt_font(1, 20)) is 16.0000\nok CTFontGetAscent(pt_font(1, 20)) is CTFontGetAscent(pt_font(0, 20))\nok CTFontGetAscent(CTFontCreateCopyWithAttributes(pt_font(0, 10), 50, NULL, NULL)) is 40.0000\nok CTFontGetAscent(CTFontCreateWithFontDescriptor(pt_descriptor(0), 20, &t)) is 48.0000\nok pt_register()\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 40, NULL)) is 32.0000\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 40, NULL)) is 32.0000\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b1ed0624480449e50c974c6622664d4c5499f09ff70e844602f9d428c35b36df",
+          "exit_code": 0,
+          "stdout": "ok CTFontGetAscent(pt_font(1, 20)) is 16.0000\nok CTFontGetAscent(pt_font(1, 20)) is CTFontGetAscent(pt_font(0, 20))\nok CTFontGetAscent(CTFontCreateCopyWithAttributes(pt_font(0, 10), 50, NULL, NULL)) is 40.0000\nok CTFontGetAscent(CTFontCreateWithFontDescriptor(pt_descriptor(0), 20, &t)) is 48.0000\nok pt_register()\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 40, NULL)) is 32.0000\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 40, NULL)) is 32.0000\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
