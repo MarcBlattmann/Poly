@@ -373,6 +373,22 @@ impl VirtualMemory {
         self.allocations.range_mut(..=addr).next_back().map(|(_, a)| a).filter(|a| a.contains(addr))
     }
 
+    /// Whether every allocation `[base, base + size)` touches is private memory, not a view or a
+    /// placeholder (an empty range: the allocation at `base`): what a process's own memory calls may
+    /// change under its lock alone (ADR 0262; views need the system's sections).
+    pub fn only_private(&self, base: u64, size: u64) -> bool {
+        let start = page_down(base);
+        let end = if size == 0 {
+            self.allocation(start).map_or(start.saturating_add(1), Allocation::end)
+        } else {
+            base.saturating_add(size)
+        };
+        let first = self.allocation(start).map_or(start, |a| a.base);
+        self.allocations
+            .range(first..end.max(first.saturating_add(1)))
+            .all(|(_, a)| a.kind == AllocKind::Private && a.placeholder != Placeholder::Is)
+    }
+
     /// Every allocation, by address.
     pub fn allocations(&self) -> impl Iterator<Item = &Allocation> {
         self.allocations.values()

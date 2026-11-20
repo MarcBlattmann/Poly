@@ -22,6 +22,7 @@ mod audio;
 mod backend;
 pub mod console;
 mod io;
+mod proctable;
 mod test_console;
 mod test_io;
 mod test_pe;
@@ -317,12 +318,13 @@ struct ThreadCtl {
     page_fault: Option<(u64, NtStatus)>,
 }
 
-/// The whole NT state behind one lock (ADR 0030: the object manager and
-/// dispatcher are one lock; the per-process memory models and the section
-/// store ride with it until SMP needs them split).
+/// The NT state behind one lock (ADR 0030: the object manager and dispatcher
+/// are one lock, with the section store). Each process's own state has a lock
+/// of its own inside it (ADR 0262, [`proctable`]): taken after this one, never
+/// before.
 struct NtState {
     sys: NtSystem,
-    processes: BTreeMap<ProcessId, NtProcess>,
+    processes: proctable::ProcTable,
     sections: Sections,
     /// Per-thread control blocks ([`ThreadCtl`]), keyed by thread id.
     ctl: BTreeMap<ThreadRef, ThreadCtl>,
@@ -643,7 +645,7 @@ fn waits_main(_: usize) -> usize {
         let suspended: Vec<String> = with(|s| {
             s.processes
                 .values()
-                .flat_map(|p| p.threads.iter().map(move |t| (p.pid.0, t.thread)))
+                .flat_map(|p| p.threads.iter().map(|t| (p.pid.0, t.thread)).collect::<Vec<_>>())
                 .filter_map(|(pid, t)| {
                     let c = s.ctl.get(&t)?;
                     (c.suspend_count > 0 || c.suspended_ctx.is_some()).then(|| {
@@ -668,7 +670,7 @@ fn waits_main(_: usize) -> usize {
         for pid in pids {
             let process = crate::process::find(pid);
             let memory = io::memory_of(pid);
-            let teb = with(|s| s.processes.get(&ProcessId(pid)).and_then(|p| p.threads.first()).map(|t| t.teb));
+            let teb = with(|s| s.processes.get(&ProcessId(pid)).and_then(|p| p.threads.first().map(|t| t.teb)));
             let modules = match (&memory, teb) {
                 (Some(m), Some(teb)) => {
                     poly_personality_nt::diag::modules(&|at, buf: &mut [u8]| m.read(at, buf).is_ok(), teb)
@@ -854,7 +856,7 @@ fn make_state(slot: &mut Option<NtState>) {
     state.sys.logon = *LOGON.lock();
     // The system's commit limit (ADR 0250): RAM less the frames the kernel keeps for itself.
     let total = crate::frames::FRAMES.lock().as_ref().map_or(0, |f| f.total_frames());
-    state.sys.commit_limit = total.saturating_sub(crate::frames::reserve()) * 4096;
+    state.sys.commit.set_limit(total.saturating_sub(crate::frames::reserve()) * 4096);
     state.sys.consent.hook = *UAC_ANSWER.lock();
     // The Windows folders on C: and the registry values that follow
     // them (ADR 0073), before file I/O attaches C:.
@@ -896,7 +898,7 @@ fn make_state(slot: &mut Option<NtState>) {
 fn build_state(slot: &mut Option<NtState>) {
     *slot = Some(NtState {
         sys: registry::boot_system(),
-        processes: BTreeMap::new(),
+        processes: proctable::ProcTable::default(),
         sections: Sections::default(),
         ctl: BTreeMap::new(),
         timers: BTreeMap::new(),
@@ -981,10 +983,22 @@ impl NtKernel for Kernel {
     fn with_state<R>(&mut self, f: impl FnOnce(&mut NtSystem, &mut NtProcess, &mut dyn Backend) -> R) -> R {
         let memory = &self.memory;
         with(|s| {
-            let proc = s.processes.get_mut(&self.pid).expect("an NT process");
+            let mut proc = s.processes.get_mut(&self.pid).expect("an NT process");
             let mut b = MemBackend { memory, sections: &mut s.sections };
-            f(&mut s.sys, proc, &mut b)
+            f(&mut s.sys, &mut proc, &mut b)
         })
+    }
+
+    fn with_own_vm<R>(&mut self, f: impl FnOnce(&mut NtProcess, &mut dyn Backend) -> R) -> R {
+        // The process's lock alone (ADR 0262): no section is reached (the personality keeps views
+        // out of this path), so the backend gets an empty section store.
+        let Some(cell) = proctable::own(self.pid) else {
+            return self.with_state(|_, proc, b| f(proc, b));
+        };
+        let mut proc = cell.lock();
+        let mut sections = Sections::default();
+        let mut b = MemBackend { memory: &self.memory, sections: &mut sections };
+        f(&mut proc, &mut b)
     }
 
     fn with_process<R>(
@@ -994,9 +1008,9 @@ impl NtKernel for Kernel {
     ) -> Option<R> {
         let memory = io::memory_of(pid.0)?;
         with(|s| {
-            let proc = s.processes.get_mut(&pid)?;
+            let mut proc = s.processes.get_mut(&pid)?;
             let mut b = MemBackend { memory: &memory, sections: &mut s.sections };
-            Some(f(&mut s.sys, proc, &mut b))
+            Some(f(&mut s.sys, &mut proc, &mut b))
         })
     }
 
@@ -1227,7 +1241,7 @@ impl NtKernel for Kernel {
             s.processes
                 .values()
                 .filter(|p| p.exit_status.is_none())
-                .map(poly_personality_nt::proclist::ProcessSummary::of)
+                .map(|p| poly_personality_nt::proclist::ProcessSummary::of(&p))
                 .collect()
         })
     }
@@ -1541,12 +1555,14 @@ fn start_params(
     // A console program gets a console (ADR 0080).
     let console_app = image.info.optional.subsystem == poly_pe::subsystem::WINDOWS_CUI;
     let started = with(|s| {
-        s.processes.insert(pid, NtProcess::new(pid));
+        let mut new = NtProcess::new(pid);
+        s.sys.adopt(&mut new);
+        s.processes.insert(pid, new);
         note_nt_pid(pid.0, true);
         s.created.insert(pid, registry::filetime_now());
         s.finished.remove(&pid);
         s.peak.remove(&pid);
-        let proc = s.processes.get_mut(&pid).expect("just inserted");
+        let mut proc = s.processes.get_mut(&pid).expect("just inserted");
         proc.parent = handles.map_or(0, |h| h.parent().0);
         if let Some(h) = handles {
             proc.set_mitigation(h.mitigation);
@@ -1569,7 +1585,7 @@ fn start_params(
         };
         let only = handles.and_then(|h| h.inherit_only.as_deref());
         let start =
-            exec::start_process_listed(&mut s.sys, proc, &mut b, image, NTDLL, None, thread, inherit_from, only);
+            exec::start_process_listed(&mut s.sys, &mut proc, &mut b, image, NTDLL, None, thread, inherit_from, only);
         let start = start.and_then(|ps| {
             // Its token (a copy of its creator's, or the one given) and the
             // descriptors of its objects (ADR 0171).
@@ -1581,7 +1597,7 @@ fn start_params(
                 thread,
             )?;
             // Its session, from the token (ADR 0222).
-            poly_personality_nt::security::write_session_id(&s.sys, proc, &mut b)?;
+            poly_personality_nt::security::write_session_id(&s.sys, &proc, &mut b)?;
             poly_personality_nt::security::assign_process_security(
                 &mut s.sys,
                 pid,
@@ -1603,10 +1619,10 @@ fn start_params(
                 )?;
             }
             // KUSER_SHARED_DATA at 0x7FFE0000 (ADR 0155).
-            exec::map_user_shared_data(proc, &mut b, &user_shared_facts())?;
+            exec::map_user_shared_data(&mut proc, &mut b, &user_shared_facts())?;
             // The process parameters: image path, command line,
             // environment and current directory (ADR 0073, 0079).
-            let base = poly_personality_nt::params::write(proc, &mut b, ps.peb, params)?;
+            let base = poly_personality_nt::params::write(&mut proc, &mut b, ps.peb, params)?;
             // Its console and standard handles (ADR 0080, 0089).
             let (connection, std) = console::setup(&mut s.sys, &mut b, pid, thread, console_app, sources, creator)?;
             poly_personality_nt::params::write_handles_for(&proc.layout(), &mut b, base, connection, std)?;
@@ -1630,6 +1646,7 @@ fn start_params(
             };
             Ok((ps, opened))
         });
+        drop(proc);
         match start {
             Ok((ps, opened)) => Ok((
                 Start {
@@ -1816,15 +1833,14 @@ pub fn image_of(pid: u32) -> Option<String> {
     with_existing(|s| {
         s.processes
             .get(&ProcessId(pid))
-            .and_then(|p| p.image_name.as_ref())
-            .map(|(_, path)| String::from_utf16_lossy(path))
+            .and_then(|p| p.image_name.as_ref().map(|(_, path)| String::from_utf16_lossy(path)))
     })
     .flatten()
 }
 
 /// The system's commit charge and its limit (ADR 0250), if the NT state is there.
 pub fn commit() -> Option<(u64, u64)> {
-    with_existing(|s| (s.sys.commit_total, s.sys.commit_limit))
+    with_existing(|s| (s.sys.commit.total(), s.sys.commit.limit()))
 }
 
 /// End NT process `pid` because memory ran out (ADR 0250, `crate::oom`): as `NtTerminateProcess`
@@ -1853,9 +1869,10 @@ pub fn thread_exit(pid: u32, tid: u32, status: ExitStatus, memory: &Arc<Memory>)
             return None;
         }
         let nt_status = s.ctl.get(&tref).and_then(|c| c.exit_status).unwrap_or_else(|| exit_to_nt(status));
-        let proc = s.processes.get_mut(&ProcessId(pid)).expect("checked");
+        let mut proc = s.processes.get_mut(&ProcessId(pid)).expect("checked");
         let mut b = MemBackend { memory, sections: &mut s.sections };
-        exec::thread_exit(&mut s.sys, proc, &mut b, tref, nt_status);
+        exec::thread_exit(&mut s.sys, &mut proc, &mut b, tref, nt_status);
+        drop(proc);
         s.ctl.remove(&tref);
         // Its pending I/O requests are cancelled (ADR 0067).
         s.sys.io.cancel_thread(tref);
@@ -2003,7 +2020,8 @@ fn shell_main(_: usize) -> usize {
         Ok(p) => {
             // The session's shell window answers as this process's (`GetShellWindow`).
             with(|s| {
-                let tid = s.processes.get(&ProcessId(p.pid)).and_then(|q| q.threads.first()).map_or(0, |t| t.thread.0);
+                let tid =
+                    s.processes.get(&ProcessId(p.pid)).and_then(|q| q.threads.first().map(|t| t.thread.0)).unwrap_or(0);
                 s.sys.win32k.wm.mutate().set_shell_process(p.pid, tid as u32);
             });
             crate::kprintln!("nt: explorer.exe started (p{}) with the filtered token", p.pid)
@@ -2027,10 +2045,10 @@ fn boot_services(_: usize) -> usize {
 /// exception. Returns whether the faulting instruction should be retried.
 pub fn resolve_fault(pid: u32, tid: u32, memory: &Arc<Memory>, addr: u64) -> bool {
     with(|s| {
-        let Some(proc) = s.processes.get_mut(&ProcessId(pid)) else { return false };
+        let Some(mut proc) = s.processes.get_mut(&ProcessId(pid)) else { return false };
         let mut b = MemBackend { memory, sections: &mut s.sections };
         let tref = ThreadRef(u64::from(tid));
-        match exec::access_fault(proc, &mut b, tref, addr) {
+        match exec::access_fault(&mut proc, &mut b, tref, addr) {
             vm::AccessFault::StackGrown { .. } => true,
             // Remembered for the exception it raises (ADR 0068).
             vm::AccessFault::Exception(status) => {

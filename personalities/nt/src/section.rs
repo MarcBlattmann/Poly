@@ -535,7 +535,7 @@ fn map_section_inner(
     let mut status = status;
     if reloc_to_view || (status == STATUS_IMAGE_NOT_AT_BASE && relocate) {
         let img = section.image().expect("an image");
-        match img.relocated(base) {
+        match img.relocated_from(base, &mut sys.reloc_tables) {
             Ok(bytes) => {
                 source = ViewSource::Image(bytes);
                 status = STATUS_SUCCESS;

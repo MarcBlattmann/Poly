@@ -358,12 +358,13 @@ pub fn create_thread(
     let tid_u32 = crate::process::alloc_nt_id();
     let tref = ThreadRef(u64::from(tid_u32));
     let (start, handle) = with(|s| {
-        let proc = s.processes.get_mut(&target).ok_or(STATUS_PROCESS_IS_TERMINATING)?;
+        let mut proc = s.processes.get_mut(&target).ok_or(STATUS_PROCESS_IS_TERMINATING)?;
         if target != pid && proc.exit_status.is_some() {
             return Err(STATUS_PROCESS_IS_TERMINATING);
         }
         let mut b = MemBackend { memory: &memory, sections: &mut s.sections };
-        let start = exec::create_thread(&mut s.sys, proc, &mut b, &req, tref)?;
+        let start = exec::create_thread(&mut s.sys, &mut proc, &mut b, &req, tref)?;
+        drop(proc);
         let obj = s.sys.objects.thread_object(tref).expect("new thread object");
         let caller = poly_ntobj::Caller::user(pid, caller);
         let attributes = if req.inherit { poly_ntobj::OBJ_INHERIT } else { 0 };
@@ -381,9 +382,9 @@ pub fn create_thread(
         let handle = match handle {
             Ok(h) => h,
             Err(e) => {
-                let proc = s.processes.get_mut(&target).expect("still there");
+                let mut proc = s.processes.get_mut(&target).expect("still there");
                 let mut b = MemBackend { memory: &memory, sections: &mut s.sections };
-                exec::thread_exit(&mut s.sys, proc, &mut b, tref, STATUS_UNSUCCESSFUL);
+                exec::thread_exit(&mut s.sys, &mut proc, &mut b, tref, STATUS_UNSUCCESSFUL);
                 return Err(e);
             }
         };
@@ -462,9 +463,9 @@ fn spawn(
         Err(_) => {
             // Undo the stack, TEB and object the layout made.
             with(|s| {
-                if let Some(proc) = s.processes.get_mut(&ProcessId(process.pid)) {
+                if let Some(mut proc) = s.processes.get_mut(&ProcessId(process.pid)) {
                     let mut b = MemBackend { memory, sections: &mut s.sections };
-                    exec::thread_exit(&mut s.sys, proc, &mut b, tref, STATUS_UNSUCCESSFUL);
+                    exec::thread_exit(&mut s.sys, &mut proc, &mut b, tref, STATUS_UNSUCCESSFUL);
                 }
             });
             Err(STATUS_UNSUCCESSFUL)
@@ -514,7 +515,7 @@ pub fn terminate_other(pid: ProcessId, thread: ThreadRef, status: NtStatus) -> R
 /// whose first thread was never started (created suspended) ends at once.
 pub fn terminate_process_by_id(target: ProcessId, status: NtStatus) -> Result<(), NtStatus> {
     let (threads, deferred) = with(|s| {
-        let Some(p) = s.processes.get_mut(&target) else { return (Vec::new(), None) };
+        let Some(mut p) = s.processes.get_mut(&target) else { return (Vec::new(), None) };
         p.exit_status.get_or_insert(status);
         let threads: Vec<ThreadRef> = p.threads.iter().map(|t| t.thread).collect();
         let mut deferred = None;

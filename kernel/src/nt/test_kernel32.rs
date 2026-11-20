@@ -85,6 +85,17 @@ mod tests {
         }
     }
 
+    kernel_test! {
+        /// Per-process memory locks (ADR 0262): `k32test.exe --vm-stress` runs memory calls
+        /// (commit, protect, query, decommit, release, two views of a section) from four threads
+        /// in each of four processes at once, while the parent allocates, writes, reads, protects,
+        /// queries and frees memory in each child from a thread of its own; every result is
+        /// checked.
+        fn nt_memory_calls_of_many_threads_and_processes_at_once() -> TestResult {
+            run("--vm-stress")
+        }
+    }
+
     /// Install and run `k32test.exe` with argument `arg`; it must pass.
     fn run(arg: &str) -> crate::ktest::TestResult {
         {

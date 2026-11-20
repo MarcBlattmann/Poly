@@ -2,7 +2,7 @@
 //! (ADR 0155): only their headers are read when they are opened, and the
 //! kernel says `STATUS_NO_MEMORY` when memory runs out instead of panicking.
 
-use crate::image::{ImageFile, ImageSection, try_filled};
+use crate::image::{ImageFile, ImageSection, RelocTables, try_filled};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -155,4 +155,60 @@ fn relocating_a_big_image_reads_its_table_not_its_file() {
     // About 8 bytes per block and its entry, twice: nothing like the 160 MB file.
     let read = file.read_total() - before;
     assert!(read < 4 << 20, "{read} bytes read to check the table");
+}
+
+/// [`Counting`] as a file with a name ([`ImageFile::identity`]), so its relocation table may be
+/// kept by file.
+#[derive(Debug)]
+struct Named(Arc<Counting>);
+
+impl ImageFile for Named {
+    fn len(&self) -> u64 {
+        self.0.len()
+    }
+
+    fn read_at(&self, offset: u64, buf: &mut [u8]) -> usize {
+        self.0.read_at(offset, buf)
+    }
+
+    fn identity(&self) -> Option<crate::imageshare::FileIdentity> {
+        Some(crate::imageshare::FileIdentity { dev: 1, ino: 7, size: self.0.len, mtime_sec: 0, mtime_nsec: 0 })
+    }
+}
+
+/// ADR 0262: the second relocated view of a big image file, from a section of its own, takes the
+/// table the first one checked instead of reading it again, and sees the same bytes.
+#[test]
+fn a_big_files_checked_relocation_table_is_kept_for_its_next_views() {
+    let mut table = Vec::new();
+    for i in 0..4_000u32 {
+        table.extend_from_slice(&(0x1000 * (i % 100)).to_le_bytes());
+        table.extend_from_slice(&12u32.to_le_bytes());
+        table.extend_from_slice(&((10u16 << 12) | 8).to_le_bytes());
+        table.extend_from_slice(&0u16.to_le_bytes());
+    }
+    let mut head = small_exe();
+    let size = (table.len() as u32).next_multiple_of(4096);
+    let rel = append_section(&mut head, ".rel2", &table, size, DATA).unwrap();
+    head.resize(rel.file_len as usize, 0);
+    let pad = append_section(&mut head, ".pad", &[], 160 << 20, DATA).unwrap();
+    set_directory(&mut head, 5, rel.rva, table.len() as u32);
+    let file = Counting::new(head, pad.file_len);
+    let mut tables = RelocTables::default();
+    let first = ImageSection::from_reader(Arc::new(Named(file.clone()))).expect("opens");
+    let base = first.image_base() + 0x1000_0000;
+    let a = first.relocated_from(base, &mut tables).expect("relocates");
+    assert_eq!(tables.len(), 1);
+    // Another section of the same file: the table is not read again.
+    let second = ImageSection::from_reader(Arc::new(Named(file.clone()))).expect("opens");
+    let before = file.read_total();
+    let b = second.relocated_from(base + 0x10_0000, &mut tables).expect("relocates");
+    assert_eq!(file.read_total() - before, 0, "the table was read again");
+    assert_eq!(tables.len(), 1);
+    // Both apply the fix-ups by their own delta: page 0 has 40 blocks of one entry, each fixing
+    // the 8 bytes at RVA 8.
+    let (mut x, mut y) = ([0u8; 8], [0u8; 8]);
+    a.read_at(8, &mut x);
+    b.read_at(8, &mut y);
+    assert_eq!(u64::from_le_bytes(y).wrapping_sub(u64::from_le_bytes(x)), 40 * 0x10_0000);
 }

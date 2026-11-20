@@ -281,6 +281,55 @@ pub struct Fake {
     /// WOW64 tests); otherwise `load_context` is not implemented, as before.
     pub loaded: Option<poly_seh::Context>,
     pub accept_contexts: bool,
+    /// How many calls ran on the process's own memory under its lock alone
+    /// ([`NtKernel::with_own_vm`], ADR 0262).
+    pub own_vm_calls: usize,
+}
+
+/// The fake's memory as [`NtKernel::with_own_vm`] gives it: the kernel's own-memory path has no
+/// section store, so a call that reaches one there fails the test (ADR 0262).
+struct OwnVm<'a>(&'a mut Mem);
+
+impl Backend for OwnVm<'_> {
+    fn commit(&mut self, addr: u64, len: u64, prot: HwProt) -> Result<(), NtStatus> {
+        self.0.commit(addr, len, prot)
+    }
+    fn release(&mut self, addr: u64, len: u64) {
+        self.0.release(addr, len)
+    }
+    fn protect(&mut self, addr: u64, len: u64, prot: HwProt) {
+        self.0.protect(addr, len, prot)
+    }
+    fn map_view(&mut self, _: u64, _: u64, _: &ViewMap) -> Result<(), NtStatus> {
+        panic!("a view is mapped on the own-memory path")
+    }
+    fn write(&mut self, addr: u64, data: &[u8]) -> Result<(), NtStatus> {
+        self.0.write(addr, data)
+    }
+    fn read(&mut self, addr: u64, buf: &mut [u8]) -> Result<(), NtStatus> {
+        self.0.read(addr, buf)
+    }
+    fn page_written(&mut self, addr: u64) -> bool {
+        self.0.page_written(addr)
+    }
+    fn page_resident(&mut self, addr: u64) -> bool {
+        self.0.page_resident(addr)
+    }
+    fn create_section(&mut self, _: &SectionSource) -> Result<u64, NtStatus> {
+        panic!("a section is made on the own-memory path")
+    }
+    fn commit_section(&mut self, _: u64, _: u64, _: u64) {
+        panic!("a section is committed on the own-memory path")
+    }
+    fn delete_section(&mut self, _: u64) {
+        panic!("a section is deleted on the own-memory path")
+    }
+    fn file_size(&mut self, _: u64) -> Option<u64> {
+        panic!("a file is read on the own-memory path")
+    }
+    fn read_file(&mut self, _: u64) -> Result<Vec<u8>, NtStatus> {
+        panic!("a file is read on the own-memory path")
+    }
 }
 
 /// What the fake's `audio_open` calls.
@@ -376,6 +425,11 @@ impl NtKernel for Fake {
         f(&mut self.sys, &mut self.proc, &mut self.mem)
     }
 
+    fn with_own_vm<R>(&mut self, f: impl FnOnce(&mut NtProcess, &mut dyn Backend) -> R) -> R {
+        self.own_vm_calls += 1;
+        f(&mut self.proc, &mut OwnVm(&mut self.mem))
+    }
+
     fn terminate_process(&mut self, status: NtStatus) {
         self.terminated = Some(status);
     }
@@ -399,6 +453,7 @@ impl NtKernel for Fake {
         self.next_tid += 1;
         let (pid, tid) = (ProcessId(self.next_tid as u32), ThreadRef(self.next_tid));
         let mut child = NtProcess::new(pid);
+        self.sys.adopt(&mut child);
         let mut mem = Mem::default();
         let caller = self.caller();
         let inherit = req.inherit_handles.then_some(caller.process);
@@ -592,9 +647,11 @@ impl Fake {
         for a in (SCRATCH..SCRATCH + SCRATCH_SIZE).step_by(PAGE_SIZE as usize) {
             mem.pages.insert(a, Page { prot: HwProt::RW, frame: frame(), section: None });
         }
+        let (mut sys, mut proc) = (NtSystem::new(), NtProcess::new(PID));
+        sys.adopt(&mut proc);
         Fake {
-            sys: NtSystem::new(),
-            proc: NtProcess::new(PID),
+            sys,
+            proc,
             mem,
             terminated: None,
             terminated_thread: None,
@@ -611,6 +668,7 @@ impl Fake {
             next: SCRATCH,
             loaded: None,
             accept_contexts: false,
+            own_vm_calls: 0,
         }
     }
 
