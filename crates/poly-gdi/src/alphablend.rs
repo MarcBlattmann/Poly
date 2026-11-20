@@ -43,8 +43,14 @@ pub fn blend_constant(s: u8, d: u8, a: u8) -> u8 {
 
 /// `premultiplied`: the colour bytes `s` (with the source alpha byte `sa`) over the destination's
 /// `d` (with its alpha byte `da`), scaled by the constant alpha `a`; the colours and the alpha
-/// byte of the result. A colour byte above the alpha byte (not premultiplied) wraps as the
-/// sheet's `non_premultiplied` describes.
+/// byte of the result.
+///
+/// The scaled source and the scaled destination are added as one 32-bit pixel (blue, green, red,
+/// alpha from the lowest byte up): a byte whose sum passes 255 keeps the low eight bits and
+/// carries one into the next byte. For premultiplied pixels no sum passes 255; for a colour byte
+/// above its alpha byte this gives what the sheet's `non_premultiplied` observed: a sum of 355
+/// or 256 reads 100 or 1 when the byte below also passed 255 (the sum less 255), and the alpha
+/// byte one more than the formula (`s = 255, sa = 1, a = 255`: alpha 2).
 pub fn blend_premultiplied(s: [u8; 3], sa: u8, d: [u8; 3], da: u8, a: u8) -> ([u8; 3], u8) {
     // A pixel of alpha 0 leaves the destination alone, whatever its colour.
     if sa == 0 {
@@ -52,14 +58,20 @@ pub fn blend_premultiplied(s: [u8; 3], sa: u8, d: [u8; 3], da: u8, a: u8) -> ([u
     }
     let a32 = u32::from(a);
     let a2 = if sa == 255 { a32 } else { mul(u32::from(sa), a32) };
-    let mut out = [0u8; 3];
+    let mut sums = [0u32; 4];
     for i in 0..3 {
         let (sv, dv) = (u32::from(s[i]), u32::from(d[i]));
-        let v = if sa == 255 { (sv * a32 + dv * (255 - a32) + 127) / 255 } else { mul(sv, a32) + mul(dv, 255 - a2) };
-        out[i] = if v > 255 { (v - 255) as u8 } else { v as u8 };
+        sums[i] = if sa == 255 { (sv * a32 + dv * (255 - a32) + 127) / 255 } else { mul(sv, a32) + mul(dv, 255 - a2) };
     }
-    let alpha = a2 + mul(u32::from(da), 255 - a2);
-    (out, alpha.min(255) as u8)
+    sums[3] = a2 + mul(u32::from(da), 255 - a2);
+    let mut out = [0u8; 4];
+    let mut carry = 0;
+    for i in 0..4 {
+        let v = sums[i] + carry;
+        out[i] = (v & 0xFF) as u8;
+        carry = v >> 8;
+    }
+    ([out[0], out[1], out[2]], out[3])
 }
 
 /// `stretching`: the source column (or row) destination column `dx` takes when `sw` source
@@ -102,8 +114,11 @@ mod tests {
         assert_eq!(blend_premultiplied([10, 20, 30], 255, [100, 100, 100], 50, 255), ([10, 20, 30], 255));
         // A transparent black pixel leaves the destination.
         assert_eq!(blend_premultiplied([0; 3], 0, [37, 37, 37], 77, 200), ([37, 37, 37], 77));
-        // non_premultiplied: 355 wraps to 100; 256 to 1.
-        assert_eq!(blend_premultiplied([255, 2, 0], 1, [100, 255, 0], 0, 255).0[..2], [100, 1]);
+        // non_premultiplied: white of alpha 1 over 100: blue 355 keeps 99 and carries, so green
+        // and red read 100 and the alpha byte 2 (one more than the formula's 1).
+        assert_eq!(blend_premultiplied([255, 255, 255], 1, [100, 100, 100], 0, 255), ([99, 100, 100], 2));
+        // 256 gives 1 above a byte that carried.
+        assert_eq!(blend_premultiplied([2, 2, 2], 1, [255, 255, 255], 0, 255), ([0, 1, 1], 2));
         // Half-transparent white at full constant alpha over black.
         let (c, a) = blend_premultiplied([128, 128, 128], 128, [0, 0, 0], 0, 255);
         assert_eq!((c, a), ([128, 128, 128], 128));
