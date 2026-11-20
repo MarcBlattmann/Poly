@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_numdevs_count",
+      "exe_sha256": "104e472a4b4cf8e86792926384f47f0193023eee75a6b5857214d7bec99d083c",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGV2aWNlcyA9IDEKb2sgb25lIGRldmljZQpvayBzYW1lIG9uIHRoZSBzZWNvbmQgY2FsbApjYXBzIG9mIGRldmljZSAwID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgY2FwcyBvZiBkZXZpY2UgMApjYXBzIG9mIGRldmljZSBjb3VudCA9IE1NU1lTRVJSX0JBRERFVklDRUlEICgyKQpvayBjYXBzIG9mIGRldmljZSBjb3VudApjYXBzIG9mIHRoZSBtYXBwZXIgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBjYXBzIG9mIHRoZSBtYXBwZXIKc3VtbWFyeSA1IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "devices = 1\nok one device\nok same on the second call\ncaps of device 0 = MMSYSERR_NOERROR (0)\nok caps of device 0\ncaps of device count = MMSYSERR_BADDEVICEID (2)\nok caps of device count\ncaps of the mapper = MMSYSERR_NOERROR (0)\nok caps of the mapper\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 81
+    },
+    {
+      "name": "wo_numdevs_open_handles",
+      "exe_sha256": "fe293aaf4b06cfe25581b581fa9eb25923c087831577cea2fac1075369996c5b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKb3BlbiBmaXJzdCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIG9wZW4gZmlyc3QKb3BlbiBzZWNvbmQgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBvcGVuIHNlY29uZApvayB0d28gZGlmZmVyZW50IGhhbmRsZXMKb2sgY291bnQgd2l0aCB0d28gaGFuZGxlcyBvcGVuCmNsb3NlIGZpcnN0ID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgY2xvc2UgZmlyc3QKY2xvc2Ugc2Vjb25kID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgY2xvc2Ugc2Vjb25kCm9rIGNvdW50IGFmdGVyIGNsb3NpbmcKY291bnQgYmVmb3JlIDEgZHVyaW5nIDEgYWZ0ZXIgMQpzdW1tYXJ5IDggcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nopen first = MMSYSERR_NOERROR (0)\nok open first\nopen second = MMSYSERR_NOERROR (0)\nok open second\nok two different handles\nok count with two handles open\nclose first = MMSYSERR_NOERROR (0)\nok close first\nclose second = MMSYSERR_NOERROR (0)\nok close second\nok count after closing\ncount before 1 during 1 after 1\nsummary 8 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 193
+    },
+    {
+      "name": "wo_numdevs_thread",
+      "exe_sha256": "f1211870c763fa45789854bb6cc1d2489304c160d316e386c44fe1f4ae41d7ee",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgdGhyZWFkIGNyZWF0ZWQKb2sgdGhyZWFkIGZpbmlzaGVkCm1haW4gMSBvdGhlciB0aHJlYWQgMQpvayBzYW1lIGNvdW50IG9uIGFub3RoZXIgdGhyZWFkCnN1bW1hcnkgMyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok thread created\nok thread finished\nmain 1 other thread 1\nok same count on another thread\nsummary 3 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 92
+    }
+  ]
+}

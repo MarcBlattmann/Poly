@@ -89,6 +89,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "dcomp.dll",
     "dxcore.dll",
     "ucrtbase.dll",
+    "winmm.dll",
 ];
 /// The observation file a test writes beside itself (`poly_wtest::OUTPUT_FILE`).
 pub const OUTPUT_FILE: &str = "poly-test.out";

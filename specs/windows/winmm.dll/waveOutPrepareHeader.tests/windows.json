@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_prep_errors",
+      "exe_sha256": "844bb5eca5580e0b6466fb1c9cb6ba834b2e655d8dffb0a358fe333f3c62af01",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKV0FWRUhEUiBpcyA0OCBieXRlcwpvayBXQVZFSERSIGlzIDQ4IGJ5dGVzCnNpemUgMCA9IE1NU1lTRVJSX0lOVkFMUEFSQU0gKDExKQpvayBzaXplIDAKb2sgaGVhZGVyIHVudG91Y2hlZApzaXplIDQgPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgc2l6ZSA0Cm9rIGhlYWRlciB1bnRvdWNoZWQKc2l6ZSA4ID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIHNpemUgOApvayBoZWFkZXIgdW50b3VjaGVkCnNpemUgNDcgPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgc2l6ZSA0NwpvayBoZWFkZXIgdW50b3VjaGVkCnNpemUgNDggPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBzaXplIDQ4CnNpemUgNjQgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBzaXplIDY0Cm51bGwgaGVhZGVyID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIG51bGwgaGVhZGVyCmZsYWdzIDB4MjAgPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgZmxhZ3MgMHgyMApvayBmbGFncyBsZWZ0IGFzIHRoZXkgd2VyZQpmbGFncyAweDQwID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIGZsYWdzIDB4NDAKb2sgZmxhZ3MgbGVmdCBhcyB0aGV5IHdlcmUKZmxhZ3MgMHg4MCA9IE1NU1lTRVJSX0lOVkFMUEFSQU0gKDExKQpvayBmbGFncyAweDgwCm9rIGZsYWdzIGxlZnQgYXMgdGhleSB3ZXJlCmZsYWdzIDB4MTAwID0gTU1TWVNFUlJfSU5WQUxQQVJBTSAoMTEpCm9rIGZsYWdzIDB4MTAwCm9rIGZsYWdzIGxlZnQgYXMgdGhleSB3ZXJlCmZsYWdzIDB4ODAwMDAwMDAgPSBNTVNZU0VSUl9JTlZBTFBBUkFNICgxMSkKb2sgZmxhZ3MgMHg4MDAwMDAwMApvayBmbGFncyBsZWZ0IGFzIHRoZXkgd2VyZQp6ZXJvIGxlbmd0aCA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHplcm8gbGVuZ3RoCm51bGwgZGF0YSBwb2ludGVyID0gTU1TWVNFUlJfTk9FUlJPUiAoMCkKb2sgbnVsbCBkYXRhIHBvaW50ZXIKaGFuZGxlIDAgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgaGFuZGxlIDAKbWFkZS11cCBoYW5kbGUgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgbWFkZS11cCBoYW5kbGUKY2xvc2VkIGhhbmRsZSA9IE1NU1lTRVJSX0lOVkFMSEFORExFICg1KQpvayBjbG9zZWQgaGFuZGxlCnN1bW1hcnkgMjggcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nWAVEHDR is 48 bytes\nok WAVEHDR is 48 bytes\nsize 0 = MMSYSERR_INVALPARAM (11)\nok size 0\nok header untouched\nsize 4 = MMSYSERR_INVALPARAM (11)\nok size 4\nok header untouched\nsize 8 = MMSYSERR_INVALPARAM (11)\nok size 8\nok header untouched\nsize 47 = MMSYSERR_INVALPARAM (11)\nok size 47\nok header untouched\nsize 48 = MMSYSERR_NOERROR (0)\nok size 48\nsize 64 = MMSYSERR_NOERROR (0)\nok size 64\nnull header = MMSYSERR_INVALPARAM (11)\nok null header\nflags 0x20 = MMSYSERR_INVALPARAM (11)\nok flags 0x20\nok flags left as they were\nflags 0x40 = MMSYSERR_INVALPARAM (11)\nok flags 0x40\nok flags left as they were\nflags 0x80 = MMSYSERR_INVALPARAM (11)\nok flags 0x80\nok flags left as they were\nflags 0x100 = MMSYSERR_INVALPARAM (11)\nok flags 0x100\nok flags left as they were\nflags 0x80000000 = MMSYSERR_INVALPARAM (11)\nok flags 0x80000000\nok flags left as they were\nzero length = MMSYSERR_NOERROR (0)\nok zero length\nnull data pointer = MMSYSERR_NOERROR (0)\nok null data pointer\nhandle 0 = MMSYSERR_INVALHANDLE (5)\nok handle 0\nmade-up handle = MMSYSERR_INVALHANDLE (5)\nok made-up handle\nclosed handle = MMSYSERR_INVALHANDLE (5)\nok closed handle\nsummary 28 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 185
+    },
+    {
+      "name": "wo_prep_flags",
+      "exe_sha256": "0d11ae8aa0d4228dd61a82b7a995860bf917d4089f6ed02a05de64f9dbfdadcc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKbm8gZmxhZ3M6IE1NU1lTRVJSX05PRVJST1IgZmxhZ3MgUFJFUEFSRUQKb2sgbm8gZmxhZ3MKb2sgZmxhZ3MgYWZ0ZXIgcHJlcGFyZQpET05FOiBNTVNZU0VSUl9OT0VSUk9SIGZsYWdzIFBSRVBBUkVECm9rIERPTkUKb2sgZmxhZ3MgYWZ0ZXIgcHJlcGFyZQpCRUdJTkxPT1A6IE1NU1lTRVJSX05PRVJST1IgZmxhZ3MgUFJFUEFSRUR8QkVHSU5MT09QCm9rIEJFR0lOTE9PUApvayBmbGFncyBhZnRlciBwcmVwYXJlCkVORExPT1A6IE1NU1lTRVJSX05PRVJST1IgZmxhZ3MgUFJFUEFSRUR8RU5ETE9PUApvayBFTkRMT09QCm9rIGZsYWdzIGFmdGVyIHByZXBhcmUKQkVHSU5MT09QfEVORExPT1A6IE1NU1lTRVJSX05PRVJST1IgZmxhZ3MgUFJFUEFSRUR8QkVHSU5MT09QfEVORExPT1AKb2sgQkVHSU5MT09QfEVORExPT1AKb2sgZmxhZ3MgYWZ0ZXIgcHJlcGFyZQpET05FfEJFR0lOTE9PUDogTU1TWVNFUlJfTk9FUlJPUiBmbGFncyBQUkVQQVJFRHxCRUdJTkxPT1AKb2sgRE9ORXxCRUdJTkxPT1AKb2sgZmxhZ3MgYWZ0ZXIgcHJlcGFyZQpJTlFVRVVFIChzdGFsZSk6IE1NU1lTRVJSX05PRVJST1IgZmxhZ3MgUFJFUEFSRUQKb2sgSU5RVUVVRSAoc3RhbGUpCm9rIGZsYWdzIGFmdGVyIHByZXBhcmUKb2sgcHJlcGFyZQpvayBwcmVwYXJlIGFnYWluCmFmdGVyIHRoZSBzZWNvbmQgcHJlcGFyZSBET05FfFBSRVBBUkVECm9rIGZsYWdzIHVuY2hhbmdlZCBieSB0aGUgc2Vjb25kIHByZXBhcmUKb2sgcHJlcGFyZQpvayBkd1VzZXIga2VwdApvayBkd0xvb3BzIGtlcHQKb2sgZHdCeXRlc1JlY29yZGVkIGtlcHQKb2sgZHdCdWZmZXJMZW5ndGgga2VwdApvayBscERhdGEga2VwdApzdW1tYXJ5IDI0IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nno flags: MMSYSERR_NOERROR flags PREPARED\nok no flags\nok flags after prepare\nDONE: MMSYSERR_NOERROR flags PREPARED\nok DONE\nok flags after prepare\nBEGINLOOP: MMSYSERR_NOERROR flags PREPARED|BEGINLOOP\nok BEGINLOOP\nok flags after prepare\nENDLOOP: MMSYSERR_NOERROR flags PREPARED|ENDLOOP\nok ENDLOOP\nok flags after prepare\nBEGINLOOP|ENDLOOP: MMSYSERR_NOERROR flags PREPARED|BEGINLOOP|ENDLOOP\nok BEGINLOOP|ENDLOOP\nok flags after prepare\nDONE|BEGINLOOP: MMSYSERR_NOERROR flags PREPARED|BEGINLOOP\nok DONE|BEGINLOOP\nok flags after prepare\nINQUEUE (stale): MMSYSERR_NOERROR flags PREPARED\nok INQUEUE (stale)\nok flags after prepare\nok prepare\nok prepare again\nafter the second prepare DONE|PREPARED\nok flags unchanged by the second prepare\nok prepare\nok dwUser kept\nok dwLoops kept\nok dwBytesRecorded kept\nok dwBufferLength kept\nok lpData kept\nsummary 24 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 185
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/winmm.dll/waveOutBreakLoop.yaml
+id: windows/api/winmm.dll/waveOutBreakLoop
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-waveout
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only). Microsoft Learn: "waveOutOpen function", "waveOutClose", "waveOutPrepareHeader", "waveOutUnprepareHeader", "waveOutWrite", "waveOutPause", "waveOutRestart", "waveOutReset", "waveOutBreakLoop", "waveOutGetPosition", "waveOutGetVolume", "waveOutSetVolume", "waveOutGetDevCaps", "waveOutGetNumDevs", "waveOutGetID", "waveOutGetErrorText", "waveOutMessage", "WAVEHDR", "WAVEFORMATEX", "WAVEFORMATEXTENSIBLE", "WAVEOUTCAPS", "MMTIME", "waveOutProc callback function", "Multimedia Error Codes"; constants and layouts from mmsystem.h, mmeapi.h, mmreg.h and ksmedia.h. The import names of Chrome's chrome.dll come from the survey in docs/windows/audio-plan.md. No Wine, ReactOS or Chromium source was read and no Microsoft binary was disassembled.
+summary: >
+  Ends a loop that is playing (WHDR_BEGINLOOP / WHDR_ENDLOOP): the loop finishes its current pass and playing goes on after it.
+interface:
+  signature: "MMRESULT waveOutBreakLoop(HWAVEOUT handle)"
+rules:
+  break: "a header looped 1000 times (dwLoops, 4800 bytes) is still not done after 120 ms; after waveOutBreakLoop it is done within 3 s, at least one pass (4800 bytes) was played and far fewer than twenty; its loop flags stay set"
+  idle: "with no loop it succeeds and changes nothing: also while a plain buffer plays (the whole buffer is played once, position 9600)"
+errors:
+  invalid_handle: "MMSYSERR_INVALHANDLE (5) for 0 and a made-up value"
+side_effects: "none besides the end of the loop"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing winmm.dll, kernel32.dll (and user32.dll for the window and thread callback tests) by name, built with the pipeline's usual flags. Every test needs a wave output device: it first checks that waveOutGetNumDevs is at least 1 and fails if not. Audio data is always silence (zero samples; never 8-bit data, whose silence is not zero), so nothing is audible. Observations are return codes, header flags, booleans, counts, orders of callbacks and positions that follow from the bytes written; never handles, thread ids, addresses or times. Waiting is bounded: a buffer of 50 or 100 ms is waited for up to 5 s, and "nothing happens" checks look for 100 to 400 ms. The tests that change the volume restore it; the volume is per process, so a test that fails does not leave it changed. A few tests are the exception: they say "NO SOUND DEVICE" in their first line and must be run with no sound device present; their recording was made with the oracle's sound card disabled (the HD audio function turned off in Device Manager terms, and turned on again after the run); where such a test runs with a device it fails.
+not_covered: >
+  Machines with no sound device, except for the no-device rules named above; devices other than device 0 and the mapper; how long a buffer takes to start or the latency of any call; capture (waveIn) and MIDI. Which pass the loop stops at.

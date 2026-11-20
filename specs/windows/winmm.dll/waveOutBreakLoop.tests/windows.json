@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_breakloop_idle",
+      "exe_sha256": "abb06925a74b59ed231f54a1284c8aecb403dc4c396376e1676fd6dfdab2b5e3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKaGFuZGxlIDAgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgaGFuZGxlIDAKbWFkZS11cCBoYW5kbGUgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgbWFkZS11cCBoYW5kbGUKaWRsZSBoYW5kbGUgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBpZGxlIGhhbmRsZQpvayBxdWV1ZSBhIHBsYWluIGJ1ZmZlcgp3aGlsZSBhIHBsYWluIGJ1ZmZlciBwbGF5cyA9IE1NU1lTRVJSX05PRVJST1IgKDApCm9rIHdoaWxlIGEgcGxhaW4gYnVmZmVyIHBsYXlzCm9rIGRvbmUKb2sgdGhlIHdob2xlIGJ1ZmZlciB3YXMgcGxheWVkIG9uY2UKc3VtbWFyeSA4IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nhandle 0 = MMSYSERR_INVALHANDLE (5)\nok handle 0\nmade-up handle = MMSYSERR_INVALHANDLE (5)\nok made-up handle\nidle handle = MMSYSERR_NOERROR (0)\nok idle handle\nok queue a plain buffer\nwhile a plain buffer plays = MMSYSERR_NOERROR (0)\nok while a plain buffer plays\nok done\nok the whole buffer was played once\nsummary 8 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 285
+    }
+  ]
+}

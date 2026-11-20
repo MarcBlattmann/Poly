@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/winmm.dll/waveOutWrite.yaml
+id: windows/api/winmm.dll/waveOutWrite
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-waveout
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only). Microsoft Learn: "waveOutOpen function", "waveOutClose", "waveOutPrepareHeader", "waveOutUnprepareHeader", "waveOutWrite", "waveOutPause", "waveOutRestart", "waveOutReset", "waveOutBreakLoop", "waveOutGetPosition", "waveOutGetVolume", "waveOutSetVolume", "waveOutGetDevCaps", "waveOutGetNumDevs", "waveOutGetID", "waveOutGetErrorText", "waveOutMessage", "WAVEHDR", "WAVEFORMATEX", "WAVEFORMATEXTENSIBLE", "WAVEOUTCAPS", "MMTIME", "waveOutProc callback function", "Multimedia Error Codes"; constants and layouts from mmsystem.h, mmeapi.h, mmreg.h and ksmedia.h. The import names of Chrome's chrome.dll come from the survey in docs/windows/audio-plan.md. No Wine, ReactOS or Chromium source was read and no Microsoft binary was disassembled.
+summary: >
+  Queues a prepared buffer for playing after the buffers queued before it; returns at once. When the buffer has been played the system sets WHDR_DONE, clears WHDR_INQUEUE and notifies WOM_DONE. A buffer's data must not change while it is queued. WAVEHDR is 48 bytes: lpData, dwBufferLength, dwBytesRecorded, dwUser, dwFlags, dwLoops, lpNext, reserved. The header must stay at the same address from prepare until unprepare.
+interface:
+  signature: "MMRESULT waveOutWrite(HWAVEOUT handle, LPWAVEHDR header, UINT size)"
+chrome: "Chrome for Windows (157) imports it statically from winmm.dll (survey, docs/windows/audio-plan.md): Chrome falls back to the waveOut API when WASAPI is not available."
+rules:
+  queue: "returns before the buffer has played with dwFlags PREPARED|INQUEUE (DONE clear); a buffer of 50 ms is still queued when the call returns. When done: DONE|PREPARED (INQUEUE cleared), dwBytesRecorded is 0 (also when the application had put another value there). A done header can be written again at once without preparing it again; the write clears DONE and sets INQUEUE"
+  order: "buffers play one after the other in the order written; each gets exactly one WOM_DONE (function callback: in that order, flags DONE|PREPARED in the callback); with six buffers of 10 to 50 ms queued ahead all six finish, and when the last is done the position (TIME_BYTES) is the total number of bytes written"
+  sizes: "a buffer of length 0, of an odd length (4801 bytes) and of one frame (4 bytes) are accepted and finish normally (DONE|PREPARED, WOM_DONE)"
+  loops: "a header with WHDR_BEGINLOOP|WHDR_ENDLOOP and dwLoops = n plays n times in all (n = 3: the position grows by three times the length), then is done; dwLoops and the loop flags are left alone. A loop over several headers: the header with WHDR_BEGINLOOP (and dwLoops) is not done until the header with WHDR_ENDLOOP has been written: nothing finishes while it waits (checked for 400 ms); then the two play dwLoops times (2: four buffers) and both are done"
+  errors: "a header that is not prepared (or was unprepared) is WAVERR_UNPREPARED and unchanged; a header that is queued is WAVERR_STILLPLAYING; a size below 48 (0, 8, 47) and a null header are MMSYSERR_INVALPARAM; handle 0, a made-up value and a closed handle are MMSYSERR_INVALHANDLE (also for a prepared header). A failed write queues nothing"
+  streaming: "the usual player pattern works: ten-millisecond buffers (1920 bytes), four queued ahead, an event as the callback; whenever it is set, finished headers (in queue order) are unprepared, refilled, prepared and written again: fifty buffers play, every one exactly once, no call fails, and the position ends at the total"
+  from_callback: "a function callback can call waveOutWrite (queue the next buffer) and waveOutUnprepareHeader (a finished one) from inside WOM_DONE; both succeed"
+errors:
+  unprepared: "WAVERR_UNPREPARED (34)"
+  still_playing: "WAVERR_STILLPLAYING (33)"
+  invalid_param: "MMSYSERR_INVALPARAM (11)"
+  invalid_handle: "MMSYSERR_INVALHANDLE (5)"
+side_effects: "queues the buffer; sets WHDR_INQUEUE; later WHDR_DONE and a notification"
+threading: "may be called from any thread, and from the WOM_DONE callback"
+ordering: ["buffers finish in the order written", "WHDR_DONE is set before the notification (event, callback, message) for that buffer"]
+timing:
+  typical: "returns in well under a millisecond; the buffer is done about as long after the write as its audio lasts (after the earlier buffers)"
+  guarantees: none
+tests:
+  visible: 5
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing winmm.dll, kernel32.dll (and user32.dll for the window and thread callback tests) by name, built with the pipeline's usual flags. Every test needs a wave output device: it first checks that waveOutGetNumDevs is at least 1 and fails if not. Audio data is always silence (zero samples; never 8-bit data, whose silence is not zero), so nothing is audible. Observations are return codes, header flags, booleans, counts, orders of callbacks and positions that follow from the bytes written; never handles, thread ids, addresses or times. Waiting is bounded: a buffer of 50 or 100 ms is waited for up to 5 s, and "nothing happens" checks look for 100 to 400 ms. The tests that change the volume restore it; the volume is per process, so a test that fails does not leave it changed. A few tests are the exception: they say "NO SOUND DEVICE" in their first line and must be run with no sound device present; their recording was made with the oracle's sound card disabled (the HD audio function turned off in Device Manager terms, and turned on again after the run); where such a test runs with a device it fails.
+not_covered: >
+  Machines with no sound device, except for the no-device rules named above; devices other than device 0 and the mapper; how long a buffer takes to start or the latency of any call; capture (waveIn) and MIDI. More than six buffers queued without the callback pattern; buffers in other formats' loop counts; what the audio does at the start.

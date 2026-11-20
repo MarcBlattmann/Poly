@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "wo_getid_errors",
+      "exe_sha256": "9c1a51397786129c5ad5382d680a1a07a34cf01473739c348d1f7f0dbb465657",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKaGFuZGxlIDAgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgaGFuZGxlIDAKbWFkZS11cCBoYW5kbGUgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgbWFkZS11cCBoYW5kbGUKb2sgaWQgdmFyaWFibGUgdW50b3VjaGVkCmNsb3NlZCBoYW5kbGUgPSBNTVNZU0VSUl9JTlZBTEhBTkRMRSAoNSkKb2sgY2xvc2VkIGhhbmRsZQpvayBpZCB2YXJpYWJsZSB1bnRvdWNoZWQKc3VtbWFyeSA2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nhandle 0 = MMSYSERR_INVALHANDLE (5)\nok handle 0\nmade-up handle = MMSYSERR_INVALHANDLE (5)\nok made-up handle\nok id variable untouched\nclosed handle = MMSYSERR_INVALHANDLE (5)\nok closed handle\nok id variable untouched\nsummary 6 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 191
+    },
+    {
+      "name": "wo_getid_two_handles",
+      "exe_sha256": "b25f335c162af985fb2592eb125187ef59aaf74d155fa3e9988eda256decd4bd",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgaGFzIG91dHB1dCBkZXZpY2UKZmlyc3QgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBmaXJzdApzZWNvbmQgPSBNTVNZU0VSUl9OT0VSUk9SICgwKQpvayBzZWNvbmQKb2sgZmlyc3QgaWQKb2sgc2Vjb25kIGlkCnN1bW1hcnkgNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok has output device\nfirst = MMSYSERR_NOERROR (0)\nok first\nsecond = MMSYSERR_NOERROR (0)\nok second\nok first id\nok second id\nsummary 5 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 215
+    }
+  ]
+}
