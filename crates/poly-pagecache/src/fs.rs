@@ -123,6 +123,16 @@ impl<F: PageFrame, L: RawLock + Default> CachedFs<F, L> {
     }
 
     /// Pages of this file system in the cache, and how many are dirty.
+    /// Whether any page of this file system waits to be written back: a look at the first dirty
+    /// entry, not a count (writeback asks every pass; counting walked every cached page of the
+    /// file system with the index locked, tens of milliseconds for a large cache).
+    pub fn has_dirty(&self) -> bool {
+        let index = self.core.index.lock();
+        let lo = Key::new(self.st.id, 0, 0);
+        let hi = Key::new(self.st.id, Ino::MAX, u64::MAX);
+        index.dirty.range(lo..=hi).next().is_some()
+    }
+
     pub fn page_counts(&self) -> (usize, usize) {
         let index = self.core.index.lock();
         let lo = Key::new(self.st.id, 0, 0);
