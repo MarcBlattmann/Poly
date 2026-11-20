@@ -12,8 +12,10 @@
 
 #![allow(dead_code)]
 
+use poly_mach::exc::ThreadState64;
 use poly_mach::ulock;
 use poly_mach::{SenderInfo, TaskId, ThreadId};
+use poly_personality_xnu::exc;
 use poly_personality_xnu::kernel::{
     Arch, Backing, Fault, Inherit, MachState, PageInfo, Region, ThreadStart, Wakeup, XnuKernel,
 };
@@ -100,6 +102,9 @@ pub struct World {
     next_id: AtomicU64,
     start: Instant,
     pub out: Mutex<Checker>,
+    /// The architecture the model's programs are (arm64 for the recorded
+    /// tests; x86-64 where a test needs what only x86-64 does, a send).
+    arch: Arch,
 }
 
 struct Proc {
@@ -147,7 +152,7 @@ pub struct K {
 }
 
 impl World {
-    fn new() -> Arc<World> {
+    fn new(arch: Arch) -> Arc<World> {
         Arc::new(World {
             mach: Mutex::new(MachState::new()),
             tasks: Mutex::new(BTreeMap::new()),
@@ -157,6 +162,7 @@ impl World {
             next_id: AtomicU64::new(1),
             start: Instant::now(),
             out: Mutex::new(Checker::default()),
+            arch,
         })
     }
 
@@ -254,7 +260,7 @@ impl XnuKernel for K {
         self.thread
     }
     fn arch(&self) -> Arch {
-        Arch::Arm64
+        self.w.arch
     }
     fn page_size(&self) -> u64 {
         PS
@@ -651,6 +657,31 @@ impl P {
         *self.k.w.procs.lock().unwrap()[&pid].status.lock().unwrap()
     }
 
+    /// Start another thread of this task running `f` (its own thread port);
+    /// join it with the handle.
+    pub fn thread<R: Send + 'static>(
+        &mut self,
+        f: impl FnOnce(&mut P) -> R + Send + 'static,
+    ) -> std::thread::JoinHandle<R> {
+        let w = self.k.w.clone();
+        let (task, thread) = (self.k.task, w.id());
+        w.threads.lock().unwrap().insert(thread, Slot::default());
+        w.mach.lock().unwrap().ipc.create_thread(task, thread);
+        let data_next = self.data_next + 4096;
+        std::thread::spawn(move || {
+            let mut p = P { k: K { w, task, thread }, data_next };
+            f(&mut p)
+        })
+    }
+
+    /// The calling thread faults: CPU exception `vector` (a page fault at
+    /// `address`, on a mapped page if `mapped`) with registers `regs`; the
+    /// kernel's exception path decides.
+    pub fn fault(&mut self, vector: u8, address: Option<u64>, mapped: bool, regs: ThreadState64) -> exc::Outcome {
+        let f = exc::Fault { vector, error: 0, address, mapped };
+        exc::deliver(&mut self.k, f, regs)
+    }
+
     pub fn kill(&self, pid: u64, sig: u32) {
         let thread = self.k.w.procs.lock().unwrap()[&pid].thread;
         if let Some(s) = self.k.w.threads.lock().unwrap().get_mut(&thread) {
@@ -715,6 +746,19 @@ pub fn run(dir: &str, test: &str, body: impl Fn(&mut P)) {
 }
 
 fn run_once(body: &impl Fn(&mut P)) -> String {
+    run_arch(Arch::Arm64, |p| body(p))
+}
+
+/// Run `body` as a fresh x86-64 process (a test of what only x86-64 does,
+/// such as sending with mach_msg_trap); its checks must all pass. Returns
+/// its output.
+pub fn run_x86(body: impl FnOnce(&mut P)) -> String {
+    let out = run_arch(Arch::X86_64, body);
+    assert!(!out.contains("not ok "), "{out}");
+    out
+}
+
+fn run_arch(arch: Arch, body: impl FnOnce(&mut P)) -> String {
     HOOK.call_once(|| {
         let prev = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
@@ -723,7 +767,7 @@ fn run_once(body: &impl Fn(&mut P)) -> String {
             }
         }));
     });
-    let w = World::new();
+    let w = World::new(arch);
     let k = w.new_task(Vec::new(), MAP_BASE);
     let mut p = P { k, data_next: DATA };
     // The program's data area (its variables).
