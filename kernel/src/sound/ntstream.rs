@@ -7,14 +7,18 @@
 //! output period the server mixes the running ones like ALSA clients
 //! (converted to the device's format, with the stream's own gains), and a
 //! running stream that ran out plays silence for the rest of its share.
-//! When the mixer took frames from any stream, the `nt-audio` worker
-//! (`crate::nt::audio`) is woken to finish the waits that are due.
+//! A stream's frames count as played when the device finished the period
+//! they went out in (each stream keeps its frames per period in flight),
+//! not when the mixer took them: the device holds several periods. When
+//! frames were played, the `nt-audio` worker (`crate::nt::audio`) is woken
+//! to finish the waits that are due.
 //!
 //! Lock order: the card's lock, then a stream's.
 
 use super::{card, kick};
 use crate::sync::Mutex;
 use crate::thread::WaitQueue as ThreadQueue;
+use alloc::collections::VecDeque;
 use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -25,12 +29,12 @@ use poly_audio::{Converter, Format, MAX_CHANNELS, UNITY};
 use poly_ntobj::NtStatus;
 use poly_personality_nt::audio::{NtAudioStream, STATUS_NO_SUCH_DEVICE};
 
-/// Bumped whenever the mixer took frames from a stream; the worker waits
-/// on [`PLAYED`] for it to move.
+/// Bumped whenever a stream's frames were played; the worker waits on
+/// [`PLAYED`] for it to move.
 pub static PLAYED_GEN: AtomicU64 = AtomicU64::new(0);
 pub static PLAYED: ThreadQueue = ThreadQueue::new();
-/// The mixer took frames since the audio thread last looked.
-static TOOK: AtomicBool = AtomicBool::new(false);
+/// Frames were played since the audio thread last looked.
+static HEARD: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug)]
 struct State {
@@ -39,6 +43,8 @@ struct State {
     gains: [u32; MAX_CHANNELS],
     /// From the stream's format to the device's.
     conv: Converter,
+    /// Its frames in each device period in flight, oldest first.
+    in_flight: VecDeque<u32>,
 }
 
 /// One stream.
@@ -62,7 +68,9 @@ pub fn open(format: Format, frames: u32) -> Result<Arc<NtStream>, NtStatus> {
     let hw = g.hw.output().ok_or(STATUS_NO_SUCH_DEVICE)?;
     let conv = Converter::new(format, hw.format).ok_or(poly_ntobj::status::STATUS_INVALID_PARAMETER)?;
     let bytes = vec![0u8; frames as usize * format.frame_bytes()];
-    let state = State { ring: Ring::new(frames), bytes, gains: [UNITY; MAX_CHANNELS], conv };
+    // The periods already in flight carry none of its frames.
+    let in_flight = core::iter::repeat_n(0, g.out.in_flight as usize).collect();
+    let state = State { ring: Ring::new(frames), bytes, gains: [UNITY; MAX_CHANNELS], conv, in_flight };
     let s = Arc::new(NtStream { format, state: Mutex::new(state) });
     g.nt.retain(|w| w.strong_count() > 0);
     g.nt.push(Arc::downgrade(&s));
@@ -141,9 +149,6 @@ impl Source for Play<'_> {
 
     fn consume(&mut self, frames: usize) {
         self.0.ring.consume(frames as u32);
-        if frames > 0 {
-            TOOK.store(true, SeqCst);
-        }
     }
 }
 
@@ -153,16 +158,19 @@ pub(super) fn any_running(nt: &[Weak<NtStream>]) -> bool {
 }
 
 /// Mix every running stream into `acc` (one period of the device's
-/// frames); the ones that ran out count the silence.
+/// frames, about to be handed over); the ones that ran out count the
+/// silence. Every stream notes its frames in this period.
 pub(super) fn mix(nt: &mut Vec<Weak<NtStream>>, acc: &mut [i32], scratch: &mut [u8], device: Format) {
     nt.retain(|w| w.strong_count() > 0);
     let frames = acc.len() / device.channels as usize;
     for s in nt.iter().filter_map(Weak::upgrade) {
         let mut g = s.state.lock();
         if !g.ring.running() {
+            g.in_flight.push_back(0);
             continue;
         }
         let m = mix_source(&mut Play(&mut g), acc, scratch);
+        g.in_flight.push_back(m.consumed as u32);
         if m.produced < frames {
             // The rest of its share, in its own frames.
             let short = ((frames - m.produced) as u64 * s.format.rate as u64).div_ceil(device.rate as u64);
@@ -171,9 +179,23 @@ pub(super) fn mix(nt: &mut Vec<Weak<NtStream>>, acc: &mut [i32], scratch: &mut [
     }
 }
 
-/// After a round of the server: wake the worker if the mixer took frames.
+/// The device finished `periods` periods (all of them: `None`, when it
+/// stopped): their frames are played.
+pub(super) fn completed(nt: &[Weak<NtStream>], periods: Option<u32>) {
+    for s in nt.iter().filter_map(Weak::upgrade) {
+        let mut g = s.state.lock();
+        let n = periods.map_or(g.in_flight.len(), |p| (p as usize).min(g.in_flight.len()));
+        let frames: u64 = g.in_flight.drain(..n).map(u64::from).sum();
+        if frames > 0 {
+            g.ring.heard(frames);
+            HEARD.store(true, SeqCst);
+        }
+    }
+}
+
+/// After a round of the server: wake the worker if frames were played.
 pub(super) fn after_round() {
-    if TOOK.swap(false, SeqCst) {
+    if HEARD.swap(false, SeqCst) {
         PLAYED_GEN.fetch_add(1, SeqCst);
         PLAYED.wake_all();
     }

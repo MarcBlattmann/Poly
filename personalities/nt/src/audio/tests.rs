@@ -45,7 +45,9 @@ impl TestStream {
         for (at, n) in [s.first, s.second] {
             out.extend_from_slice(&bytes[at as usize * fb..(at + n) as usize * fb]);
         }
+        // The test's device plays at once what the mixer took.
         ring.consume(s.frames());
+        ring.heard(u64::from(s.frames()));
         out
     }
 }

@@ -128,6 +128,7 @@ pub mod verinfo;
 pub mod version;
 pub mod volume;
 pub mod waitreg;
+pub mod waveout;
 pub mod winmm;
 pub mod winpath;
 pub mod withtoken;

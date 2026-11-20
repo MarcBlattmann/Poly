@@ -194,6 +194,7 @@ dependencies = [
 name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
+ "poly-audio",
  "poly-nls",
  "poly-ntobj",
  "poly-pe",
