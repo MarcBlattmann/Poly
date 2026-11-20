@@ -464,6 +464,11 @@ pub fn set_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Re
 /// (minimum, maximum, flags) to a handle with a query right. The same layout for 32- and 64-bit
 /// callers, so the WOW64 thunk passes it through.
 pub const PROCESS_POLY_WORKING_SET: u32 = 0x1002;
+/// Poly's own process information class for the subsystem of a process's executable
+/// (`IMAGE_SUBSYSTEM_*` as a `u32`: 2 GUI, 3 console), to a handle with a query right:
+/// `WaitForInputIdle` and `ShellExecuteEx`'s `SEE_MASK_WAITFORINPUTIDLE` tell console programs
+/// from GUI ones by it (ADR 0245). The same layout for 32- and 64-bit callers.
+pub const PROCESS_POLY_SUBSYSTEM: u32 = 0x1003;
 /// `PROCESS_SET_QUOTA` (`winnt.h`).
 const PROCESS_SET_QUOTA: u32 = 0x0100;
 
@@ -739,6 +744,17 @@ pub fn query_information_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> 
             }
             let c = k.memory_counters(pid).unwrap_or_default();
             reply(k, buf, length, ret, &c.bytes()[..length as usize])
+        }
+        PROCESS_POLY_SUBSYSTEM => {
+            if length != 4 {
+                return Err(STATUS_INFO_LENGTH_MISMATCH);
+            }
+            let subsystem = if pid == k.caller().process {
+                k.with_state(|_, proc, _| proc.subsystem)
+            } else {
+                k.with_process(pid, |_, proc, _| proc.subsystem).ok_or(STATUS_PROCESS_IS_TERMINATING)?
+            };
+            reply(k, buf, length, ret, &le32(u32::from(subsystem)))
         }
         PROCESS_POLY_WORKING_SET => {
             if length != 24 {

@@ -216,6 +216,10 @@ fn hit_tests_find_the_topmost_part() {
     assert_eq!(scene.hit_test(30, 50), Hit::Surface { window: a, x: 10, y: 10 });
     assert_eq!(scene.hit_test(70, 70), Hit::Surface { window: b, x: 10, y: 10 });
     assert_eq!(scene.hit_test(19, 50), Hit::Border(a));
+    // Beyond the visible border the invisible sizing zone, as Windows' sizing border (ADR 0234):
+    // border and zone are 8 logical pixels, then the desktop.
+    assert_eq!(scene.hit_test(19 - RESIZE_REACH, 50), Hit::Border(a));
+    assert_eq!(scene.hit_test(19 - RESIZE_REACH - 1, 50), Hit::Desktop);
     assert_eq!(scene.hit_test(5, 5), Hit::Desktop);
     scene.raise(a);
     assert_eq!(scene.hit_test(70, 70), Hit::Surface { window: a, x: 50, y: 30 });

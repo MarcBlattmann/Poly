@@ -1,0 +1,11 @@
+[package]
+name = "poly-mach"
+description = "Mach core: port name spaces, rights, port sets, message queues, semaphores, and the wait tables behind ulock and psynch"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

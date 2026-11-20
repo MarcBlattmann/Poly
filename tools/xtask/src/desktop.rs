@@ -1165,6 +1165,17 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     thread::sleep(Duration::from_millis(500));
     d.wait("session bus on unix:path=", 1)?;
 
+    // The owner's way to start an app (ADR 0234): the Windows key, then the name, then Enter. The
+    // launcher the desktop shows at the start stays for the key (it used to close, and the typing
+    // went nowhere); the name typed next goes into it, Enter starts the app below.
+    let hidden_before = count(&lines, LAUNCHER_HIDDEN);
+    d.type_text(&["meta_l"])?;
+    thread::sleep(Duration::from_millis(1000));
+    expect(
+        "the Windows key keeps the launcher shown at the start",
+        count(&lines, LAUNCHER_HIDDEN) == hidden_before && d.shot("windows-key-at-start")?.pixel(900, 40) == RIDGE,
+    )?;
+
     // A no-window app must return to the launcher after its child exits.
     let launchers_shown = count(&lines, LAUNCHER_SHOWN);
     d.type_text(&["s", "e", "n", "d"])?;
@@ -1177,6 +1188,14 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     thread::sleep(Duration::from_millis(1000));
     let img = d.shot("notification-return")?;
     expect("the launcher returned after notify-send", img.pixel(900, 40) == RIDGE)?;
+    // Shown again by the desktop: the Windows key keeps it this time too (ADR 0234).
+    let hidden_before = count(&lines, LAUNCHER_HIDDEN);
+    d.type_text(&["meta_l"])?;
+    thread::sleep(Duration::from_millis(1000));
+    expect(
+        "the Windows key keeps the launcher the desktop showed again",
+        count(&lines, LAUNCHER_HIDDEN) == hidden_before,
+    )?;
 
     // 1. The demo window, maximized with the frame's middle button.
     d.type_text(&["d", "e", "m", "o"])?;

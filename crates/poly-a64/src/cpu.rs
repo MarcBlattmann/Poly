@@ -245,6 +245,9 @@ pub struct Cpu {
     /// translations compares it before running a block to notice that the
     /// program invalidated its instruction cache.
     pub icache_flushes: u64,
+    /// The virtual address size pointer authentication strips to (47 on
+    /// macOS for arm64 processes).
+    pub va_bits: u8,
     pub(crate) monitor: Option<Monitor>,
 }
 
@@ -290,7 +293,28 @@ impl Cpu {
             cntfrq: 24_000_000,
             dczid: DCZID_DEFAULT,
             icache_flushes: 0,
+            va_bits: 47,
             monitor: None,
+        }
+    }
+
+    /// Remove a pointer authentication code: `XPACI`/`XPACD`, `XPACLRI`.
+    ///
+    /// What an arm64 process on macOS observes (measured on Apple silicon):
+    /// virtual addresses have 47 bits; bits 63:47 become copies of bit 55,
+    /// except that a data pointer with bit 55 clear keeps its top byte
+    /// (top-byte-ignore is on for data in the lower half of the address
+    /// space and off for instruction addresses).
+    pub fn strip_pac(&self, ptr: u64, data: bool) -> u64 {
+        let va = u32::from(self.va_bits);
+        let low = ptr & ((1u64 << va) - 1);
+        let upper_half = ptr & (1 << 55) != 0;
+        if upper_half {
+            low | (u64::MAX << va)
+        } else if data {
+            low | (ptr & 0xFF00_0000_0000_0000)
+        } else {
+            low
         }
     }
 
@@ -464,6 +488,13 @@ impl Cpu {
             | Inst::MulHigh { .. }
             | Inst::Div { .. }
             | Inst::ShiftVar { .. }
+            | Inst::Crc32 { .. }
+            | Inst::Pac { .. }
+            | Inst::Xpac { .. }
+            | Inst::Pacga { .. }
+            | Inst::Rmif { .. }
+            | Inst::Setf { .. }
+            | Inst::FlagOp { .. }
             | Inst::Bit1 { .. } => {
                 self.exec_int(inst);
                 Ok(None)
@@ -474,9 +505,17 @@ impl Cpu {
             | Inst::TestBranch { .. }
             | Inst::BranchReg { .. }
             | Inst::BranchLinkReg { .. }
+            | Inst::BranchAuth { .. }
             | Inst::Ret { .. } => Ok(self.exec_branch(inst)),
             Inst::Svc(i) => Err(Trap::Svc(i)),
             Inst::Brk(i) => Err(Trap::Brk(i)),
+            // XPACLRI strips the code from the link register; the other
+            // hints (including PACIASP and friends, with keys disabled) do
+            // nothing.
+            Inst::Hint { crm_op2: 7 } => {
+                self.x[30] = self.strip_pac(self.x[30], false);
+                Ok(None)
+            }
             Inst::Hint { .. } => Ok(None),
             Inst::Barrier { kind, .. } => {
                 if kind == Barrier::Clrex {
@@ -491,6 +530,8 @@ impl Cpu {
             | Inst::LoadStorePair { .. }
             | Inst::Exclusive { .. }
             | Inst::Ordered { .. }
+            | Inst::OrderedImm { .. }
+            | Inst::LoadAuth { .. }
             | Inst::Atomic { .. }
             | Inst::Cas { .. }
             | Inst::Casp { .. } => {

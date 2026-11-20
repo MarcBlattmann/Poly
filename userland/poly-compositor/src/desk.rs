@@ -936,7 +936,7 @@ impl Desktop {
         );
         self.launcher_wait = waiting;
         if show {
-            self.shell.toggle_launcher();
+            self.shell.show_launcher_unasked();
             println!("poly-compositor: launcher shown");
         }
         self.windows = now;

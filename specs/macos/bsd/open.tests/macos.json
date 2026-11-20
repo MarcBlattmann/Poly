@@ -10,8 +10,23 @@
   },
   "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
   "sdk": "macOS SDK 27.2",
-  "started": "2026-11-14 21:33:19",
+  "started": "2026-11-19 20:07:17",
   "tests": [
+    {
+      "name": "open_case",
+      "source_sha256": "3c215f4de545c49635823d37c58b4b189e54a47672dd9ed8e0937d242caec09b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "65e60abe3b4419f6d918dab184f6c809ce66a3dac3c7dca4fee33700043ced31",
+          "exit_code": 0,
+          "stdout": "ok another case finds the file\nok and it is the same file\nok O_CREAT|O_EXCL on another case is EEXIST\nok O_CREAT on another case opens the existing file\nok no second file was created: one entry, with the first spelling\nok F_GETPATH shows the stored case, not the asked one\nok stat through another spelling: same inode\nok link to another case of the same name is EEXIST\nok link under a new name\nok a link is a second name for the same inode\nok unlink through another spelling\nok the link is gone, the file stays\nok case differences inside a path do not matter\nok mkdir of another case of a directory is EEXIST\nok mkdir of another case of a file's name is EEXIST\nok a file used as a directory is ENOTDIR whatever the case\nok rmdir through another spelling of a non-empty directory is ENOTEMPTY\nok and of an empty one works\nok it is gone\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
     {
       "name": "open_create",
       "source_sha256": "57da0490a967d9c1855a3c356b980eeaa99a5d521efc99961adf287271ad9609",

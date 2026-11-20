@@ -54,6 +54,7 @@ impl Cpu {
 
     pub(crate) fn exec_simd(&mut self, inst: Inst) -> Result<(), Trap> {
         match inst {
+            Inst::Vec3Same { op, .. } if op as u8 >= V3Op::Shadd as u8 => self.exec_simd2(inst),
             Inst::Vec3Same { op, q, size, scalar, rd, rn, rm } => {
                 self.exec_3same(op, q, size, scalar, rd, rn, rm);
                 Ok(())
@@ -192,7 +193,7 @@ impl Cpu {
                 self.exec_shift_imm(op, q, size, scalar, u32::from(shift), rd, rn);
                 Ok(())
             }
-            _ => Err(Trap::Unsupported),
+            _ => self.exec_simd2(inst),
         }
     }
 

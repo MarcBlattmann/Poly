@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "fgetx_values",
+      "source_sha256": "4ac758079172aa130a39f2b858aaefb7bf0e52c2784ee9084600142ca6a2093f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "92c7c3757310775400e90b937d1107c0dbcc3c978431b5116f0b1fc5d23aeb49",
+          "exit_code": 0,
+          "stdout": "ok the length is 5\nok a NULL buffer asks for the length\nok one byte short is ERANGE\nok a missing attribute is ENOATTR\nok names are case sensitive\nok an empty name is EINVAL\nok a bad descriptor is EBADF\nok a closed descriptor is EBADF\nok a position other than 0 is EINVAL\nok option 1 is EINVAL for the descriptor form\nok an unwritable buffer is EFAULT\nok through a read-only descriptor\nok a directory descriptor\nok the resource fork can be read at a position\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

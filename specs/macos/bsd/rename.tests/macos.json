@@ -1,0 +1,46 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "rename_basics",
+      "source_sha256": "b6923e0c404542c3eccbf8b2a147a00de8700f26a3ccd5f2a9bf6d7e05e4f76a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "65872a379c406125d020d965b2e720ac86ac2f0cce7e1e9da5f26dbf69a8afec",
+          "exit_code": 0,
+          "stdout": "ok rename over an existing file: 0\nok the source name is gone\nok the destination has the source's content and inode\nok a name to itself: 0\nok and the file is still there\nok onto its own hard link: 0\nok both names stay\nok an open descriptor follows the rename\nok a directory over an empty directory\nok the source is gone\nok a directory over a non-empty one: ENOTEMPTY\nok nothing changed\nok a directory over a file: ENOTDIR\nok a file over a directory: EISDIR\nok a directory with content moves\nok its content moved with it\nok a symbolic link is renamed itself\nok it is still a link to full2\nok lstat says link\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "rename_case",
+      "source_sha256": "69235903c202ee1292d3b70e505bb168d405039e7fda3b53264ee90288ee1ce4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a7d5da64fc7f68b6854c8cd1dbcf3e089fcd94f702e2d896ff10cd1d05d23bf0",
+          "exit_code": 0,
+          "stdout": "ok listed as created\nok a case-only rename: 0\nok the listing shows the new case\nok same inode, same content\nok any case finds it\nok renaming through another spelling of the old name works\nok a case-only rename given in another case of the old name\nok a file renamed onto another case of an existing name: 0\nok the content is the renamed file's\nok the destination keeps its stored spelling FINAL.TXT\nok the source name is gone\nok a directory renamed to another case\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

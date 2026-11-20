@@ -31,6 +31,20 @@ summary: >
   gets the length the result would need in its first 4 bytes and as much
   of the rest as fits, and the call returns 0 (a 4-byte buffer: only the
   length, 20 for the name alone).
+  More behaviour, values (one attribute per call, buffer: u32 length, then
+  the value). ATTR_CMN_FILEID (0x02000000) is the inode (8 bytes);
+  ATTR_CMN_CRTIME (0x200), MODTIME (0x400) timespecs equal to stat's birth
+  and modification time; ATTR_CMN_ACCESSMASK (0x20000) the mode including
+  the file type bits; ATTR_CMN_FLAGS (0x40000) st_flags; ATTR_CMN_OWNERID
+  (0x8000) and GRPID (0x10000) the owner; ATTR_FILE_LINKCOUNT (1) the link
+  count (2 after a hard link); ATTR_FILE_DATALENGTH (0x200) the size;
+  ATTR_FILE_ALLOCSIZE (0x4) at least the size and a multiple of 4096;
+  ATTR_DIR_LINKCOUNT (1) is 1 for a directory with one subdirectory and
+  ATTR_DIR_ENTRYCOUNT (2) the number of entries, not counting . and ..;
+  ATTR_CMN_OBJTYPE of a symbolic link is VLNK 5 with FSOPT_NOFOLLOW (1)
+  and the target's VREG 1 without it, VDIR 2 for a directory;
+  ATTR_CMN_NAME through another spelling of the name is the stored
+  spelling; a missing file is ENOENT (2).
 returns:
   success: "0, buffer filled (truncated to size)"
 errors:
@@ -45,5 +59,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 2  # count in <symbol>.tests/
+  visible: 3  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner

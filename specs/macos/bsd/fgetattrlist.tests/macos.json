@@ -1,0 +1,31 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-19 20:07:17",
+  "tests": [
+    {
+      "name": "fgal_basic",
+      "source_sha256": "31e2015af3f55e6cd643efba295654dc5c041bf9b07a2a6a4b2c0af757a1d98b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d22d0262806b45b94d0d1ec3d8eda8c4c44d1f44a6c818563042b43c6128cc92",
+          "exit_code": 0,
+          "stdout": "ok fgetattrlist returns 0\nok the returned set: common 0x80000009, file 0x200\nok the name \"Mixed.Txt\" (10 bytes with the NUL)\nok the object type VREG\nok the data length is 10\nok after a write the length follows: 13\nok a descriptor opened with another case still reports the stored name\nok a descriptor that is not open is EBADF\nok a directory: stored name \"Dir\" and VDIR\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

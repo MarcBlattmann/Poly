@@ -6,6 +6,7 @@ version = 4
 name = "a64diff"
 version = "0.0.1"
 dependencies = [
+ "libc",
  "poly-a64",
 ]
 
@@ -67,6 +68,16 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 [[package]]
 name = "poly-a64"
 version = "0.0.1"
+
+[[package]]
+name = "poly-a64-jit"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "poly-a64",
+ "poly-macho",
+ "poly-personality-xnu",
+]
 
 [[package]]
 name = "poly-abi"
@@ -374,6 +385,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-mach"
+version = "0.0.1"
+
+[[package]]
 name = "poly-macho"
 version = "0.0.1"
 
@@ -488,6 +503,7 @@ name = "poly-personality-xnu"
 version = "0.0.1"
 dependencies = [
  "poly-abi",
+ "poly-mach",
 ]
 
 [[package]]

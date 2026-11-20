@@ -27,6 +27,12 @@ summary: >
   after argv[0]. Failures that happen before the point of no return return
   the errno to the caller, which keeps running: a bad argv pointer in a
   child is EFAULT (14).
+  More behaviour, refusals. An empty executable file is ENOEXEC (8) and so
+  is a text file without a #! line; a script whose interpreter is missing
+  is ENOENT (2); a directory is EACCES (13); a path through a file ENOTDIR
+  (20); a missing file ENOENT; a name of 256 bytes ENAMETOOLONG (63); an
+  unreadable path or argv EFAULT (14); arguments of more than 1 MiB are
+  E2BIG (7); after each failed execve the calling process goes on.
 returns:
   success: "does not return; the process runs the new program"
 errors:
@@ -42,5 +48,5 @@ timing:
   typical: "microseconds: one system call"
   guarantees: "none"
 tests:
-  visible: 3  # count in <symbol>.tests/
+  visible: 4  # count in <symbol>.tests/
   held_out: 1  # count kept by the diff runner

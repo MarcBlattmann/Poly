@@ -1,0 +1,57 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/bsd/clonefileat.yaml. Observed with C tests of raw system calls
+# (tests/macos/include/poly_mtest.h, ADR 0182); results per architecture in
+# clonefileat.tests/macos.json.
+id: macos/syscall/bsd/clonefileat
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively. x86_64 not observed yet: Rosetta 2 is not installed on the oracle, so the x86_64 builds of the tests were not run"
+  observed_by: spec-macos-1
+  date: 2026-11-19
+summary: >
+  Raw call, no libSystem: x86_64 `syscall` with rax = 0x2000000 | 462,
+  arguments in rdi, rsi, rdx, r10, r8, r9 (second result in rdx); arm64
+  `svc #0x80` with x16 = 462, arguments in x0..x5 (second result in x1).
+  On failure the carry flag is set and the result register holds the errno
+  (<sys/errno.h>); on success the carry flag is clear. clonefileat(srcfd,
+  src, dstfd, dst, flags) makes a copy of a file that shares its data
+  until either side is written (copy on write) and returns 0; srcfd and
+  dstfd are directory descriptors for relative paths (AT_FDCWD is -2). The
+  copy is a new file (new inode, link count 1) with the same size, mode,
+  modification time and extended attributes; it is independent afterwards
+  (writes to either side do not show in the other, also removing from the
+  original keeps the copy). The destination must not exist (EEXIST 17, a
+  directory too); a missing source or destination directory is ENOENT (2);
+  a file as srcfd or dstfd with a relative path is ENOTDIR (20), a
+  descriptor not open EBADF (9). Nothing is created on failure. A symbolic
+  link as source is followed (the copy is a regular file with the target's
+  content) unless CLONE_NOFOLLOW (1), which copies the link itself with
+  the same target (a dangling link followed is ENOENT, not followed it can
+  be cloned). A directory is cloned with everything in it (files,
+  subdirectories with their modes, links); the copy is independent.
+  CLONE_NOOWNERCOPY is 2; flag bit 8 was accepted, 0x10000 is EINVAL (22).
+  The copy's owner is the caller; modes such as 0600 are kept; an empty
+  file and a file with a hole keep their size; cloning does not change the
+  source's times; a file open for writing is cloned as it is at that
+  moment. A source without read permission (mode 0) is EACCES (13), a
+  destination directory without write permission EACCES; /dev/null is
+  EINVAL.
+returns:
+  success: "0"
+errors:
+  exists: "EEXIST (17)"
+  missing: "ENOENT (2)"
+  not_dir: "ENOTDIR (20)"
+  bad_fd: "EBADF (9)"
+  bad_flags: "EINVAL (22)"
+  access: "EACCES (13)"
+  kind: "EINVAL (22) for a device"
+side_effects: "a new file or directory tree is created"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

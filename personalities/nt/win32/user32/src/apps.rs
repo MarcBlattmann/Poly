@@ -138,7 +138,6 @@ poly_win32_rt::fail_exports!(
         UnpackDDElParam,
         UnregisterTouchWindow,
         UpdateLayeredWindowIndirect,
-        WaitForInputIdle,
         WinHelpW,
         keybd_event,
         mouse_event,

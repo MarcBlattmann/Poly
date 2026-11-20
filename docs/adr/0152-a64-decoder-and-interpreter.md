@@ -260,3 +260,54 @@ unchanged.
   The next steps are a loader for arm64 Mach-O that starts a `Cpu` (ADR
   0153's reader), the arm64 system call convention in the XNU personality,
   and the block JIT.
+
+## Amendment (track `impl-a64-jit`, 2026-11): Apple silicon as the oracle
+
+The translator's track (ADR 0239) needs the interpreter to cover what real
+arm64 Mac programs execute and to behave like the CPUs those programs were
+built for. A Mac with Apple silicon is a better oracle than qemu for that:
+it is the real hardware, and it is fast.
+
+- **`a64diff native`** runs the same generated blocks as `a64diff fuzz` on
+  the host CPU, in process: `clang` (a black box) assembles them into a
+  Mach-O object, the tool copies its code into a `MAP_JIT` mapping, a
+  prologue loads the whole register state, the block ends in a `BRK`, and a
+  signal handler copies the registers out of the signal context and resumes
+  the tool (faults and undefined instructions are caught the same way).
+  poly-a64 runs the same bytes at the same addresses. Only macOS on Apple
+  silicon; elsewhere it says so and exits successfully. 4,000 blocks take
+  two seconds. `X18` (the platform register) is not compared; a mismatch is
+  retried on the host up to three times (a store-exclusive may fail
+  spuriously). New families: `rand-dp`, `rand-fp-simd`, `rand-ldst` (random
+  words over whole encoding classes, with loads and stores based on `x5`),
+  and `unaligned-atomic`.
+- **What the oracle changed** (each is now a decoder or interpreter rule):
+  CONSTRAINED UNPREDICTABLE cases are UNDEFINED where these cores make them
+  so (writeback into a transfer register, `LDP`/`LDXP` into one register
+  twice, `LDNP` with `LDPSW`'s encoding, encodings with bits 29:24 =
+  001001, scalar Advanced SIMD with bit 31 set, `o2` in modified
+  immediates); "should be" fields the cores ignore are ignored (`Ra` of
+  `SMULH`/`UMULH`, `Rs`/`Rt2` of exclusives and `LDAR`/`STLR`, `Rm` of
+  `FCMP #0.0`), but `Rt2` of `CAS` must be 11111; ordered, atomic and
+  exclusive accesses may be unaligned within a 16-byte block (FEAT_LSE2);
+  an ordinary store to the bytes the exclusive monitor watches makes the
+  next store-exclusive fail; pointer authentication behaves as for arm64
+  processes on macOS (keys disabled: `PAC*`/`AUT*` change nothing, `XPAC*`
+  and `XPACLRI` strip to a 47-bit address with top-byte-ignore for data
+  pointers in the lower half).
+- **Coverage added:** `CRC32*`, FlagM (`CFINV`, `RMIF`, `SETF8/16`,
+  `AXFLAG`, `XAFLAG`), `LDAPUR`/`STLUR`, the pointer-authentication
+  register, branch and load forms, `PACGA`, and most of the Advanced SIMD
+  "not covered" list above: vector floating point (arithmetic, fused
+  multiply-add, compares, pairwise and across lanes, conversions, rounding,
+  estimates and steps), long, wide and narrow integer forms, by-element
+  forms, saturating, halving and rounding arithmetic and shifts, dot
+  products, `PMULL`, SHA3. Still not covered: half-precision arithmetic,
+  AES/SHA1/SHA2/SHA512/SM3/SM4, complex numbers, `FMLAL`, `FCVTXN`.
+- **Result:** 200,000 blocks from the 57 hand-made families match the
+  hardware (seed 21); the `rand-*` families report only instructions that
+  are still not covered (half precision, crypto, `FCMLA`, ...). Unit tests
+  pin the new classes with values measured on an M1 Pro.
+
+Clean room: as above. The Mac runs only instruction streams we generated;
+no Apple binary is disassembled.
