@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/RegistryDefaults.ClassesRoots.yaml
+id: windows/api/advapi32.dll/RegistryDefaults.ClassesRoots
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station: windows and messages work, nothing is visible, no input) as the local account \"server\" (an administrator, full token); each test is a 64-bit and a 32-bit program, and every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-wow64-defaults
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above: 64-bit programs that ask for each view in turn (the access bits KEY_WOW64_64KEY and KEY_WOW64_32KEY) and 32-bit programs (built for i686, run under WOW64) that ask for their own default view and for each explicit one; the marker keys the tests make are removed again (the programs end by checking that none is left). Every program reads names and values only. Microsoft Learn: "Registry Redirector", "Registry Keys Affected by WOW64", "Accessing an Alternate Registry View", "Registry Key Security and Access Rights", "Interface Key", "CLSID Key", "InprocServer32", "ProxyStubClsid32", "TypeLib Key", "Type Library Registration", "Windows NT CurrentVersion" (no page: names as found); oaidl.h, objidl.h, unknwn.h, oleauto.h for the interface names. The coordinator's finding for B7: the 32-bit updater creates and opens keys below Software\Classes and needs the standard COM registrations in the 32-bit view too. The oracle is a normal installed machine (it also has Google, Intel, Python, Git and other vendors' keys): only what Windows itself makes is listed as default, vendor keys are left out. The earlier sheets of this area (RegCreateKeyExW and its relatives, observed under the name spec-win-wow64-registry) say how a key made through a handle or a path lands in a view; these sheets say what is there before any program has made anything. No Wine or ReactOS source was read and no Microsoft binary was decompiled or disassembled.
+summary: >
+  Which class-registration roots exist by default below HKLM\SOFTWARE\Classes and HKEY_CLASSES_ROOT, and how HKCU\Software\Classes follows the same view rules (CLSID and Interface redirected for a 32-bit process; TypeLib and AppID shared; the user's TypeLib and AppID are not aliased the same way in the 64-bit view).
+interface:
+  signature: "behaviour of RegOpenKeyExW and RegCreateKeyExW on HKLM\\SOFTWARE\\Classes, HKEY_CLASSES_ROOT and HKCU\\Software\\Classes"
+rules:
+  names: "HKLM\\SOFTWARE\\Classes and HKEY_CLASSES_ROOT, in both views, have the children CLSID, Interface, TypeLib, AppID, Wow6432Node, Installer, MIME, Local Settings, Media Type, MediaFoundation, DirectShow, Drive, Directory, Folder, *, exefile, dllfile, .exe, .dll, .tlb, .lnk, http, https and SystemFileAssociations"
+  hkcu_clsid: "a key made below HKCU\\Software\\Classes\\CLSID (or Interface) with no view bit: a 64-bit process makes it there, found in the 64-bit view at HKCU\\Software\\Classes\\CLSID\\id and HKEY_CLASSES_ROOT\\CLSID\\id, not in the 32-bit view; a 32-bit process makes it at HKCU\\Software\\Classes\\Wow6432Node\\CLSID\\id, found in the 32-bit view at HKCU\\Software\\Classes\\CLSID\\id, HKCU\\Software\\Classes\\Wow6432Node\\CLSID\\id and HKEY_CLASSES_ROOT\\CLSID\\id and Wow6432Node\\CLSID\\id, and in the 64-bit view only at the Wow6432Node path"
+  hkcu_shared: "HKCU\\Software\\Classes\\TypeLib\\id and HKCU\\Software\\Classes\\AppID\\id are the same key for both bitnesses (found at HKCU\\Software\\Classes\\TypeLib and HKEY_CLASSES_ROOT\\TypeLib in every view). HKCU\\Software\\Classes\\Wow6432Node\\TypeLib\\id (and AppID) is a name for them in the 32-bit view only; in the 64-bit view it is not found"
+  hkcu_plain: "a plain name made at HKCU\\Software\\Classes\\X is found in both views at that path; at HKCU\\Software\\Classes\\Wow6432Node\\X and HKEY_CLASSES_ROOT\\Wow6432Node\\X in the 32-bit view only. HKCU\\Software\\X is not redirected: found at HKCU\\Software\\X in every view and never at HKCU\\Software\\Wow6432Node\\X"
+errors:
+  missing_key: "ERROR_FILE_NOT_FOUND (2)"
+side_effects: "the programs make and remove marker keys below HKCU\\Software; none is left"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, in two builds of the same program: a 64-bit program (which asks for KEY_WOW64_64KEY and for KEY_WOW64_32KEY) and a 32-bit program (marked as such, ADR 0259; it asks for its own default view and for each explicit one). Programs read with RegOpenKeyExW, RegEnumKeyExW, RegEnumValueW, RegQueryInfoKeyW and RegQueryValueExW; the ones that make marker keys use RegCreateKeyExW and RegDeleteKeyExW and need an administrator token (the default token kind of the runner) for HKLM. Names of the markers are fixed and unique; each program removes its markers at the start and at the end. Output lines hold names, yes/no answers and text values only: no counts of a whole hive, no handle, no time, no path of the test.
+not_covered: >
+  Other hives (HKU, HKCC), keys below HKLM\SYSTEM, the registry on a machine that has ARM64 emulation, the values of keys that vendors' installers make, and the data (names and permissions) of the security descriptors of the keys. Counts of the children of the big keys (Interface has about twenty-four thousand children on the oracle) differ from machine to machine and are not part of the behaviour.
