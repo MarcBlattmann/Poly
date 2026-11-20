@@ -1004,6 +1004,8 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
         d.send(&abs(cx + 3 + 15 * i, cy - 12 + 10 * i))?;
     }
     d.send(&[button(false)])?;
+    // The pointer off the window, so the theme's larger pointer (ADR 0252) covers no pixel looked at.
+    d.send(&abs(cx + 63 + 200, cy + 28 + 200))?;
     thread::sleep(Duration::from_millis(1000));
     let img = d.shot("wl-client-moved")?;
     expect(
