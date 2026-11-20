@@ -373,6 +373,12 @@ pub fn install(
             // Redirector").
             let root = reg.hive(id).root;
             make_path(reg, root, WOW6432_NODE, false, now)?;
+            // And the 32-bit view of the redirected `Classes` subkeys lives below
+            // `Classes\WOW6432Node` (Learn: "Registry Keys Affected by WOW64";
+            // `RegCreateKeyExW.yaml` `level_by_level`: a 32-bit `CLSID` exists).
+            for sub in ["CLSID", "Interface", "DirectShow", "Media Type", "MediaFoundation"] {
+                make_path(reg, root, &alloc::format!("Classes\\{WOW6432_NODE}\\{sub}"), false, now)?;
+            }
         }
         out.push(outcome);
     }
