@@ -56,7 +56,10 @@ three-function stand-in for the dyld tests. A program linked the ordinary way ag
    (0x1000000 | number) return their `kern_return_t`. They cover every call that has a sheet, under
    the names the SDK exports them by (`stat$INODE64`, `__psynch_mutexwait`, `__ulock_wait`,
    `mach_msg_trap` …; `$NOCANCEL` forms are the plain calls); arguments past the sixth stay on
-   the stack where the caller put them. Functions the SDK declares over a trap with the same
+   the stack where the caller put them. `posix_spawn` maps the C call's six arguments (pid, path,
+   file actions, attributes, argv, envp) to BSD call 244's five (pid, path, descriptor, argv,
+   envp), with descriptor 0 (v0 has no file actions or attributes; a non-empty one is `EINVAL`),
+   and returns the errno itself as POSIX has it. Functions the SDK declares over a trap with the same
    arguments (`mach_port_allocate`, `mach_vm_allocate`, `semaphore_signal` …) are the trap;
    `semaphore_timedwait*` split their `mach_timespec_t`. `mach_task_self_` is read at start.
 6. **`errno` is a Mach-O thread-local variable** of libsystem_kernel, reached through
@@ -126,8 +129,9 @@ returns, exits with 134; the stack protector's canary has a zero low byte; the m
   by `generate.sh` with clang and Apple's ld against the SDK, as `/bin/mhello-libsystem` with
   Poly's seven dylibs in `/usr/lib`; it prints through `printf`, `puts`, `putchar` and `stderr`,
   uses `malloc`/`calloc`/`realloc`, `snprintf` (fortified), `asprintf`, `errno`, the number and
-  string functions, `getenv`, the dyld and `crt_externs` accessors, the stack protector and
-  `atexit`, and must exit 0.
+  string functions, `getenv`, the dyld and `crt_externs` accessors, the stack protector,
+  `posix_spawn` (it runs itself as a child, which checks the argv it was given, and `wait4`s for
+  it) and `atexit`, and must exit 0.
 
 ## Waiting for other work
 

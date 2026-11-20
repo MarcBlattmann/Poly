@@ -425,6 +425,7 @@ const HELLO_LINES: &[&str] = &[
     "ok _NSGetArgc and getprogname",
     "ok the stack protector's guard is set",
     "ok fprintf to stderr",
+    "ok posix_spawn passes argv to the child",
     "hello: done",
     "atexit: last registered runs first",
     "atexit: then the first",

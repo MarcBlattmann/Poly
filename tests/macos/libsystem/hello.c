@@ -9,6 +9,8 @@
 #include <errno.h>
 #include <mach-o/dyld.h>
 #include <mach-o/ldsyms.h>
+#include <spawn.h>
+#include <sys/wait.h>
 #include <malloc/malloc.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -49,7 +51,31 @@ static void *a_global(void) {
     return global;
 }
 
+/* posix_spawn: the program runs itself as a child with three arguments;
+ * the child exits with 3 when its argv is the one it was given. */
+static int spawn_child(const char *self) {
+    char *args[] = {"mhello-libsystem", "child", "two words", 0};
+    pid_t pid = 0;
+    int err = posix_spawn(&pid, self, 0, 0, args, *_NSGetEnviron());
+    if (err != 0 || pid <= 0) {
+        printf("  posix_spawn returned %d, pid %d\n", err, (int)pid);
+        return 0;
+    }
+    int status = 0;
+    if (wait4(pid, &status, 0, 0) != pid) {
+        printf("  wait4 failed, errno %d\n", errno);
+        return 0;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 3) printf("  the child's status is %#x\n", status);
+    return WIFEXITED(status) && WEXITSTATUS(status) == 3;
+}
+
 int main(int argc, char **argv) {
+    if (argc >= 2 && strcmp(argv[1], "child") == 0)
+        return argc == 3 && strcmp(argv[0], "mhello-libsystem") == 0 && strcmp(argv[2], "two words") == 0 &&
+                       argv[3] == 0
+                   ? 3
+                   : 1;
     puts("hello, world");
     printf("ok printf: %d %d %x %#x %.2f %.1e [%5s] [%-5s] %s %%\n", 42, -7, 42, 42, 3.14159, 1500.0, "pad", "left",
            (char *)0);
@@ -117,6 +143,8 @@ int main(int argc, char **argv) {
     check("the stack protector's guard is set", __stack_chk_guard != 0);
 
     fprintf(stderr, "ok fprintf to stderr\n");
+
+    check("posix_spawn passes argv to the child", spawn_child("/bin/mhello-libsystem"));
 
     puts(fails ? "hello: failed" : "hello: done");
     atexit(registered_first);
