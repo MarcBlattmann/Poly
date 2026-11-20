@@ -983,7 +983,7 @@
 {"symbol":"WM_NCHITTEST","status":"green","tests_visible":3,"tests_held_out":2,"src":["ms-learn-winuser"]},
 {"symbol":"WNDPROC_CALLBACK","src":["wine-spec"]},
 {"symbol":"WaitAvailableMessageEx","src":["wine-spec"]},
-{"symbol":"WaitForInputIdle","status":"green","tests_visible":5,"tests_held_out":2,"src":["wine-spec"],"seeds":["wine:user32/tests/msg.c:test_WaitForInputIdle"]},
+{"symbol":"WaitForInputIdle","status":"claimed","claimed_by":"spec-win-waitforinputidle","src":["wine-spec"],"seeds":["wine:user32/tests/msg.c:test_WaitForInputIdle"]},
 {"symbol":"WaitMessage","src":["wine-spec"]},
 {"symbol":"WinHelpA","src":["wine-spec"]},
 {"symbol":"WinHelpW","status":"stub","src":["wine-spec"]},
