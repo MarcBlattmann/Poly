@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_once_f_basic",
+      "source_sha256": "ebd1acc5d30983c88a894bc7e8cc88cc53b8756b75a1fa32cd290275c81f6512",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6efb38c9b8cffad0c5f8d6eedeed9dc22c058dc4994a732d2068f7c4d11f6a7f",
+          "exit_code": 0,
+          "stdout": "ok the function ran exactly once\nok with the context of the first caller\nok every caller returned after it finished\nok a later call does nothing\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "507ffcd9b81f45e49890949538491bc0a7e790d990733ef6b562dae03ef3fb04",
+          "exit_code": 0,
+          "stdout": "ok the function ran exactly once\nok with the context of the first caller\nok every caller returned after it finished\nok a later call does nothing\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

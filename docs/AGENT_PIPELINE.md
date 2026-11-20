@@ -689,6 +689,13 @@ cannot hide behind its own output. `mac build` lets exactly these tests import
 libSystem symbols and still refuses every other library; all other tests import
 nothing.
 
+libdispatch's tests (`macos/api/libdispatch.dylib/...`) also include `poly_mgcd.h`
+(timing, semaphore wait and thread helpers); they assert lower bounds on time only,
+never exact times, and synchronise with semaphores rather than sleeps. `poly_mlibc.h`
+starts every such program with a 30 second `alarm`, so a test that hangs is killed
+and fails instead of blocking the run. A test about the main queue and run loops
+carries both `poly-mac: libsystem` and `poly-mac: corefoundation`.
+
 ```sh
 cargo xtask pipeline mac build [--tests-dir DIR]... [--tests a,b]   # target/pipeline/macos/bin/<arch>/, manifest.json
 cargo xtask pipeline mac run [--tests-dir DIR]... [--tests a,b] [--runs 3] [--record]

@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_sync_f_more",
+      "source_sha256": "7fb07dcb302327d7822dc1b41e155ad13d61449932ee831c0a853bacfdbfd4df",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "cc3c62f88c055e8721ea4040d4709a096fb9f6f6f29647a88b7db906b7f15be5",
+          "exit_code": 0,
+          "stdout": "ok the sync function ran after the two async ones\nok and again\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3ad7049d98fe9c45aa6a37b8d1b9d3ffd0cc702c26560afdfaa8cacbe16043e2",
+          "exit_code": 0,
+          "stdout": "ok the sync function ran after the two async ones\nok and again\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
