@@ -265,7 +265,20 @@ fn decode_branch_reg(w: u32) -> Inst {
         };
     }
     if bits(w, 15, 11) == 0b00001 {
-        return Inst::Unsupported(w); // pointer-authenticated branches
+        // Pointer-authenticated branches: op3 = 00001M (M = key B).
+        let key_b = bit(w, 10);
+        let rm = bits(w, 4, 0) as Reg;
+        return match opc {
+            // BRAAZ/BRABZ, BLRAAZ/BLRABZ: op4 must be 11111.
+            0b0000 | 0b0001 if rm == 31 => Inst::BranchAuth { link: opc == 1, ret: false, key_b, rn, modifier: None },
+            // RETAA/RETAB: Rn and op4 are 11111; the modifier is SP.
+            0b0010 if rn == 31 && rm == 31 => {
+                Inst::BranchAuth { link: false, ret: true, key_b, rn: 30, modifier: Some(31) }
+            }
+            // BRAA/BRAB, BLRAA/BLRAB: the modifier is Xm|SP.
+            0b1000 | 0b1001 => Inst::BranchAuth { link: opc == 0b1001, ret: false, key_b, rn, modifier: Some(rm) },
+            _ => Inst::Undefined(w), // ERETAA/ERETAB and the rest: not at EL0
+        };
     }
     Inst::Undefined(w)
 }
@@ -293,6 +306,9 @@ fn decode_system(w: u32) -> Inst {
                 7 => Inst::Barrier { kind: Barrier::Sb, crm: crm as u8 },
                 _ => Inst::Unsupported(w), // DSB nXS, reserved
             },
+            4 if rt == 31 && op1 == 0 && crm == 0 && op2 == 0 => Inst::FlagOp { op: FlagOp::Cfinv },
+            4 if rt == 31 && op1 == 0 && crm == 0 && op2 == 2 => Inst::FlagOp { op: FlagOp::Axflag },
+            4 if rt == 31 && op1 == 0 && crm == 0 && op2 == 1 => Inst::FlagOp { op: FlagOp::Xaflag },
             4 if rt == 31 => Inst::Unsupported(w), // MSR (immediate): PSTATE fields
             _ => Inst::Unsupported(w),
         };
@@ -347,9 +363,19 @@ fn decode_ldst(w: u32) -> Inst {
             if v {
                 return decode_simd::decode_simd_ldst_struct(w);
             }
+            if bit(w, 24) {
+                // Bits 29:24 = 001001: nothing this core implements (RCpc3, LSE128, ...).
+                return Inst::Undefined(w);
+            }
             decode_exclusive(w)
         }
         0b011 => {
+            if bits(w, 25, 24) == 0b01 && !v && !bit(w, 21) && bits(w, 11, 10) == 0 {
+                return decode_ldapur(w);
+            }
+            if bits(w, 25, 24) == 0b01 && bit(w, 21) {
+                return Inst::Unsupported(w); // memory tagging (STG, LDG, ...)
+            }
             // Load register (literal): bits 25:24 = 00.
             if bits(w, 25, 24) != 0 {
                 return Inst::Undefined(w);
@@ -399,6 +425,11 @@ fn decode_ldst(w: u32) -> Inst {
                 if bits(w, 11, 10) == 0b10 && (v || kind == MemKind::Prefetch) {
                     return Inst::Undefined(w);
                 }
+                // Writeback into the transfer register is CONSTRAINED
+                // UNPREDICTABLE; Apple's cores make it UNDEFINED.
+                if matches!(addr, Addr::Pre { .. } | Addr::Post { .. }) && !v && rt == rn && rn != 31 {
+                    return Inst::Undefined(w);
+                }
                 return Inst::LoadStore { kind, size: sz, fp: v, rt, addr };
             }
             match bits(w, 11, 10) {
@@ -424,7 +455,19 @@ fn decode_ldst(w: u32) -> Inst {
                         addr: Addr::Reg { rn, rm: bits(w, 20, 16) as Reg, ext: Extend::from_bits(option), shift },
                     }
                 }
-                _ => Inst::Unsupported(w), // PAC loads (LDRAA/LDRAB)
+                _ => {
+                    // LDRAA/LDRAB: size 11, V 0; M (bit 23) is key B, S (bit 22) the
+                    // sign of the scaled 10-bit offset, W (bit 11) the pre-index form.
+                    if size != 3 || v {
+                        return Inst::Undefined(w);
+                    }
+                    let imm10 = (bits(w, 22, 22) << 9) | bits(w, 20, 12);
+                    let writeback = bit(w, 11);
+                    if writeback && rt == rn && rn != 31 {
+                        return Inst::Undefined(w);
+                    }
+                    Inst::LoadAuth { key_b: bit(w, 23), rt, rn, offset: sext(imm10, 10) << 3, writeback }
+                }
             }
         }
         _ => Inst::Undefined(w),
@@ -459,12 +502,28 @@ fn decode_pair(w: u32) -> Inst {
             _ => return Inst::Undefined(w),
         }
     };
+    if bits(w, 24, 23) == 0 && kind == PairKind::LoadSw {
+        return Inst::Undefined(w); // no non-temporal LDPSW
+    }
     let offset = sext(bits(w, 21, 15), 7) << size;
     let addr = match bits(w, 24, 23) {
         0b00 | 0b10 => Addr::Imm { rn, offset },
         0b01 => Addr::Post { rn, offset },
         _ => Addr::Pre { rn, offset },
     };
+    // CONSTRAINED UNPREDICTABLE cases that Apple's cores make UNDEFINED: a
+    // load pair into one register twice, and writeback into a transfer
+    // register.
+    if !v {
+        if l && rt == rt2 {
+            return Inst::Undefined(w);
+        }
+        if matches!(addr, Addr::Pre { .. } | Addr::Post { .. }) && rn != 31 && (rt == rn || rt2 == rn) {
+            return Inst::Undefined(w);
+        }
+    } else if l && rt == rt2 {
+        return Inst::Undefined(w);
+    }
     Inst::LoadStorePair { kind, size, fp: v, rt, rt2, addr }
 }
 
@@ -478,6 +537,9 @@ fn decode_exclusive(w: u32) -> Inst {
     let rt2 = bits(w, 14, 10) as Reg;
     let rn = bits(w, 9, 5) as Reg;
     let rt = bits(w, 4, 0) as Reg;
+    // Fields the encodings fix to 11111 (`Rs` of loads, `Rt2` of single
+    // registers) are ignored by Apple's cores, except for `CAS`, where other
+    // values are UNDEFINED.
     match (o2, o1) {
         (false, false) => {
             let kind = if l { ExclKind::Load } else { ExclKind::Store };
@@ -486,6 +548,9 @@ fn decode_exclusive(w: u32) -> Inst {
         (false, true) => {
             if size >= 2 {
                 // LDXP/STXP/LDAXP/STLXP: the size bit selects W or X pairs.
+                if l && rt == rt2 {
+                    return Inst::Undefined(w);
+                }
                 let kind = if l { ExclKind::LoadPair } else { ExclKind::StorePair };
                 Inst::Exclusive { kind, size, ordered: o0, rs, rt, rt2, rn }
             } else if rt2 == 31 && rs & 1 == 0 && rt & 1 == 0 {
@@ -495,8 +560,30 @@ fn decode_exclusive(w: u32) -> Inst {
             }
         }
         (true, false) => Inst::Ordered { store: !l, size, rt, rn },
-        (true, true) => Inst::Cas { size, acq: l, rel: o0, rs, rt, rn },
+        (true, true) => {
+            if rt2 != 31 {
+                return Inst::Undefined(w);
+            }
+            Inst::Cas { size, acq: l, rel: o0, rs, rt, rn }
+        }
     }
+}
+
+/// `LDAPUR*`/`STLUR*` (bits 29:24 = 011001, bit 21 = 0, bits 11:10 = 00).
+fn decode_ldapur(w: u32) -> Inst {
+    let size = bits(w, 31, 30) as u8;
+    let rt = bits(w, 4, 0) as Reg;
+    let rn = bits(w, 9, 5) as Reg;
+    let offset = sext(bits(w, 20, 12), 9);
+    let kind = match (size, bits(w, 23, 22)) {
+        (_, 0) => MemKind::Store,
+        (_, 1) => MemKind::Load,
+        (0 | 1, 2) => MemKind::LoadSigned(Width::X),
+        (0 | 1, 3) => MemKind::LoadSigned(Width::W),
+        (2, 2) => MemKind::LoadSigned(Width::X),
+        _ => return Inst::Undefined(w),
+    };
+    Inst::OrderedImm { kind, size, rt, rn, offset }
 }
 
 fn decode_atomic(w: u32) -> Inst {
@@ -603,10 +690,19 @@ fn decode_dp_reg(w: u32) -> Inst {
     match bits(w, 23, 21) {
         0b000 => {
             // Add/subtract with carry (op3 = 000000); rotate and flag-set forms are FEAT_FlagM.
-            if bits(w, 15, 10) == 0 {
+            let op3 = bits(w, 15, 10);
+            if op3 == 0 {
                 Inst::AddSubCarry { w: wd, sub: bit(w, 30), s: bit(w, 29), rd, rn, rm }
+            } else if bits(w, 31, 29) == 0b101 && bits(w, 14, 10) == 0b00001 && !bit(w, 4) {
+                Inst::Rmif { rn, shift: bits(w, 20, 15) as u8, mask: bits(w, 3, 0) as u8 }
+            } else if bits(w, 31, 29) == 0b001
+                && bits(w, 20, 15) == 0
+                && bits(w, 13, 10) == 0b0010
+                && bits(w, 4, 0) == 0b01101
+            {
+                Inst::Setf { rn, sixteen: bit(w, 14) }
             } else {
-                Inst::Unsupported(w)
+                Inst::Undefined(w)
             }
         }
         0b010 => {
@@ -659,7 +755,15 @@ fn decode_dp2(w: u32) -> Inst {
         0b001001 => Inst::ShiftVar { w: wd, op: Shift::Lsr, rd, rn, rm },
         0b001010 => Inst::ShiftVar { w: wd, op: Shift::Asr, rd, rn, rm },
         0b001011 => Inst::ShiftVar { w: wd, op: Shift::Ror, rd, rn, rm },
-        0b000000 | 0b000001 | 0b000100 | 0b000101 | 0b001100 | 0b010000..=0b010111 => Inst::Unsupported(w),
+        0b001100 if wd == Width::X => Inst::Pacga { rd, rn, rm },
+        0b010000..=0b010111 => {
+            let size = bits(w, 11, 10) as u8;
+            if (size == 3) != (wd == Width::X) {
+                return Inst::Undefined(w);
+            }
+            Inst::Crc32 { c: bit(w, 12), size, rd, rn, rm }
+        }
+        0b000000 | 0b000001 | 0b000100 | 0b000101 => Inst::Unsupported(w), // MTE (IRG, GMI, SUBP)
         _ => Inst::Undefined(w),
     }
 }
@@ -669,8 +773,27 @@ fn decode_dp1(w: u32) -> Inst {
     let wd = Width::from_sf(sf);
     let rd = bits(w, 4, 0) as Reg;
     let rn = bits(w, 9, 5) as Reg;
+    if bits(w, 20, 16) == 1 && sf {
+        // Pointer authentication: opcode bits 15:10.
+        let op = bits(w, 15, 10);
+        let zero = op & 0b001000 != 0;
+        if zero && rn != 31 {
+            return Inst::Undefined(w);
+        }
+        return match op {
+            0b000000..=0b001111 => Inst::Pac {
+                auth: op & 0b100 != 0,
+                data: op & 0b010 != 0,
+                key_b: op & 0b001 != 0,
+                rd,
+                modifier: if zero { None } else { Some(rn) },
+            },
+            0b010000 | 0b010001 if rn == 31 => Inst::Xpac { data: op & 1 != 0, rd },
+            _ => Inst::Undefined(w),
+        };
+    }
     if bits(w, 20, 16) != 0 {
-        return if bits(w, 20, 16) == 1 { Inst::Unsupported(w) } else { Inst::Undefined(w) };
+        return Inst::Undefined(w);
     }
     let op = match (bits(w, 15, 10), sf) {
         (0b000000, _) => Bit1Op::Rbit,
@@ -699,8 +822,9 @@ fn decode_dp3(w: u32) -> Inst {
         0b000 => Inst::Madd { w: wd, sub: o0, rd, rn, rm, ra },
         0b001 if sf => Inst::MaddLong { signed: true, sub: o0, rd, rn, rm, ra },
         0b101 if sf => Inst::MaddLong { signed: false, sub: o0, rd, rn, rm, ra },
-        0b010 if sf && !o0 && ra == 31 => Inst::MulHigh { signed: true, rd, rn, rm },
-        0b110 if sf && !o0 && ra == 31 => Inst::MulHigh { signed: false, rd, rn, rm },
+        // `Ra` "should be" 11111; Apple's cores ignore it (but not `o0`).
+        0b010 if sf && !o0 => Inst::MulHigh { signed: true, rd, rn, rm },
+        0b110 if sf && !o0 => Inst::MulHigh { signed: false, rd, rn, rm },
         _ => Inst::Undefined(w),
     }
 }

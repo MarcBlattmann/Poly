@@ -1,0 +1,84 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "nct_basic",
+      "exe_sha256": "abb5e05f7bc7c99656910f79d2e1175e67630322b707df86e1986253b9ffb57e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlOiBzdGF0dXMgMHgwLCBoYW5kbGUgeWVzCkdldFByb2Nlc3NJZE9mVGhyZWFkID09IHRhcmdldCBwaWQ6IHllcwpHZXRUaHJlYWRJZCBub24temVybzogeWVzCndhaXQgZm9yIHRoZSB0aHJlYWQ6IDB4MApHZXRFeGl0Q29kZVRocmVhZDogMHgxMjM0CmdyYW50ZWQgYWNjZXNzOiAweDFmZmZmZgpjcmVhdGUgd2l0aCBjb2RlIGluIHRoZSB0YXJnZXQ6IHN0YXR1cyAweDAKd2FpdCBmb3IgdGhlIHRocmVhZDogMHgwCkdldEV4aXRDb2RlVGhyZWFkOiAweDc3Cm1hcmtlciB3cml0dGVuIGludG8gdGhlIHRhcmdldDogMHhjMGRlNWVlZAp0aHJlYWQgc2F3IHRoZSB0YXJnZXQncyBwcm9jZXNzIGlkOiB5ZXMKdGhyZWFkIHNhdyBpdHMgb3duIGlkID09IEdldFRocmVhZElkOiB5ZXMKY3JlYXRlIGluIHRoZSBjdXJyZW50IHByb2Nlc3Mgd2l0aCB0aGUgcHNldWRvIGhhbmRsZTogc3RhdHVzIDB4MApHZXRQcm9jZXNzSWRPZlRocmVhZCA9PSBvd24gcGlkOiB5ZXMKd2FpdCBmb3IgdGhlIHRocmVhZDogMHgwCkdldEV4aXRDb2RlVGhyZWFkOiAweDc3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create: status 0x0, handle yes\nGetProcessIdOfThread == target pid: yes\nGetThreadId non-zero: yes\nwait for the thread: 0x0\nGetExitCodeThread: 0x1234\ngranted access: 0x1fffff\ncreate with code in the target: status 0x0\nwait for the thread: 0x0\nGetExitCodeThread: 0x77\nmarker written into the target: 0xc0de5eed\nthread saw the target's process id: yes\nthread saw its own id == GetThreadId: yes\ncreate in the current process with the pseudo handle: status 0x0\nGetProcessIdOfThread == own pid: yes\nwait for the thread: 0x0\nGetExitCodeThread: 0x77\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 286
+    },
+    {
+      "name": "nct_errors",
+      "exe_sha256": "48b5100ae56678c26201f2d46a115c5766aeec9da27970b193a0f42807d1f849",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCBoYW5kbGUgb3V0cHV0OiBzdGF0dXMgMHhjMDAwMDAwNQphZnRlciBOVUxMIGhhbmRsZSBvdXRwdXQ6IHRhcmdldCBwcm9jZXNzIGFsaXZlOiB5ZXMKYXR0cmlidXRlIGxpc3Qgb2YgbGVuZ3RoIDggKG5vIGF0dHJpYnV0ZXMpOiBzdGF0dXMgMHhjMDAwMDAwZAphdHRyaWJ1dGUgbGlzdCBvZiBsZW5ndGggNDogc3RhdHVzIDB4YzAwMDAwMGQKT0JKRUNUX0FUVFJJQlVURVMgbGVuZ3RoIDA6IHN0YXR1cyAweGMwMDAwMDBkCk9CSkVDVF9BVFRSSUJVVEVTIGxlbmd0aCA0ODogc3RhdHVzIDB4MApPQkpfSU5IRVJJVDogc3RhdHVzIDB4MCwgaGFuZGxlIGluaGVyaXRhYmxlIHllcwphZnRlciBPQkpfSU5IRVJJVDogdGFyZ2V0IHByb2Nlc3MgYWxpdmU6IHllcwpOVUxMIHN0YXJ0IHJvdXRpbmUsIHN1c3BlbmRlZDogc3RhdHVzIDB4MCwgaGFuZGxlIHllcwphZnRlciBOVUxMIHN0YXJ0IHJvdXRpbmU6IHRhcmdldCBwcm9jZXNzIGFsaXZlOiB5ZXMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL handle output: status 0xc0000005\nafter NULL handle output: target process alive: yes\nattribute list of length 8 (no attributes): status 0xc000000d\nattribute list of length 4: status 0xc000000d\nOBJECT_ATTRIBUTES length 0: status 0xc000000d\nOBJECT_ATTRIBUTES length 48: status 0x0\nOBJ_INHERIT: status 0x0, handle inheritable yes\nafter OBJ_INHERIT: target process alive: yes\nNULL start routine, suspended: status 0x0, handle yes\nafter NULL start routine: target process alive: yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 282
+    },
+    {
+      "name": "nct_flags",
+      "exe_sha256": "05148f363ee460816c5286213a87516c00b9463b26ddd3441fb8f11b0265acfc",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmxhZ3MgMHgwOiBzdGF0dXMgMHgwLCBoaWRkZW4gZnJvbSBkZWJ1Z2dlciAwLCB3YWl0IGJlZm9yZSByZXN1bWUgMHgwLCB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4NjYKZmxhZ3MgMHgxOiBzdGF0dXMgMHgwLCBoaWRkZW4gZnJvbSBkZWJ1Z2dlciAwLCB3YWl0IGJlZm9yZSByZXN1bWUgMHgxMDIsIHdhaXQgMHgwLCBleGl0IGNvZGUgMHg2NgpmbGFncyAweDI6IHN0YXR1cyAweDAsIGhpZGRlbiBmcm9tIGRlYnVnZ2VyIDAsIHdhaXQgYmVmb3JlIHJlc3VtZSAweDAsIHdhaXQgMHgwLCBleGl0IGNvZGUgMHg2NgpmbGFncyAweDM6IHN0YXR1cyAweDAsIGhpZGRlbiBmcm9tIGRlYnVnZ2VyIDAsIHdhaXQgYmVmb3JlIHJlc3VtZSAweDEwMiwgd2FpdCAweDAsIGV4aXQgY29kZSAweDY2CmZsYWdzIDB4NDogc3RhdHVzIDB4MCwgaGlkZGVuIGZyb20gZGVidWdnZXIgMSwgd2FpdCBiZWZvcmUgcmVzdW1lIDB4MCwgd2FpdCAweDAsIGV4aXQgY29kZSAweDY2CmZsYWdzIDB4NTogc3RhdHVzIDB4MCwgaGlkZGVuIGZyb20gZGVidWdnZXIgMSwgd2FpdCBiZWZvcmUgcmVzdW1lIDB4MTAyLCB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4NjYKZmxhZ3MgMHg4OiBzdGF0dXMgMHgwLCBoaWRkZW4gZnJvbSBkZWJ1Z2dlciAwLCB3YWl0IGJlZm9yZSByZXN1bWUgMHgwLCB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4NjYKZmxhZ3MgMHgxMDogc3RhdHVzIDB4MCwgaGlkZGVuIGZyb20gZGVidWdnZXIgMCwgd2FpdCBiZWZvcmUgcmVzdW1lIDB4MCwgd2FpdCAweDAsIGV4aXQgY29kZSAweDY2CmZsYWdzIDB4MjA6IHN0YXR1cyAweDAsIGhpZGRlbiBmcm9tIGRlYnVnZ2VyIDAsIHdhaXQgYmVmb3JlIHJlc3VtZSAweDAsIHdhaXQgMHgwLCBleGl0IGNvZGUgMHg2NgpmbGFncyAweDQwOiBzdGF0dXMgMHgwLCBoaWRkZW4gZnJvbSBkZWJ1Z2dlciAwLCB3YWl0IGJlZm9yZSByZXN1bWUgMHgwLCB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4NjYKZmxhZ3MgMHgxMDA6IHN0YXR1cyAweGMwMDAwMGY1CmZsYWdzIDB4MTAwMDogc3RhdHVzIDB4YzAwMDAwZjUKZmxhZ3MgMHgxMDAwMDogc3RhdHVzIDB4YzAwMDAwZjUKZmxhZ3MgMHg4MDAwMDAwMDogc3RhdHVzIDB4YzAwMDAwZjUKZmxhZ3MgMHg4MDogc3RhdHVzIDB4YzAwMDAwZjUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "flags 0x0: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x1: status 0x0, hidden from debugger 0, wait before resume 0x102, wait 0x0, exit code 0x66\nflags 0x2: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x3: status 0x0, hidden from debugger 0, wait before resume 0x102, wait 0x0, exit code 0x66\nflags 0x4: status 0x0, hidden from debugger 1, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x5: status 0x0, hidden from debugger 1, wait before resume 0x102, wait 0x0, exit code 0x66\nflags 0x8: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x10: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x20: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x40: status 0x0, hidden from debugger 0, wait before resume 0x0, wait 0x0, exit code 0x66\nflags 0x100: status 0xc00000f5\nflags 0x1000: status 0xc00000f5\nflags 0x10000: status 0xc00000f5\nflags 0x80000000: status 0xc00000f5\nflags 0x80: status 0xc00000f5\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1201
+    },
+    {
+      "name": "nct_stack",
+      "exe_sha256": "eeb122b03a594962121edda2dbcdf978844a285c6bfee8c87e56b393149c3648",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U3RhY2tTaXplIDAsIE1heGltdW1TdGFja1NpemUgMDogc3RhdHVzIDB4MCwgcmVzZXJ2ZT0xMDI0SywgY29tbWl0dGVkIGF0IGxlYXN0IG9uZSBwYWdlOiB5ZXMsIGNvbW1pdHRlZCBhdCBsZWFzdCBTdGFja1NpemU6IHllcwpTdGFja1NpemUgMjU2SywgTWF4aW11bSAwOiBzdGF0dXMgMHgwLCByZXNlcnZlPTEwMjRLLCBjb21taXR0ZWQgYXQgbGVhc3Qgb25lIHBhZ2U6IHllcywgY29tbWl0dGVkIGF0IGxlYXN0IFN0YWNrU2l6ZTogeWVzClN0YWNrU2l6ZSAwLCBNYXhpbXVtIDJNOiBzdGF0dXMgMHgwLCByZXNlcnZlPTIwNDhLLCBjb21taXR0ZWQgYXQgbGVhc3Qgb25lIHBhZ2U6IHllcywgY29tbWl0dGVkIGF0IGxlYXN0IFN0YWNrU2l6ZTogeWVzClN0YWNrU2l6ZSA2NEssIE1heGltdW0gMjU2Szogc3RhdHVzIDB4MCwgcmVzZXJ2ZT0yNTZLLCBjb21taXR0ZWQgYXQgbGVhc3Qgb25lIHBhZ2U6IHllcywgY29tbWl0dGVkIGF0IGxlYXN0IFN0YWNrU2l6ZTogeWVzClN0YWNrU2l6ZSAyNTZLLCBNYXhpbXVtIDI1Nks6IHN0YXR1cyAweDAsIHJlc2VydmU9MTAyNEssIGNvbW1pdHRlZCBhdCBsZWFzdCBvbmUgcGFnZTogeWVzLCBjb21taXR0ZWQgYXQgbGVhc3QgU3RhY2tTaXplOiB5ZXMKU3RhY2tTaXplIDJNLCBNYXhpbXVtIDI1NksgKGNvbW1pdCBhYm92ZSByZXNlcnZlKTogc3RhdHVzIDB4MCwgcmVzZXJ2ZT0yMDQ4SywgY29tbWl0dGVkIGF0IGxlYXN0IG9uZSBwYWdlOiB5ZXMsIGNvbW1pdHRlZCBhdCBsZWFzdCBTdGFja1NpemU6IHllcwpTdGFja1NpemUgMCwgTWF4aW11bSA0Szogc3RhdHVzIDB4MCwgcmVzZXJ2ZT0xMDI0SywgY29tbWl0dGVkIGF0IGxlYXN0IG9uZSBwYWdlOiB5ZXMsIGNvbW1pdHRlZCBhdCBsZWFzdCBTdGFja1NpemU6IHllcwpTdGFja1NpemUgMCwgTWF4aW11bSAxMDAwMDA6IHN0YXR1cyAweDAsIHJlc2VydmU9MTI4SywgY29tbWl0dGVkIGF0IGxlYXN0IG9uZSBwYWdlOiB5ZXMsIGNvbW1pdHRlZCBhdCBsZWFzdCBTdGFja1NpemU6IHllcwpTdGFja1NpemUgMSwgTWF4aW11bSAwOiBzdGF0dXMgMHgwLCByZXNlcnZlPTEwMjRLLCBjb21taXR0ZWQgYXQgbGVhc3Qgb25lIHBhZ2U6IHllcywgY29tbWl0dGVkIGF0IGxlYXN0IFN0YWNrU2l6ZTogeWVzClN0YWNrU2l6ZSAwLCBNYXhpbXVtIDFUOiBzdGF0dXMgMHgwLCByZXNlcnZlPTEwNzM3NDE4MjRLLCBjb21taXR0ZWQgYXQgbGVhc3Qgb25lIHBhZ2U6IHllcywgY29tbWl0dGVkIGF0IGxlYXN0IFN0YWNrU2l6ZTogeWVzClN0YWNrU2l6ZSAwLCBNYXhpbXVtIGFsbCBvbmVzOiBzdGF0dXMgMHhjMDAwMDAwZApTdGFja1NpemUgYWxsIG9uZXMsIE1heGltdW0gMDogc3RhdHVzIDB4YzAwMDAwMGQKWmVyb0JpdHMgMTogc3RhdHVzIDB4MCwgcmVzZXJ2ZT0xMDI0SywgY29tbWl0dGVkIGF0IGxlYXN0IG9uZSBwYWdlOiB5ZXMsIGNvbW1pdHRlZCBhdCBsZWFzdCBTdGFja1NpemU6IHllcwpaZXJvQml0cyAweEZGRkZGRkZGOiBzdGF0dXMgMHgwLCByZXNlcnZlPTEwMjRLLCBjb21taXR0ZWQgYXQgbGVhc3Qgb25lIHBhZ2U6IHllcywgY29tbWl0dGVkIGF0IGxlYXN0IFN0YWNrU2l6ZTogeWVzClplcm9CaXRzIDB4RkZGRkZGRkZGRkZGRkZGRjogc3RhdHVzIDB4MCwgcmVzZXJ2ZT0xMDI0SywgY29tbWl0dGVkIGF0IGxlYXN0IG9uZSBwYWdlOiB5ZXMsIGNvbW1pdHRlZCBhdCBsZWFzdCBTdGFja1NpemU6IHllcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "StackSize 0, MaximumStackSize 0: status 0x0, reserve=1024K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 256K, Maximum 0: status 0x0, reserve=1024K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 0, Maximum 2M: status 0x0, reserve=2048K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 64K, Maximum 256K: status 0x0, reserve=256K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 256K, Maximum 256K: status 0x0, reserve=1024K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 2M, Maximum 256K (commit above reserve): status 0x0, reserve=2048K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 0, Maximum 4K: status 0x0, reserve=1024K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 0, Maximum 100000: status 0x0, reserve=128K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 1, Maximum 0: status 0x0, reserve=1024K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 0, Maximum 1T: status 0x0, reserve=1073741824K, committed at least one page: yes, committed at least StackSize: yes\nStackSize 0, Maximum all ones: status 0xc000000d\nStackSize all ones, Maximum 0: status 0xc000000d\nZeroBits 1: status 0x0, reserve=1024K, committed at least one page: yes, committed at least StackSize: yes\nZeroBits 0xFFFFFFFF: status 0x0, reserve=1024K, committed at least one page: yes, committed at least StackSize: yes\nZeroBits 0xFFFFFFFFFFFFFFFF: status 0x0, reserve=1024K, committed at least one page: yes, committed at least StackSize: yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 283
+    },
+    {
+      "name": "nct_tls",
+      "exe_sha256": "b3a3348b456290588c72b08658ff40387228b5b66f9a0b220c168ecdc6f8dbb7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW1hZ2UgYmFzZSBvZiB0aGUgdGFyZ2V0IGZvdW5kOiB5ZXMKZmxhZ3MgMDogd2FpdCAweDAsIGV4aXQgY29kZSAweDJhLCBldmVudHM6IFt0aHJlYWQtYXR0YWNoIChuZXcgdGhyZWFkKSwgdGhyZWFkLWRldGFjaCAobmV3IHRocmVhZCldLCBzdGFydCByb3V0aW5lIHJhbiAxIHRpbWUocykgaW4gdG90YWwsIGxhc3QgYXJndW1lbnQgMHgzMwpmbGFncyAxIChzdXNwZW5kZWQpOiB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4MmEsIGV2ZW50czogW3RocmVhZC1hdHRhY2ggKG5ldyB0aHJlYWQpLCB0aHJlYWQtZGV0YWNoIChuZXcgdGhyZWFkKV0sIHN0YXJ0IHJvdXRpbmUgcmFuIDIgdGltZShzKSBpbiB0b3RhbCwgbGFzdCBhcmd1bWVudCAweDMzCmZsYWdzIDIgKHNraXAgdGhyZWFkIGF0dGFjaCk6IHdhaXQgMHgwLCBleGl0IGNvZGUgMHgyYSwgZXZlbnRzOiBbXSwgc3RhcnQgcm91dGluZSByYW4gMyB0aW1lKHMpIGluIHRvdGFsLCBsYXN0IGFyZ3VtZW50IDB4MzMKZmxhZ3MgMyAoc3VzcGVuZGVkLCBza2lwIHRocmVhZCBhdHRhY2gpOiB3YWl0IDB4MCwgZXhpdCBjb2RlIDB4MmEsIGV2ZW50czogW10sIHN0YXJ0IHJvdXRpbmUgcmFuIDQgdGltZShzKSBpbiB0b3RhbCwgbGFzdCBhcmd1bWVudCAweDMzCmZsYWdzIDAgYWdhaW46IHdhaXQgMHgwLCBleGl0IGNvZGUgMHgyYSwgZXZlbnRzOiBbdGhyZWFkLWF0dGFjaCAobmV3IHRocmVhZCksIHRocmVhZC1kZXRhY2ggKG5ldyB0aHJlYWQpXSwgc3RhcnQgcm91dGluZSByYW4gNSB0aW1lKHMpIGluIHRvdGFsLCBsYXN0IGFyZ3VtZW50IDB4MzMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "image base of the target found: yes\nflags 0: wait 0x0, exit code 0x2a, events: [thread-attach (new thread), thread-detach (new thread)], start routine ran 1 time(s) in total, last argument 0x33\nflags 1 (suspended): wait 0x0, exit code 0x2a, events: [thread-attach (new thread), thread-detach (new thread)], start routine ran 2 time(s) in total, last argument 0x33\nflags 2 (skip thread attach): wait 0x0, exit code 0x2a, events: [], start routine ran 3 time(s) in total, last argument 0x33\nflags 3 (suspended, skip thread attach): wait 0x0, exit code 0x2a, events: [], start routine ran 4 time(s) in total, last argument 0x33\nflags 0 again: wait 0x0, exit code 0x2a, events: [thread-attach (new thread), thread-detach (new thread)], start routine ran 5 time(s) in total, last argument 0x33\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 302
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+name: a64-jit
+
+# The arm64 translator's tests on an x86-64 runner (ADR 0239): translated
+# code runs only on x86-64, and the developers' Macs are arm64. The host
+# tests of `ci.yml` run the same tests on every pull request; this job adds
+# the timing of the test programs and runs on the translator's branches
+# without a pull request.
+on:
+  push:
+    branches: ['impl-a64-jit*']
+  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (version from rust-toolchain.toml)
+        run: rustup show active-toolchain || rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: a64-jit
+      - name: Tests (poly-a64, poly-a64-jit, the XNU personality)
+        run: cargo test -p poly-a64 -p poly-a64-jit -p poly-personality-xnu -- --nocapture
+      - name: Longer differential run
+        run: JIT_DIFF_ITERS=300000 cargo test --release -p poly-a64-jit translated_matches_interpreted -- --nocapture
+      - name: Speed of the test programs, interpreter and translator
+        run: cargo test --release -p poly-a64-jit corpus_speed -- --ignored --nocapture
