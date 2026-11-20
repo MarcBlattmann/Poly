@@ -1,0 +1,17 @@
+[package]
+name = "mmdevapi"
+description = "Our mmdevapi.dll (audio plan W2): the home of the audio endpoint classes (MMDeviceEnumerator), a scaffold until W2's sheets fill it"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+name = "mmdevapi"
+crate-type = ["cdylib"]
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+
+[lints]
+workspace = true
