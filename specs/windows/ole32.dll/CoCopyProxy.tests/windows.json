@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "cpy_dead",
-      "exe_sha256": "358395b9012cb979923e3665bc5495e9389f2801b69dc7b498a4dd993a3249e6",
+      "exe_sha256": "deb3e1c5eb8c21c6a792631de52fa54482b5b61add430b5d40b12168cb506327",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
