@@ -690,6 +690,11 @@ cannot hide behind its own output. `mac build` lets exactly these tests import
 libSystem symbols and still refuses every other library; all other tests import
 nothing.
 
+IOSurface's and IOKit's tests (`macos/api/IOSurface.framework/...`, `IOKit.framework/...`) say `poly-mac: iosurface`
+and include `poly_miosurface.h`: `mac build` links IOSurface, IOKit and CoreFoundation and lets them import those
+frameworks' symbols and libSystem's. They record shapes of what the machine reports, never its serial number,
+platform UUID or hardware counts.
+
 libdispatch's tests (`macos/api/libdispatch.dylib/...`) also include `poly_mgcd.h`
 (timing, semaphore wait and thread helpers); they assert lower bounds on time only,
 never exact times, and synchronise with semaphores rather than sleeps. `poly_mlibc.h`
