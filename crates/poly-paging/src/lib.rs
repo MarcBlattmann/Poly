@@ -636,6 +636,12 @@ impl<M: PhysMemory> PageTables<M> {
     /// is now completely empty (all entries zero), bottom-up. The PML4 is
     /// never freed.
     ///
+    /// Whether a table is empty is asked of the two neighbours of the entry
+    /// just cleared first, then of the whole table: a range unmapped page by
+    /// page, upwards or downwards, finds a neighbour that is still mapped at
+    /// once, so freeing a large range costs a few reads per page, not a scan
+    /// of the table.
+    ///
     /// The unlinked frames are returned rather than freed: until the TLB
     /// flush for `virt` has completed on every CPU using these tables, the
     /// paging-structure caches may still walk through them. Hand them to the
@@ -647,7 +653,9 @@ impl<M: PhysMemory> PageTables<M> {
         let mut level = leaf.level;
         while level < 4 {
             let table = leaf.path[4 - level];
-            if (0..ENTRIES).any(|i| self.mem.read_entry(table, i) != 0) {
+            let at = index(virt, level);
+            let near = [at + 1, at.wrapping_sub(1)].into_iter().filter(|&i| i < ENTRIES);
+            if near.chain(0..ENTRIES).any(|i| self.mem.read_entry(table, i) != 0) {
                 break;
             }
             self.mem.write_entry(leaf.path[4 - level - 1], index(virt, level + 1), 0);
