@@ -20,6 +20,11 @@ Commands (screen pixels of the guest output, e.g. 2560x1600):
                                  PPM screendumps until it changes; then until it stays the same
                                  for 300 ms; report first change and settle in ms
   watch NAME X0 Y0 X1 Y1 SECS    poll the region for SECS; report each change time (flicker count)
+  white NAME X0 Y0 X1 Y1 SECS    poll the region for SECS; log its share of pure-white pixels over time
+                                 and how long it was 90 % white or more (a window before its first frame)
+  tlgrab NAME                    copy the kernel timeline ring (boot with poly.debug.timeline; freeze it
+                                 first with `key pause`, thaw after) to target/qa/tl-NAME.bin; read it with
+                                 tools/timeline/timeline.py (ADR 0247, docs/DEBUGGING.md)
   grep TEXT                      count/last lines of TEXT in the serial log
   tail N                         last N serial lines
   mark TEXT                      write a mark line to the .out
@@ -169,6 +174,40 @@ class Driver:
                 prev = cur
         self.say(f'WATCH {name}: {len(changes)} changes in {polls} polls over {secs}s: {changes[:60]}')
 
+    def white(self, name, box, secs):
+        """How much of the region is pure white over time (sampled every 16th pixel and row)."""
+        x0, y0, x1, y1 = box
+        t0 = time.monotonic()
+        last, log, polls, white_ms, prev_t, shot_hi = None, [], 0, 0.0, None, False
+        while time.monotonic() - t0 < secs:
+            self.q.cmd('screendump', filename=PPM, format='ppm')
+            now = time.monotonic()
+            with open(PPM, 'rb') as f:
+                data = f.read()
+            off, nl = 0, 0
+            while nl < 3:
+                off = data.index(b'\n', off) + 1
+                nl += 1
+            w = int(data[3:].split()[0])
+            tot = wh = 0
+            for y in range(y0, y1, 16):
+                row = data[off + (y * w + x0) * 3: off + (y * w + x1) * 3]
+                for r, g, b in zip(row[0::48], row[1::48], row[2::48]):
+                    tot += 1
+                    wh += r == 255 and g == 255 and b == 255
+            pct = round(100 * wh / max(tot, 1))
+            polls += 1
+            if prev_t is not None and last is not None and last >= 90:
+                white_ms += (now - prev_t) * 1000
+            prev_t = now
+            if last is None or abs(pct - last) >= 3:
+                log.append((round((now - t0) * 1000), pct))
+                last = pct
+                if pct >= 90 and not shot_hi:
+                    shot_hi = True
+                    self.shot(f'{name}-white')
+        self.say(f'WHITE {name}: >=90% white for {white_ms:.0f} ms; {polls} polls; (ms, %white): {log[:40]}')
+
     def run_one(self, line):
         p = line.split()
         c, a = p[0], p[1:]
@@ -225,6 +264,20 @@ class Driver:
         elif c == 'lat':
             name, x0, y0, x1, y1, to = a[0], *map(int, a[1:5]), float(a[5])
             self.lat(name, (x0, y0, x1, y1), to, ' '.join(a[6:]))
+        elif c == 'tlgrab':
+            # Copy the timeline ring (ADR 0247) out of guest memory: target/qa/tl-NAME.bin.
+            import sys as _sys
+            _sys.path.insert(0, '/repo/tools/timeline')
+            _sys.dont_write_bytecode = True
+            import timeline as _tl
+            with open(self.serial, 'rb') as f:
+                text = f.read().decode('utf-8', 'replace')
+            out = os.path.join(os.path.dirname(self.out), f'tl-{a[0]}.bin')
+            t = time.monotonic()
+            r = _tl.grab(lambda n, **k: self.q.cmd(n, **k), text, out)
+            self.say(f'TLGRAB {a[0]}: {r} ({(time.monotonic() - t) * 1000:.0f} ms) -> {out}')
+        elif c == 'white':
+            self.white(a[0], tuple(map(int, a[1:5])), float(a[5]))
         elif c == 'watch':
             self.watch(a[0], tuple(map(int, a[1:5])), float(a[5]))
         elif c == 'grep':
