@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfbooleangetvalue_values",
+      "source_sha256": "8756b9af17e895963ce9ce5ca8e9f11cec13cc08780fbf6214f9510d2cb1d6e3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3e3b997dc6ba239c2e75d6f80b695bedbd72aab854586e35ea70ed8051171aa1",
+          "exit_code": 0,
+          "stdout": "ok CFBooleanGetValue(kCFBooleanTrue) == 1\nok CFBooleanGetValue(kCFBooleanFalse) == 0\nok !CFBooleanGetValue(CFArrayGetValueAtIndex(a, 0))\nok CFBooleanGetValue(CFArrayGetValueAtIndex(a, 1))\nok sizeof(Boolean) == 1\nok CFBooleanGetValue(kCFBooleanFalse) == 0\nok CFBooleanGetValue(kCFBooleanFalse) == 0\nok CFBooleanGetValue(kCFBooleanFalse) == 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5c802755348a953edc977efa615fe63f5ff6a60a2b32892f526eb9eb4f760950",
+          "exit_code": 0,
+          "stdout": "ok CFBooleanGetValue(kCFBooleanTrue) == 1\nok CFBooleanGetValue(kCFBooleanFalse) == 0\nok !CFBooleanGetValue(CFArrayGetValueAtIndex(a, 0))\nok CFBooleanGetValue(CFArrayGetValueAtIndex(a, 1))\nok sizeof(Boolean) == 1\nok CFBooleanGetValue(kCFBooleanFalse) == 0\nok CFBooleanGetValue(kCFBooleanFalse) == 0\nok CFBooleanGetValue(kCFBooleanFalse) == 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

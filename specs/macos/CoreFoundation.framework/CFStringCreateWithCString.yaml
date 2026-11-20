@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFStringCreateWithCString.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFStringCreateWithCString.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFStringCreateWithCString
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFStringCreateWithCString(alloc, cStr, encoding) reads the NUL-terminated bytes of cStr in the given
+  encoding and returns a new string of UTF-16 code units, or NULL if the bytes are not valid in the
+  encoding. UTF-8 (kCFStringEncodingUTF8 = 0x08000100): ASCII is one unit, é one unit, € one unit, a
+  character above U+FFFF two (a surrogate pair); malformed input gives NULL: stray continuation or
+  lead bytes (0xFF, 0x80), a truncated sequence, overlong forms (C0 80, E0 80 80), an encoded
+  surrogate (ED A0 80), a code point beyond U+10FFFF (F4 90 80 80); a leading byte order mark EF BB BF
+  is dropped (a lone one gives the empty string), one in the middle stays as U+FEFF. Single-byte
+  encodings map through their tables: ISOLatin1 (0x0201) is the identity (E9 is U+00E9), MacRoman (0)
+  maps 8E to U+00E9 and A5 to U+2022, WindowsLatin1 (0x0500) maps 80 to U+20AC and 93 to U+201C,
+  NextStepLatin (0x0B01) maps E9 to U+00D8; ASCII (0x0600) accepts every byte as the code point with
+  the same value (E9 gives U+00E9, 80 gives U+0080, FF U+00FF) and does not fail. The string ends at
+  the first NUL byte; an empty string gives an empty (not NULL) string. alloc may be NULL for the
+  default allocator; with a given allocator the object (and storage of long strings) comes from it and
+  is returned to it on the last release. UTF-16 and other multi-byte encodings are not valid for a C
+  string (NUL bytes end it) and are not specified here; use CFStringCreateWithBytes.
+returns:
+  success: "a new string (retain count 1), possibly empty"
+  invalid_bytes: "NULL"
+errors:
+  invalid_utf8: "NULL"
+  null_cstr: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "allocates the string"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds; linear in the length"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

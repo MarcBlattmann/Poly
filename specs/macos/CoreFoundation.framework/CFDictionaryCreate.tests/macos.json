@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfdictionarycreate_callbacks",
+      "source_sha256": "af3564dc9a67cf3cff036eb2ac8545a813931ce21764da0142380183b49aae75",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d97e2102629b420088f9bf9aae518e857d3eba8eb4b14b89fac00715743627b9",
+          "exit_code": 0,
+          "stdout": "ok kret == 2 && vret == 2\nok CFDictionaryGetValue(d, (void *)0x200) == (void *)0x2\nok CFDictionaryGetValue(d, (void *)0x300) == NULL\nok krel == 2 && vrel == 2\nok CFDictionaryGetCount(raw) == 2\nok CFDictionaryGetValue(raw, (void *)0x100) == (void *)0x1\nok CFDictionaryGetValue(p, S(\"k\")) != NULL\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e7569adc28c563720de536c2747b44fecd7eb1db6825b49ad9981a1b60717c28",
+          "exit_code": 0,
+          "stdout": "ok kret == 2 && vret == 2\nok CFDictionaryGetValue(d, (void *)0x200) == (void *)0x2\nok CFDictionaryGetValue(d, (void *)0x300) == NULL\nok krel == 2 && vrel == 2\nok CFDictionaryGetCount(raw) == 2\nok CFDictionaryGetValue(raw, (void *)0x100) == (void *)0x1\nok CFDictionaryGetValue(p, S(\"k\")) != NULL\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfdictionarycreate_pairs",
+      "source_sha256": "085a64cb5b39fa89f7ac423d8f94d875bb19897e6b791bade15465cdeec96038",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5769e9b2025cf586fd9bc7fd3f9f60226b13cbe4745c5f20a1c2ea4886adec18",
+          "exit_code": 0,
+          "stdout": "ok CFDictionaryGetCount(d) == 2\nok CFDictionaryGetValue(d, S(\"one\")) == v[0]\nok CFDictionaryGetValue(d, CFSTR(\"two\")) == v[1]\nok CFDictionaryContainsKey(d, CFSTR(\"one\"))\nok !CFDictionaryContainsKey(d, CFSTR(\"three\"))\nok CFDictionaryContainsValue(d, CFSTR(\"2\"))\nok !CFDictionaryContainsValue(d, CFSTR(\"one\"))\nok e != NULL && CFDictionaryGetCount(e) == 0\nok CFDictionaryGetCount(dup) == 1\nok cf_is(CFDictionaryGetValue(dup, CFSTR(\"a\")), \"first\")\nok CFEqual(copy, d)\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cf10f7047448e9f38e445bffe00a5678bbb37b8056a8b565336e133f99fc4d1a",
+          "exit_code": 0,
+          "stdout": "ok CFDictionaryGetCount(d) == 2\nok CFDictionaryGetValue(d, S(\"one\")) == v[0]\nok CFDictionaryGetValue(d, CFSTR(\"two\")) == v[1]\nok CFDictionaryContainsKey(d, CFSTR(\"one\"))\nok !CFDictionaryContainsKey(d, CFSTR(\"three\"))\nok CFDictionaryContainsValue(d, CFSTR(\"2\"))\nok !CFDictionaryContainsValue(d, CFSTR(\"one\"))\nok e != NULL && CFDictionaryGetCount(e) == 0\nok CFDictionaryGetCount(dup) == 1\nok cf_is(CFDictionaryGetValue(dup, CFSTR(\"a\")), \"first\")\nok CFEqual(copy, d)\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

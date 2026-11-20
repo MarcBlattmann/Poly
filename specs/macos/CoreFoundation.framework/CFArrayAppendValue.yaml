@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFArrayAppendValue.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFArrayAppendValue.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFArrayAppendValue
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFArrayAppendValue(array, value) adds value at the end of a mutable array: the count grows by one,
+  the earlier values keep their indexes, appending the same object again is allowed, and with the
+  standard callbacks the array retains the value (its count rises by one) and releases it when it is
+  removed (CFArrayRemoveValueAtIndex, RemoveAllValues, SetValueAtIndex over it) or the array is freed.
+  CFArrayContainsValue, GetFirstIndexOfValue (kCFNotFound = -1 when absent), GetLastIndexOfValue and
+  GetCountOfValue work over a range with the callbacks' equal function (CFEqual for the standard
+  table: an equal string made apart is found, 'TEXT' is not found for 'text', a number 5 found by a
+  long long 5). Other edits seen: InsertValueAtIndex (index 0 and index count insert at the ends),
+  SetValueAtIndex (replaces and releases the old value), ExchangeValuesAtIndices, RemoveValueAtIndex,
+  AppendArray(range of another array), an immutable copy made earlier does not change. An array made
+  immutable or a NULL value with the standard callbacks (exception) is not supported.
+returns:
+  success: "nothing"
+errors:
+  null_value_with_type_callbacks: "raises an exception: not supported"
+  not_mutable: "undefined"
+side_effects: "grows the array; retain callback called once"
+threading: "not thread safe for writers: one thread may mutate, readers need their own locking"
+ordering: []
+timing:
+  typical: "amortised constant time per append"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

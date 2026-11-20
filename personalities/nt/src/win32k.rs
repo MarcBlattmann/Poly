@@ -36,7 +36,7 @@ use poly_win32k::proto::{Reply, Request};
 use poly_win32k::services::Win32kService;
 use poly_win32k::surfaces::{BAND_BYTES, MAX_SIDE, Surfaces};
 use poly_win32k::wire;
-use poly_win32k::wm::{Ctx, Effects, Key, Wm};
+use poly_win32k::wm::{Ctx, Effects, Key};
 
 /// What a process under the win32k lockdown gets for every table-1 call.
 /// Provisional: Learn says only that such a process "is not permitted to
@@ -50,8 +50,9 @@ const MAX_REQUEST: u64 = 1 << 20;
 /// win32k's machine-wide state, in [`crate::NtSystem`].
 #[derive(Debug, Default)]
 pub struct Win32k {
-    /// The window manager of the one session.
-    pub wm: Wm,
+    /// The window manager of the one session, behind the window-state generation (ADR 0249):
+    /// read through `Deref`, changed through `mutate()`.
+    pub wm: crate::wmgen::Tracked,
     /// The desktop link's win32k end: the surfaces of top-level windows
     /// as the compositor is told about them.
     pub desktop: Desktop,
@@ -74,7 +75,7 @@ impl Win32k {
     /// Forget a thread: its window manager state and its event.
     pub fn thread_exited(&mut self, objects: &mut poly_ntobj::ObjectManager, pid: u32, tid: u32) {
         let mut fx = Effects::default();
-        self.wm.thread_exited(pid, tid, &mut fx);
+        self.wm.mutate().thread_exited(pid, tid, &mut fx);
         if let Some((id, _)) = self.events.remove(&(pid, tid)) {
             let _ = objects.dereference(id);
         }
@@ -85,7 +86,7 @@ impl Win32k {
     /// Forget a process.
     pub fn process_exited(&mut self, objects: &mut poly_ntobj::ObjectManager, pid: u32) {
         let mut fx = Effects::default();
-        self.wm.process_exited(pid, &mut fx);
+        self.wm.mutate().process_exited(pid, &mut fx);
         for object in self.layers.remove_process(&mut self.desktop, pid) {
             let _ = objects.dereference(ObjectId::from_raw(object));
         }
@@ -117,33 +118,33 @@ impl Win32k {
                 // buttons and keys (ADR 0136).
                 FromCompositor::Pointer { surface, x, y, .. } => {
                     if let Some(i) = self.surfaces.hwnd_of(surface).and_then(|h| self.wm.info(h)) {
-                        self.wm.link_pointer(i.client.left + x, i.client.top - i.menu_bar + y, &mut fx);
+                        self.wm.mutate().link_pointer(i.client.left + x, i.client.top - i.menu_bar + y, &mut fx);
                     }
                 }
                 FromCompositor::Button { button, pressed, .. } => {
-                    self.wm.link_button(button, pressed, &mut fx);
+                    self.wm.mutate().link_button(button, pressed, &mut fx);
                     // The compositor's drag ends with the button: the window leaves its sizing and
                     // moving loop (`WM_EXITSIZEMOVE`).
                     if !pressed
                         && button == 0x110
                         && let Some(hwnd) = self.dragging.take()
                     {
-                        self.wm.post_system_message(hwnd, 0x0232, 0, &mut fx);
+                        self.wm.mutate().post_system_message(hwnd, 0x0232, 0, &mut fx);
                     }
                 }
                 FromCompositor::Axis { vertical, horizontal, .. } => {
-                    self.wm.link_wheel(vertical, &mut fx);
-                    self.wm.link_hwheel(horizontal, &mut fx);
+                    self.wm.mutate().link_wheel(vertical, &mut fx);
+                    self.wm.mutate().link_hwheel(horizontal, &mut fx);
                 }
-                FromCompositor::Key { code, pressed, .. } => self.wm.link_key(code, pressed, &mut fx),
+                FromCompositor::Key { code, pressed, .. } => self.wm.mutate().link_key(code, pressed, &mut fx),
                 // Windows apps live in output pixels: the system DPI follows (ADR 0219).
                 FromCompositor::Consent { request, allow } => self.consent_answers.push((request, allow)),
-                FromCompositor::Units { units } => self.wm.set_system_dpi(96 * units.clamp(1, 8)),
+                FromCompositor::Units { units } => self.wm.mutate().set_system_dpi(96 * units.clamp(1, 8)),
                 // The shell's request to close a window: its thread gets
                 // `WM_CLOSE`, as from a click on a caption close button.
                 FromCompositor::Request { surface, request: DesktopRequest::Close } => {
                     if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
-                        self.wm.post_system_message(hwnd, poly_win32k::user::WM_CLOSE, 0, &mut fx);
+                        self.wm.mutate().post_system_message(hwnd, poly_win32k::user::WM_CLOSE, 0, &mut fx);
                     }
                 }
                 // The shell minimizes, maximizes or restores the window (a minimized window
@@ -155,7 +156,13 @@ impl Win32k {
                         _ => poly_win32k::user::SC_RESTORE,
                     };
                     if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
-                        self.wm.post_system_message_with(hwnd, poly_win32k::user::WM_SYSCOMMAND, sc, 0, &mut fx);
+                        self.wm.mutate().post_system_message_with(
+                            hwnd,
+                            poly_win32k::user::WM_SYSCOMMAND,
+                            sc,
+                            0,
+                            &mut fx,
+                        );
                     }
                 }
                 // The compositor moved or resized the window's surface (a new size: its
@@ -164,7 +171,7 @@ impl Win32k {
                     if let Some(hwnd) = self.surfaces.hwnd_of(surface) {
                         let (width, height) = (width.min(i32::MAX as u32) as i32, height.min(i32::MAX as u32) as i32);
                         let client = Rect::new(x, y, x.saturating_add(width), y.saturating_add(height));
-                        self.wm.configure_from_desktop(hwnd, client, frame, &mut fx);
+                        self.wm.mutate().configure_from_desktop(hwnd, client, frame, &mut fx);
                     }
                 }
                 _ => {}
@@ -173,7 +180,7 @@ impl Win32k {
         self.wake(objects, &fx);
         // Windows programs type with the desktop's keyboard layout (ADR 0209).
         if let Some(name) = self.desktop.layout() {
-            self.wm.set_layout(poly_win32k::kbd::Layout::for_desktop(name));
+            self.wm.mutate().set_layout(poly_win32k::kbd::Layout::for_desktop(name));
         }
         // With a compositor the session is interactive, its screen the
         // output, the work area below Poly's 24-pixel ridge.
@@ -182,7 +189,11 @@ impl Win32k {
         {
             // The ridge in Windows pixels (ADR 0219: `units` of them a logical pixel).
             let ridge = 24 * (self.wm.system_dpi() / 96).max(1) as i32;
-            self.wm.set_display(poly_win32k::metrics::Display::desktop(o.width as i32, o.height as i32, ridge));
+            self.wm.mutate().set_display(poly_win32k::metrics::Display::desktop(
+                o.width as i32,
+                o.height as i32,
+                ridge,
+            ));
         }
         self.sync();
     }
@@ -293,8 +304,13 @@ fn call<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus, NtStatus
 
 /// One request for the window manager.
 fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: Request) -> Reply {
-    k.with_state(|sys, _, _| {
+    k.with_state(|sys, proc, b| {
+        // A read is answered without counting as a change of the window manager (ADR 0249).
+        if let Some(reply) = sys.win32k.wm.handle_read(ctx, &req) {
+            return reply;
+        }
         match req {
+            Request::SharedPage {} => return Reply::Value { value: window_state_page(proc, b) },
             Request::RegisterEvent { handle } => return register_event(sys, caller, ctx, handle),
             Request::ShellOpen { handle, show } => return shell_open(sys, caller, handle, show),
             Request::Surface { hwnd } => {
@@ -316,7 +332,7 @@ fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: R
                 let u = sys.win32k.wm.units_of((ctx.pid, ctx.tid));
                 let (x, y) = (u.to_phys(x), u.to_phys(y));
                 loop {
-                    let r = sys.win32k.wm.handle_phys(ctx, Request::WindowFromPoint { x, y, below }, &mut fx);
+                    let r = sys.win32k.wm.mutate().handle_phys(ctx, Request::WindowFromPoint { x, y, below }, &mut fx);
                     let Reply::Handle { hwnd } = r else { return r };
                     let w = &sys.win32k;
                     let mut top = hwnd;
@@ -385,11 +401,30 @@ fn call_wm<K: NtKernel>(k: &mut K, caller: &poly_ntobj::Caller, ctx: Ctx, req: R
             _ => {}
         }
         let mut fx = Effects::default();
-        let reply = sys.win32k.wm.handle(ctx, req, &mut fx);
+        let reply = sys.win32k.wm.mutate().handle(ctx, req, &mut fx);
         sys.win32k.wake(&mut sys.objects, &fx);
         sys.win32k.sync();
         reply
     })
+}
+
+/// Map the window-state page into `proc` on its first ask (ADR 0249): its address, 0 if the kernel
+/// has none. One page of address space is committed read-only for it, which the kernel's shared
+/// page then replaces.
+fn window_state_page(proc: &mut crate::system::NtProcess, b: &mut dyn crate::backend::Backend) -> u64 {
+    use crate::consts::{MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, MEM_TOP_DOWN, PAGE_READONLY};
+    if proc.window_state_page != 0 {
+        return proc.window_state_page;
+    }
+    let Ok((at, _)) = proc.vm.allocate(b, 0, 0x1000, 0, MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN, PAGE_READONLY) else {
+        return 0;
+    };
+    if b.map_window_state_page(at).is_err() {
+        let _ = proc.vm.free(b, at, 0, MEM_RELEASE);
+        return 0;
+    }
+    proc.window_state_page = at;
+    at
 }
 
 /// `PolyUserCommitSurface(hwnd, pixels, width, height, stride)`: the app
