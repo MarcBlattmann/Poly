@@ -387,11 +387,16 @@ pub fn create_thread(
                 return Err(e);
             }
         };
-        // The descriptor the creator asked for applies after its own handle is open.
-        if let Some(sd) = req.security.as_deref() {
-            let token = s.sys.objects.security.effective(pid, caller.thread);
-            s.sys.objects.assign_security(obj, poly_ntobj::ObjectType::Thread, token, Some(sd));
-        }
+        // The thread object's descriptor applies after the creator's own handle is open: the one
+        // the creator asked for, or the default of the creator's primary token (Learn,
+        // "CreateRemoteThread": "The access control lists (ACL) in the default security
+        // descriptor for a thread come from the primary token of the creator"), also for a
+        // thread made in another process.
+        let token = match req.security.as_deref() {
+            Some(_) => s.sys.objects.security.effective(pid, caller.thread),
+            None => s.sys.objects.security.process_token(pid),
+        };
+        s.sys.objects.assign_security(obj, poly_ntobj::ObjectType::Thread, token, req.security.as_deref());
         Ok::<_, NtStatus>((start, handle))
     })?;
     let entry = Entry { rip: start.entry, rsp: start.rsp, args: [start.start_routine, start.argument, start.exe_base] };
