@@ -1597,29 +1597,42 @@ pub unsafe extern "system" fn CLSIDFromString(text: *const u16, clsid: *mut Guid
     }
 }
 
-/// `IIDFromString`: braced text only.
+/// `CO_E_INVALIDCLSID` (`winerror.h`): an interface or class id text with a wrong character.
+const CO_E_INVALIDCLSID: Hresult = 0x8004_01F4_u32 as i32;
+
+/// `IIDFromString` (sheet `IIDFromString`): braced text only, before `CoInitializeEx` too; a NULL
+/// string is `GUID_NULL`; text of another form is `E_INVALIDARG` with the output left alone; a
+/// wrong character in the braced form is `CO_E_INVALIDCLSID` with a partial value written.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn IIDFromString(text: *const u16, iid: *mut Guid) -> Hresult {
-    if text.is_null() || iid.is_null() {
+    if iid.is_null() {
         return E_INVALIDARG;
     }
-    // SAFETY: a NUL-terminated string.
-    let s = unsafe { wide_prefix(text, GUID_TEXT_LEN + 1) };
-    match Guid::parse(s) {
-        Some(g) => {
-            // SAFETY: the caller's out parameter.
-            unsafe { *iid = g };
-            S_OK
-        }
-        None => CO_E_IIDSTRING,
+    if text.is_null() {
+        // SAFETY: the caller's out parameter.
+        unsafe { *iid = Guid::default() };
+        return S_OK;
     }
+    // SAFETY: a NUL-terminated string; one character past the length shows a longer one.
+    let s = unsafe { wide_prefix(text, GUID_TEXT_LEN + 1) };
+    let (hr, value) = match Guid::parse_iid(s) {
+        poly_com::guid::IidText::Valid(g) => (S_OK, Some(g)),
+        poly_com::guid::IidText::Malformed => (E_INVALIDARG, None),
+        poly_com::guid::IidText::BadCharacter(g) => (CO_E_INVALIDCLSID, Some(g)),
+    };
+    if let Some(g) = value {
+        // SAFETY: the caller's out parameter.
+        unsafe { *iid = g };
+    }
+    hr
 }
 
-/// `StringFromGUID2`: the characters written including the NUL (39), or 0
-/// when `max` is too small.
+/// `StringFromGUID2` (sheet `StringFromGUID2`): the characters written including the NUL (39); 0
+/// and nothing written (the last error untouched) for a buffer under 39 units, a negative size
+/// or a NULL buffer.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn StringFromGUID2(guid: *const Guid, buf: *mut u16, max: i32) -> i32 {
-    if guid.is_null() || buf.is_null() || (max as usize) < GUID_TEXT_LEN + 1 {
+    if guid.is_null() || buf.is_null() || max < (GUID_TEXT_LEN + 1) as i32 {
         return 0;
     }
     // SAFETY: the caller's GUID and a buffer of at least 39 characters.
