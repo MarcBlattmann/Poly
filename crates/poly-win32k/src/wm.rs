@@ -716,6 +716,11 @@ impl Wm {
         })
     }
 
+    /// Whether thread `key` has a message queue (its first request made it).
+    pub(crate) fn has_queue(&self, key: Key) -> bool {
+        self.queues.contains_key(&key)
+    }
+
     fn queue(&mut self, key: Key) -> &mut Queue {
         self.queues.entry(key).or_default()
     }
@@ -2408,6 +2413,8 @@ impl Wm {
                         || self.shell_owner.is_some_and(|k| k.1 == tid) && self.shell_window() != 0),
             },
             Request::ShellWindow {} => Reply::Handle { hwnd: self.shell_window() },
+            // The NT personality maps the page (ADR 0249); a window manager on its own has none.
+            Request::SharedPage {} => Reply::Value { value: 0 },
             Request::RegisterMessage { name } => {
                 // Learn: the string is at most 255 characters; the number is in 0xC000..=0xFFFF.
                 // Over that: ERROR_MORE_DATA; the empty string and "#1234" (an integer atom) give

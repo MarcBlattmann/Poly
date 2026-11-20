@@ -12,7 +12,9 @@
 //! A PE executable goes to the NT personality's loader (`crate::nt`), and
 //! a native Poly program (an ELF with Poly's ABI note, ADR 0125) is loaded
 //! like a static ELF into a native process. An x86-64 Mach-O program is
-//! linked by Poly's own dyld into an XNU process (`crate::xnu`, ADR 0237).
+//! linked by Poly's own dyld into an XNU process (`crate::xnu`, ADR 0237);
+//! an arm64 one too, run by the translator's runtime (`crate::xnu::arm64`,
+//! ADR 0257).
 //! Other formats are refused with a reason.
 
 use crate::boot_info::BootInfo;
@@ -254,16 +256,36 @@ fn prepare_full(
             return Ok(Prepared::Native { process, image });
         }
         Some(Personality::Xnu) => {
-            // Poly's own dyld links and maps it (ADR 0237); x86-64 only
-            // until the arm64 translator (ADR 0151).
-            if let poly_binfmt::Format::MachO { arch, .. } = format
-                && arch != poly_binfmt::Arch::X86_64
-            {
-                return Err(ExecPathError::Unsupported(format!(
-                    "a {arch:?} Mach-O program (x86-64 ones run; arm64 needs the translator, ADR 0151)"
-                )));
-            }
-            let loaded = crate::xnu::prepare(path, argv, envp).map_err(ExecPathError::Unsupported)?;
+            // Poly's own dyld links and maps it (ADR 0237): an x86-64
+            // program runs natively, an arm64 one in the translator's
+            // runtime (ADR 0257); a universal file runs its x86-64 slice if
+            // it has one.
+            let arm64 = match format {
+                poly_binfmt::Format::MachO { arch: poly_binfmt::Arch::X86_64, .. } => false,
+                poly_binfmt::Format::MachO { arch: poly_binfmt::Arch::Aarch64, .. } => true,
+                poly_binfmt::Format::MachO { arch, .. } => {
+                    return Err(ExecPathError::Unsupported(format!(
+                        "a {arch:?} Mach-O program (x86-64 and arm64 ones run)"
+                    )));
+                }
+                _ => crate::xnu::arm64::is_arm64_only(path).map_err(ExecPathError::Unsupported)?,
+            };
+            let loaded = if arm64 {
+                let runtime = open_exec(crate::xnu::arm64::RUNTIME.as_bytes(), parent).map_err(|e| {
+                    ExecPathError::Unsupported(format!(
+                        "an arm64 Mach-O program needs the translator's runtime {}: {}",
+                        crate::xnu::arm64::RUNTIME,
+                        e.name()
+                    ))
+                })?;
+                let rt_argv = [crate::xnu::arm64::RUNTIME.as_bytes(), path];
+                let params = ExecParams::new(&rt_argv, &[], crate::xnu::arm64::RUNTIME.as_bytes());
+                let image = exec::load(Arc::new(FileSource::of(&runtime)), &params).map_err(ExecPathError::Exec)?;
+                crate::xnu::arm64::prepare(image.memory, image.entry, path, argv, envp)
+                    .map_err(ExecPathError::Unsupported)?
+            } else {
+                crate::xnu::prepare(path, argv, envp).map_err(ExecPathError::Unsupported)?
+            };
             let process = crate::xnu::new_process(ppid, format, traced);
             if let Some(p) = parent {
                 process.files.adopt_context(&p.files);
@@ -358,8 +380,15 @@ pub fn run_init(boot: &BootInfo) -> bool {
     let identity = crate::testinit::identity(boot).map_err(ExecPathError::Unsupported);
     // Its arguments: one `poly.init.arg=` word each (ADR 0087).
     let args: Vec<&str> = boot.args(testrun::INIT_ARGV).collect();
-    // Its environment: the display scale for a compositor (ADR 0116).
-    let env: Vec<String> = boot.arg(DISPLAY_SCALE).map(|s| format!("POLY_DISPLAY_SCALE={s}")).into_iter().collect();
+    // Its environment: the display scale for a compositor (ADR 0116), and
+    // one `NAME=value` per `poly.init.env=` word (ADR 0257: the arm64
+    // translator's settings).
+    let env: Vec<String> = boot
+        .arg(DISPLAY_SCALE)
+        .map(|s| format!("POLY_DISPLAY_SCALE={s}"))
+        .into_iter()
+        .chain(boot.args(testrun::INIT_ENV).map(String::from))
+        .collect();
     let env: Vec<&[u8]> = env.iter().map(|s| s.as_bytes()).collect();
     match identity.and_then(|id| run_first(path, &args, &env, traced, id.as_ref())) {
         Ok((pid, status)) => {

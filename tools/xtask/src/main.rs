@@ -164,6 +164,7 @@ mod libsearch;
 mod libsystem;
 mod linuxchrome;
 mod macho;
+mod macho_a64;
 mod macimports;
 mod mesa;
 mod native;
@@ -1698,6 +1699,10 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // The Mach core's visible spec tests that run on Poly today, x86-64
     // builds, output compared with macOS's (macho.rs, ADR 0238).
     ("macho-mach", macho::mach_boot_test),
+    // arm64 Mach-O programs on x86-64 through the translator's runtime:
+    // static, universal, dynamically linked, malloc-heavy under the JIT and
+    // the interpreter (macho_a64.rs, ADR 0257).
+    ("macho-a64", macho_a64::boot_test),
     // An SDK-linked C program with Poly's own libSystem.B.dylib (libsystem.rs,
     // ADR 0258).
     ("libsystem", libsystem::boot_test),
@@ -1863,6 +1868,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "dynamic",
             "macho",
             "macho-mach",
+            "macho-a64",
             "libsystem",
             "busybox",
             "rootdisk",

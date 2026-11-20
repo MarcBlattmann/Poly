@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFStringCompare.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFStringCompare.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFStringCompare
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFStringCompare(a, b, options) returns kCFCompareLessThan (-1), kCFCompareEqualTo (0) or
+  kCFCompareGreaterThan (1) (<CoreFoundation/CFString.h>; option bits: CaseInsensitive 1, Backwards 4,
+  Anchored 8, Nonliteral 16, Localized 32, Numerically 64, DiacriticInsensitive 128, WidthInsensitive
+  256, ForcedOrdering 512). Without options units are compared in order as unsigned 16-bit numbers:
+  'a' < 'b', 'a' > 'B', 'Z' < 'a', a prefix is smaller ('ab' < 'abc', '' < 'a'), 'a2' > 'a10', é
+  (U+00E9) > 'e', and a surrogate (U+D83D, the lead of U+1F600) sorts below U+FF61, i.e. unit order
+  and not code point order. CaseInsensitive folds case for letters beyond ASCII (É = é) and the sharp
+  s equals 'ss'; unequal strings then order by the folded letters ('a' < 'B', 'Z' > 'a'); without it É
+  < é. Numerically reads digit runs as numbers: 'a2' < 'a10', 'a02' = 'a2', 'a1' = 'a01', 'file9.txt'
+  < 'file10.txt', '1.5' < '1.10'. Nonliteral makes é equal to e + U+0301 (otherwise é > e+U+0301);
+  DiacriticInsensitive makes é = e and 'resume' = 'résumé'; WidthInsensitive makes the full-width A
+  (U+FF21) equal to 'A' (otherwise greater). ForcedOrdering breaks a tie of an otherwise equal
+  comparison by the plain order ('a' vs 'A' case-insensitively: 'a' > 'A'). Backwards, Anchored,
+  Localized (without a locale) and unknown option bits did not change the plain results seen
+  (CompareLocalized made 'a' < 'B' and 'a' < 'A'; not tested). Equal strings with unknown bits stay
+  equal.
+returns:
+  less: "-1"
+  equal: "0"
+  greater: "1"
+errors:
+  null: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "none"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds; linear in the length"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFStringCreateWithBytes.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFStringCreateWithBytes.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFStringCreateWithBytes
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFStringCreateWithBytes(alloc, bytes, numBytes, encoding, isExternalRepresentation) decodes exactly
+  numBytes bytes (no terminator needed, NUL is a character U+0000) and returns a new string or NULL.
+  UTF-8 behaves as for CFStringCreateWithCString (invalid input gives NULL; a leading byte order mark
+  is dropped whether or not isExternalRepresentation is set); ASCII and ISOLatin1 map bytes to the
+  code points of the same value, and NUL bytes are kept. UTF-16: kCFStringEncodingUTF16LE (0x14000100)
+  and UTF16BE (0x10000100) read units in that byte order and keep a byte order mark as the character
+  U+FEFF, even when isExternalRepresentation is set. Plain kCFStringEncodingUTF16 (0x100) with
+  isExternalRepresentation true reads a byte order mark (FF FE little endian, FE FF big endian),
+  consumes it and follows it; with no mark an external representation is big endian; with
+  isExternalRepresentation false there is no mark processing and the host order (little endian on both
+  architectures) is used, a mark staying as U+FEFF. An odd number of bytes drops the last byte; a
+  single byte gives NULL. UTF-32 (UTF32 0x0c000100, UTF32LE 0x1c000100, UTF32BE 0x18000100) gives
+  surrogate pairs above U+FFFF. numBytes 0 gives the empty string; bytes may be NULL only with
+  numBytes 0. An unknown encoding value gives NULL.
+returns:
+  success: "a new string"
+  invalid: "NULL"
+errors:
+  invalid_input: "NULL"
+  null_bytes_with_length: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "allocates the string"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds; linear in numBytes"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

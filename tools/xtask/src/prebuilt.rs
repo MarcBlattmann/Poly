@@ -148,10 +148,10 @@ pub fn command(args: &[String]) -> Result {
     Ok(())
 }
 
-/// The native programs' files (`native::PROGRAMS`).
+/// The native programs' files (`native::PROGRAMS` and `native::RUNTIMES`).
 fn native_files() -> Vec<PathBuf> {
     let dir = root().join("target/native/x86_64-unknown-poly/release");
-    crate::native::PROGRAMS.iter().map(|n| dir.join(n)).collect()
+    crate::native::PROGRAMS.iter().chain(crate::native::RUNTIMES.iter().map(|(n, _)| n)).map(|n| dir.join(n)).collect()
 }
 
 /// The kernel part: the kernel alone (the native programs are the tools
@@ -215,7 +215,8 @@ mod tests {
     #[test]
     fn kernel_part_lists_the_kernel_and_every_native_program() {
         let native = native_files();
-        assert_eq!(native.len(), crate::native::PROGRAMS.len());
+        assert_eq!(native.len(), crate::native::PROGRAMS.len() + crate::native::RUNTIMES.len());
+        assert!(native.iter().any(|p| p.ends_with("poly-a64")));
         assert!(native.iter().all(|p| p.starts_with(root().join("target/native"))));
     }
 

@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFEqual.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFEqual.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFEqual
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFEqual(a, b) says whether two objects are equal: true for the same object, false for different
+  classes, and otherwise by the class's own rule. Strings: same UTF-16 code units, no case folding and
+  no normalisation (precomposed é and e + U+0301 differ), whichever way they were made, constant or
+  mutable. Numbers: by value across types (int 1, long long 1, short 1, float 1.0 and double 1.0 are
+  equal; 1.5 and 1 are not; NaN equals NaN; kCFNumberNaN is equal to itself, the two infinities
+  differ). A number is equal to a Boolean when it is 1 for true or 0 for false (either order), but a
+  Boolean is equal to no other class (not null, not a string). Data: same length and bytes (empty ones
+  equal). Arrays: same count and equal elements in order. Dictionaries and sets: same count and every
+  key/member of one found in the other (order does not matter; values compared with CFEqual). kCFNull
+  and the Booleans are single objects: equal only to themselves (and the number rule above). Equal
+  objects have equal CFHash. CFEqual(NULL, NULL) kills the process.
+returns:
+  equal: "true (1)"
+  different: "false (0)"
+errors:
+  null: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "none"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds for short values; linear in the size of strings, data and collections"
+  guarantees: "none"
+tests:
+  visible: 4  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

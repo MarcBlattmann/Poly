@@ -1,0 +1,52 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFRunLoopRunInMode.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFRunLoopRunInMode.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFRunLoopRunInMode
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFRunLoopRunInMode(mode, seconds, returnAfterSourceHandled) runs the calling thread's loop in one
+  mode and returns kCFRunLoopRunFinished (1: nothing left in the mode to run), kCFRunLoopRunStopped
+  (2: CFRunLoopStop was called during the run), kCFRunLoopRunTimedOut (3) or
+  kCFRunLoopRunHandledSource (4: with returnAfterSourceHandled true, after a source was handled). An
+  empty mode (no source, timer or observer) returns Finished at once, even with a long timeout; a mode
+  holding only a timer, or any source, waits: the main thread's default mode holds the loop's own
+  sources, so a default-mode run waits its whole timeout and returns TimedOut (0.3 s asked, between
+  0.25 and 2 s taken); zero and negative timeouts return TimedOut (or Finished for an empty mode)
+  after one pass, also with returnAfterSourceHandled. A timer due in the mode fires once during the
+  run (a one-shot timer becomes invalid), a repeating timer about once per interval (20 ms first, 50
+  ms interval over 0.5 s: 5 to 12 times), but a fired timer does not end the run: it goes on to its
+  timeout (a 0.05 s timer in a 0.5 s run: TimedOut after at least 0.45 s). CFRunLoopStop(rl) from a
+  callback ends the run immediately with Stopped; called outside a run it does nothing (the next run
+  is unaffected). A signalled source runs in the next pass, once however often it was signalled; with
+  returnAfterSourceHandled the run returns HandledSource after the first source (the one with the
+  lowest order value; here 'b' of orders 5,1,3) and the others run in the next run, in order of their
+  order values (1, 3, 5: 'bca'); without the flag the run goes on to the timeout with all sources
+  handled. A source removed with CFRunLoopRemoveSource before the run is not performed. Sources,
+  timers and observers see the stations of a run in this order, seen by an observer for all
+  activities: Entry, BeforeTimers, BeforeSources, BeforeWaiting, AfterWaiting, Exit ('ETSWAX' when a
+  timer ends the run with CFRunLoopStop). A mode argument of kCFRunLoopCommonModes (not a real mode to
+  run) writes a log line with a time and the process id to stderr and returns Finished; a NULL mode
+  logs the same way; do not rely on either.
+returns:
+  finished: "1"
+  stopped: "2"
+  timed_out: "3"
+  handled_source: "4"
+errors:
+  common_modes_or_null_mode: "logs to stderr and returns at once (kCFRunLoopRunFinished for kCFRunLoopCommonModes)"
+side_effects: "runs timer, source and observer callbacks on the calling thread"
+threading: "runs on the calling thread; CFRunLoopStop and WakeUp may be called from other threads"
+ordering: 
+  - "observer stations in the order Entry, BeforeTimers, BeforeSources, BeforeWaiting, AfterWaiting, Exit"
+  - "timers fire when due; signalled sources run in order of their order value, lowest first"
+  - "with returnAfterSourceHandled only the first source of a pass is handled before the run returns"
+timing:
+  typical: "a timed run takes its timeout (plus under a few ms of scheduling); timers fire within a few ms of their due time"
+  guarantees: "the run never returns before its timeout unless it is Finished, Stopped or a source was handled with the flag"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfhash_equal_objects_equal_hashes",
+      "source_sha256": "b8402cd26b01aadc4bb7bf0fbe1c172ccee34e05a095ba7107b323c24bbba72f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "69a8f0ae9f424d1a817e0e9110f1b21cd5a2758d62e253d0d5ee9042ffbb8003",
+          "exit_code": 0,
+          "stdout": "ok CFHash(S(\"a text to hash\")) == CFHash(CFSTR(\"a text to hash\"))\nok CFHash(m) == CFHash(CFSTR(\"a text to hash\"))\nok CFHash(ni) == CFHash(CFNumberCreate(kCFAllocatorDefault, kCFNumberLongLongType, &l))\nok CFHash(ni) == CFHash(CFNumberCreate(kCFAllocatorDefault, kCFNumberShortType, &sh))\nok CFHash(ni) == CFHash(CFNumberCreate(kCFAllocatorDefault, kCFNumberDoubleType, &d))\nok CFHash(ni) == CFHash(CFNumberCreate(kCFAllocatorDefault, kCFNumberFloatType, &f))\nok CFHash(CFDataCreate(kCFAllocatorDefault, b, 4)) == CFHash(CFDataCreate(kCFAllocatorDefault, b, 4))\nok CFHash(CFArrayCreate(kCFAllocatorDefault, v, 2, &kCFTypeArrayCallBacks)) == CFHash(CFArrayCreate(kCFAllocatorDefault, vd, 2, &kCFTypeArrayCallBacks))\nok CFHash(CFSetCreate(kCFAllocatorDefault, v, 2, &kCFTypeSetCallBacks)) == CFHash(CFSetCreate(kCFAllocatorDefault, vd, 2, &kCFTypeSetCallBacks))\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2ab08ecefbfa300e4ebb72fe4def23366f61d72ea0181b258935cbe1d58ab3c2",
+          "exit_code": 0,
+          "stdout": "ok CFHash(S(\"a text to hash\")) == CFHash(CFSTR(\"a text to hash\"))\nok CFHash(m) == CFHash(CFSTR(\"a text to hash\"))\nok CFHash(ni) == CFHash(CFNumberCreate(kCFAllocatorDefault, kCFNumberLongLongType, &l))\nok CFHash(ni) == CFHash(CFNumberCreate(kCFAllocatorDefault, kCFNumberShortType, &sh))\nok CFHash(ni) == CFHash(CFNumberCreate(kCFAllocatorDefault, kCFNumberDoubleType, &d))\nok CFHash(ni) == CFHash(CFNumberCreate(kCFAllocatorDefault, kCFNumberFloatType, &f))\nok CFHash(CFDataCreate(kCFAllocatorDefault, b, 4)) == CFHash(CFDataCreate(kCFAllocatorDefault, b, 4))\nok CFHash(CFArrayCreate(kCFAllocatorDefault, v, 2, &kCFTypeArrayCallBacks)) == CFHash(CFArrayCreate(kCFAllocatorDefault, vd, 2, &kCFTypeArrayCallBacks))\nok CFHash(CFSetCreate(kCFAllocatorDefault, v, 2, &kCFTypeSetCallBacks)) == CFHash(CFSetCreate(kCFAllocatorDefault, vd, 2, &kCFTypeSetCallBacks))\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfhash_integer_numbers",
+      "source_sha256": "178ea1d8f613b15f643f396fe2ae37ce2519c841b36ab722901777a768e6d661",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7a84180eeb7d782c9e2039714ebffdbd3ba2f11092a56a9282613119bb66dddc",
+          "exit_code": 0,
+          "stdout": "ok hash_int(0) == 0\nok hash_int(1) == 2654435761UL\nok hash_int(2) == 2 * 2654435761UL\nok hash_int(12345) == 12345 * 2654435761UL\nok hash_int(-5) == 5 * 2654435761UL\nok hash_int(-5) == hash_int(5)\nok hash_int(1000000) == 1000000 * 2654435761UL\nok (unsigned long)CFHash(kCFBooleanTrue) == 2654435761UL\nok (unsigned long)CFHash(kCFBooleanFalse) == 0\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ff9fd3515c0c24b5ee40d423289b5d5a9d83f07a99a4956da16f460fa657f6f6",
+          "exit_code": 0,
+          "stdout": "ok hash_int(0) == 0\nok hash_int(1) == 2654435761UL\nok hash_int(2) == 2 * 2654435761UL\nok hash_int(12345) == 12345 * 2654435761UL\nok hash_int(-5) == 5 * 2654435761UL\nok hash_int(-5) == hash_int(5)\nok hash_int(1000000) == 1000000 * 2654435761UL\nok (unsigned long)CFHash(kCFBooleanTrue) == 2654435761UL\nok (unsigned long)CFHash(kCFBooleanFalse) == 0\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfhash_strings_differ_and_repeat",
+      "source_sha256": "3b926685a4a9cbc9a46f22028760c050e6cabae8ca7706d39f02f4072409a2cd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ce93efc5bf7fdbbafbd95a8e7ce4a3e2770136f88bf83d6aabeb8e38b6c8e1d0",
+          "exit_code": 0,
+          "stdout": "ok CFHash(a) == CFHash(a)\nok CFHash(a) == CFHash(S(\"alpha\"))\nok CFHash(a) != CFHash(b)\nok CFHash(a) != CFHash(c)\nok CFHash(b) != CFHash(c)\nok CFHash(e) == 0\nok CFHash(e) == CFHash(CFSTR(\"\"))\nok CFHash(S(\"abc\")) != CFHash(S(\"cba\"))\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d2d2620404cd209109b48192ecba062c8c105af106959d7c0c23525a8d867dff",
+          "exit_code": 0,
+          "stdout": "ok CFHash(a) == CFHash(a)\nok CFHash(a) == CFHash(S(\"alpha\"))\nok CFHash(a) != CFHash(b)\nok CFHash(a) != CFHash(c)\nok CFHash(b) != CFHash(c)\nok CFHash(e) == 0\nok CFHash(e) == CFHash(CFSTR(\"\"))\nok CFHash(S(\"abc\")) != CFHash(S(\"cba\"))\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

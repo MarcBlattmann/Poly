@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfstringcreatewithformat_floats",
+      "source_sha256": "4cbc02ea857fb31895ce5c990e2e16feba97c44d6b5b4da567e44fd216371ada",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8479c9c85d46899a544930d8b2df17c16af258760441b7406c2e04444749c6e7",
+          "exit_code": 0,
+          "stdout": "ok 3.141590\nok 3.14\nok [     3.142]\nok 2\nok 0.1\nok 1.234568e+04\nok 0.0001\nok 1e+10\nok -0.000000\nok inf\nok nan\nok 1.500000\nok 1.500000\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ac4980b3f3d23c02fe26aec98e279a279b3dbfe2600477e4bc844cbded2b518b",
+          "exit_code": 0,
+          "stdout": "ok 3.141590\nok 3.14\nok [     3.142]\nok 2\nok 0.1\nok 1.234568e+04\nok 0.0001\nok 1e+10\nok -0.000000\nok inf\nok nan\nok 1.500000\nok 1.500000\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringcreatewithformat_integers",
+      "source_sha256": "646586ca82311b1b7a25a39b5059eea80ec5548ab4d206302b8bf43b596d7526",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e38c8703530cee8ff3d9b0324cc137771e973a21362c2a42e078c101fd105dc9",
+          "exit_code": 0,
+          "stdout": "ok -42\nok 12\nok -4000000000\nok -4000000000\nok 4000000000\nok 18446744073709551615\nok 7\nok -3\nok -3\nok 65535\nok ff\nok FF\nok 0xff\nok 0000beef\nok 1234567890abcdef\nok 10\nok [   42]\nok [42   ]\nok [00042]\nok [+42]\nok [ 42]\nok [007]\nok [    42]\nok 5\nsummary 24 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9c09d760b684b0c8b4dc8e999fb6ac77b48320a46c4b18de7a6a3a1d9906863c",
+          "exit_code": 0,
+          "stdout": "ok -42\nok 12\nok -4000000000\nok -4000000000\nok 4000000000\nok 18446744073709551615\nok 7\nok -3\nok -3\nok 65535\nok ff\nok FF\nok 0xff\nok 0000beef\nok 1234567890abcdef\nok 10\nok [   42]\nok [42   ]\nok [00042]\nok [+42]\nok [ 42]\nok [007]\nok [    42]\nok 5\nsummary 24 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringcreatewithformat_positional_and_odd",
+      "source_sha256": "b962b418a7d783bfdafc15ad4dcce1a9448fb72c0f0a04c45e2c7a9439045964",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "df16173ff9a30fdda13aa859889dd8719d90a3aa57f1aa79c4d1b13928277338",
+          "exit_code": 0,
+          "stdout": "ok two one\nok 2-1\nok 3\nok 0x0\nok y\nok abc\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6eda0f5884039ea6ada745cc69c39da5b4962568669c7a1122243dfaf4172425",
+          "exit_code": 0,
+          "stdout": "ok two one\nok 2-1\nok 3\nok 0x0\nok y\nok abc\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
