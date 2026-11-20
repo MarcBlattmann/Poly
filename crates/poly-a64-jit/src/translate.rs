@@ -72,8 +72,9 @@ impl Features {
                 let l1 = core::arch::x86_64::__cpuid(1);
                 let osxsave = l1.ecx & (1 << 27) != 0;
                 let avx_state = if osxsave {
-                    let xcr0: u64;
-                    core::arch::asm!("xgetbv", in("ecx") 0u32, out("eax") _, out("edx") _, lateout("rax") xcr0, options(nomem, nostack));
+                    let (lo, hi): (u32, u32);
+                    core::arch::asm!("xgetbv", in("ecx") 0u32, out("eax") lo, out("edx") hi, options(nomem, nostack));
+                    let xcr0 = (u64::from(hi) << 32) | u64::from(lo);
                     xcr0 & 6 == 6
                 } else {
                     false
