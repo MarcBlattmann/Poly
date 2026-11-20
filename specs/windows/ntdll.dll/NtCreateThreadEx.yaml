@@ -38,6 +38,7 @@ rules:
   attribute_list: "an attribute list that is only a header (TotalLength 8) or shorter (TotalLength 4): STATUS_INVALID_PARAMETER 0xC000000D. NULL is fine"
   loader_notifications: "the new thread is attached for the loader before its start routine runs: an image's TLS callback in the target is called with DLL_THREAD_ATTACH (2) in the new thread, then the start routine runs, then DLL_THREAD_DETACH (3) when the thread ends, for CreateFlags 0 and for 1 (suspended: nothing until the resume). With CreateFlags 0x2 (SKIP_THREAD_ATTACH), alone or with 0x1, the start routine runs and ends with its exit code but the callback gets NO attach and NO detach for that thread. The next thread created with flags 0 is attached and detached normally"
   sandboxed_targets: "against targets under a restricted token, at low integrity, in a job or in an AppContainer, from a medium-integrity caller (standard token), with the handle CreateProcessAsUser returned (all rights): STATUS_SUCCESS and the thread runs (exit code = the argument); with a handle opened by process id with PROCESS_CREATE_THREAD (alone) STATUS_SUCCESS; with a handle opened with PROCESS_QUERY_LIMITED_INFORMATION only STATUS_ACCESS_DENIED 0xC0000022. Where the target's token has a default DACL granting only SYSTEM: the creator's handle works, OpenProcess by id fails (ERROR_ACCESS_DENIED). See the CreateRemoteThread sheet for the cases"
+  wow64_callers_and_targets: "from a 32-bit (WOW64) caller (the 32-bit ntdll) to a 64-bit target process with all rights: STATUS_ACCESS_DENIED 0xC0000022, with or without CreateFlags 1 (suspended); from a 64-bit caller to a 32-bit target, with 32-bit code in it as the start routine: STATUS_SUCCESS, the thread runs the routine (exit code 0x77) as a 32-bit thread. Observed once by hand, not recorded as a test (the pipeline cannot build 32-bit programs); see the CreateRemoteThread sheet"
   null_start: "StartRoutine NULL with CreateFlags 1: STATUS_SUCCESS and a handle (the thread is never resumed in the tests; after such a never-resumed thread was created, a later ordinary thread in the same target ended with 0xC0000005 and took the target down, so a tester creates it last and ends the target afterwards)"
 errors:
   invalid_handle: "ProcessHandle NULL, a number that is no handle, a closed handle: STATUS_INVALID_HANDLE 0xC0000008"
@@ -64,4 +65,4 @@ building_tests: >
 not_covered: >
   PS_ATTRIBUTE_LIST contents (client id, TEB address, and the other attributes; only an empty or invalid list was
   tried); CreateFlags 0x10 with a security descriptor in OBJECT_ATTRIBUTES and 0x20 (access check in the target) with a
-  restricted token; a 32-bit caller (WOW64).
+  restricted token; 32-bit callers other than the one observation of wow64_callers_and_targets.
