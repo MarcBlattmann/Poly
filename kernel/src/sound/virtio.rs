@@ -252,13 +252,15 @@ const SAMPLES: [(u8, Sample); 6] = [
     (vfmt::U8, Sample::U8),
 ];
 
-/// Hardware periods: 20 ms, four of them in flight.
-const PERIOD_MS: u32 = 20;
-const PERIODS: u32 = 4;
+/// Hardware periods: 10 ms, six of them in flight. A stream's frames count as played period by
+/// period (ADR 0244), so the period is the grain of every client's clock: 10 ms is a Windows audio
+/// engine period (the WASAPI sheets), which an event-driven client is woken at.
+const PERIOD_MS: u32 = 10;
+const PERIODS: u32 = 6;
 
 /// The fixed format the server uses on stream `info`: S16 (else the next
 /// best it offers), stereo where allowed, 48 kHz (else 44.1 kHz, else its
-/// fastest rate); 20 ms periods.
+/// fastest rate); 10 ms periods.
 fn choose(info: &PcmInfo, base: u32) -> Option<(SetParams, HwFormat)> {
     let (vf, sample) = SAMPLES.iter().copied().find(|(f, _)| info.has_format(*f))?;
     let channels = 2u8.clamp(info.channels_min, info.channels_max);

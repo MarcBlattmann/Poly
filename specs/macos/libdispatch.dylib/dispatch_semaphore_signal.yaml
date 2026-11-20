@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_semaphore_signal.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_semaphore_signal.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_semaphore_signal
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_semaphore_signal(sem) adds a token and returns 0 when it did not wake a waiter and nonzero (1) when it woke one (a waiter blocked in the wait for 100 ms: the signal returned 1 and the waiter went on). Signals are counted, not merged: three signals
+  gave three tokens; 3000 signals from three threads (a global queue, a serial queue and the main thread) gave exactly 3000 tokens.
+returns:
+  "no_waiter_woken": "0"
+  "waiter_woken": "nonzero (1)"
+errors:
+  "none": "no error result"
+side_effects: "adds a token / wakes one waiter"
+threading: "safe from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

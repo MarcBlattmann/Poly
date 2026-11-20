@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "guid_basic",
+      "exe_sha256": "8b0336b00af4d6a719981fbce32464f292fbbeff63f2bab58d8f5aa58477fda5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gQ09NIG9uIHRoZSB0aHJlYWQ6IDB4MDAwMDAwMDAsIG5vdCBHVUlEX05VTEwgMSwgd3JpdHRlbiAxCnNpbmdsZS10aHJlYWRlZCBhcGFydG1lbnQgKGluaXQgMHgwMDAwMDAwMCk6IDB4MDAwMDAwMDAsIG5vdCBHVUlEX05VTEwgMQptdWx0aXRocmVhZGVkIGFwYXJ0bWVudCAoaW5pdCAweDAwMDAwMDAwKTogMHgwMDAwMDAwMCwgbm90IEdVSURfTlVMTCAxCmFmdGVyIENvVW5pbml0aWFsaXplOiAweDAwMDAwMDAwCjMwMCBjYWxsczogZmFpbHVyZXMgMCwgZHVwbGljYXRlcyAwLCBHVUlEX05VTEwgMCwgdmVyc2lvbiBuaWJibGUgNDogMzAwLCB2YXJpYW50IGJpdHMgMTA6IDMwMAoyMDAgY2FsbHMgZnJvbSB0d28gdGhyZWFkcyBhdCBvbmNlOiBkdXBsaWNhdGVzIDAKTlVMTCBvdXRwdXQgcG9pbnRlcjogdGhlIHByb2Nlc3MgZW5kZWQgd2l0aCAweDgwMDcwMDU3CnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no COM on the thread: 0x00000000, not GUID_NULL 1, written 1\nsingle-threaded apartment (init 0x00000000): 0x00000000, not GUID_NULL 1\nmultithreaded apartment (init 0x00000000): 0x00000000, not GUID_NULL 1\nafter CoUninitialize: 0x00000000\n300 calls: failures 0, duplicates 0, GUID_NULL 0, version nibble 4: 300, variant bits 10: 300\n200 calls from two threads at once: duplicates 0\nNULL output pointer: the process ended with 0x80070057\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 75
+    }
+  ]
+}

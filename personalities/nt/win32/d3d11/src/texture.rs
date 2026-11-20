@@ -891,11 +891,20 @@ pub fn copy_region(
     h: usize,
 ) {
     let (Some(d), Some(s)) = (dst.sub(ds), src.sub(ss)) else { return };
+    // Two resources have bytes of their own: their rows are copied straight across. Only a copy
+    // within one resource goes through a buffer (its source and destination are one slice). The
+    // buffer was once taken for every copy: a whole frame's worth (11-15 MB for Chrome's frame at
+    // 2560x1600) allocated, zero-filled and freed again for each frame.
+    let apart = !Arc::ptr_eq(&dst.store, &src.store);
     if dst.is_buffer() || src.is_buffer() {
         // Bytes: x is a byte offset.
         let n = w.min(s.pitch.saturating_sub(sx)).min(d.pitch.saturating_sub(dx));
-        let from: Vec<u8> = src.data()[s.offset + sx..s.offset + sx + n].to_vec();
-        dst.data()[d.offset + dx..d.offset + dx + n].copy_from_slice(&from);
+        if apart {
+            dst.data()[d.offset + dx..d.offset + dx + n].copy_from_slice(&src.data()[s.offset + sx..s.offset + sx + n]);
+        } else {
+            let from: Vec<u8> = src.data()[s.offset + sx..s.offset + sx + n].to_vec();
+            dst.data()[d.offset + dx..d.offset + dx + n].copy_from_slice(&from);
+        }
         return;
     }
     if dst.format() != src.format() && !same_family(dst.format(), src.format()) {
@@ -904,6 +913,14 @@ pub fn copy_region(
     let bpp = bytes_per_pixel(dst.format());
     let w = w.min((s.width as usize).saturating_sub(sx)).min((d.width as usize).saturating_sub(dx));
     let h = h.min((s.height as usize).saturating_sub(sy)).min((d.height as usize).saturating_sub(dy));
+    if apart {
+        let (sb, db) = (src.data(), dst.data());
+        for y in 0..h {
+            let (from, to) = (s.offset + (sy + y) * s.pitch + sx * bpp, d.offset + (dy + y) * d.pitch + dx * bpp);
+            db[to..to + w * bpp].copy_from_slice(&sb[from..from + w * bpp]);
+        }
+        return;
+    }
     let mut rows = Vec::with_capacity(w * bpp * h);
     let sb = src.data();
     for y in 0..h {

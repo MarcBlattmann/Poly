@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_time_basic",
+      "source_sha256": "09ffcedf7a4e43c79f2ba584596ee16c1ec871a07b59c8e9899c165bf1630bb6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d05efc142e218a44d24c0cd8033af1417d111c5bbea74ec3d4ad2058d747832d",
+          "exit_code": 0,
+          "stdout": "ok DISPATCH_TIME_NOW is 0\nok DISPATCH_TIME_FOREVER is all ones\nok a time for now is not 0 (it is a clock reading)\nok two readings in a row: the second is not earlier\nok one second later is later\nvalue units added by a delta of 1e9 ns (equal to 1e9 on x86_64; mach ticks on arm64: 24000000) 24000000\nok adding 0 to a time keeps it\nok a time before it is earlier\nok FOREVER plus a delta is FOREVER\nok FOREVER minus a delta is FOREVER\nok adding a huge delta saturates at FOREVER\nvalue NSEC_PER_SEC 1000000000\nvalue NSEC_PER_MSEC 1000000\nvalue USEC_PER_SEC 1000000\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "758dce9c4039d31a07f813abfb2488d999e45aafb748d4420f58ebffca7dac4e",
+          "exit_code": 0,
+          "stdout": "ok DISPATCH_TIME_NOW is 0\nok DISPATCH_TIME_FOREVER is all ones\nok a time for now is not 0 (it is a clock reading)\nok two readings in a row: the second is not earlier\nok one second later is later\nvalue units added by a delta of 1e9 ns (equal to 1e9 on x86_64; mach ticks on arm64: 24000000) 1000000000\nok adding 0 to a time keeps it\nok a time before it is earlier\nok FOREVER plus a delta is FOREVER\nok FOREVER minus a delta is FOREVER\nok adding a huge delta saturates at FOREVER\nvalue NSEC_PER_SEC 1000000000\nvalue NSEC_PER_MSEC 1000000\nvalue USEC_PER_SEC 1000000\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_time_more",
+      "source_sha256": "ce217621f335be62c86b94ac1bd4b51d4e6da7bb1b0e6e02594c993f432601fc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "22b7ec477a0a8116a90e77a6308445aff08c3a9b832ab981c59b32312ea59f79",
+          "exit_code": 0,
+          "stdout": "value timebase numer 125\nvalue timebase denom 3\nok two half-second steps are one second, in ticks\nok a - 0.5 s\nok a reading of now is the mach absolute time, as mach_absolute_time gives it (within 1 s)\nok the clock does not run backwards over a 20 ms sleep\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b664ee0ce2e0ebcf25ab1a23acbee37bc7191be92f14002da94d74e1814574f4",
+          "exit_code": 0,
+          "stdout": "value timebase numer 1\nvalue timebase denom 1\nok two half-second steps are one second, in ticks\nok a - 0.5 s\nok a reading of now is the mach absolute time, as mach_absolute_time gives it (within 1 s)\nok the clock does not run backwards over a 20 ms sleep\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

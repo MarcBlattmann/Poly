@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsnotificationcenter_addobserver_block_and_thread",
+      "source_sha256": "0c7d296c956ef2e5bfe1e716509e7a46125afe5cec9788868892bbf71188ee4e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "25940fd802677411046049675aaf15e871b2fa50f0ce01b70ff7248c26e5fc3a",
+          "exit_code": 0,
+          "stdout": "ok hits == 1 && onMain == 1\nok hits == 1\nok posted_from_worker && hits == 11 && onMain == 0\nok ns_is(seen, \"PolyHand\")\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "aab6e6b88eb118b9d8f95c28eba2d94f55b4cd48f256827f428e1a10d1e390a0",
+          "exit_code": 0,
+          "stdout": "ok hits == 1 && onMain == 1\nok hits == 1\nok posted_from_worker && hits == 11 && onMain == 0\nok ns_is(seen, \"PolyHand\")\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsnotificationcenter_addobserver_filters",
+      "source_sha256": "05a615b943cb5be5763959404642f06528b8f95ee21693de9208740cc6c74d7f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "77cc4a262305e8c456a206e0d0871c528f75e785321509dd5360919391819380",
+          "exit_code": 0,
+          "stdout": "ok o->hits == 1 && ns_is(o->lastName, \"PolyNote\") && ns_is(o->lastObject, \"sender\") && o->lastInfo == nil\nok o->hits == 1\nok o->hits == 2 && o->lastInfo.count == 1 && [o->lastInfo[@\"a\"] intValue] == 1\nok o->hits == 2\nok f->hits == 0\nok f->hits == 1\nok f->hits == 1\nok all->hits >= 2\nok twice->hits == 2\nok str_eq(order, \"ab\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c9d8421dc5e61865fb8319c964d6a935a4b9c5370362afabd9f35db6bf38df98",
+          "exit_code": 0,
+          "stdout": "ok o->hits == 1 && ns_is(o->lastName, \"PolyNote\") && ns_is(o->lastObject, \"sender\") && o->lastInfo == nil\nok o->hits == 1\nok o->hits == 2 && o->lastInfo.count == 1 && [o->lastInfo[@\"a\"] intValue] == 1\nok o->hits == 2\nok f->hits == 0\nok f->hits == 1\nok f->hits == 1\nok all->hits >= 2\nok twice->hits == 2\nok str_eq(order, \"ab\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
