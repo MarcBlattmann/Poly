@@ -29,6 +29,10 @@
       "description": "Microsoft Learn Direct3D 11, DXGI and DirectComposition reference and the public SDK headers d3d11*.h, dxgi*.h, dcomp.h, dxcore*.h: the COM interfaces and methods of d3d11.dll, dxgi.dll, dcomp.dll (entries named Interface.Method)",
       "revision": "Windows SDK 10.0.26100.0"
     },
+    "ms-learn-chrome-net": {
+      "description": "Microsoft Learn Winsock, I/O completion port, overlapped I/O, named pipe and thread pool wait reference, and the observed call trace of Chrome for Testing's network service on Windows (names, counts and first-call order): what Chrome's network stack does per page load, observed by the spec agent spec-win-chrome-setup",
+      "revision": "Windows 11 26H2 build 26300.9974"
+    },
     "ms-learn-dwrite": {
       "description": "Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method)",
       "revision": "Windows SDK 10.0.26100.0"
