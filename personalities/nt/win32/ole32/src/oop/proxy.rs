@@ -457,7 +457,11 @@ unsafe fn iface_proxy(p: *mut Proxy, iid: &Guid, out: *mut *mut c_void) -> Hresu
         },
     };
     if hr < 0 {
-        return if hr == RPC_E_DISCONNECTED || hr == RPC_S_SERVER_UNAVAILABLE || hr == E_ACCESSDENIED {
+        return if hr == RPC_E_DISCONNECTED
+            || hr == RPC_S_SERVER_UNAVAILABLE
+            || hr == RPC_S_CALL_FAILED
+            || hr == E_ACCESSDENIED
+        {
             hr
         } else {
             E_NOINTERFACE

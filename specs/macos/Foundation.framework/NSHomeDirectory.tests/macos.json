@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nshomedirectory_basics",
+      "source_sha256": "a8833906052b124cd9bc5c9e9ccc5e9d636ebee9f758bda78ffe1342800e16f1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1081b78b308eb82658a63a77c97ed308121c9517bd6c4a57d1e7fd5c3fbcb112",
+          "exit_code": 0,
+          "stdout": "ok home != nil && [home hasPrefix:@\"/\"] && ![home hasSuffix:@\"/\"] && home.length > 1\nok [[NSFileManager defaultManager] fileExistsAtPath:home isDirectory:&isDir] && isDir\nok [NSHomeDirectory() isEqualToString:home]\nok NSUserName().length > 0\nok [home hasSuffix:[@\"/\" stringByAppendingString:NSUserName()]]\nok [[@\"~\" stringByExpandingTildeInPath] isEqualToString:home]\nok [[@\"~/x\" stringByExpandingTildeInPath] isEqualToString:[home stringByAppendingPathComponent:@\"x\"]]\nok ns_is([NSHomeDirectory() class] == [NSHomeDirectory() class] ? @\"same\" : @\"diff\", \"same\")\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7c719882c75eb5558ce19bc4e932e93f9842fe3af5c5538337272e60f6ca87b8",
+          "exit_code": 0,
+          "stdout": "ok home != nil && [home hasPrefix:@\"/\"] && ![home hasSuffix:@\"/\"] && home.length > 1\nok [[NSFileManager defaultManager] fileExistsAtPath:home isDirectory:&isDir] && isDir\nok [NSHomeDirectory() isEqualToString:home]\nok NSUserName().length > 0\nok [home hasSuffix:[@\"/\" stringByAppendingString:NSUserName()]]\nok [[@\"~\" stringByExpandingTildeInPath] isEqualToString:home]\nok [[@\"~/x\" stringByExpandingTildeInPath] isEqualToString:[home stringByAppendingPathComponent:@\"x\"]]\nok ns_is([NSHomeDirectory() class] == [NSHomeDirectory() class] ? @\"same\" : @\"diff\", \"same\")\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nshomedirectory_search_paths_agree",
+      "source_sha256": "ee7f59f1e357cc2f3263ae4f6dd4de4ca936f05acd256d7399734932ab37c9d2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7f63229358a6a4c4827d8270149476dfd602aee44c1cdd3334c101f47e822b6b",
+          "exit_code": 0,
+          "stdout": "ok [[NSFileManager defaultManager].homeDirectoryForCurrentUser.path isEqualToString:home]\nok [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject hasPrefix:home]\nok [NSHomeDirectoryForUser(NSUserName()) isEqualToString:home]\nok [NSFullUserName() length] > 0\nok [@\"~\" stringByExpandingTildeInPath].length == home.length\nok [[@\"~/Library\" stringByExpandingTildeInPath] isEqualToString:[home stringByAppendingPathComponent:@\"Library\"]]\nok [[home stringByAbbreviatingWithTildeInPath] isEqualToString:@\"~\"]\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0d626d16f296d9e183ff16836956c7b82af349143dd21ae5b6e607fc3879892e",
+          "exit_code": 0,
+          "stdout": "ok [[NSFileManager defaultManager].homeDirectoryForCurrentUser.path isEqualToString:home]\nok [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES).firstObject hasPrefix:home]\nok [NSHomeDirectoryForUser(NSUserName()) isEqualToString:home]\nok [NSFullUserName() length] > 0\nok [@\"~\" stringByExpandingTildeInPath].length == home.length\nok [[@\"~/Library\" stringByExpandingTildeInPath] isEqualToString:[home stringByAppendingPathComponent:@\"Library\"]]\nok [[home stringByAbbreviatingWithTildeInPath] isEqualToString:@\"~\"]\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

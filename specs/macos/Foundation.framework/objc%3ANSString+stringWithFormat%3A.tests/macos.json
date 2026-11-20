@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsstring_stringwithformat_numbers",
+      "source_sha256": "416cd0f0a570802bb9088fbfc5a34af8f260f480466a0efe3ef8ebd6fdc33e0c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f1fdd48bf2e835f351426cbc0b591c2deaf3f8bd076268b702afb0bcc5b66f78",
+          "exit_code": 0,
+          "stdout": "ok -42\nok -1 -2 3\nok 4000000000\nok ff FF 10 0xff\nok [   42][42   ][00042][+42]\nok [    42]\nok 3.141590\nok 3.14|   3.142|1.234568e+04|0.0001\nok ok\nok 100%\nok 3 items\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ce5a6c0febd4187b9712938f123c05d71c406d3fa34ce1867e9891cd98fc5587",
+          "exit_code": 0,
+          "stdout": "ok -42\nok -1 -2 3\nok 4000000000\nok ff FF 10 0xff\nok [   42][42   ][00042][+42]\nok [    42]\nok 3.141590\nok 3.14|   3.142|1.234568e+04|0.0001\nok ok\nok 100%\nok 3 items\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsstring_stringwithformat_objects_and_strings",
+      "source_sha256": "9294f7a6e46faf5a86b9dff6061d4f4483d41dbd794f143b4d1dd997eebdd5fb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c862fe189ba7fe3acb79a9f56d545aebc6a392b871b280ba3674dca4d418aaac",
+          "exit_code": 0,
+          "stdout": "ok text\nok <42>\nok 1 0\nok 1.5\nok (null)\nok <null>\nok (\n    a,\n    2\n)\nok {\n    k = v;\n}\nok NSObject\nok plain\nok h√©\nok [   ab][ab   ][a]\nok hi\nok two one\nok 2-1\nok nested\nok \nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a51bd4760908e4148a20af0126142cea8b98bc6560d74ae68daa3d26948618c5",
+          "exit_code": 0,
+          "stdout": "ok text\nok <42>\nok 1 0\nok 1.5\nok (null)\nok <null>\nok (\n    a,\n    2\n)\nok {\n    k = v;\n}\nok NSObject\nok plain\nok h√©\nok [   ab][ab   ][a]\nok hi\nok two one\nok 2-1\nok nested\nok \nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

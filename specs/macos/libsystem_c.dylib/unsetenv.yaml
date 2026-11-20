@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_c.dylib/unsetenv.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in unsetenv.tests/macos.json.
+id: macos/api/libsystem_c.dylib/unsetenv
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  unsetenv(name) removes a variable from environ and returns 0, also when the name is not set (a longer
+  or shorter name such as "A1" does not remove "A"). The remaining variables keep their order and environ
+  stays NULL-terminated (after removing B from A,B,C: A=1, C=3, NULL). When the program was started with
+  duplicates (D=1, D=2, D=3) every copy is removed. Removing from an empty environment returns 0. A variable
+  can be set again afterwards. A NULL name, an empty name or a name containing '=' returns -1 with errno
+  EINVAL (22) and removes nothing; a successful call leaves errno unchanged.
+returns:
+  "success": "0, also when the name was not set"
+errors:
+  "invalid_name": "EINVAL (22): NULL, empty, or containing '='; result -1"
+side_effects: "changes environ"
+threading: "not tested with several threads"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

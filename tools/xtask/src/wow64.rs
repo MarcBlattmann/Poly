@@ -69,6 +69,9 @@ pub const SYSTEM_MODULES: &[&str] = &[
     "dbghelp.dll",
     // Google's 32-bit updater imports AlphaBlend.
     "msimg32.dll",
+    // The audio endpoint and session classes (audio plan W2).
+    "mmdevapi.dll",
+    "audioses.dll",
 ];
 
 /// The 32-bit system programs (installed in `SysWOW64` with the DLLs), built from the Win32

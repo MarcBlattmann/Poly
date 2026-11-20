@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/exception_raise.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mexc.h; ADR 0182);
+# results per architecture in exception_raise.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/exception_raise
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mexc.h, poly_mlibc.h) so that they call libSystem; each makes its own faults in its own threads or child processes and catches them with exception ports of its own, in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); results are equal on both except where the sheet names a difference"
+  observed_by: spec-macos-mach-exc
+  date: 2026-11-20
+summary: >
+  The message the kernel sends to a task or thread exception port set with behavior EXCEPTION_DEFAULT (ids 2401 (32-bit codes) and 2405 (64-bit codes, MACH_EXCEPTION_CODES); 76 and 84 bytes), and what the client stub of the same name does from
+  user space. The message: a header (the local port is the exception port's name; the reply right arrives as the remote port with the disposition
+  MACH_MSG_TYPE_MOVE_SEND_ONCE, 18, in the remote slot of the bits), then a body with two port descriptors (the thread, then the task, each moved as a send right: disposition 17), the NDR record (8 bytes), the exception type, the number of codes (2), the codes, nothing else; the message is complex (MACH_MSGH_BITS_COMPLEX). The codes: for EXC_BAD_ACCESS (1) code 0 is KERN_PROTECTION_FAILURE (2) for a write to a PROT_NONE page
+  and KERN_INVALID_ADDRESS (1) for an unmapped one, code 1 the faulting address (the low 32 bits with 32-bit codes; the whole address with MACH_EXCEPTION_CODES);
+  EXC_BAD_INSTRUCTION (2) code 0 is 1 (undefined instruction) on both architectures; EXC_BREAKPOINT (6) code 0 is 1 on arm64 (brk) and 2 on x86_64 (int3); The trailer of a handler that asked for none is 8 bytes. The reply is RetCode only: KERN_SUCCESS resumes the thread with whatever state the handler set with thread_set_state, any other value hands the exception to the next handler or the BSD signal. A handler that
+  replies with a failure code gets the exception passed on: to the next level (a task port after a thread port) and finally the BSD signal. The client stub
+  (exception_raise called from user space on a port the program made: the process is ended by SIGKILL (a Mach port guard violation reported as INVALID_OPTIONS), also for the thread and task ports made
+  for the test; with MACH_PORT_NULL as the port it returns MACH_SEND_INVALID_DEST (0x10000003); not tried with a port that is a launchd service. The 64-bit variants mach_exception_raise
+  and mach_exception_raise_state are not exported by libSystem; mach_exception_raise_state_identity was not found either.
+  Observations of both architectures agree unless a difference is named (x86_64 was observed under Rosetta 2: a few answers there are the
+  translator's, named below). Exception ports: a task starts with no port for the classic exceptions 1 to 9 (EXC_MASK_CLASSIC, 0x3fe); on arm64 the
+  harness's processes also inherited a port for EXC_RESOURCE (mask 0x800, behavior 0xa0000004), which the tests never look at.
+returns:
+  success: "the handler's RetCode when the stub returns (it was not seen to return from user space)"
+errors:
+  bad_port: "MACH_SEND_INVALID_DEST (0x10000003) for MACH_PORT_NULL"
+  guard: "SIGKILL for the process when called with a port of the program's own"
+side_effects: "the faulting thread is stopped until the handler replies"
+threading: "the faulting thread blocks; the handler runs in another thread"
+ordering: []
+timing:
+  typical: "tens of microseconds per exception"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

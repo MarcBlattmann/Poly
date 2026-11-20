@@ -214,6 +214,58 @@ pub unsafe extern "system" fn RegGetKeySecurity(hkey: HKey, information: u32, sd
     ERROR_SUCCESS
 }
 
+/// Keys a 32-bit process opened or made through `HKEY_CLASSES_ROOT`: a create below them is in
+/// the 32-bit view unless the key was opened with `KEY_WOW64_64KEY` and the create has it too
+/// (`RegCreateKeyExW.yaml` `hkcr`, [`reg::classes_create_access`]). A slot holds the handle
+/// shifted left once, with bit 0 set when it was opened with `KEY_WOW64_64KEY`; 0 is free. A
+/// full table forgets nothing that is in it and takes nothing more (such a key then makes keys
+/// as one below `HKEY_LOCAL_MACHINE` does).
+static CLASSES_KEYS: [AtomicUsize; 64] = [const { AtomicUsize::new(0) }; 64];
+
+/// Whether this is a 32-bit process (the only kind the `HKEY_CLASSES_ROOT` rule is about).
+const X86: bool = cfg!(target_arch = "x86");
+
+fn note_classes_key(h: Handle, sam: u32) {
+    if !X86 || h <= 0 {
+        return;
+    }
+    let native = sam & reg::KEY_WOW64_RES == reg::KEY_WOW64_64KEY;
+    let v = ((h as usize) << 1) | usize::from(native);
+    for s in &CLASSES_KEYS {
+        if s.compare_exchange(0, v, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            return;
+        }
+    }
+}
+
+/// `Some(opened with KEY_WOW64_64KEY)` for a key opened through `HKEY_CLASSES_ROOT`
+/// (`HKEY_CLASSES_ROOT` itself: `Some(false)`), in a 32-bit process.
+fn classes_key(hkey: HKey) -> Option<bool> {
+    if !X86 {
+        return None;
+    }
+    if reg::predefined(hkey as u64) == Some(Predefined::ClassesRoot) {
+        return Some(false);
+    }
+    CLASSES_KEYS
+        .iter()
+        .map(|s| s.load(Ordering::Acquire))
+        .find(|&v| v != 0 && v >> 1 == hkey as usize)
+        .map(|v| v & 1 != 0)
+}
+
+fn forget_classes_key(h: Handle) {
+    if !X86 {
+        return;
+    }
+    for s in &CLASSES_KEYS {
+        let v = s.load(Ordering::Acquire);
+        if v != 0 && v >> 1 == h as usize {
+            let _ = s.compare_exchange(v, 0, Ordering::AcqRel, Ordering::Acquire);
+        }
+    }
+}
+
 /// The NT handle an `HKEY` stands for.
 fn handle_of(hkey: HKey) -> Result<Handle, u32> {
     match reg::predefined(hkey as u64) {
@@ -287,6 +339,9 @@ pub unsafe extern "system" fn RegOpenKeyExW(
     };
     match r {
         Ok(h) => {
+            if h != hkey && reg::predefined(hkey as u64) == Some(Predefined::ClassesRoot) {
+                note_classes_key(h, sam);
+            }
             // SAFETY: checked non-null; the caller's variable.
             unsafe { out.write(h) };
             ERROR_SUCCESS
@@ -349,11 +404,19 @@ pub unsafe extern "system" fn RegCreateKeyExW(
     let inherit = unsafe { crate::base::sa_inherits(security) };
     let parts = reg::components(sub);
     let options = options & (reg::REG_OPTION_VOLATILE | reg::REG_OPTION_CREATE_LINK | reg::REG_OPTION_BACKUP_RESTORE);
-    let start = if reg::predefined(hkey as u64) == Some(Predefined::ClassesRoot) && !parts.is_empty() {
+    let from_classes_root = reg::predefined(hkey as u64) == Some(Predefined::ClassesRoot);
+    let sam = match classes_key(hkey) {
+        Some(native) if !parts.is_empty() => reg::classes_create_access(sam, native),
+        _ => sam,
+    };
+    let start = if from_classes_root && !parts.is_empty() {
         // The view: an existing key under the user's classes is used;
         // anything new goes under HKLM\Software\Classes (Learn).
         match user_classes().map(|u| nt_open(u, &reg::normalized(sub), sam, 0)) {
-            Some(Ok(h)) => return finish_create(out, disposition, h, reg::REG_OPENED_EXISTING_KEY),
+            Some(Ok(h)) => {
+                note_classes_key(h, sam);
+                return finish_create(out, disposition, h, reg::REG_OPENED_EXISTING_KEY);
+            }
             _ => handle_of(hkey),
         }
     } else {
@@ -374,7 +437,8 @@ pub unsafe extern "system" fn RegCreateKeyExW(
     let mut last = 0;
     for (i, name) in parts.iter().enumerate() {
         let final_part = i + 1 == parts.len();
-        let access = if final_part { sam } else { MAXIMUM_ALLOWED };
+        // Every level in the view of the call (`RegCreateKeyExW.yaml` `from_the_root`).
+        let access = if final_part { sam } else { reg::level_access(sam) };
         let r = create_one(parent, name, access, if final_part { class } else { None }, options, inherit && final_part);
         if let Some(h) = opened.take() {
             close(h);
@@ -387,6 +451,9 @@ pub unsafe extern "system" fn RegCreateKeyExW(
             }
             Err(e) => return err(e),
         }
+    }
+    if from_classes_root {
+        note_classes_key(parent, sam);
     }
     finish_create(out, disposition, parent, last)
 }
@@ -430,6 +497,7 @@ pub extern "system" fn RegCloseKey(hkey: HKey) -> u32 {
     if reg::predefined(hkey as u64).is_some() {
         return ERROR_SUCCESS;
     }
+    forget_classes_key(hkey);
     // SAFETY: closing a handle value is memory-safe; the kernel checks it.
     let st = unsafe { crate::nt::NtClose(hkey) };
     if st.is_success() { ERROR_SUCCESS } else { err(st) }

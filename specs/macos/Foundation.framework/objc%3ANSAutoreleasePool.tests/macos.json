@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsautoreleasepool_arc_blocks_and_returns",
+      "source_sha256": "9399ddf143b7594af402d3936aa7d9d25027396fa52e99f3f8a82e2e29336f36",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "784ff4d2d1fcec6a349bd4a39be47442d6e57bea27a714a361389c9e1e306c65",
+          "exit_code": 0,
+          "stdout": "ok deallocs == 0\nok deallocs == 1\nok deallocs == 2\nok ns_is(kept, \"7-kept\")\nok ns_is(kept, \"7-kept\")\nok b != nil && [b retainCount] >= 1\nok deallocs == 3\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f0b54da49d45d197893ce410c1de9359838aed385a9a9f37f551a1cda2f03088",
+          "exit_code": 0,
+          "stdout": "ok deallocs == 0\nok deallocs == 1\nok deallocs == 2\nok ns_is(kept, \"7-kept\")\nok ns_is(kept, \"7-kept\")\nok b != nil && [b retainCount] >= 1\nok deallocs == 3\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsautoreleasepool_drain_and_release",
+      "source_sha256": "dfbaaf4573b9140e707e2dc77116c5941956e3cb6825e1348e9b9c020d00e839",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b79b8dd187a8bcb7c3b350d70fee92ee18c5a716e172a6545d318f7cc0c95dd9",
+          "exit_code": 0,
+          "stdout": "ok deallocs == 0\nok deallocs == 1\nok deallocs == 1\nok deallocs == 2\nok deallocs == 0\nok deallocs == 1\nok deallocs == 0\nok deallocs == 100\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4fc11409848518e834571382da546801904a6fe083d2a0d51b22a9e313d7b85f",
+          "exit_code": 0,
+          "stdout": "ok deallocs == 0\nok deallocs == 1\nok deallocs == 1\nok deallocs == 2\nok deallocs == 0\nok deallocs == 1\nok deallocs == 0\nok deallocs == 100\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

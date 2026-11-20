@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "2c44ff600c90",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:21:59Z",
+  "tests": [
+    {
+      "name": "fk_up_follows",
+      "exe_sha256": "845bfcc8b4d0aefca2f134c20e05b706684c2d3ce82175b4bcfd9f5adb4a69ec",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBhIHByZXNzZWQsIHRoZSB0ZXN0IG1vdmVzIHRoZSBmb2N1cyB0byBGLCBhIHJlbGVhc2VkLCBiIHR5cGVkCiAgYSBpcyBkb3duOiBHZXRLZXlTdGF0ZSB0cnVlIEdldEFzeW5jS2V5U3RhdGUgdHJ1ZQogIGEgcmVsZWFzZWQ6IEdldEtleVN0YXRlIGZhbHNlIEdldEFzeW5jS2V5U3RhdGUgZmFsc2UKICBFIFdNX0tFWURPV04gdms9MHg0MSBsPTB4MDAxZTAwMDEKICBFIFdNX0NIQVIgY2g9MHgwMDYxIGw9MHgwMDFlMDAwMQogIEUgV01fS0lMTEZPQ1VTIG90aGVyPUYKICBGIFdNX1NFVEZPQ1VTIG90aGVyPUUKICBGIFdNX0tFWVVQIHZrPTB4NDEgbD0weGMwMWUwMDAxCiAgRiBXTV9LRVlET1dOIHZrPTB4NDIgbD0weDAwMzAwMDAxCiAgRiBXTV9DSEFSIGNoPTB4MDA2MiBsPTB4MDAzMDAwMDEKICBGIFdNX0tFWVVQIHZrPTB4NDIgbD0weGMwMzAwMDAxCiAgdGV4dHM6IEUgImEiIEYgImIiIEcgIiI7IGZvY3VzIEY7IGZvcmVncm91bmQgb3VycyB0cnVlCj09IEN0cmwrTCBtb3ZlcyB0aGUgZm9jdXMgaW4gdGhlIGtleS1kb3duIG9mIEw6IHRoZSBrZXktdXBzIG9mIEwgYW5kIEN0cmwKICBFIFdNX0tFWURPV04gdms9MHgxMSBsPTB4MDAxZDAwMDEKICBFIFdNX0tFWURPV04gdms9MHg0YyBsPTB4MDAyNjAwMDEKICBFIFdNX0tJTExGT0NVUyBvdGhlcj1GCiAgRiBXTV9TRVRGT0NVUyBvdGhlcj1FCiAgRSBoYW5kbGVyOiBTZXRGb2N1cyhlZGl0IDEpCiAgRSBXTV9DSEFSIGNoPTB4MDAwYyBsPTB4MDAyNjAwMDEKICBGIFdNX0tFWVVQIHZrPTB4NGMgbD0weGMwMjYwMDAxCiAgRiBXTV9LRVlVUCB2az0weDExIGw9MHhjMDFkMDAwMQogIHRleHRzOiBFICIiIEYgIiIgRyAiIjsgZm9jdXMgRjsgZm9yZWdyb3VuZCBvdXJzIHRydWUKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== a pressed, the test moves the focus to F, a released, b typed\n  a is down: GetKeyState true GetAsyncKeyState true\n  a released: GetKeyState false GetAsyncKeyState false\n  E WM_KEYDOWN vk=0x41 l=0x001e0001\n  E WM_CHAR ch=0x0061 l=0x001e0001\n  E WM_KILLFOCUS other=F\n  F WM_SETFOCUS other=E\n  F WM_KEYUP vk=0x41 l=0xc01e0001\n  F WM_KEYDOWN vk=0x42 l=0x00300001\n  F WM_CHAR ch=0x0062 l=0x00300001\n  F WM_KEYUP vk=0x42 l=0xc0300001\n  texts: E \"a\" F \"b\" G \"\"; focus F; foreground ours true\n== Ctrl+L moves the focus in the key-down of L: the key-ups of L and Ctrl\n  E WM_KEYDOWN vk=0x11 l=0x001d0001\n  E WM_KEYDOWN vk=0x4c l=0x00260001\n  E WM_KILLFOCUS other=F\n  F WM_SETFOCUS other=E\n  E handler: SetFocus(edit 1)\n  E WM_CHAR ch=0x000c l=0x00260001\n  F WM_KEYUP vk=0x4c l=0xc0260001\n  F WM_KEYUP vk=0x11 l=0xc01d0001\n  texts: E \"\" F \"\" G \"\"; focus F; foreground ours true\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2125
+    }
+  ]
+}

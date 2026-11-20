@@ -7,7 +7,7 @@ use crate::kernel::{Fault, MachState, Wakeup, XnuKernel, unblock_all, with_mach}
 use crate::mem::{self, Coverage};
 use crate::wait::{after, block_for};
 use poly_mach::consts::{kern::*, msg::*, trap::*, vm::*};
-use poly_mach::{PortId, Received, Signal, WakeReason};
+use poly_mach::{PortId, Received, SendError, Signal, WakeReason};
 
 /// Run Mach trap `number` with arguments `a`; `None` if Poly does not have
 /// it.
@@ -30,7 +30,7 @@ pub fn trap(k: &mut dyn XnuKernel, number: u64, a: &[u64; 8]) -> Option<u64> {
         THREAD_SELF => u64::from(with_mach(k, |m, k| m.ipc.thread_self(k.task(), k.thread()))),
         TASK_SELF => u64::from(with_mach(k, |m, k| m.ipc.task_self(k.task()))),
         HOST_SELF => u64::from(with_mach(k, |m, k| m.ipc.host_self(k.task()))),
-        MACH_MSG => u64::from(mach_msg(k, a[0], n32(1), n32(3), n32(4), n32(5))),
+        MACH_MSG => u64::from(mach_msg(k, a[0], n32(1), n32(2), n32(3), n32(4), n32(5))),
         SEMAPHORE_SIGNAL => u64::from(semaphore_signal(k, n32(0), Signal::One)),
         SEMAPHORE_SIGNAL_ALL => u64::from(semaphore_signal(k, n32(0), Signal::All)),
         SEMAPHORE_SIGNAL_THREAD => u64::from(semaphore_signal_thread(k, n32(0), n32(1))),
@@ -40,7 +40,7 @@ pub fn trap(k: &mut dyn XnuKernel, number: u64, a: &[u64; 8]) -> Option<u64> {
         SEMAPHORE_TIMEDWAIT_SIGNAL => u64::from(semaphore_wait(k, n32(0), Some(n32(1)), Some((n32(2), n32(3) as i32)))),
         MACH_TIMEBASE_INFO => u64::from(timebase_info(k, a[0])),
         MACH_WAIT_UNTIL => u64::from(wait_until(k, a[0])),
-        _ => return None,
+        _ => return crate::ports::trap(k, number, a),
     };
     Some(r)
 }
@@ -90,7 +90,7 @@ fn port_mod_refs(k: &mut dyn XnuKernel, task: u32, name: u32, right: u32, delta:
         kr
     });
     unblock_all(k, woken);
-    kr
+    crate::ports::guarded(k, kr)
 }
 
 fn port_type(k: &mut dyn XnuKernel, task: u32, name: u32, ptr: u64) -> u32 {
@@ -194,10 +194,26 @@ fn vm_protect(k: &mut dyn XnuKernel, task: u32, addr: u64, size: u64, set_max: b
 /// caller (the sheet: programs send with mach_msg2_trap); a receive takes a
 /// message from a port or a set, waiting up to `timeout` ms with
 /// `MACH_RCV_TIMEOUT`.
-fn mach_msg(k: &mut dyn XnuKernel, msg: u64, option: u32, rcv_size: u32, rcv_name: u32, timeout_ms: u32) -> u32 {
+fn mach_msg(
+    k: &mut dyn XnuKernel,
+    msg: u64,
+    option: u32,
+    send_size: u32,
+    rcv_size: u32,
+    rcv_name: u32,
+    timeout_ms: u32,
+) -> u32 {
     if option & MACH_SEND_MSG != 0 {
-        k.kill_self(9);
-        return MACH_SEND_INVALID_DATA;
+        // arm64 programs send with mach_msg2_trap; the oracle kills one that
+        // sends with this trap (the sheet). x86-64 programs send here.
+        if k.arch() == crate::kernel::Arch::Arm64 {
+            k.kill_self(9);
+            return MACH_SEND_INVALID_DATA;
+        }
+        let kr = send(k, msg, send_size, option, timeout_ms);
+        if kr != MACH_MSG_SUCCESS {
+            return kr;
+        }
     }
     if option & MACH_RCV_MSG == 0 {
         return MACH_MSG_SUCCESS;
@@ -235,6 +251,69 @@ fn mach_msg(k: &mut dyn XnuKernel, msg: u64, option: u32, rcv_size: u32, rcv_nam
                     Ok(WakeReason::Died) => return MACH_RCV_PORT_DIED,
                     Err(Wakeup::Signal) => return MACH_RCV_INTERRUPTED,
                     Err(_) => return MACH_RCV_TIMED_OUT,
+                }
+            }
+        }
+    }
+}
+
+/// SIGKILL: what a port guard violation ends a process with.
+pub(crate) const SIGKILL: u32 = 9;
+
+/// The largest message Poly sends (inline data; out-of-line memory is not
+/// there yet).
+const MAX_SEND: u32 = 1 << 20;
+
+/// The send half of mach_msg: the message is `send_size` bytes at `msg`
+/// (its header's size is that); a full queue waits for room, at most
+/// `timeout_ms` with `MACH_SEND_TIMEOUT`. A message to a task or thread
+/// port is a MIG request the kernel answers at once.
+fn send(k: &mut dyn XnuKernel, msg: u64, send_size: u32, option: u32, timeout_ms: u32) -> u32 {
+    if send_size < 24 || !send_size.is_multiple_of(4) {
+        return MACH_SEND_MSG_TOO_SMALL;
+    }
+    if send_size > MAX_SEND {
+        return MACH_SEND_TOO_LARGE;
+    }
+    let mut bytes = alloc::vec![0u8; send_size as usize];
+    if k.copy_in(msg, &mut bytes).is_err() {
+        return MACH_SEND_INVALID_DATA;
+    }
+    bytes[4..8].copy_from_slice(&send_size.to_le_bytes());
+    let deadline = (option & MACH_SEND_TIMEOUT != 0).then(|| after(k, u64::from(timeout_ms) * 1_000_000));
+    loop {
+        let sender = k.sender_info();
+        let r = with_mach(k, |m, k| {
+            let r = crate::exc::with_threads(m, k, |ipc, t| ipc.send_with(k.task(), &bytes, sender, t));
+            if let Err(SendError::Full(p)) = r
+                && deadline.is_none_or(|d| k.now_ns() < d)
+            {
+                m.ipc.wait_send(p, k.thread());
+            }
+            r
+        });
+        match r {
+            Ok(woken) => {
+                if let Some(t) = woken {
+                    k.unblock(t);
+                }
+                // A request that broke a port guard ends the sender.
+                if with_mach(k, |m, k| m.ipc.take_violation(k.task())) {
+                    k.kill_self(SIGKILL);
+                }
+                return MACH_MSG_SUCCESS;
+            }
+            Err(SendError::Return(kr)) => return kr,
+            Err(SendError::KernelObject(_)) => return MACH_SEND_INVALID_DEST,
+            Err(SendError::Full(_)) => {
+                if deadline.is_some_and(|d| k.now_ns() >= d) {
+                    return MACH_SEND_TIMED_OUT;
+                }
+                match block_for(k, deadline, |m, t| m.ipc.wait_result(t), |m, t| m.ipc.cancel_waits(t)) {
+                    Ok(WakeReason::Ready) => continue,
+                    Ok(WakeReason::Died) => return MACH_SEND_INVALID_DEST,
+                    Err(Wakeup::Signal) => return MACH_SEND_INTERRUPTED,
+                    Err(_) => return MACH_SEND_TIMED_OUT,
                 }
             }
         }

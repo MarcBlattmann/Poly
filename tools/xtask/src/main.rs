@@ -92,6 +92,14 @@
 //!                       (Linux), make target/poly-chromium-disk.img
 //!   chromium [--release] [--fresh-disk] [--scale=N] [STEP...]
 //!                       boot Chromium's disk to the desktop, steps as for toolkits (--scale=N: a HiDPI desktop)
+//!   corefoundation [--out <dir>] [--cache-key]
+//!                       build Poly's CoreFoundation.framework (or take it from the content-hash
+//!                       cache), verify it, optionally copy it into <dir>/System/Library/Frameworks
+//!                       (corefoundation.rs, ADR 0260)
+//!   libsystem [--out <dir>] [--cache-key]
+//!                       build Poly's libSystem.B.dylib and its sub-libraries (or take them from
+//!                       the content-hash cache), verify them, optionally copy them into <dir>/usr/lib
+//!                       (libsystem.rs, ADR 0258)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -139,6 +147,7 @@ mod compositor;
 mod compositor_kms;
 mod conflicts;
 mod console;
+mod corefoundation;
 mod cursors;
 mod desktop;
 mod drm;
@@ -157,9 +166,11 @@ mod installer;
 mod installer2;
 mod ktest;
 mod libsearch;
+mod libsystem;
 mod linuxchrome;
 mod macho;
 mod macho_a64;
+mod macho_specs;
 mod macimports;
 mod mesa;
 mod native;
@@ -283,6 +294,8 @@ const COMMANDS: &[&str] = &[
     "wayland",
     "nls-tables",
     "system-messages",
+    "libsystem",
+    "corefoundation",
     "ntdll",
     "win32",
     "wow64",
@@ -323,6 +336,8 @@ fn dispatch(args: &[String]) -> Result {
         Some("cursors") => cursors::command(rest),
         Some("fonts") => fonts::command(rest),
         Some("wayland") => wayland::run(&root(), rest),
+        Some("libsystem") => libsystem::command(rest),
+        Some("corefoundation") => corefoundation::command(rest),
         Some("ntdll") => ntdll::command(rest),
         Some("win32") => win32::command(rest),
         Some("wow64") => wow64::command(rest),
@@ -607,8 +622,9 @@ fn qemu_on(
     cmd
 }
 
-/// How long the slow test device takes for every request, in nanoseconds.
-const SLOW_DISK_LATENCY: u64 = 300_000_000;
+/// How long the slow test device takes for every request, in nanoseconds: three times the
+/// watchdog limit of its test (`virtio_blk::SLOW_LIMIT_NS`, 50 ms), so every request is late.
+const SLOW_DISK_LATENCY: u64 = 150_000_000;
 
 /// Whether QEMU can open a window: on macOS (Cocoa) and Windows always,
 /// elsewhere when an X11 or Wayland display is set. Without one, QEMU's
@@ -1692,10 +1708,20 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // The Mach core's visible spec tests that run on Poly today, x86-64
     // builds, output compared with macOS's (macho.rs, ADR 0238).
     ("macho-mach", macho::mach_boot_test),
+    // Every visible macOS system call test, x86-64 and arm64, compared with
+    // macOS's output; a list of passing runs is the ratchet (macho_specs.rs,
+    // ADR 0246).
+    ("macho-specs", macho_specs::boot_test),
     // arm64 Mach-O programs on x86-64 through the translator's runtime:
     // static, universal, dynamically linked, malloc-heavy under the JIT and
     // the interpreter (macho_a64.rs, ADR 0257).
     ("macho-a64", macho_a64::boot_test),
+    // An SDK-linked C program with Poly's own libSystem.B.dylib (libsystem.rs,
+    // ADR 0258).
+    ("libsystem", libsystem::boot_test),
+    // CoreFoundation's spec tests and a C program with Poly's own
+    // CoreFoundation.framework (corefoundation.rs, ADR 0260).
+    ("corefoundation", corefoundation::boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
@@ -1858,7 +1884,10 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "dynamic",
             "macho",
             "macho-mach",
+            "macho-specs",
             "macho-a64",
+            "libsystem",
+            "corefoundation",
             "busybox",
             "rootdisk",
             "toolkits",
@@ -2200,6 +2229,22 @@ fn fmt_checks(plan: &quicklint::Plan) -> Result {
             cargo().args(["fmt", "--check", "--manifest-path"]).arg(root().join("personalities/nt/ntdll/Cargo.toml")),
         )?;
     }
+    if plan.libsystem {
+        step(
+            "fmt (libsystem)",
+            cargo()
+                .args(["fmt", "--check", "--manifest-path"])
+                .arg(root().join("personalities/xnu/libsystem/Cargo.toml")),
+        )?;
+    }
+    if plan.corefoundation {
+        step(
+            "fmt (corefoundation)",
+            cargo()
+                .args(["fmt", "--check", "--manifest-path"])
+                .arg(root().join("personalities/xnu/corefoundation/Cargo.toml")),
+        )?;
+    }
     if plan.win32 {
         step(
             "fmt (win32)",
@@ -2318,6 +2363,14 @@ fn lint_units(plan: &quicklint::Plan) -> Result {
     // The aarch64 boot stub: its own package (ADR 0154).
     if plan.aarch64 {
         aarch64::lint()?;
+    }
+    // Poly's libSystem, for its Darwin target (ADR 0258).
+    if plan.libsystem {
+        libsystem::lint()?;
+    }
+    // Poly's CoreFoundation, for its Darwin target (ADR 0260).
+    if plan.corefoundation {
+        corefoundation::lint()?;
     }
     Ok(())
 }

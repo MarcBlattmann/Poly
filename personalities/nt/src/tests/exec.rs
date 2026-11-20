@@ -507,3 +507,30 @@ fn a_whole_committed_stack_has_no_guard_page() {
     let q = f.proc.vm.query(bottom).unwrap();
     assert_eq!((q.state, q.protect, q.allocation_base), (MEM_COMMIT, PAGE_READWRITE, bottom));
 }
+
+#[test]
+fn a_touch_just_below_the_guard_page_grows_the_stack_too() {
+    // An x64 function with a frame of up to 8 KiB probes nothing (Learn, "_chkstk Routine"):
+    // the page below the guard page may be the first one it touches (Chrome's video decoder).
+    let mut f = Fake::bare();
+    start(&mut f, &test_exe(false)).unwrap();
+    let req = crate::kernel::ThreadCreate {
+        start_routine: IMAGE_BASE + 0x1000,
+        stack_reserve: 0x10_0000,
+        desired_access: 0x1F_FFFF,
+        ..Default::default()
+    };
+    let t = ThreadRef(TID.0 + 1);
+    let s = exec::create_thread(&mut f.sys, &mut f.proc, &mut f.mem, &req, t).unwrap();
+    let guard = s.stack_limit - 0x1000;
+    let below = guard - 0x1000;
+    assert_eq!(exec::access_fault(&mut f.proc, &mut f.mem, t, below + 0x438), AccessFault::StackGrown { limit: below });
+    assert_eq!(f.u64_at(s.teb + TEB_STACK_LIMIT), below);
+    // Both pages are committed now and a new guard page lies below them.
+    assert_eq!(f.proc.vm.query(guard).unwrap().protect, PAGE_READWRITE);
+    assert_eq!(f.proc.vm.query(below).unwrap().protect, PAGE_READWRITE);
+    assert_eq!(f.proc.vm.query(below - 0x1000).unwrap().protect, PAGE_READWRITE | PAGE_GUARD);
+    // Two pages below the guard page is still an access violation.
+    let far = below - 0x3000;
+    assert_eq!(exec::access_fault(&mut f.proc, &mut f.mem, t, far), AccessFault::Exception(STATUS_ACCESS_VIOLATION));
+}

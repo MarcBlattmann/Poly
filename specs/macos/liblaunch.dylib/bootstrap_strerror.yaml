@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/liblaunch.dylib/bootstrap_strerror.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in bootstrap_strerror.tests/macos.json.
+id: macos/api/liblaunch.dylib/bootstrap_strerror
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  bootstrap_strerror(code) returns a static C string for a result of the bootstrap calls: 0 is "Success"; 1100 "Permission
+  denied" (BOOTSTRAP_NOT_PRIVILEGED); 1101 "Service name already exists" (BOOTSTRAP_NAME_IN_USE); 1102 "Unknown service
+  name" (BOOTSTRAP_UNKNOWN_SERVICE); 1103 "Service is already active" (BOOTSTRAP_SERVICE_ACTIVE); 1104 "Too many lookups were
+  requested in one request" (BOOTSTRAP_BAD_COUNT); 1105 "Out of memory" (BOOTSTRAP_NO_MEMORY). Other numbers of the bootstrap range
+  (1099, and 1106 to 1110, though <servers/bootstrap_defs.h> names 1106 BOOTSTRAP_NO_CHILDREN) and other unknown positive
+  numbers (2000) are "unknown error code". A Mach error (kern_return_t or
+  message result) gets mach_error_string's text: 5 is "(os/kern) failure", 15 "(os/kern) invalid name", 17 "(os/kern) invalid
+  right", 18 "(os/kern) invalid value", 0x10000003 "(ipc/send) invalid destination port", 0x10004003 "(ipc/rcv) timed out", -300
+  "(ipc/mig) client type check failure". -1 gives a NULL pointer (printf shows "(null)"). The returned pointer is the same for
+  the same code. Text of the Mach errors is of mach_error_string (observed; not re-specified here).
+returns:
+  text: "the text above; NULL for -1"
+errors: {}
+side_effects: none
+threading: "safe from several threads (static strings)"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

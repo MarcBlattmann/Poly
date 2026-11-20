@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "methimp_runtime",
+      "source_sha256": "58e85860272f000a9c534e670ea269d880b725fb9dd659daa0d179325f3e784a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "05ce330f2ed96695f3f2f1a6c13497fd133ad2df63bc9fe315e635185b0c0954",
+          "exit_code": 0,
+          "stdout": "ok the added IMP\nok the replaced IMP is read through the same Method\nok a subclass's Method is the same object and so has the same IMP\nok a subclass override has its own\nok the superclass's is unchanged\nok an NSObject method has an IMP\nok calling NSObject's -hash IMP agrees with a message\nok a class method through the metaclass\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "812f010ca347f85566f4e0b8cb4faaf0b401d462c8a03bf5057612db5dfcda51",
+          "exit_code": 0,
+          "stdout": "ok the added IMP\nok the replaced IMP is read through the same Method\nok a subclass's Method is the same object and so has the same IMP\nok a subclass override has its own\nok the superclass's is unchanged\nok an NSObject method has an IMP\nok calling NSObject's -hash IMP agrees with a message\nok a class method through the metaclass\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

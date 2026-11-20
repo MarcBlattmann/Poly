@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/object_getClass.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in object_getClass.tests/macos.json.
+id: macos/api/libobjc.A.dylib/object_getClass
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  Class object_getClass(id obj). Returns the class recorded in the object: for an instance its class,
+  for a class its metaclass (a different object, flagged by class_isMetaClass, with the class's name),
+  for a metaclass the root metaclass (NSObject's metaclass, whose own class is itself). Nil gives Nil.
+  The metaclass chain mirrors the class chain (the metaclass of a subclass has the metaclass of the
+  superclass as superclass) and the root metaclass's superclass is NSObject; five levels below
+  NSObject a metaclass is five steps from the root metaclass. Unlike the message -class, which returns
+  the class itself for a class receiver, object_getClass returns the metaclass. For instances made by
+  class_createInstance of run-time classes the class is the one passed, the metaclass exists from
+  allocation and is not changed by registration; after object_setClass the answer is the new class
+  (and object_setClass returns the previous one). object_isClass says YES for a class and a metaclass,
+  NO for an instance and for nil.
+returns:
+  class: "the object's class (for a class object: its metaclass)"
+  nil: "Nil for nil"
+errors:
+  none: "no error codes"
+side_effects: "none"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering: []
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

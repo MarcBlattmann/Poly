@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_semaphore_signal_basic",
+      "source_sha256": "204d2363b42b4bd2c13bd608016ae0a44e8ad914b72ea1fe05a0a944f67f263a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c114e1bd93ca096d1d23eae290721e41bf04ee1b7c8675248e16e3b81bdcd85e",
+          "exit_code": 0,
+          "stdout": "ok signal with nobody waiting: 0\nok three signals are three tokens\nok signal that wakes a waiter: nonzero\nok the waiter proceeded\nvalue the result of a waking signal 1\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5d6f1934005609502402610afe406c55b2041c272d10087d26d5dc5e74072aef",
+          "exit_code": 0,
+          "stdout": "ok signal with nobody waiting: 0\nok three signals are three tokens\nok signal that wakes a waiter: nonzero\nok the waiter proceeded\nvalue the result of a waking signal 1\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

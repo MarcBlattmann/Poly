@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsthread_currentthread_sleep_and_exit",
+      "source_sha256": "a4a3011b66b96d033d9c6aae26d718c91a73a0ab590d29faa90c3990e07c2da7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "06c9c6538eb3e828714cf627009dd944fd2dd73e3f191c143ea3f4c5f5694fc3",
+          "exit_code": 0,
+          "stdout": "ok d >= 0.09 && d < 2.0\nok [[NSDate date] timeIntervalSinceDate:t0] < 0.05\nok before_exit && !after_exit\nok t.isFinished && !t.isExecuting\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a9c888b1f76aef7bafd2029575bc35198ef9805de675b4404ca707149073d19c",
+          "exit_code": 0,
+          "stdout": "ok d >= 0.09 && d < 2.0\nok [[NSDate date] timeIntervalSinceDate:t0] < 0.05\nok before_exit && !after_exit\nok t.isFinished && !t.isExecuting\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsthread_currentthread_worker",
+      "source_sha256": "5a767437371ffa862032ea9d70d38c704ff58e254a28d84ed7e63fa4a4557a1c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "21646b27520abe1ed399c43a010fbac39fc71cb46623aeff0d6f9f96101e5545",
+          "exit_code": 0,
+          "stdout": "ok done\nok worker_is_main == 0 && worker_same == 1 && worker_dict_empty == 1\nok worker_thread != mainThread && worker_thread != nil\nok ns_is(mainThread.threadDictionary[@\"who\"], \"main\")\nok [NSThread isMainThread]\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "68cbb2c91c309ac07bd35c8840c930bd67e02ee481b8412c644794806537d9e5",
+          "exit_code": 0,
+          "stdout": "ok done\nok worker_is_main == 0 && worker_same == 1 && worker_dict_empty == 1\nok worker_thread != mainThread && worker_thread != nil\nok ns_is(mainThread.threadDictionary[@\"who\"], \"main\")\nok [NSThread isMainThread]\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

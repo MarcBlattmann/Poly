@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/posix_spawnattr_setexceptionports_np.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in posix_spawnattr_setexceptionports_np.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/posix_spawnattr_setexceptionports_np
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  posix_spawnattr_setexceptionports_np(&attr, mask, port, behavior, flavor) records exception ports for the child that
+  posix_spawn starts. It returns 0 for every argument tried: any mask (also 0 and EXC_MASK_ALL), a port that is MACH_PORT_NULL
+  or a name that does not exist, a behavior that is none (99); several calls on one attribute set add up; the port's rights
+  in the caller are not touched. For an unprivileged, not entitled caller the setting has no effect on the child: it
+  starts normally with no exception port for the masks asked (task_get_exception_ports in the child gives only null ports
+  for EXC_MASK_BAD_ACCESS | EXC_MASK_ARITHMETIC; on arm64 an exception port of the crash handler for EXC_MASK_CRASH was seen in
+  some children that inherited it from the parent, not tested) and nothing is ever sent to the port given.
+returns:
+  success: "0 for every argument tried"
+errors: {}
+side_effects: "the attribute record holds the setting"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

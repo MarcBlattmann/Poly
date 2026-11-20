@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSProcessInfo.@environment.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSProcessInfo.@environment.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSProcessInfo.@environment"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSProcessInfo environment] is an NSDictionary of NSString to NSString with the variables the
+  program started with: names and values UTF-8 decoded ('U=café'), an empty value kept as an empty
+  string ('EMPTY='), a variable that is not there nil, plus one the system adds before the program
+  runs, __CF_USER_TEXT_ENCODING (the text 0xUID:0x0:0x0 with the user id in hex, so it differs per
+  user and is never printed): a program started with an empty environment sees exactly that one entry
+  (no HOME, PATH or TMPDIR), one started with three variables sees four. The dictionary is a
+  CFDictionary bridge and is immutable.
+returns:
+  success: "an NSDictionary of strings"
+errors: {}
+side_effects: "none"
+threading: "objects are immutable or the class says otherwise; immutable values may be read from any thread"
+ordering: []
+timing:
+  typical: "microseconds, no system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

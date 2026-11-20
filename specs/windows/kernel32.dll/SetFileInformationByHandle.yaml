@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/SetFileInformationByHandle.yaml
+id: windows/api/kernel32.dll/SetFileInformationByHandle
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave the same output except where a sheet says what a 32-bit caller sees."
+  observed_by: spec-win-updater-services
+  date: 2026-11-20
+sources: >
+  Observations of our own 64-bit test programs on the machine above (each test ran at least twice with identical output). Microsoft Learn pages of the functions (kernel32 / fileapi.h, winbase.h, processthreadsapi.h, wow64apiset.h, memoryapi.h, synchapi.h, combaseapi.h, objbase.h, userenv.h) for names, parameters and the error values in winerror.h. What the documentation does not say (error codes, edge cases, the effect of access rights) is taken from the observations only. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Sets attributes, length, delete-on-close and the name of an open file. Which classes work depends on the access rights of the handle: FILE_WRITE_ATTRIBUTES for FileBasicInfo, a write right for the length, DELETE for the disposition and the rename.
+interface:
+  signature: "BOOL SetFileInformationByHandle(HANDLE hFile, FILE_INFO_BY_HANDLE_CLASS FileInformationClass, LPVOID lpFileInformation, DWORD dwBufferSize)"
+installer: "Google's updater 157 and 159 (32-bit) import this function; their run on Poly reaches it while they install and start their two services and register their update service and scheduled task. What they pass is not known beyond the import. Chrome's setup.exe and notification helper import it as well."
+rules:
+  basic_info: "FileBasicInfo (0), a 40-byte record with zero times (unchanged) and the attributes at offset 32, with a handle that has FILE_WRITE_ATTRIBUTES: hidden (2), read-only (1) and normal (0x80) are set and read back with GetFileAttributes (normal reads back as 0 in the low bits)"
+  buffer_size: "a size of 39 bytes or 0 for FileBasicInfo, 4 bytes for FileEndOfFileInfo and 8 bytes for FileRenameInfo (the structure needs more): ERROR_BAD_LENGTH 24"
+  end_of_file: "FileEndOfFileInfo (6) with 8 bytes: the file shrinks to 5 or grows to 20 bytes ; FileAllocationInfo (5) succeeds and does not change the size"
+  classes: "an unknown class (0x7F) and a class that cannot be set (FileStandardInfo, 1): ERROR_INVALID_PARAMETER 87"
+  access: "FileEndOfFileInfo and FileBasicInfo on a handle opened for GENERIC_READ only: ERROR_ACCESS_DENIED 5; FileDispositionInfo on a handle without DELETE: ERROR_ACCESS_DENIED 5 whatever the value"
+  disposition: "FileDispositionInfo (4) with 1 on a handle with DELETE: TRUE; while the handle is open the name can no longer be looked up with GetFileAttributes; the file is gone after the handle is closed; a later FileDispositionInfo with 0 cancels the deletion (the file stays); on a read-only file: ERROR_ACCESS_DENIED 5"
+  rename: "see the rename tests: FileRenameInfo (3) renames an open file given the DELETE right; to a free name TRUE and the old name is gone; to an existing name: with ReplaceIfExists 0 error ERROR_ALREADY_EXISTS 183, with 1 the target is replaced; to the same name TRUE; to a name an other handle holds open: ERROR_ACCESS_DENIED 5; into a directory that does not exist: ERROR_PATH_NOT_FOUND 3; without DELETE: ERROR_ACCESS_DENIED 5; a buffer that lacks the NUL after the name, and a name length that is 40 bytes longer than the name (the extra bytes are NULs), are accepted; the record is the 64-bit layout (ReplaceIfExists as a 4-byte flag at 0, RootDirectory at 8, FileNameLength at 16, FileName at 20): a 32-bit caller has a 4-byte RootDirectory (FileNameLength at 8, FileName at 12), and the 64-bit layout from a 32-bit program fails with ERROR_INVALID_NAME 123"
+errors:
+  bad_length: "ERROR_BAD_LENGTH 24"
+  invalid_parameter: "ERROR_INVALID_PARAMETER 87"
+  access_denied: "ERROR_ACCESS_DENIED 5"
+  already_exists: "ERROR_ALREADY_EXISTS 183"
+  path_not_found: "ERROR_PATH_NOT_FOUND 3"
+side_effects: "the file the handle refers to"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, run on the oracle with the elevated token in the interactive session. Scenarios that could end the process (a NULL pointer where the function reads or writes through it) run in a child process of the same image (`--child ...`) and the parent prints the exit code. Observations are results, error codes, booleans and counts; never addresses, process or thread ids, times or the name of the machine. Files the tests make live next to the test program and are deleted by the test.
+not_covered: >
+  the other information classes (FileIoPriorityHintInfo, FileRemoteProtocolInfo, ...), FileDispositionInfoEx flags, renames across volumes, with a RootDirectory handle, with alternate data streams, and of files that other processes have open with a conflicting sharing mode.

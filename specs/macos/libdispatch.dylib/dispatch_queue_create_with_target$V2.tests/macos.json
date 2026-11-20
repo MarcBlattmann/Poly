@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_queue_create_with_target_global",
+      "source_sha256": "201bbe6bb876e289071b0170488960eb5f0ee8f6b0e315b4144246d5f7bf586e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bb78249f97b19ec7b13e3f34dcfad96af76852c1a0f7fb9dfb5beb60d035e16b",
+          "exit_code": 0,
+          "stdout": "ok the block ran\nok not on the main thread\nvalue QoS class of a block of a queue aimed at the utility global queue (17 = utility) 17\nok a NULL target: the block runs\nok ... off the main thread\nok aimed at the main queue: nothing runs while the main thread is not draining it\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0900033f4102dc81466e629335dee1566a535ebd8254d714a4dcc5cefee4b7e9",
+          "exit_code": 0,
+          "stdout": "ok the block ran\nok not on the main thread\nvalue QoS class of a block of a queue aimed at the utility global queue (17 = utility) 17\nok a NULL target: the block runs\nok ... off the main thread\nok aimed at the main queue: nothing runs while the main thread is not draining it\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_queue_create_with_target_more",
+      "source_sha256": "92dd8d7b8f4b532ee178da96810496b785c2f3f7923a9d003c5946c303a073a4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "addcbb46aa335f080f8e15210729ac256042b7917bd1d7de64f91cfc07c41c5e",
+          "exit_code": 0,
+          "stdout": "ok a concurrent queue aimed at a serial queue: all blocks ran, none overlapped\nok a serial queue aimed at a concurrent queue: all blocks ran, none overlapped\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "94837669a08a1ed8baed1454cdad9aa105a21a3d30117b82944b926d9f30163d",
+          "exit_code": 0,
+          "stdout": "ok a concurrent queue aimed at a serial queue: all blocks ran, none overlapped\nok a serial queue aimed at a concurrent queue: all blocks ran, none overlapped\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

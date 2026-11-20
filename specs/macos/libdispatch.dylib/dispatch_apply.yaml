@@ -1,0 +1,29 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_apply.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_apply.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_apply
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_apply(count, queue, block) calls block(i) for i in 0..count-1, each index exactly once (1000 iterations), and returns only when all have finished, so
+  their results are visible afterwards (4096 results; the sum of 100000 indexes was exact). count 0 runs nothing, count 1 runs index 0. On a global (concurrent) queue
+  the iterations spread over threads (a slow body: more than one thread took part) and the calling thread runs some of them itself; an apply inside an apply works (8 x 8,
+  sum 2016). On a serial queue the iterations run in order 0, 1, 2, ... Same on both architectures.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "runs the block count times"
+threading: "iterations run concurrently on a concurrent queue; the call blocks until all are done"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

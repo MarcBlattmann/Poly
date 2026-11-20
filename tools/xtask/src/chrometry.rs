@@ -196,9 +196,9 @@ pub fn parts(fresh_disk: bool) -> Result<Parts> {
 /// the menu, seen through the menu window's soft shadow, must still be blue (a popup composed
 /// without its alpha showed a black frame there, ADR 0225).
 const TRY_STEPS: &str = concat!(
-    "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,",
+    "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,waitpixel:200|400|008000|30,",
     "chord:ctrl+l,sleep:2,shot:address-focused,type:data:text/html,<body bgcolor=blue>,",
-    "shot:typed,key:ret,sleep:10,shot:navigated,pixel:200|400|0000ff,",
+    "shot:typed,key:ret,sleep:10,shot:navigated,waitpixel:200|400|0000ff|50,",
     "chord:alt+f,sleep:8,shot:menu,near:496|300|0000ff|64"
 );
 
@@ -274,7 +274,7 @@ pub fn group_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Sym
 /// 0234 the second start crashed (DefWindowProc's SC_MAXIMIZE showed and activated the window
 /// Chrome was still building) and exited without a window, at every start after.
 const MAX_STEPS: &str = concat!(
-    "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,",
+    "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,waitpixel:200|400|008000|30,",
     "dclick:600|52,sleep:8,shot:maximized,pixel:1200|600|008000,",
     "chord:ctrl+shift+w,wait:exited with status,sleep:5,shot:closed,",
     "launch,waitn:2|launch-to-window,sleep:25,shot:again,pixel:200|400|008000,pixel:1200|600|008000"

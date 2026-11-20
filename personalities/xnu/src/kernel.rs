@@ -6,7 +6,9 @@
 //! state ([`MachState`], from `poly-mach`); the kernel copies user memory,
 //! owns the address space and the page tables, and blocks and wakes threads.
 
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
+use poly_mach::exc::{ExceptionState64, ThreadState64};
 use poly_mach::{Ipc, PsynchTable, SenderInfo, TaskId, ThreadId, UlockTable, ulock};
 
 /// The Mach state of the machine, kept by the kernel behind one lock.
@@ -15,6 +17,18 @@ pub struct MachState {
     pub ipc: Ipc,
     pub ulock: UlockTable,
     pub psynch: PsynchTable,
+    /// Threads stopped in an exception while a handler decides: their
+    /// state, which thread_get_state and thread_set_state reach.
+    pub stopped: BTreeMap<ThreadId, Stopped>,
+}
+
+/// A thread stopped in an exception.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Stopped {
+    pub regs: ThreadState64,
+    pub exc: ExceptionState64,
+    /// thread_set_state changed the registers.
+    pub changed: bool,
 }
 
 impl MachState {
@@ -124,6 +138,15 @@ pub struct ThreadStart {
     pub flags: u32,
 }
 
+/// Another process, as task_name_for_pid sees it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Peer {
+    /// It runs (it has not exited; a zombie does not run).
+    pub running: bool,
+    /// It is the caller's parent or one of its children.
+    pub related: bool,
+}
+
 pub trait XnuKernel {
     fn task(&self) -> TaskId;
     fn thread(&self) -> ThreadId;
@@ -194,17 +217,33 @@ pub trait XnuKernel {
     fn thread_entry_registered(&self) -> bool;
     /// Start a thread at the registered entry point; its pthread address.
     fn create_thread(&mut self, start: ThreadStart) -> Result<u64, u32>;
+
+    /// The process `pid`, if there is one.
+    fn peer(&self, pid: i32) -> Option<Peer> {
+        let _ = pid;
+        None
+    }
+
+    /// The calling thread's user registers as it entered the kernel (for
+    /// thread_get_state of itself); `None` where the kernel cannot say.
+    fn current_state(&self) -> Option<ThreadState64> {
+        None
+    }
 }
 
 /// Run `f` with the Mach state locked and return its result.
 pub fn with_mach<R>(k: &mut dyn XnuKernel, f: impl FnOnce(&mut MachState, &mut dyn XnuKernel) -> R) -> R {
     let mut f = Some(f);
     let mut out = None;
+    let mut woken = Vec::new();
     k.with_mach(&mut |m, k| {
         if let Some(f) = f.take() {
             out = Some(f(m, k));
         }
+        // Waiters a released right woke (a kernel reply that will not come).
+        woken = m.ipc.take_woken();
     });
+    unblock_all(k, woken);
     out.expect("with_mach ran the closure")
 }
 

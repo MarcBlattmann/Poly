@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSNotificationCenter.postNotificationName%3Aobject%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSNotificationCenter.postNotificationName%3Aobject%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSNotificationCenter.postNotificationName:object:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSNotificationCenter postNotificationName:object:] delivers synchronously: every matching observer
+  has been called when it returns, in order of registration, on the posting thread; a post nobody
+  observes does nothing; an observer that posts another notification from its handler gets that one
+  delivered inside (nested, before the outer handler goes on); an observer removed during a delivery
+  is not called afterwards for that notification. The three forms, name and object, name object and
+  userInfo (postNotificationName:object:userInfo:) and a ready notification (postNotification:), reach
+  the same observer with the same name, the object pointer and the same userInfo content; a nil name
+  is accepted and reaches no observer registered for a name. Order of two posts is the order of the
+  calls.
+returns:
+  success: "nothing"
+errors: {}
+side_effects: "calls observers"
+threading: "the observers run on the posting thread"
+ordering:
+  - "observers called in registration order before the post returns; nested posts are delivered inside the observer that made them"
+timing:
+  typical: "microseconds per observer"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

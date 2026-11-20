@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsprocessinfo_environment_application",
+      "source_sha256": "f7a57ff1fc37fe72882882deb4d32471fb2435f130043e60f14b6fe85c4a35ee",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a407f31da4f6fe908f71d2f364a3b39c0f24fbac3e1a049642c6814fa75a63e5",
+          "exit_code": 0,
+          "stdout": "ok env != nil\nok ns_is(env[@\"FOO\"], \"bar\")\nok env[@\"EMPTY\"] != nil && [env[@\"EMPTY\"] length] == 0\nok ns_is(env[@\"U\"], \"caf\\xc3\\xa9\")\nok env[@\"NOPE\"] == nil\nok env.count == 4\nok env[@\"__CF_USER_TEXT_ENCODING\"] != nil\nok [k isKindOfClass:[NSString class]] && [env[k] isKindOfClass:[NSString class]]\nok [k isKindOfClass:[NSString class]] && [env[k] isKindOfClass:[NSString class]]\nok [k isKindOfClass:[NSString class]] && [env[k] isKindOfClass:[NSString class]]\nok [k isKindOfClass:[NSString class]] && [env[k] isKindOfClass:[NSString class]]\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d7a666420cb4a20570556a30a750b9f33defd1a6306292f62464ace39c0d79c9",
+          "exit_code": 0,
+          "stdout": "ok env != nil\nok ns_is(env[@\"FOO\"], \"bar\")\nok env[@\"EMPTY\"] != nil && [env[@\"EMPTY\"] length] == 0\nok ns_is(env[@\"U\"], \"caf\\xc3\\xa9\")\nok env[@\"NOPE\"] == nil\nok env.count == 4\nok env[@\"__CF_USER_TEXT_ENCODING\"] != nil\nok [k isKindOfClass:[NSString class]] && [env[k] isKindOfClass:[NSString class]]\nok [k isKindOfClass:[NSString class]] && [env[k] isKindOfClass:[NSString class]]\nok [k isKindOfClass:[NSString class]] && [env[k] isKindOfClass:[NSString class]]\nok [k isKindOfClass:[NSString class]] && [env[k] isKindOfClass:[NSString class]]\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsprocessinfo_environment_plain",
+      "source_sha256": "3b16172ae31f0ea4d2235fe4e2c4c128d5b55e9f7d614ab085206f008988daed",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7663a4f04fc6c9fa7c34f5e75ff227b1d4bc060d97a87c42101b7e632c9dc7db",
+          "exit_code": 0,
+          "stdout": "ok env != nil && env.count == 1\nok env[@\"HOME\"] == nil && env[@\"PATH\"] == nil && env[@\"TMPDIR\"] == nil\nok v != nil && [v hasPrefix:@\"0x\"] && [v hasSuffix:@\":0x0:0x0\"]\nok CFGetTypeID((__bridge CFTypeRef)env) == CFDictionaryGetTypeID()\nok [env isEqualToDictionary:[NSProcessInfo processInfo].environment]\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bc3bfc398f97ab5a040fa501f7799ab2e178a60edc81fe3600b2d70057d90d2c",
+          "exit_code": 0,
+          "stdout": "ok env != nil && env.count == 1\nok env[@\"HOME\"] == nil && env[@\"PATH\"] == nil && env[@\"TMPDIR\"] == nil\nok v != nil && [v hasPrefix:@\"0x\"] && [v hasSuffix:@\":0x0:0x0\"]\nok CFGetTypeID((__bridge CFTypeRef)env) == CFDictionaryGetTypeID()\nok [env isEqualToDictionary:[NSProcessInfo processInfo].environment]\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

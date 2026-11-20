@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libxpc.dylib/xpc_dictionary_get_int64.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in xpc_dictionary_get_int64.tests/macos.json.
+id: macos/api/libxpc.dylib/xpc_dictionary_get_int64
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  xpc_dictionary_get_int64(dict, key) gives the int64 stored under key, and 0 when the key is missing or the value is not an
+  int64 (a string, bool, double, uint64 or dictionary; int64 and uint64 are separate types: xpc_dictionary_get_uint64 of an int64
+  gives 0 and the other way round). xpc_dictionary_get_double of a missing key is NaN and xpc_dictionary_get_bool false;
+  type names are "int64", "uint64", "double", "bool", "string". A dictionary stored in another is retained: releasing it afterwards
+  keeps it valid, xpc_dictionary_get_dictionary gives the same object (NULL for a missing key or a value that is no dictionary),
+  and changes made through it show in the outer one.
+returns:
+  value: "the stored number, or 0"
+errors: {}
+side_effects: none
+threading: "not specified"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

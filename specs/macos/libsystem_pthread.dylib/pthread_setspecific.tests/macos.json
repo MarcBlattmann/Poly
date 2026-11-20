@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "pthread_setspecific_errors",
+      "source_sha256": "437e9b6ba7fcd12b6e1bca25352dd76b74fe9b30d8ae9ad3475ce706299f5ba9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2a6ef13eb8d51b0ae82c1fb127ab21bb943d93d266f2b130653e2323a677ce47",
+          "exit_code": 0,
+          "stdout": "ok set on a deleted key: EINVAL (22)\nok get on a deleted key: NULL\nok deleting a deleted key: EINVAL\nok set on a key number far out of range: EINVAL\nok delete of a key number far out of range: EINVAL\nok the failures did not break key creation\nok set on the new key works\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "48913dba3c98ad705a70c9b2cb54cbd13ea8e78c5b3d1d76fc93df0b0ba9776f",
+          "exit_code": 0,
+          "stdout": "ok set on a deleted key: EINVAL (22)\nok get on a deleted key: NULL\nok deleting a deleted key: EINVAL\nok set on a key number far out of range: EINVAL\nok delete of a key number far out of range: EINVAL\nok the failures did not break key creation\nok set on the new key works\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pthread_setspecific_more",
+      "source_sha256": "e2fa1026906a46878f4f0db535fc5aa6f3ea9e490f7dc15c3d0974362e8cf4cd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "acf1150c5ea87067c3f5ec7b789e24dfcf135a919c0e0d0618394453661b1f8b",
+          "exit_code": 0,
+          "stdout": "ok no thread ever read another's value\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "925a70cfdf7d0222fab42f68397edda71de73016478e8b7af2a879ef39051b29",
+          "exit_code": 0,
+          "stdout": "ok no thread ever read another's value\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

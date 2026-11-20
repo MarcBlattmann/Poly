@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:38:59",
+  "tests": [
+    {
+      "name": "exc_begincatch_rc",
+      "source_sha256": "2bb27ef74d03df70ba6f74456ebd333a065a36a07881a62b55c9d8fffc51bd62",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8e0b3c5728ff428285d36069ca75a2e9e541f22c31f94f875693f0b69d9bd437",
+          "exit_code": 0,
+          "stdout": "value rc before any throw 1\nvalue rc inside @catch (id) 2\nvalue rc after @catch 1\nvalue rc inside @catch (...) 2\nvalue rc after @catch (...) 1\nvalue rc in an inner @finally while unwinding 2\nvalue rc in the handler after the @finally 2\nvalue rc after that 1\nvalue rc in the first handler 2\nvalue rc in the handler of a rethrown exception 2\nok rethrown is the same object\nvalue rc after the rethrow was caught 1\nvalue rc in the outer handler 2\nvalue rc in the nested handler (same object thrown again) 3\nvalue rc back in the outer handler 2\nvalue rc after the nested handlers 1\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1c2569df363c53580be3ba84adbb0904a4643aa6e3c96793b0d80f355ce3f0f1",
+          "exit_code": 0,
+          "stdout": "value rc before any throw 1\nvalue rc inside @catch (id) 2\nvalue rc after @catch 1\nvalue rc inside @catch (...) 2\nvalue rc after @catch (...) 1\nvalue rc in an inner @finally while unwinding 2\nvalue rc in the handler after the @finally 2\nvalue rc after that 1\nvalue rc in the first handler 2\nvalue rc in the handler of a rethrown exception 2\nok rethrown is the same object\nvalue rc after the rethrow was caught 1\nvalue rc in the outer handler 2\nvalue rc in the nested handler (same object thrown again) 3\nvalue rc back in the outer handler 2\nvalue rc after the nested handlers 1\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_begincatch_rethrow",
+      "source_sha256": "43a008bf5d6055602716d6104739495994bf8cdc897c0f85af680774c9bc1c30",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ea5d450da8a3b035976883533beab5fcc08a2c8048dd30294910404fd08dd460",
+          "exit_code": 0,
+          "stdout": "ok @throw with no operand rethrows the caught object\nvalue rc in the final handler 2\nvalue steps 2\nvalue rc afterwards 1\nok same object after two rethrows\nvalue rc after two rethrows, in the last handler 2\nvalue handlers run 3\nvalue rc afterwards 1\nok the new one arrives\nvalue rc of the first once the handler was left by a new throw 1\nvalue rc of the second 2\nvalue rc of the second after 1\nok a superclass clause takes the rethrown subclass instance\nvalue deallocs 2\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2fd465e46f84ff2b56894b2884c902148d7099a1cf9be11dd339bbb818b65414",
+          "exit_code": 0,
+          "stdout": "ok @throw with no operand rethrows the caught object\nvalue rc in the final handler 2\nvalue steps 2\nvalue rc afterwards 1\nok same object after two rethrows\nvalue rc after two rethrows, in the last handler 2\nvalue handlers run 3\nvalue rc afterwards 1\nok the new one arrives\nvalue rc of the first once the handler was left by a new throw 1\nvalue rc of the second 2\nvalue rc of the second after 1\nok a superclass clause takes the rethrown subclass instance\nvalue deallocs 2\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

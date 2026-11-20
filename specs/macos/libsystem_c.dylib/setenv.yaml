@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_c.dylib/setenv.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in setenv.tests/macos.json.
+id: macos/api/libsystem_c.dylib/setenv
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  setenv(name, value, overwrite) sets a variable in the process environment (environ) and returns 0, or
+  returns -1 with errno EINVAL (22) when name is NULL, empty, or contains '=' (also a name ending in '='
+  or just "="); nothing is set then, and a later valid call works. Name and value are copied (changing
+  the caller's strings afterwards changes nothing; a 1999 byte value works). With overwrite 0 an existing
+  variable is left alone (result 0, old value kept); with a nonzero overwrite (1 and 7 both tried) the value
+  is replaced. A new variable is appended at the end of environ, which stays NULL-terminated; replacing a
+  variable keeps its position. 100 overwrites of one name leave one variable. (A pointer from getenv
+  taken before a replacement is not valid afterwards: a longer value frees the old string, a shorter one is
+  written over it.) Names
+  may contain spaces ("A B"), values may contain '='. An empty value is allowed.
+returns:
+  "success": "0"
+errors:
+  "invalid_name": "EINVAL (22): NULL, empty, or containing '='; result -1"
+side_effects: "changes environ and the strings it points to"
+threading: "not tested with several threads"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/mach_port_get_attributes.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in mach_port_get_attributes.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/mach_port_get_attributes
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  mach_port_get_attributes(task, name, flavor, info, &count) on a receive right: MACH_PORT_RECEIVE_STATUS (2, count 10 on
+  return) gives mps_pset (1 while in a port set), mps_seqno (messages received so far), mps_mscount (make-send count: raised
+  by MAKE_SEND, not by COPY_SEND; mach_port_set_mscount sets it), mps_qlimit (5 for a fresh port), mps_msgcount (queued
+  messages), mps_sorights (send-once rights made), mps_nsrequest (1 while a no-senders request is pending, 0 once used or
+  cancelled), mps_pdrequest (1 while a port-destroyed request is pending), mps_flags (0). A fresh port: all zero but the limit.
+  MACH_PORT_LIMITS_INFO (3, count 1) gives the queue limit; MACH_PORT_DNREQUESTS_SIZE (4, count 1) gives 0 for a new port.
+  Flavor 999 and MACH_PORT_TEMPOWNER are KERN_INVALID_ARGUMENT (4); a count of 0 is KERN_FAILURE (5); names not in the task
+  KERN_INVALID_NAME (15); a send-only name or a port set KERN_INVALID_RIGHT (17); an invalid task MACH_SEND_INVALID_DEST. With
+  a count of 5 for the receive status the call is KERN_FAILURE (5).
+returns:
+  success: "KERN_SUCCESS (0); the structure and count set"
+errors:
+  failure: "KERN_FAILURE (5): count too small"
+  invalid_argument: "KERN_INVALID_ARGUMENT (4): unknown flavor"
+  invalid_name: "KERN_INVALID_NAME (15)"
+  invalid_right: "KERN_INVALID_RIGHT (17)"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: none
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

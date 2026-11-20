@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_retainAutorelease.yaml. Observed with Objective-C test programs built with
+# clang for x86_64 and arm64 (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in
+# objc_retainAutorelease.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_retainAutorelease
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively and x86_64 under Rosetta 2; every test printed the same bytes on both architectures and on every run. Test programs are built with `poly-mac: libobjc` (linked against libobjc and the root class NSObject only, no Foundation)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  A "count" below is what the root class's retainCount method reports: 1 for a new object, one per
+  owning reference. objc_retainAutorelease(obj) is a retain followed by an autorelease, in one
+  call, returning obj: the count is one higher after the call (2 for a new object) and, once the
+  pool open at the call is popped, it is back to what it was. An override of -retain and one of
+  -autorelease are each called once per call. Used for a function that returns an object it only
+  borrows: the caller's owner may release it at once and the object still lives until the pool is
+  popped (the observed case: owner's release leaves it alive, the pop frees it). Five calls on one
+  object give count 6, and the pop returns it to 1. The release goes to the innermost pool open at
+  the call (an inner pop frees it when the owner had already released). With no pool open the
+  count stays raised for ever. nil is accepted and returned. Identical on x86_64 and arm64.
+returns:
+  object: "the argument"
+  nil: "nil"
+errors:
+  no_pool: "no error; the extra count is never released"
+side_effects: >
+  Count +1 now; one release queued in the innermost pool.
+threading: >
+  No thread-specific behaviour was observed; every test ran on the main thread of one process.
+  Behaviour with several threads is not observed.
+ordering:
+  - "-retain, then -autorelease, each once per call"
+timing:
+  typical: "microseconds: a few memory operations, no system call in the common case"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

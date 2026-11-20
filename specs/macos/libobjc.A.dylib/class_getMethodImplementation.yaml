@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/class_getMethodImplementation.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in class_getMethodImplementation.tests/macos.json.
+id: macos/api/libobjc.A.dylib/class_getMethodImplementation
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  IMP class_getMethodImplementation(Class cls, SEL name). Returns the function a message with that
+  selector would call on an instance of cls. For an implemented selector it is the method's
+  implementation: the same IMP as method_getImplementation of class_getInstanceMethod (own, inherited
+  from the superclass: the superclass's IMP, or NSObject's), and calling it with (self, _cmd, args)
+  gives the method's result. For a selector the class does not implement it never returns NULL: it
+  returns a forwarding function, the same one for every unimplemented selector and for every class,
+  different from any implemented method's IMP (it was only compared, never called);
+  class_getInstanceMethod and class_respondsToSelector still say the selector is absent. It follows
+  run-time changes at once: after class_addMethod in a superclass a subclass's answer is the new IMP,
+  after a subclass override its own, and after class_replaceMethod, method_setImplementation or
+  method_exchangeImplementations the new IMPs. Asked of a metaclass it gives class methods. A nil
+  class gives NULL, and a NULL selector gives NULL. For a selector the class does not have,
+  +resolveInstanceMethod: is called once and, if it added the method, that implementation is returned.
+  Unlike the other lookups it sends +initialize to the class (once) if it was not initialized yet.
+returns:
+  imp: "the implementation, or the common forwarding IMP (non-NULL) for an unimplemented selector"
+  null: "NULL for a nil class or a NULL selector"
+errors:
+  none: "no error codes"
+side_effects: "may send +initialize to the class (first use) and +resolveInstanceMethod: for an unknown selector"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "+initialize (if needed) runs before the IMP is returned"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

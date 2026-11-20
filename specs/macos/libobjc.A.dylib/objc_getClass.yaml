@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_getClass.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in objc_getClass.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_getClass
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  Class objc_getClass(const char *name). Looks a class up by its exact name and returns the Class, or
+  nil when no class of that name is registered. The name is compared in full and is case sensitive: a
+  prefix, a longer name, a name with a trailing space and a different case are all unknown. Classes
+  that the program's images define (compiled @interface/@implementation) are found, and so are classes
+  made at run time, but only after objc_registerClassPair: a class that was allocated and not
+  registered is not found, and neither is a name that was never used. The name given to
+  objc_allocateClassPair is copied, so changing the caller's buffer later does not change what is
+  found. Names with dots, dashes, spaces, '$', ':', '<', '>', a non-ASCII byte, a single letter, and a
+  1024-character name were all registered and found again. A metaclass is not returned for the class's
+  name (the metaclass has the same name; the lookup gives the class). The call does not send
+  +initialize. The lookup is by name only: a selector name or an instance's class name given as a
+  string is not special.
+returns:
+  found: "the Class registered under exactly that name, the same pointer on every call and the same as the compiler's class reference"
+  not_found: "nil: unknown name, empty string, wrong case, prefix, longer name, allocated-but-unregistered name"
+  null_name: "nil for a NULL name (observed)"
+errors:
+  none: "no error is reported besides the nil result; nothing is written to stderr for an unknown name"
+  not_observed: "the class-lookup hook of objc_setHook_getClass was not installed, so its effect is not observed"
+side_effects: "none; a lookup does not send +initialize and does not change any class"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "a class becomes findable at the moment objc_registerClassPair returns, not before"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

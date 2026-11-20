@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "addmethod_basic",
+      "source_sha256": "7c3e014fd8d7637be7b1090811b71c6ad81afb3a41c1cf149ef077ca3953133b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ea7dc0d61fd3de8a93a9e0040e159b784391728a9f29eb501c26cfa7f25c47d7",
+          "exit_code": 0,
+          "stdout": "ok a new selector is added\nok the class itself now has it\nok adding it again returns NO\nok a different type string does not matter\nok the first implementation is kept\nok the first type string is kept\nok NSObject has hash itself\nok a method only the superclass has can be added (override)\nok the superclass keeps its own\nok the class has its own now\nok the override is used\nok the new method is used\nok adding a new selector after registration\nok adding an existing one after registration is NO\nok the added method answers\nok adding to the superclass later does not stop a subclass method\nok the subclass keeps its own implementation\nok an inherited added method is seen\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c4a485abe2d85dffa23c834fbd1b94ab207c75e8bbcc1b8981f74ec91c1b13e0",
+          "exit_code": 0,
+          "stdout": "ok a new selector is added\nok the class itself now has it\nok adding it again returns NO\nok a different type string does not matter\nok the first implementation is kept\nok the first type string is kept\nok NSObject has hash itself\nok a method only the superclass has can be added (override)\nok the superclass keeps its own\nok the class has its own now\nok the override is used\nok the new method is used\nok adding a new selector after registration\nok adding an existing one after registration is NO\nok the added method answers\nok adding to the superclass later does not stop a subclass method\nok the subclass keeps its own implementation\nok an inherited added method is seen\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "addmethod_cache",
+      "source_sha256": "a64702fa35fae138f39ca8178cb063678b1929f87c475a8b4bc8034e08ae909c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b6f9948fbb416b719a06b42bf491739ca5e0870e52eb6733f556edaa5fcbeac3",
+          "exit_code": 0,
+          "stdout": "ok before: inherited retainCount is 1 (a)\nok before: inherited retainCount is 1 (b)\nok add override to A\nok A's next message uses it\nok a subclass instance sees it too\nok add override to B\nok B's own now wins\nok A is unchanged by B's\nok NSObject itself is unchanged\nok plain NSObject instance unchanged\nok class method added through the metaclass\nok a class message uses it\nok subclass inherits the class method\nok instances do not respond\nok the metaclass does\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d4992cd222b71b37faf0c6c7cd59bbdd61346feb9abd7f51fc5a31270b20ba83",
+          "exit_code": 0,
+          "stdout": "ok before: inherited retainCount is 1 (a)\nok before: inherited retainCount is 1 (b)\nok add override to A\nok A's next message uses it\nok a subclass instance sees it too\nok add override to B\nok B's own now wins\nok A is unchanged by B's\nok NSObject itself is unchanged\nok plain NSObject instance unchanged\nok class method added through the metaclass\nok a class message uses it\nok subclass inherits the class method\nok instances do not respond\nok the metaclass does\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

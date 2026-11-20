@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d45892328ab7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:26:42Z",
+  "tests": [
+    {
+      "name": "cnet_iocp",
+      "exe_sha256": "1e744694728941eaf25b54727527624798dd8b965603f67d97381efb90339274",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bmV3IHBvcnQ6IGhhbmRsZSB5ZXMKZW1wdHkgcG9ydCwgNTAgbXM6IHJldHVybmVkIG5vIChlcnJvciAyNTgpLCBjb3VudCAweGFhYWEsIGtleSAweGFhYWEsIE9WRVJMQVBQRUQgbnVsbCB5ZXMKdGhpcmQgcG9zdGVkOiByZXR1cm5lZCB5ZXMgKGVycm9yIDApLCBjb3VudCAzLCBrZXkgMCwgT1ZFUkxBUFBFRCBudWxsIHllcwp3cml0ZSA1IGJ5dGVzOiByZXR1cm5lZCB5ZXMgY291bnQgNQpyZWFkIG9mIHRoZSB3YWl0aW5nIDUgYnl0ZXM6IHJldHVybmVkIHllcyBjb3VudCA1CmEgcGFja2V0IGJlZm9yZSB0aGUgZGF0YSBjYW1lOiBubwpwYWNrZXQgb2YgdGhlIGNhbmNlbGxlZCByZWFkOiByZXR1cm5lZCBubyAoZXJyb3IgOTk1KSwgY291bnQgMCwga2V5IDcsIE9WRVJMQVBQRUQgaXMgdGhlIGNhbGwncyB5ZXMKYSB3YWl0ZXIgYmxvY2tlZCBpbiBHZXRRdWV1ZWRDb21wbGV0aW9uU3RhdHVzKElORklOSVRFKTogc3RpbGwgd2FpdGluZyB5ZXMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "new port: handle yes\nempty port, 50 ms: returned no (error 258), count 0xaaaa, key 0xaaaa, OVERLAPPED null yes\nthird posted: returned yes (error 0), count 3, key 0, OVERLAPPED null yes\nwrite 5 bytes: returned yes count 5\nread of the waiting 5 bytes: returned yes count 5\na packet before the data came: no\npacket of the cancelled read: returned no (error 995), count 0, key 7, OVERLAPPED is the call's yes\na waiter blocked in GetQueuedCompletionStatus(INFINITE): still waiting yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 406
+    },
+    {
+      "name": "cnet_iocp_c",
+      "exe_sha256": "d060f40d5987aa58a036bc9924df47e65b15986ceae19f73bfd299a40193d6eb",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bGFzdCBlcnJvciBhZnRlciBpdDogMjU4CnNlY29uZCBwb3N0ZWQ6IHJldHVybmVkIHllcyAoZXJyb3IgMCksIGNvdW50IDIsIGtleSA5OSwgT1ZFUkxBUFBFRCBudWxsIHllcwphc3NvY2lhdGluZyB0aGUgc2VydmVyIGVuZCBhZ2FpbjogTlVMTCAoZXJyb3IgODcpCmEgc2Vjb25kIHBhY2tldCBmb3IgaXQ6IG5vCmEgcmVhZCB3aXRoIG5vIGRhdGE6IHJldHVybmVkIG5vIChlcnJvciA5OTcpCmEgdGhpcmQgcGFja2V0OiBubwpwYWNrZXQgb2YgdGhlIHJlYWQgdGhlIHBlZXIncyBjbG9zZSBlbmRlZDogcmV0dXJuZWQgbm8gKGVycm9yIDEwOSksIGNvdW50IDAsIGtleSA3LCBPVkVSTEFQUEVEIGlzIHRoZSBjYWxsJ3MgeWVzCnRoZSB3YWl0ZXIgZ290OiByZXR1cm5lZCB5ZXMsIGNvdW50IDc3LCBrZXkgOTksIG9uIGFub3RoZXIgdGhyZWFkIHllcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "last error after it: 258\nsecond posted: returned yes (error 0), count 2, key 99, OVERLAPPED null yes\nassociating the server end again: NULL (error 87)\na second packet for it: no\na read with no data: returned no (error 997)\na third packet: no\npacket of the read the peer's close ended: returned no (error 109), count 0, key 7, OVERLAPPED is the call's yes\nthe waiter got: returned yes, count 77, key 99, on another thread yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 412
+    }
+  ]
+}

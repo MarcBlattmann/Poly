@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d45892328ab7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:26:42Z",
+  "tests": [
+    {
+      "name": "cnet_ipc",
+      "exe_sha256": "a58acc5714880c6c8eccee1e37c6923418c08681ffc3463dde6abc8df893a72e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Tm90aWZ5QWRkckNoYW5nZSB3aXRoIGFuIE9WRVJMQVBQRUQ6IDk5NyAoOTk3ID0gcGVuZGluZyksIGV2ZW50IHNpZ25hbGxlZCBubwpDYW5jZWxJUENoYW5nZU5vdGlmeSBhZ2Fpbjogbm87IGVycm9yIDAKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NotifyAddrChange with an OVERLAPPED: 997 (997 = pending), event signalled no\nCancelIPChangeNotify again: no; error 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 115
+    },
+    {
+      "name": "cnet_ipc_b",
+      "exe_sha256": "5a66e82ecd2c9782cd1bae404329341aada7579c0f5cf7f5dcb707ac10f47b01",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Q2FuY2VsSVBDaGFuZ2VOb3RpZnk6IHllczsgZXJyb3IgYWZ0ZXIgaXQgMApDYW5jZWxJUENoYW5nZU5vdGlmeSBvZiBhbiB1bmtub3duIE9WRVJMQVBQRUQ6IG5vOyBlcnJvciAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "CancelIPChangeNotify: yes; error after it 0\nCancelIPChangeNotify of an unknown OVERLAPPED: no; error 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 113
+    }
+  ]
+}

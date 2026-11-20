@@ -203,3 +203,30 @@ expected), the buffer-size and period arithmetic (`2 * rate / 100 + 96` frames a
 it), padding, the clock counting bytes (frequency 384000, position equal to the bytes written when played out), the event rate
 (one per 10 ms) and the session state notifications. Device removal under a running stream was observed once, by restarting
 the Windows Audio service: `AUDCLNT_E_DEVICE_INVALIDATED` everywhere (in the sheet of `IAudioClient.Stream`, no test).
+
+### W2 implemented (impl-win-audio, 2026-11-20)
+
+- **`mmdevapi.dll`** is Poly's own: the enumerator, the render endpoint, the audio client (`IAudioClient` 1–3), the
+  render client, the clock and the session ([ADR 0259](../adr/0259-wasapi-an-engine-per-client-on-10-ms-device-periods.md)).
+  The rules are in `poly_kernelbase::wasapi`; an engine thread per client feeds `\Device\PolyAudio` on its own 10 ms
+  clock. The 24 visible tests pass on Poly. `audioses.dll` is an empty server for now.
+- **10 ms device periods** (six in flight, on virtio-sound and Intel HDA): a 10 ms wait on `\Device\PolyAudio` used to
+  come at about 0 or 20 ms; now 293 of 300 come within 2 ms of 10 ms.
+- **Chrome for Windows plays** with its default sandbox, through WASAPI and `\Device\PolyAudio` (WHPX desktop,
+  `--record-sound`):
+  - **The 440 Hz page:** the tone is recorded clean at its level (RMS 11596 of the expected 11585, median frequency
+    440 Hz). It has 3 to 9 short gaps (48 to 100 ms in 3.9 s). Earlier engine versions had 26 to 30.
+  - **YouTube** ("Me at the zoo", then the autoplayed next video) plays and is recorded. While the page loads and the
+    video runs, the guest's CPU is saturated (software video decoding and rendering), so the device stream underruns
+    in about 11 % of its periods. Poly's scheduler has no thread priorities: Chrome's audio threads and the engine wait
+    beside the renderer. The engine's schedule restarted 1 to 6 times per stream (stalls over 100 ms). Thread
+    priorities are the next step for smooth video sound.
+  - **Latency:** Chrome reports an output latency of 24 ms (its own view). Poly's pipeline adds the client's buffer
+    (up to 22 ms), the engine's lead (20 ms) and the device's six periods (60 ms), plus the host's backend: about
+    100 ms from `ReleaseBuffer` to the speaker.
+- **The sandbox.** Chrome's audio process has a restricted token at Low integrity: restricting SIDs Users, Everyone,
+  INTERACTIVE, Authenticated Users, RESTRICTED, the user and the logon SID; one privilege; no AppContainer. It runs in
+  a job (limits 0x2508). Poly let it open `\Device\PolyAudio`, which has no security descriptor. The engine now asks
+  only for `FILE_READ_ATTRIBUTES | SYNCHRONIZE` (the requests need no access), so a Windows-like label check on the
+  device would not refuse it. What Windows itself grants such a token for audio (it talks to the audio service, not a
+  device) is a question for the spec agent.
