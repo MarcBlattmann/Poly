@@ -104,6 +104,7 @@ pub unsafe extern "system" fn DeriveAppContainerSidFromAppContainerName(name: *c
 }
 
 mod env;
+mod policy;
 mod profile;
 
 /// The entry point (`DllMain`): nothing to set up.
@@ -111,7 +112,5 @@ mod profile;
 pub extern "system" fn userenv_main(_module: *mut u8, _reason: u32, _reserved: *mut u8) -> i32 {
     1
 }
-
-mod delayed;
 
 mod apps;
