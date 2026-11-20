@@ -265,6 +265,33 @@ fn own_private_memory_is_charged_and_bound_by_job_limits_on_the_process_lock_alo
     assert_eq!(f.sys.commit.total(), 0);
 }
 
+/// The kernel runs a process's memory calls on its own memory without the end-of-call work
+/// (ADR 0262, [`crate::dispatch_own_memory`]): those four calls on `NtCurrentProcess()`, and no
+/// other call.
+#[test]
+fn own_memory_calls_are_the_ones_without_end_of_call_work() {
+    let mut f = Fake::new();
+    let rw = u64::from(PAGE_READWRITE);
+    let kind = u64::from(MEM_RESERVE | MEM_COMMIT);
+    let (b, s) = (f.put_u64(0), f.put_u64(0x2000));
+    let st = f.call_own_memory(Service::AllocateVirtualMemory, &[SELF, b, 0, s, kind, rw]);
+    assert_eq!(st, Some(STATUS_SUCCESS));
+    let base = f.u64_at(b);
+    let info = f.alloc(48);
+    let st = f.call_own_memory(Service::QueryVirtualMemory, &[SELF, base, 0, info, 48, 0]);
+    assert_eq!(st, Some(STATUS_SUCCESS));
+    // Another information class, another process, another call: the full path.
+    assert_eq!(f.call_own_memory(Service::QueryVirtualMemory, &[SELF, base, 2, info, 48, 0]), None);
+    let h = other_process(&mut f);
+    let (b2, s2) = (f.put_u64(0), f.put_u64(0x1000));
+    assert_eq!(f.call_own_memory(Service::AllocateVirtualMemory, &[h, b2, 0, s2, kind, rw]), None);
+    assert_eq!(f.call_own_memory(Service::Close, &[h]), None);
+    let z = f.put_u64(0);
+    let st = f.call_own_memory(Service::FreeVirtualMemory, &[SELF, b, z, u64::from(MEM_RELEASE)]);
+    assert_eq!(st, Some(STATUS_SUCCESS));
+    assert_eq!(query(&mut f, base).state, MEM_FREE);
+}
+
 #[test]
 fn memory_of_another_process_is_allocated_written_read_protected_and_freed() {
     let mut f = Fake::new();

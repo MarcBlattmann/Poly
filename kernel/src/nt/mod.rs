@@ -1340,14 +1340,15 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let trace = TRACE.load(core::sync::atomic::Ordering::Relaxed);
     let trail = TRAIL_LEN.load(core::sync::atomic::Ordering::Relaxed);
     // A call that needs neither the NT state nor the work below (the clock): no lock at all
-    // (ADR 0247). Traced runs keep every call on the full path.
-    if trace == 0
-        && trail == 0
-        && !crate::arch::user::compat()
-        && !apitrace::wanted()
-        && let Some(outcome) = poly_personality_nt::dispatch_unlocked(&mut k, regs)
-    {
-        return outcome;
+    // (ADR 0247). A process's memory calls on its own memory: its own lock, none of the work
+    // below (ADR 0262). Traced runs keep every call on the full path.
+    if trace == 0 && trail == 0 && !crate::arch::user::compat() && !apitrace::wanted() {
+        if let Some(outcome) = poly_personality_nt::dispatch_unlocked(&mut k, regs) {
+            return outcome;
+        }
+        if let Some(outcome) = poly_personality_nt::dispatch_own_memory(&mut k, regs) {
+            return outcome;
+        }
     }
     note_command_line(process.pid);
     let traced =

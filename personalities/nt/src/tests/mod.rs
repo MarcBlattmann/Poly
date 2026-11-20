@@ -752,6 +752,21 @@ impl Fake {
 
     /// Call `service` with `args`, the way `ntdll`'s stub would.
     pub fn call(&mut self, service: Service, args: &[u64]) -> NtStatus {
+        let mut regs = self.regs(service, args);
+        assert_eq!(crate::dispatch_with(self, &mut regs), poly_abi::Outcome::Handled);
+        NtStatus(regs.rax as u32)
+    }
+
+    /// [`crate::dispatch_own_memory`] of `service`: its status if it took the call.
+    pub fn call_own_memory(&mut self, service: Service, args: &[u64]) -> Option<NtStatus> {
+        let mut regs = self.regs(service, args);
+        let outcome = crate::dispatch_own_memory(self, &mut regs)?;
+        assert_eq!(outcome, poly_abi::Outcome::Handled);
+        Some(NtStatus(regs.rax as u32))
+    }
+
+    /// The registers (and stack) of a call of `service` with `args`.
+    fn regs(&mut self, service: Service, args: &[u64]) -> SyscallRegs {
         let mut regs = SyscallRegs { rax: u64::from(service.number()), rsp: STACK, ..Default::default() };
         let regs_args = [&mut regs.r10, &mut regs.rdx, &mut regs.r8, &mut regs.r9];
         for (slot, &a) in regs_args.into_iter().zip(args) {
@@ -760,8 +775,7 @@ impl Fake {
         for (i, &a) in args.iter().enumerate().skip(4) {
             self.mem.write_bytes(STACK + 0x28 + 8 * (i as u64 - 4), &a.to_le_bytes()).unwrap();
         }
-        assert_eq!(crate::dispatch_with(self, &mut regs), poly_abi::Outcome::Handled);
-        NtStatus(regs.rax as u32)
+        regs
     }
 }
 

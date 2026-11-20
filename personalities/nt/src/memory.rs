@@ -114,7 +114,7 @@ const SPECIAL_ALLOCATION: u32 = MEM_RESET | MEM_RESET_UNDO | MEM_RESERVE_PLACEHO
 
 /// What the calls of a process on its own memory look like when only its own lock is held
 /// (ADR 0262): handle `NtCurrentProcess()`.
-fn is_current(process: u64) -> bool {
+pub(crate) fn is_current(process: u64) -> bool {
     Handle(process) == Handle::CURRENT_PROCESS
 }
 
