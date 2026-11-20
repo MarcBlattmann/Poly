@@ -121,7 +121,7 @@ Seeded from (names only):
     <td align="center" width="110"><img src="https://raw.githubusercontent.com/chromium/chromium/main/chrome/app/theme/chromium/product_logo_64.png" width="40" height="40" alt="Chromium"><br><b>Chromium</b><br><sub>Linux</sub></td>
     <td align="center" width="110"><img src="https://cdn.simpleicons.org/googlechrome" width="40" height="40" alt="Google Chrome"><br><b>Google Chrome</b><br><sub>Linux</sub></td>
     <td align="center" width="110"><img src="https://cdn.simpleicons.org/googlechrome" width="40" height="40" alt="Chrome"><br><b>Chrome</b><br><sub>Windows (beta)</sub></td>
-    <td align="center" width="110"><img src="https://cdn.simpleicons.org/7zip" width="40" height="40" alt="7-Zip"><br><b>7-Zip</b><br><sub>Windows</sub></td>
+    <td align="center" width="110"><img src="https://cdn.simpleicons.org/7zip/888888" width="40" height="40" alt="7-Zip"><br><b>7-Zip</b><br><sub>Windows</sub></td>
     <td align="center" width="110"><img src="https://cdn.simpleicons.org/git" width="40" height="40" alt="Git"><br><b>Git</b><br><sub>Windows</sub></td>
   </tr>
 </table>
