@@ -42,7 +42,7 @@ Roadmap progress and API coverage for [Poly](../../README.md). See [docs/ROADMAP
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,604 | 1,099 | 3,458 | 3,786 | 52,965 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,604 | 1,098 | 3,458 | 3,787 | 52,965 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 20 | 0 | 76 | 421 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 160 | 880,397 | 0 | 0 |
 
