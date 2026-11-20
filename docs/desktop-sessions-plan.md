@@ -138,14 +138,116 @@ ioctl semantics) before an implementer starts.
 | **B5 Session choice** | Poly's login screen (users, session list from `wayland-sessions`, last choice remembered); hand-over and take-back of the screen; Settings → Desktop installs or removes a desktop | M | no | **The feature:** pick Poly, Plasma or GNOME at login; switch by logging out |
 | **B6 Windows apps bridge** | `poly-wl-bridge` (§4.2 A): top-levels, popups, input, focus, client-side frame under GNOME, DPI from the session's scale | M–L | no | Notepad++/Chrome for Windows as normal windows in Plasma and GNOME |
 | **B7 Desktop features** | XDG entries for Windows apps, the installer as MIME handler, notifications and tray through D-Bus | S–M | no | Double-click a `.exe` in Dolphin or Nautilus; Windows apps in GNOME's and Plasma's app grids |
-| **B8 Lean OS installer** | Six steps: language and keyboard, disk, user, desktop (Poly / GNOME / Plasma), default browser, done. Needs Phase 11's UEFI boot and disk installer | M | no | The installer picks the desktop; Poly's stays the default |
+| **B8 Lean OS installer** | Six steps: language and keyboard, disk, user, desktop (Poly / GNOME / Plasma), default browser, done. Split into I1–I6 in §6 | see §6 | no | The installer picks the desktop; Poly's stays the default |
 
 B0 and B1 are kernel work and come first. They also help Poly's own desktop: hotplug, and libinput
 for Linux apps that open input devices. B3 and B4 are open-ended. They are probes first, with a stop
 rule: if one needs more than its batch, record the stops and ask the owner. B6 does not depend on
 B3/B4: it can be built and tested under weston (B1).
 
-## 6. Risks
+## 6. Installer flow
+
+The owner's decision (2026-11-20): Poly's OS installer works like Windows' setup, but asks only what
+matters. There are no telemetry, account or advertising pages. Everything else gets a sensible
+default that can be changed later in Settings.
+
+1. Language and keyboard layout
+2. Target disk
+3. User name and password
+4. Desktop: **Poly (default)** / GNOME / KDE Plasma
+5. Default browser: **Chromium (preinstalled)** / Google Chrome / Firefox / …, installed during setup
+   if it isn't preinstalled
+6. Finish: the first boot goes straight into the chosen desktop
+
+### 6.1 What exists today
+
+There is **no OS installer and no first-boot setup.** Poly runs from disk images that `cargo xtask`
+builds on the host. The pieces an installer can build on:
+
+| Piece | Today | Where |
+|---|---|---|
+| Root file system | Built on the host: Debian 13 packages pinned in `tools/xtask/chromium.lock` (from snapshot.debian.org), unpacked in pure Rust and written by `poly-ext2`'s formatter (`no_std`, so it can run in the guest too). `dpkg --configure -a` runs on the first install of a package (54 s) | ADR 0130, 0147, 0173; `tools/xtask/src/chromium.rs`, `rootdisk.rs` |
+| Boot | QEMU PVH, a virtio-blk disk without a partition table. UEFI, NVMe and "Installer, disk encryption, updates" are open in Phase 11 | ADR 0019, roadmap Phase 11 |
+| Packages | Poly's installer app runs Debian's own `apt`/`dpkg` with a progress window, reads `.deb`s and the dpkg database (`crates/poly-pkg`), and uninstalls (ADR 0180) | ADR 0132, 0173, 0180; `userland/poly-installer-app` |
+| Users | Fixed: the desktop runs as root, and apps run as user `poly` (uid 1000) through `poly-as-user`. The Windows side has one user, `poly` (`RegisteredOwner`, `C:\Users\poly`), and its `InstallDate` is the first boot | ADR 0218, 0066, 0083, 0171 |
+| Language | None: the shell is English. The C runtime has locales for Windows programs | ADR 0094 |
+| Keyboard | Layouts are data (US, Swiss German, …); the shell's setting reaches Windows programs | ADR 0020, 0209, 0212 |
+| Settings | Per user: `~/.config/poly/shell.conf` (`keyboard`, `time_zone`, `scale`, `theme`, wallpaper, volume, shortcuts); unknown keys are kept | ADR 0117, 0179; `crates/poly-shell/src/settings.rs` |
+| Default browser | `/etc/xdg/mimeapps.list` names Chromium; `xdg-settings` can change it (ADR 0218 dropped `$BROWSER` so that it can) | ADR 0147, 0218 |
+
+### 6.2 What each step needs
+
+Sizes come from apt on Debian 13 at the snapshot Poly's disk uses, measured in a throwaway
+`debian:trixie` container. The base row is Chromium with its recommends: **289 MB to download, 1.1 GB
+installed.** The other rows are *extra* on top of that base: the combined total minus the base, so the
+shared libraries are counted once.
+
+| Choice | Extra download | Extra installed |
+|---|---|---|
+| GNOME, Debian's full task (`task-gnome-desktop`) | ~800 MB | ~3.2 GB |
+| GNOME core (`gnome-core`) | ~550 MB | ~2.3 GB |
+| GNOME bare (shell, session, Files, Terminal, no recommends) | ~90 MB | ~350 MB |
+| KDE Plasma, Debian's full task (`task-kde-desktop`) | ~1.4 GB | ~5.0 GB |
+| KDE Plasma desktop (`kde-plasma-desktop`) | ~950 MB | ~3.2 GB |
+| KDE Plasma bare (workspace, Dolphin, Konsole, no recommends) | ~220 MB | ~710 MB |
+| Firefox ESR (`firefox-esr`) | ~110 MB | ~420 MB |
+| Google Chrome (Google's `.deb`, from dl.google.com) | 153 MB | not measured (about 13 extra packages, ADR 0218) |
+
+The "bare" sets are lower bounds, not tested desktops. Debian's task packages also bring a full
+office suite and games, which "no bloat" leaves out. Each desktop's set is defined in batch B3/B4,
+between "bare" and "core".
+
+| Step | What it needs | Default |
+|---|---|---|
+| **1. Language and keyboard** | Sets the locale (`LANG`, generated by Debian's `locales`); the shell's `keyboard`; the console's layout; XKB for X11 and for foreign desktops (`/etc/default/keyboard`); and the Windows side's user locale and layout (ADR 0094, 0209). Poly's own shell stays English until it has translations: the step sets formats and the apps' language | Guessed from the medium's boot language, US layout |
+| **2. Disk** | Lists disks (virtio-blk now, NVMe with Phase 11) and, for "use the whole disk", writes a GPT with an EFI system partition (FAT) and an ext4 root (`poly-ext2` already formats). The root gets a copy of the medium's base root, Poly's files and the boot loader (Phase 11's UEFI boot). Space needed: 1.1 GB base, plus the desktop and browser chosen, plus room to grow; the installer shows the total. No dual-boot editing in the first version | The only or largest disk; a warning that it is wiped |
+| **3. User** | A real account: `/etc/passwd`/`shadow` entries made by Debian's own tools (`useradd`, `chpasswd`), a home directory, the groups for video, input and sound, and the same name on the Windows side (`C:\Users\<name>`, its SID, ADR 0171) and later `/Users/<name>`. The desktop and apps then run as that user, not as root and `poly`; this is roadmap Phase 8's "one user home" item | — (asked) |
+| **4. Desktop** | Poly's desktop: nothing extra. GNOME or Plasma: its package set (above) installed into the new root with `apt`, plus what Phase 12's B0–B2 make work (udev, seat, logind). Settings → Desktop can add or remove one later | Poly |
+| **5. Default browser** | Chromium is already in the base (the base needs a browser to install apps, ADR 0147). Firefox ESR from Debian; Google Chrome from Google's `.deb` (its own apt source, as when a user installs it, ADR 0218). The choice is written to `mimeapps.list` and, for Windows programs, to the shell's URL association (roadmap Phase 8: "file associations") | Chromium |
+| **6. Finish** | Writes the default session, logs the new user in automatically **once** (first boot only), and starts the chosen desktop. From the second boot on, the login screen (B5) asks for the password | — |
+
+**Offline or downloaded.** The install medium is Poly's live desktop (today's Debian disk) plus a
+local apt repository. Recommended:
+
+- **Standard medium:** the base with Chromium only (about 300 MB of packages). Poly's desktop with
+  Chromium installs **with no network**. GNOME, Plasma, Firefox and Chrome are downloaded during setup
+  from the pinned snapshot (Google's for Chrome), with the size shown next to each choice. Without a
+  network they are greyed out ("needs internet"), and Settings offers them later.
+- **Full medium (optional):** the GNOME and Plasma "core" sets and Firefox in the medium's repository,
+  about 2.5–3 GB more (the sets overlap, and the combined size is not measured yet). Everything
+  installs offline except Google Chrome, which Google distributes only itself.
+- Either way the packages are pinned in a lock file like `chromium.lock`, so an installed system is
+  the same everywhere. Updates come later through apt (Phase 11's "updates").
+
+### 6.3 How the desktop choice is stored and switched later
+
+- **System default:** `/etc/poly/session.conf` (`default-session=poly|gnome|plasma`), written by the
+  installer and by Settings → Desktop.
+- **Per user:** the login screen keeps each user's last session in `/var/lib/poly/users/<name>.conf`
+  (root-owned, read before anyone logs in), as AccountsService does on other distributions.
+- **The sessions themselves** are the `.desktop` files in `/usr/share/wayland-sessions/` (§4.1). Poly's
+  own is always there; a desktop's appears when its packages are installed.
+- **Switching:** pick another session on the login screen (log out first). Settings → Desktop installs
+  a desktop that isn't there (with the same apt progress as the installer) or removes one. Removing the
+  desktop that is someone's last choice falls back to Poly's. Poly's own settings (`shell.conf`) stay
+  untouched, whichever desktop is used.
+
+### 6.4 Installer batches
+
+| Batch | What | Size | Depends on | What the user sees |
+|---|---|---|---|---|
+| **I1 Real user accounts** | Accounts made with Debian's tools; the desktop and apps run as the logged-in user; the Windows side's profile and SID follow the user's name | M | — | Poly no longer runs the desktop as root; `C:\Users\<name>` |
+| **I2 Language and keyboard** | Locale generation and `LANG`, the keyboard everywhere (shell, console, XKB, Windows side) from one setting | S–M | — | Settings → Region; installer page 1 |
+| **I3 Packages during setup** | Lock files for the desktop and browser sets; a local apt repository on the medium plus the snapshot; installing into a target root (`apt` with a root directory, `dpkg --root`), reusing the installer app's progress (ADR 0173) | M | B3/B4 for the desktop sets | Settings → Desktop / Default apps install with progress |
+| **I4 Disk and boot** | GPT, EFI system partition, ext4 root, copy of the base, boot loader; the medium as an image built by `cargo xtask` (an installer image beside today's disks) | L | Phase 11 (UEFI, NVMe) | Poly installs onto a real or virtual disk |
+| **I5 Setup app** | A native six-page app in the Alpine look, running on the live medium's desktop; the size and network notes per choice; no account, telemetry or ad pages | M | I1–I4 | **The installer** |
+| **I6 First boot** | `session.conf`, auto-login once, `mimeapps.list`, then the login screen (B5) | S | I5, B5 | First boot lands in the chosen desktop |
+
+I1 and I2 are worth doing early: they improve Poly's own desktop today. I3 with only the browser
+sets (Firefox, Chrome) needs none of the foreign-desktop work, and gives Settings → Default apps. The
+GNOME and Plasma choices show up in the installer only once B3/B4 have made those sessions run.
+
+## 7. Risks
 
 - **GNOME and systemd.** Recent GNOME sessions are started by `systemd --user`. Running a user
   manager without systemd as PID 1 is unproven on Poly, and is the biggest unknown here.

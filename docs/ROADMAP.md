@@ -241,7 +241,11 @@ on Poly's desktop, and that weston on Poly's DRM/KMS gets as far as input.
 - [ ] Session choice: Poly's own login screen lists the users and the installed sessions (Poly is the default, GNOME, KDE Plasma); switching is a log-out, never a reinstall; desktops are added and removed from Settings
 - [ ] Windows (and later macOS) apps under a foreign desktop: a bridge shows each window as a Wayland window of GNOME's or Plasma's compositor, with input, focus, popups and its frame
 - [ ] Poly's features under a foreign desktop: launcher entries for Windows apps, Poly's installer opens `.deb`/`.rpm`/AppImage/`.exe`/`.msi` from the foreign file manager, notifications and tray icons through D-Bus
-- [ ] The lean OS installer in six steps: language and keyboard, disk, user, desktop (Poly / GNOME / KDE Plasma), default browser, done (on Phase 11's installer)
+- [ ] Real user accounts: the user made at install logs in, the desktop and apps run as that user (not root), and the Windows side's profile follows the name
+- [ ] One language and keyboard setting for everything: locale, the shell, the console, X11 and foreign desktops, the Windows side
+- [ ] Desktops and browsers install into a root from pinned package sets, offline from the install medium or downloaded (Chromium is preinstalled; Firefox and Google Chrome on request); Settings → Desktop and Default apps use the same path
+- [x] ⚖️ Decided (owner, 2026-11-20): the OS installer works like Windows' setup but asks only six things (language and keyboard, disk, user and password, desktop with Poly as the default, default browser, finish); no telemetry, account or ad pages; everything else has defaults that Settings changes later
+- [ ] The lean OS installer in those six steps, on Phase 11's disk and UEFI boot: GPT, EFI partition and ext4 root, the chosen desktop and browser installed, the first boot logs the new user straight into the chosen desktop
 - [ ] **Milestone:** the same Poly install logs into Poly's desktop, GNOME and KDE Plasma in turn, and Windows and Linux apps run in each
 
 ## Ongoing (every phase)
