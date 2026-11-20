@@ -22,6 +22,7 @@ rules:
   no_hints: "no hints: one entry with socket type 0, ai_flags 0x4"
   non_ascii: "a numeric host with a non-ASCII digit character (U+0661) and AI_NUMERICHOST: 11001"
   free: "FreeAddrInfoW(NULL) returns without harm"
+  same_as_getaddrinfo_timing: "In every lookup of the tests of getaddrinfo.FailureTiming, getaddrinfo.SingleLabel and getaddrinfo.Families GetAddrInfoW gives the same code and entries as getaddrinfo with the same arguments and the same time class (new fully qualified name: 11001 in milliseconds; new single-label name: 11001 after about 1.3 s, with AI_DNS_ONLY in milliseconds; hosts-file names with the same entries per family)."
 errors:
   host_not_found: "WSAHOST_NOT_FOUND (11001)"
   service: "WSATYPE_NOT_FOUND (10109)"
