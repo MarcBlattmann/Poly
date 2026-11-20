@@ -629,6 +629,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-squirrel"
+version = "0.0.1"
+dependencies = [
+ "poly-pe",
+ "poly-zip",
+]
+
+[[package]]
 name = "poly-stubs"
 version = "0.0.1"
 dependencies = [
@@ -791,6 +799,13 @@ name = "poly-x509"
 version = "0.0.1"
 dependencies = [
  "poly-crypto",
+]
+
+[[package]]
+name = "poly-zip"
+version = "0.0.1"
+dependencies = [
+ "poly-png",
 ]
 
 [[package]]

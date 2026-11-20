@@ -1,0 +1,14 @@
+[package]
+name = "poly-zip"
+description = "Reading zip archives (PKWARE's APPNOTE.TXT, the public .ZIP File Format Specification): the central directory, ZIP64, stored and deflated entries (RFC 1951, poly-png's decoder) with their CRC-32 checked, Open Packaging Conventions part names. no_std with alloc, host-tested"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-png = { path = "../poly-png" }
+
+[lints]
+workspace = true

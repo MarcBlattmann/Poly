@@ -1,0 +1,15 @@
+[package]
+name = "poly-squirrel"
+description = "Squirrel installers unpacked by Poly (W6, the owner's decision: no .NET Framework): finding the package bundle in a Squirrel Setup.exe's resources, reading the NuGet package's .nuspec, choosing the app's program, the folders, shortcuts and Uninstall key of an install; from public format documents only. no_std with alloc, host-tested"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+poly-pe = { path = "../poly-pe" }
+poly-zip = { path = "../poly-zip" }
+
+[lints]
+workspace = true
