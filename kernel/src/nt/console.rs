@@ -334,6 +334,7 @@ fn ctrl_thread(process: ProcessId, routine: u64, event: u32) {
         suspended: false,
         desired_access: THREAD_ALL_ACCESS,
         security: None,
+        ..Default::default()
     };
     match sched::create_thread(process, creator, &memory, req) {
         Ok(created) => {

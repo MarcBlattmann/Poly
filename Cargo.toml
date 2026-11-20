@@ -7,6 +7,7 @@
 resolver = "3"
 members = [
     "crates/poly-a64",
+    "crates/poly-a64-jit",
     "crates/poly-abi",
     "crates/poly-acpi",
     "crates/poly-audio",
@@ -51,6 +52,7 @@ members = [
     "crates/poly-libm",
     "crates/poly-line",
     "crates/poly-logline",
+    "crates/poly-timeline",
     "crates/poly-loop",
     "crates/poly-mach",
     "crates/poly-macho",
@@ -129,6 +131,7 @@ rust-version = "1.97"
 
 [workspace.dependencies]
 poly-a64 = { path = "crates/poly-a64" }
+poly-a64-jit = { path = "crates/poly-a64-jit" }
 poly-abi = { path = "crates/poly-abi" }
 poly-acpi = { path = "crates/poly-acpi" }
 poly-audio = { path = "crates/poly-audio" }
@@ -172,6 +175,7 @@ poly-libm = { path = "crates/poly-libm" }
 poly-lnk = { path = "crates/poly-lnk" }
 poly-line = { path = "crates/poly-line" }
 poly-logline = { path = "crates/poly-logline" }
+poly-timeline = { path = "crates/poly-timeline" }
 poly-loop = { path = "crates/poly-loop" }
 poly-mach = { path = "crates/poly-mach" }
 poly-macho = { path = "crates/poly-macho" }

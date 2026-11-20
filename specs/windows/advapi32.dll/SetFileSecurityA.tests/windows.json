@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "sfsa_basic",
+      "exe_sha256": "2a2e80bd13bd6d648f5055692b6915c539f6a42717b36a9025c90e74d509c4ff",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmlsZSBtYWRlOiB5ZXMKREFDTDogb2s7IHJlYWRzIGJhY2sgRDooQTs7RkE7OztCQSkoQTs7RlI7OztXRCkKb3duZXIgYW5kIGdyb3VwOiBvazsgcmVhZCBiYWNrIE86QkFHOldECk5VTEwgREFDTCwgcHJvdGVjdGVkOiBvazsgcmVhZHMgYmFjayBEOk5PX0FDQ0VTU19DT05UUk9MCm1pc3NpbmcgZmlsZTogZXJyb3IgMgptaXNzaW5nIGRpcmVjdG9yeTogZXJyb3IgMwpOVUxMIG5hbWU6IG9rIDAsIGVycm9yIDEyMwpOVUxMIGRlc2NyaXB0b3I6IG9rIDAsIGVycm9yIDk5OApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "file made: yes\nDACL: ok; reads back D:(A;;FA;;;BA)(A;;FR;;;WD)\nowner and group: ok; read back O:BAG:WD\nNULL DACL, protected: ok; reads back D:NO_ACCESS_CONTROL\nmissing file: error 2\nmissing directory: error 3\nNULL name: ok 0, error 123\nNULL descriptor: ok 0, error 998\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

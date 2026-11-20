@@ -325,6 +325,8 @@ pub struct IoState {
     pub(crate) queues: BTreeMap<u32, VecDeque<u64>>,
     pub(crate) kicks: BTreeSet<u32>,
     pub(crate) completions: VecDeque<Completion>,
+    /// Completions ever queued: the kernel tells by it which system call queued one.
+    pub(crate) completions_queued: u64,
     pub(crate) sync_done: BTreeMap<u64, (NtStatus, u64)>,
     /// The consoles (ADR 0080).
     pub(crate) consoles: crate::console::Consoles,
@@ -489,6 +491,7 @@ impl IoState {
             queues: BTreeMap::new(),
             kicks: BTreeSet::new(),
             completions: VecDeque::new(),
+            completions_queued: 0,
             sync_done: BTreeMap::new(),
             consoles: crate::console::Consoles::default(),
             next_cookie: COOKIE_BASE,

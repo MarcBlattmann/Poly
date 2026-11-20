@@ -501,6 +501,19 @@ impl Target {
         args: &str,
         cpus: u32,
     ) -> Result<(runner::Finished, String, PathBuf)> {
+        self.boot_log_devices(test, image, work, args, cpus, &[])
+    }
+
+    /// [`Target::boot_log_cpus`] with further QEMU arguments (`devices`: a sound card).
+    pub(crate) fn boot_log_devices(
+        &self,
+        test: &str,
+        image: &[u8],
+        work: &Path,
+        args: &str,
+        cpus: u32,
+        devices: &[String],
+    ) -> Result<(runner::Finished, String, PathBuf)> {
         if args.len() > CMDLINE_MAX {
             return Err(format!(
                 "the kernel command line for {test} is {} bytes, more than Poly keeps ({CMDLINE_MAX}): {args}",
@@ -528,6 +541,7 @@ impl Target {
                     "stdio",
                 ])
                 .args(["-no-reboot", "-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
+                .args(devices)
                 .arg("-kernel")
                 .arg(&self.kernel)
                 .arg("-initrd")

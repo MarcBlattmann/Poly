@@ -1148,6 +1148,16 @@ impl Scene {
             if w.frame().is_some_and(|f| f.outer.contains(x, y)) {
                 return Hit::Border(w.id);
             }
+            // The invisible sizing zone beyond the border (not over the title bar's top:
+            // there it is the border above).
+            if let Some(f) = w.frame() {
+                let reach = super::frame::RESIZE_REACH;
+                let o = f.outer;
+                let zone = Rect::new(o.x - reach, o.y - reach, o.width + 2 * reach, o.height + 2 * reach);
+                if zone.contains(x, y) {
+                    return Hit::Border(w.id);
+                }
+            }
         }
         Hit::Desktop
     }

@@ -71,7 +71,8 @@ impl KernelFrame {
 // writable.
 unsafe impl PageFrame for KernelFrame {
     fn alloc() -> Option<KernelFrame> {
-        let phys = FRAMES.lock().as_mut().and_then(|f| f.allocate(0))?;
+        // Cache pages leave the kernel's reserve alone (ADR 0250).
+        let phys = crate::frames::allocate_user_frame()?;
         let frame = KernelFrame { phys };
         CACHE_FRAMES.fetch_add(1, Ordering::Relaxed);
         let timer = crate::profile::start();
@@ -175,10 +176,11 @@ fn writeback_main(_: usize) -> usize {
 }
 
 /// Evict clean pages when free memory runs low: half of the cache's pages
-/// (as many as are clean and unused) when less than 1/16 of RAM is free.
+/// (as many as are clean and unused) when less than 1/16 of RAM, or less than
+/// the low watermark of ADR 0250, is free.
 fn relieve_memory_pressure() {
     let (free, total) = FRAMES.lock().as_ref().map_or((0, 0), |f| (f.free_frames(), f.total_frames()));
-    if free >= total / 16 {
+    if free >= (total / 16).max(crate::frames::low_watermark()) {
         return;
     }
     let c = cache();

@@ -108,9 +108,23 @@ pub fn parse(bytes: &[u8]) -> Option<(u16, Vec<Image>)> {
     (!out.is_empty()).then_some((kind, out))
 }
 
-/// One BMP image of a directory (XOR image, then the AND mask; the height
-/// in the header counts both).
+/// One image of a directory: a PNG file (Learn, "About Icons": icons may hold
+/// PNG-compressed images, as large ones usually do; decoded by `poly_png`), or
+/// a BMP image (XOR image, then the AND mask; the height in the header counts
+/// both).
 fn image(data: &[u8], hot: (i32, i32)) -> Option<Image> {
+    if data.starts_with(&poly_png::SIGNATURE) {
+        let png = poly_png::decode(data).ok()?;
+        let (w, h) = (i32::try_from(png.width).ok()?, i32::try_from(png.height).ok()?);
+        let mut bgra = Vec::with_capacity(png.pixels.len() * 4);
+        let mut and = Vec::with_capacity(png.pixels.len());
+        for &p in &png.pixels {
+            // 0xAARRGGBB, straight alpha: the bytes B, G, R, A in memory order.
+            bgra.extend_from_slice(&p.to_le_bytes());
+            and.push(u8::from(p >> 24 == 0));
+        }
+        return Some(Image { w, h, bgra, and, alpha: true, hot });
+    }
     let mut d = data.to_vec();
     let info = dib::info(&d)?;
     let half = (info.height / 2).abs().max(1);
@@ -239,6 +253,66 @@ mod tests {
         assert_eq!(big.bgra.len(), 32 * 32 * 4);
         let small = scale(&parse(&ico(1, 16, (1, 32))).unwrap().1[0], 8, 8);
         assert_eq!(small.hot, (0, 16));
+    }
+
+    /// A `w` x `w` RGBA PNG (PNG specification: IHDR, one IDAT of stored
+    /// deflate blocks under a zlib header, IEND): the left half opaque blue,
+    /// the right half transparent.
+    fn png(w: u32) -> Vec<u8> {
+        let chunk = |out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]| {
+            out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+            out.extend_from_slice(kind);
+            out.extend_from_slice(data);
+            out.extend_from_slice(&poly_png::crc32(&[kind, data]).to_be_bytes());
+        };
+        // Each row: filter type 0 (none), then the pixels.
+        let mut row = alloc::vec![0u8];
+        for x in 0..w {
+            row.extend_from_slice(&if x < w / 2 { [0, 0, 255, 255] } else { [0, 0, 0, 0] });
+        }
+        let raw = row.repeat(w as usize);
+        let mut z = alloc::vec![0x78, 0x01];
+        let blocks: Vec<&[u8]> = raw.chunks(65535).collect();
+        for (i, b) in blocks.iter().enumerate() {
+            z.push(u8::from(i + 1 == blocks.len()));
+            z.extend_from_slice(&(b.len() as u16).to_le_bytes());
+            z.extend_from_slice(&(!(b.len() as u16)).to_le_bytes());
+            z.extend_from_slice(b);
+        }
+        let (mut a, mut b) = (1u32, 0u32);
+        for &v in &raw {
+            a = (a + u32::from(v)) % 65521;
+            b = (b + a) % 65521;
+        }
+        z.extend_from_slice(&((b << 16) | a).to_be_bytes());
+        let mut ihdr = Vec::new();
+        ihdr.extend_from_slice(&w.to_be_bytes());
+        ihdr.extend_from_slice(&w.to_be_bytes());
+        ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+        let mut out = poly_png::SIGNATURE.to_vec();
+        chunk(&mut out, b"IHDR", &ihdr);
+        chunk(&mut out, b"IDAT", &z);
+        chunk(&mut out, b"IEND", &[]);
+        out
+    }
+
+    /// An icon whose only image is a PNG (as the large images of today's
+    /// icons are): read, with its alpha as the transparency.
+    #[test]
+    fn reads_a_png_image() {
+        let img = png(48);
+        let mut f = alloc::vec![0, 0, 1, 0, 1, 0, 48, 48, 0, 0, 1, 0, 32, 0];
+        f.extend_from_slice(&(img.len() as u32).to_le_bytes());
+        f.extend_from_slice(&22u32.to_le_bytes());
+        f.extend_from_slice(&img);
+        let (kind, imgs) = parse(&f).unwrap();
+        assert_eq!(kind, 1);
+        let i = &imgs[0];
+        assert_eq!((i.w, i.h, i.alpha), (48, 48, true));
+        assert_eq!(i.bgra[..4], [255, 0, 0, 255], "blue, opaque");
+        assert_eq!((i.and[0], i.and[47]), (0, 1));
+        let small = scale(i, 11, 11);
+        assert_eq!((small.w, small.bgra.len()), (11, 11 * 11 * 4));
     }
 
     #[test]

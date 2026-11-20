@@ -460,6 +460,27 @@ impl VirtualMemory {
             .sum()
     }
 
+    /// The committed bytes of private allocation pages that a `NtFreeVirtualMemory` of `base`,
+    /// `size` would give back (`size` 0: to the end of the allocation; 0 outside one).
+    pub fn committed_in(&self, base: u64, size: u64) -> u64 {
+        let start = page_down(base);
+        let Some(a) = self.allocation(start) else { return 0 };
+        if a.kind != AllocKind::Private || a.placeholder == Placeholder::Is {
+            return 0;
+        }
+        let end = if size == 0 { a.end() } else { base.saturating_add(size).min(a.end()) };
+        if end <= start {
+            return 0;
+        }
+        let committed: usize = a
+            .pages
+            .runs_in(a.index(start)..a.index(end - 1) + 1)
+            .filter(|(_, s)| matches!(s, PageState::Committed(_)))
+            .map(|(r, _)| r.len())
+            .sum();
+        committed as u64 * PAGE_SIZE
+    }
+
     /// The bytes a `NtAllocateVirtualMemory` of `MEM_COMMIT` would newly commit: the whole size for
     /// a new allocation, the reserved pages of the range for a commit inside one.
     pub fn commit_charge(&self, base: u64, size: u64, alloc_type: u32) -> u64 {
@@ -658,13 +679,15 @@ impl VirtualMemory {
         match a.kind {
             AllocKind::Private => {
                 // Fresh pages first: if the kernel runs out of memory nothing
-                // has changed but the pages committed so far, which stay.
-                let pages = a.pages.clone();
+                // has changed but the pages committed so far, which stay. Only the
+                // ranges are taken out of the map, not a copy of it (ADR 0250).
                 let ranges = |keep: &dyn Fn(PageState) -> bool| -> Vec<core::ops::Range<usize>> {
-                    pages.runs_in(first..last).filter(|&(_, s)| keep(s)).map(|(r, _)| r).collect()
+                    a.pages.runs_in(first..last).filter(|&(_, s)| keep(s)).map(|(r, _)| r).collect()
                 };
+                let fresh = ranges(&|s| s == PageState::Reserved);
+                let others = ranges(&|s| s != PageState::Reserved && s != PageState::Committed(prot));
                 let mut result = Ok(());
-                for r in ranges(&|s| s == PageState::Reserved) {
+                for r in fresh {
                     if result.is_ok() {
                         let at = base + r.start as u64 * PAGE_SIZE;
                         result = b.commit(at, r.len() as u64 * PAGE_SIZE, prot.hw(false));
@@ -674,7 +697,7 @@ impl VirtualMemory {
                     }
                 }
                 result?;
-                for r in ranges(&|s| s != PageState::Reserved && s != PageState::Committed(prot)) {
+                for r in others {
                     b.protect(base + r.start as u64 * PAGE_SIZE, r.len() as u64 * PAGE_SIZE, prot.hw(false));
                 }
                 self.allocation_mut(base).expect("live").pages.fill(first..last, PageState::Committed(prot));

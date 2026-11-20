@@ -84,25 +84,31 @@ impl PageMap {
         self.runs_in(range).any(|(_, s)| pred(&s))
     }
 
-    /// Set the pages of `range` to `state`.
+    /// Set the pages of `range` to `state`. In place: only the runs that start inside `range`
+    /// are replaced, and equal neighbours merged where it changed (ADR 0250: a process with many
+    /// runs no longer has its whole list copied on every commit).
     pub fn fill(&mut self, range: Range<usize>, state: PageState) {
         assert!(range.end <= self.len, "range {range:?} of {}", self.len);
         if range.is_empty() {
             return;
         }
-        let before: Vec<(usize, PageState)> = self.runs.iter().copied().take_while(|&(s, _)| s < range.start).collect();
         // The state the run that crosses `range.end` goes on in.
         let after_state = self.get_or(range.end);
-        let mut runs = before;
-        runs.push((range.start, state));
-        if range.end < self.len {
-            // What follows: the rest of the run that holds `range.end`, then
-            // the runs after it.
-            runs.push((range.end, after_state.expect("inside")));
-            runs.extend(self.runs.iter().copied().filter(|&(s, _)| s > range.end));
+        // The runs that start in `[range.start, range.end]` give way to the range's run and, if
+        // pages follow, to the rest of the run that holds `range.end`.
+        let first = self.runs.partition_point(|&(s, _)| s < range.start);
+        let last = self.runs.partition_point(|&(s, _)| s <= range.end);
+        let tail = after_state.filter(|_| range.end < self.len).map(|s| (range.end, s));
+        self.runs.splice(first..last, core::iter::once((range.start, state)).chain(tail));
+        // Merge equal neighbours around what changed.
+        let mut i = first.saturating_sub(1);
+        while i + 1 < self.runs.len() && i <= first + 2 {
+            if self.runs[i].1 == self.runs[i + 1].1 {
+                self.runs.remove(i + 1);
+            } else {
+                i += 1;
+            }
         }
-        runs.dedup_by(|b, a| a.1 == b.1);
-        self.runs = runs;
     }
 
     fn get_or(&self, i: usize) -> Option<PageState> {

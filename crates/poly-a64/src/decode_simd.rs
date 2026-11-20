@@ -6,6 +6,7 @@
 //! [`Inst::Unsupported`], unallocated ones [`Inst::Undefined`].
 
 use crate::decode::{bit, bits};
+use crate::decode_simd2 as ext;
 use crate::inst::*;
 
 fn ftype(w: u32) -> Option<FpType> {
@@ -22,6 +23,9 @@ pub(crate) fn decode_fp_simd(w: u32) -> Inst {
     match bits(w, 28, 24) {
         0b11110 => {
             if bit(w, 30) {
+                if bit(w, 31) {
+                    return Inst::Undefined(w);
+                }
                 decode_scalar_simd(w)
             } else {
                 decode_fp(w)
@@ -31,20 +35,25 @@ pub(crate) fn decode_fp_simd(w: u32) -> Inst {
             if bits(w, 31, 29) == 0 {
                 decode_fp3(w)
             } else if bit(w, 30) && !bit(w, 31) {
-                // Scalar shift by immediate (bit 23 = 0) or scalar x indexed element.
-                if !bit(w, 23) && bits(w, 22, 19) != 0 && bit(w, 10) {
+                // Scalar x indexed element (bit 10 = 0) or shift by immediate.
+                if !bit(w, 10) {
+                    ext::by_element(w, true)
+                } else if !bit(w, 23) && bits(w, 22, 19) != 0 {
                     decode_shift_imm(w, true)
                 } else {
-                    Inst::Unsupported(w)
+                    Inst::Undefined(w)
                 }
             } else {
                 Inst::Undefined(w)
             }
         }
         0b01110 if !bit(w, 31) => decode_vector(w),
+        0b01110 if bits(w, 31, 24) == 0b1100_1110 => ext::crypto_sha3(w),
         0b01111 if !bit(w, 31) => {
-            if bit(w, 23) {
-                Inst::Unsupported(w) // vector x indexed element
+            if !bit(w, 10) {
+                ext::by_element(w, false)
+            } else if bit(w, 23) {
+                Inst::Undefined(w)
             } else if bits(w, 22, 19) == 0 {
                 decode_modimm(w)
             } else {
@@ -151,9 +160,7 @@ fn decode_fp(w: u32) -> Inst {
                 }
                 let zero = opc2 & 8 != 0;
                 let signal = opc2 & 16 != 0;
-                if zero && rm != 0 {
-                    return Inst::Undefined(w);
-                }
+                // The zero forms' Rm "should be" 00000; Apple's cores ignore it.
                 if ft == FpType::H {
                     return Inst::Unsupported(w);
                 }
@@ -313,7 +320,7 @@ fn decode_vector(w: u32) -> Inst {
             return decode_three_same(w, q, u, size, false);
         }
         if !bit(w, 11) {
-            return Inst::Unsupported(w); // three registers of different types
+            return ext::three_diff(w);
         }
         return match bits(w, 21, 17) {
             0b10000 => decode_two_misc(w, q, u, size, false),
@@ -323,9 +330,12 @@ fn decode_vector(w: u32) -> Inst {
     }
     if bit(w, 10) {
         if bit(w, 15) {
-            return Inst::Unsupported(w); // three same extra
+            return ext::three_same_extra(w, q, u, size, false);
         }
-        if bits(w, 23, 22) != 0 {
+        if bit(w, 22) {
+            return Inst::Unsupported(w); // three same, half precision
+        }
+        if bit(w, 23) {
             return Inst::Undefined(w);
         }
         return decode_copy(w, q);
@@ -372,6 +382,9 @@ fn decode_three_same(w: u32, q: bool, u: bool, size: u8, scalar: bool) -> Inst {
     let rn = bits(w, 9, 5) as Reg;
     let rm = bits(w, 20, 16) as Reg;
     let opcode = bits(w, 15, 11);
+    if opcode >= 0b11000 {
+        return ext::fp_three_same(w, q, u, scalar);
+    }
     let logic = |op| Inst::Vec3Same { op, q, size: 0, scalar, rd, rn, rm };
     let int = |op: V3Op, no64: bool| {
         // 64-bit elements need Q = 1 in the vector form and are the only size of the scalar form.
@@ -388,7 +401,9 @@ fn decode_three_same(w: u32, q: bool, u: bool, size: u8, scalar: bool) -> Inst {
             (false, 0b00111) => int(V3Op::Cmge, false),
             (true, 0b00110) => int(V3Op::Cmhi, false),
             (true, 0b00111) => int(V3Op::Cmhs, false),
-            _ => Inst::Unsupported(w),
+            (false, 0b01000) => int(V3Op::Sshl, false),
+            (true, 0b01000) => int(V3Op::Ushl, false),
+            _ => ext::int_three_same(w, q, u, size, true),
         };
     }
     match (u, opcode) {
@@ -422,7 +437,7 @@ fn decode_three_same(w: u32, q: bool, u: bool, size: u8, scalar: bool) -> Inst {
         (false, 0b10111) => int(V3Op::Addp, false),
         (false, 0b01000) => int(V3Op::Sshl, false),
         (true, 0b01000) => int(V3Op::Ushl, false),
-        _ => Inst::Unsupported(w),
+        _ => ext::int_three_same(w, q, u, size, false),
     }
 }
 
@@ -441,7 +456,7 @@ fn decode_two_misc(w: u32, q: bool, u: bool, size: u8, scalar: bool) -> Inst {
             (true, 0b01000) if !bad64 => mk(V2Op::CmgeZ, size),
             (true, 0b01001) if !bad64 => mk(V2Op::CmleZ, size),
             (true, 0b01011) if !bad64 => mk(V2Op::Neg, size),
-            _ => Inst::Unsupported(w),
+            _ => ext::two_misc(w, q, u, size, true),
         };
     }
     match (u, opcode) {
@@ -464,7 +479,7 @@ fn decode_two_misc(w: u32, q: bool, u: bool, size: u8, scalar: bool) -> Inst {
         (false, 0b00000) | (false, 0b00001) | (true, 0b00000) | (false, 0b00100) | (true, 0b00100) => {
             Inst::Undefined(w)
         }
-        _ => Inst::Unsupported(w),
+        _ => ext::two_misc(w, q, u, size, false),
     }
 }
 
@@ -479,6 +494,7 @@ fn decode_across(w: u32, q: bool, u: bool, size: u8) -> Inst {
         (false, 0b11010) => AcrossOp::Sminv,
         (true, 0b11010) => AcrossOp::Uminv,
         (false, 0b11011) => AcrossOp::Addv,
+        (_, 0b01100) | (_, 0b01111) => return ext::fp_across(w, q, u),
         _ => return Inst::Unsupported(w),
     };
     if size == 3 || (size == 2 && !q) {
@@ -591,6 +607,10 @@ fn decode_modimm(w: u32) -> Inst {
     if !bit(w, 10) {
         return Inst::Undefined(w);
     }
+    if bit(w, 11) {
+        // o2: only FMOV (vector, immediate) half precision (op 0, cmode 1111).
+        return if !bit(w, 29) && bits(w, 15, 12) == 0b1111 { Inst::Unsupported(w) } else { Inst::Undefined(w) };
+    }
     let q = bit(w, 30);
     let op = bit(w, 29);
     let cmode = bits(w, 15, 12);
@@ -643,7 +663,7 @@ fn decode_shift_imm(w: u32, scalar: bool) -> Inst {
         (false, 0b10000) if !scalar => (ShiftImmOp::Shrn, right, size),
         (false, 0b10100) if !scalar => (ShiftImmOp::Sshll, left, size),
         (true, 0b10100) if !scalar => (ShiftImmOp::Ushll, left, size),
-        _ => return Inst::Unsupported(w),
+        _ => return ext::shift_imm(w, scalar, size, right, left),
     };
     if scalar {
         if size != 3 {
@@ -675,7 +695,13 @@ fn decode_scalar_simd(w: u32) -> Inst {
         if bit(w, 11) && bits(w, 21, 17) == 0b10000 {
             return decode_two_misc(w, true, u, size, true);
         }
+        if bits(w, 11, 10) == 0b10 && bits(w, 21, 17) == 0b11000 {
+            return ext::scalar_pairwise(w);
+        }
         return Inst::Unsupported(w);
+    }
+    if bit(w, 10) && bit(w, 15) && bits(w, 28, 24) == 0b11110 {
+        return ext::three_same_extra(w, true, u, size, true);
     }
     // Copy: DUP (element) scalar; bits 28:21 = 11110000.
     if bits(w, 28, 21) == 0b1111_0000 && bit(w, 10) && !bit(w, 15) && !u && bits(w, 14, 11) == 0 {

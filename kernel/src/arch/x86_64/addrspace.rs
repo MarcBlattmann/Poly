@@ -248,10 +248,11 @@ pub struct UserFrame {
 }
 
 impl UserFrame {
-    /// A zeroed frame, or `None` if memory ran out.
+    /// A zeroed frame, or `None` if memory ran out (or only the kernel's reserve is left,
+    /// ADR 0250).
     pub fn zeroed() -> Option<UserFrame> {
         let timer = crate::profile::start();
-        let phys = FRAMES.lock().as_mut().and_then(|f| f.allocate(0))?;
+        let phys = crate::frames::allocate_user_frame()?;
         crate::profile::since(crate::profile::Event::AllocFrame, timer);
         USER_FRAMES.fetch_add(1, Ordering::Relaxed);
         let mut frame = UserFrame { phys };
@@ -394,12 +395,14 @@ impl AddressSpace {
     pub fn map_zeroed(&self, virt: u64, len: u64, prot: Prot) -> Result<(), MapError> {
         let end = check_range(virt, len)?;
         let flags = prot.flags().ok_or(MapError::NoAccess)? | OWNED;
+        let floor = crate::frames::user_floor();
         let mut tables = self.tables.lock();
         free_slots(&tables, virt, end)?;
         let mut frames = FRAMES.lock();
         let alloc = frames.as_mut().ok_or(MapError::OutOfMemory)?;
         for page in (virt..end).step_by(PAGE_SIZE as usize) {
-            let mapped = alloc.allocate(0).ok_or(MapError::OutOfMemory).and_then(|frame| {
+            // User pages leave the kernel's reserve alone (ADR 0250).
+            let mapped = crate::frames::take_user_frame(alloc, floor).ok_or(MapError::OutOfMemory).and_then(|frame| {
                 let ptr = paging::phys_to_virt(frame).expect("frame outside the direct map") as *mut u8;
                 // SAFETY: a frame just allocated, so nothing else uses it,
                 // reached through the direct map, which maps it writable.
@@ -417,9 +420,14 @@ impl AddressSpace {
                     self.unmap_page(&mut tables, &mut reclaim, done);
                 }
                 reclaim.finish(self);
+                drop(tables);
+                crate::frames::after_user_allocation(false);
                 return Err(e);
             }
         }
+        drop(frames);
+        drop(tables);
+        crate::frames::after_user_allocation(true);
         Ok(())
     }
 

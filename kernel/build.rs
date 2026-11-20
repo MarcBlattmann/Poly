@@ -207,16 +207,19 @@ fn embed_wow64() {
     .iter()
     .map(|n| n.to_string())
     .collect();
-    // Every other DLL of the directory (ADR 0186 stage 3: advapi32, ole32, ...) goes into
-    // SysWOW64 by the layout, through the generated table `WOW64_DLLS`.
+    // Every other DLL of the directory (ADR 0186 stage 3: advapi32, ole32, ...) and every other
+    // program (the 32-bit system programs: cmd.exe) goes into SysWOW64 by the layout, through the
+    // generated table `WOW64_DLLS`.
+    let mut system_programs: Vec<String> = Vec::new();
     if let Some(d) = &dir {
         let mut extra: Vec<String> = std::fs::read_dir(d)
             .unwrap_or_else(|e| panic!("{}: {e}", d.display()))
             .flatten()
             .map(|e| e.file_name().to_string_lossy().into_owned())
-            .filter(|n| n.ends_with(".dll") && !names.contains(n))
+            .filter(|n| (n.ends_with(".dll") || n.ends_with(".exe")) && !names.contains(n))
             .collect();
         extra.sort();
+        system_programs = extra.iter().filter(|n| n.ends_with(".exe")).cloned().collect();
         names.extend(extra);
     }
     let mut table = String::from(
@@ -234,7 +237,7 @@ pub static WOW64_DLLS: &[(&str, &[u8])] = &[
             }
             None => std::fs::write(&to, []).expect("write an empty module"),
         }
-        if name.ends_with(".dll") {
+        if name.ends_with(".dll") || system_programs.contains(name) {
             table.push_str(&format!(
                 "    ({name:?}, include_bytes!(concat!(env!(\"OUT_DIR\"), \"/wow64-{name}\"))),
 "

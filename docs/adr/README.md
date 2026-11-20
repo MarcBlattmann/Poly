@@ -214,11 +214,15 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0235](0235-system-processes-run-as-localsystem.md) | System processes run as LocalSystem | Accepted |
 | [0237](0237-mach-o-loading-and-polys-own-dyld.md) | Mach-O loading and Poly's own dyld | Accepted |
 | [0238](0238-mach-core-ports-messages-semaphores-ulock-psynch.md) | The Mach core: `poly-mach` and the XNU personality's kernel interface | Accepted |
+| [0239](0239-arm64-block-jit-to-x86-64.md) | A block JIT from arm64 to x86-64, guest memory with 16 KiB pages and `MAP_JIT`, the arm64 system call convention | Accepted |
 | [0240](0240-a-small-cmd-exe.md) | A small `cmd.exe` in `C:\Windows\System32` | Accepted |
 | [0242](0242-user-mode-locks-wake-and-compete.md) | User-mode locks wake a waiter and let it compete (no convoys) | Accepted |
 | [0243](0243-a-page-flip-copies-nothing-in-the-guest-and-does-not-wait-for-the-device.md) | A page flip copies nothing in the guest and does not wait for the device | Accepted |
 | [0244](0244-the-windows-side-reaches-the-mixer-through-a-poly-audio-device.md) | The Windows side reaches the mixer through a Poly audio device | Accepted |
 | [0245](0245-input-idle-is-the-first-wait-for-messages.md) | Input idle is the first wait for messages | Accepted |
+| [0247](0247-a-timeline-of-one-key-press-and-fewer-nt-lock-waits.md) | A timeline of one key press, and fewer NT lock waits | Accepted |
+| [0248](0248-threads-in-another-process.md) | Threads in another process | Accepted |
+| [0250](0250-out-of-memory-never-panics-the-kernel.md) | Out of memory never panics the kernel | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

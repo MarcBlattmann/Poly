@@ -371,6 +371,34 @@ pub fn map_section(
     req: &MapView,
     relocate: bool,
 ) -> Result<Mapped, NtStatus> {
+    let mapped = map_section_inner(sys, proc, b, object, req, relocate)?;
+    // The kernel's timeline names the code its samples land in (ADR 0247).
+    if b.wants_image_names()
+        && let Some(key) = sys.objects.cookie(object)
+        && let Some(section) = sys.section(key)
+        && let SectionKind::Image { image, file } = &section.kind
+    {
+        let size = image.size;
+        let name = match file {
+            Some(f) => sys.objects.cookie(*f).and_then(|c| sys.io.object_name_parts(c)).and_then(|(_, p)| p),
+            None => image.name.clone().map(|(_, p)| p),
+        };
+        if let Some(path) = name {
+            b.image_mapped(proc.pid.0, mapped.base, size, &path);
+        }
+    }
+    Ok(mapped)
+}
+
+/// [`map_section`]'s work.
+fn map_section_inner(
+    sys: &mut NtSystem,
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    object: ObjectId,
+    req: &MapView,
+    relocate: bool,
+) -> Result<Mapped, NtStatus> {
     let protect = Protection::new(req.protect, false)?;
     let key = sys.objects.cookie(object).ok_or(STATUS_INVALID_HANDLE)?;
     let section = sys.section(key).ok_or(STATUS_INVALID_HANDLE)?.clone();
