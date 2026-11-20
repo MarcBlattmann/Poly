@@ -828,11 +828,11 @@ fn make_state(slot: &mut Option<NtState>) {
     if let Ok(tid) = thread::spawn_named("nt-boot-services", boot_services, 0) {
         let _ = thread::detach(tid);
     }
-    // An interactive logon's session (standard or elevated) has a shell holding the filtered
-    // token (ADR 0222, 0235); the admin logon of the older recordings has none.
-    if state.sys.logon != poly_personality_nt::security::Logon::Admin
-        && let Ok(tid) = thread::spawn_named("nt-shell", shell_main, 0)
-    {
+    // An interactive user is logged on at the console in every boot, as on the machine the
+    // recordings come from: their shell runs in session 1 with their filtered token, whatever
+    // logon the programs of the boot have (ADR 0222, 0235). The SSH logon's programs (the `admin`
+    // logon, session 0) reach it too, as the desktop's `ShellWindows` chain does on Windows.
+    if let Ok(tid) = thread::spawn_named("nt-shell", shell_main, 0) {
         let _ = thread::detach(tid);
     }
     if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
@@ -1831,9 +1831,9 @@ fn services_main(_: usize) -> usize {
     0
 }
 
-/// Start `C:\Windows\explorer.exe`, the stand-in of the session's shell (ADR 0222), with the
-/// logon's filtered token: an elevated program finds it and starts a process de-elevated with a
-/// copy of that token.
+/// Start `C:\Windows\explorer.exe`, the stand-in of the interactive user's shell (ADR 0222), in
+/// session 1 with that user's filtered token: an elevated program finds it and starts a process
+/// de-elevated with a copy of that token.
 fn shell_main(_: usize) -> usize {
     if EXPLORER_EXE.is_empty() {
         return 0;

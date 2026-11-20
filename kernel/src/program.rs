@@ -222,8 +222,11 @@ fn prepare_full(
             ))
             .map_err(|e| ExecPathError::Unsupported(format!("PE executable could not be loaded: {e:?}")))?;
             // Its creator is its parent in /proc (ADR 0230: Poly's installer
-            // waits for a Windows installer and what it started by that).
-            let mut nt = Process::new_nt(process::alloc_pid(), format, traced);
+            // waits for a Windows installer and what it started by that). Its
+            // id is a Windows one: a multiple of 4 from 0x400 up (GetThreadId.yaml
+            // `created_thread`), never a small number a program uses as "no such
+            // process" (OpenProcess.yaml's tests open pid 3 and expect a failure).
+            let mut nt = Process::new_nt(process::alloc_nt_id(), format, traced);
             nt.ppid = ppid;
             let process = Arc::new(nt);
             // Its DOS path and arguments go into its process parameters.
