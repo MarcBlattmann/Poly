@@ -21,6 +21,13 @@ unsafe extern "system" {
     fn GetWindowThreadProcessId(hwnd: usize, pid: *mut u32) -> u32;
 }
 
+#[cfg_attr(target_arch = "x86", link(name = "advapi32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "advapi32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn OpenProcessToken(process: usize, access: u32, token: *mut usize) -> i32;
+    fn GetTokenInformation(token: *mut u8, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> i32;
+}
+
 #[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
 #[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
 unsafe extern "system" {
@@ -29,7 +36,7 @@ unsafe extern "system" {
     fn CreateToolhelp32Snapshot(flags: u32, pid: u32) -> usize;
     fn Process32FirstW(snapshot: usize, entry: *mut u8) -> i32;
     fn Process32NextW(snapshot: usize, entry: *mut u8) -> i32;
-    fn ProcessIdToSessionId(pid: u32, session: *mut u32) -> i32;
+
     fn InitializeProcThreadAttributeList(list: *mut u8, count: u32, flags: u32, size: *mut usize) -> i32;
     fn UpdateProcThreadAttribute(
         list: *mut u8,
@@ -51,7 +58,7 @@ unsafe extern "system" {
         env: *mut c_void,
         dir: *const u16,
         si: *mut c_void,
-        pi: *mut [usize; 3],
+        pi: *mut crate::exec::ProcessInformation,
     ) -> i32;
     fn GetLastError() -> u32;
 }
@@ -73,6 +80,33 @@ const SI_SIZE: usize = if core::mem::size_of::<usize>() == 8 { 104 } else { 68 }
 const SI_FLAGS_AT: usize = if core::mem::size_of::<usize>() == 8 { 60 } else { 44 };
 const SI_SHOW_AT: usize = SI_FLAGS_AT + 4;
 const STARTF_USESHOWWINDOW: u32 = 1;
+
+/// `TOKEN_QUERY`, `TokenSessionId` (`winnt.h`).
+const TOKEN_QUERY: u32 = 0x0008;
+const TOKEN_SESSION_ID: u32 = 12;
+
+/// The session of process `pid`: its token's (`TokenSessionId`).
+fn session_of(pid: u32) -> Option<u32> {
+    // SAFETY: plain calls with out-pointers; both handles are closed.
+    unsafe {
+        let p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if p == 0 {
+            return None;
+        }
+        let mut token = 0usize;
+        let mut session = None;
+        if OpenProcessToken(p, TOKEN_QUERY, &mut token) != 0 {
+            let mut b = [0u8; 4];
+            let mut got = 0u32;
+            if GetTokenInformation(token as *mut u8, TOKEN_SESSION_ID, b.as_mut_ptr(), 4, &mut got) != 0 {
+                session = Some(u32::from_le_bytes(b));
+            }
+            CloseHandle(token);
+        }
+        CloseHandle(p);
+        session
+    }
+}
 
 /// Whether `name` (UTF-16, any case) is `explorer.exe`.
 fn is_explorer(name: &[u16]) -> bool {
@@ -109,8 +143,7 @@ fn shell_pid() -> Option<u32> {
                 .map(|b| u16::from_le_bytes([b[0], b[1]]))
                 .take_while(|&c| c != 0)
                 .collect();
-            let mut session = 0u32;
-            if is_explorer(&exe) && ProcessIdToSessionId(id, &mut session) != 0 && session != 0 {
+            if is_explorer(&exe) && session_of(id).is_some_and(|s| s != 0) {
                 found = Some(id);
                 break;
             }
@@ -164,7 +197,7 @@ pub fn start(command: &[u16], dir: Option<&[u16]>, show: i32) -> Option<Result<(
         si[SI_SIZE..].copy_from_slice(&(list.as_mut_ptr() as usize).to_le_bytes());
         let mut cmd = nul(command);
         let dir = dir.map(nul);
-        let mut pi = [0usize; 3];
+        let mut pi = crate::exec::ProcessInformation { process: 0, thread: 0, pid: 0, tid: 0 };
         // SAFETY: NUL-terminated strings (the command line writable), the structures above.
         let ok = unsafe {
             CreateProcessW(
@@ -187,8 +220,8 @@ pub fn start(command: &[u16], dir: Option<&[u16]>, show: i32) -> Option<Result<(
             if ok == 0 {
                 return Err(e);
             }
-            CloseHandle(pi[0]);
-            CloseHandle(pi[1]);
+            CloseHandle(pi.process);
+            CloseHandle(pi.thread);
         }
         Ok(())
     })();

@@ -283,10 +283,21 @@ process id, so its process could not be opened.
 - **The Windows test runner keeps a test's file name**: `C:\PolyTests\<name>.exe`, no longer
   `test-binary.exe`. A child's report of its parent's image name is then the recording's.
 
-Still open (not this change):
-- `ShellDispatch.ShellExecute` `sde_start_ssh` needs a shell process in the `admin` logon (on Windows
-  the user's Explorer runs in session 1 whatever the SSH session does). Today only the standard and
-  elevated logons start the stand-in (ADR 0235).
-- `CreateProcessWithTokenW` `cpwt_ssh_session0` needs session-0 programs to live on their logon's
-  own window station (`Service-0x…$`), not on `WinSta0`. Then the child's desktop name is not
-  `WinSta0\Default`.
+**An interactive user is logged on in every boot.** The `ShellDispatch.ShellExecute` test
+`sde_start_ssh` runs in the SSH logon (session 0), yet the chain reaches the Explorer of the
+interactive session. On the oracle a user is logged on at the console whatever the SSH session does.
+
+- The kernel now starts the stand-in in every boot, the `admin` logon of the older recordings
+  included. It runs as that interactive user's shell: session 1, their filtered token
+  (`Token::uac_filtered`), whatever logon the boot's own programs have. Before, it started only for
+  the standard and elevated logons (ADR 0235).
+- That is one more idle process per boot.
+- A session-0 caller has no shell window, so the chain looks for an `explorer.exe` whose token's
+  session (`TokenSessionId`) is not 0. Poly's `ProcessIdToSessionId` answers the caller's own session
+  for any process id, so it cannot tell.
+
+**Known gap, deferred:** `CreateProcessWithTokenW` `cpwt_ssh_session0`. On Windows, programs of the
+SSH logon (session 0) live on their logon's own window station (`Service-0x…$`). Poly puts every
+session-0 program on `WinSta0`, so a child started without `lpDesktop` reports `WinSta0\Default`
+instead of another station's name. Changing the session-0 window-station model touches every
+session-0 test, so it is left for a change of its own.
