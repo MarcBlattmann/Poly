@@ -39,6 +39,7 @@ pub mod nr {
     pub const GETUID: u64 = 24;
     pub const GETEUID: u64 = 25;
     pub const KILL: u64 = 37;
+    pub const GETTIMEOFDAY: u64 = 116;
     pub const GETPPID: u64 = 39;
     pub const PIPE: u64 = 42;
     pub const GETEGID: u64 = 43;
@@ -233,6 +234,10 @@ pub trait BsdKernel {
     fn system(&self) -> sysctl::System {
         sysctl::System::default()
     }
+    /// The wall clock: nanoseconds since 1970-01-01 00:00:00 UTC.
+    fn wall_clock_ns(&self) -> u64 {
+        0
+    }
 
     /// Work on the calling process's signal state.
     fn with_signals(&mut self, _f: &mut dyn FnMut(&mut Signals)) {
@@ -384,6 +389,7 @@ pub fn call(k: &mut dyn BsdKernel, number: u64, a: &[u64; 8]) -> Option<Result<R
         PIPE => k.pipe().map(|(r, w)| Ret { value: r as u64, second: Some(w as u64) }),
         MMAP => mmap(k, a),
         MUNMAP => munmap(k, a[0], a[1]),
+        GETTIMEOFDAY => gettimeofday(k, a[0], a[1]),
         GETPID => ok(u64::from(k.pid())),
         GETPPID => ok(u64::from(k.ppid())),
         GETUID | GETEUID => ok(u64::from(k.ids().0)),
@@ -492,6 +498,22 @@ fn getdirentries(k: &mut dyn BsdKernel, fd: i32, buf: u64, size: u64, basep: u64
     let base = if out.is_empty() { file::DIR_END_BASE } else { 0 };
     put(k, basep, &base.to_le_bytes())?;
     ok(out.len() as u64)
+}
+
+/// `gettimeofday(tv, tz)`, Poly's form: the wall clock as a `struct
+/// timeval` (`<sys/_types/_timeval.h>`: 64-bit seconds, 32-bit
+/// microseconds) through `tv` when it is not null; `tz` is ignored (the
+/// manual page calls it obsolete) and the call returns 0. Poly's own
+/// libraries call it; programs reach the clock through libSystem.
+fn gettimeofday(k: &mut dyn BsdKernel, tv: u64, _tz: u64) -> Result<Ret, u32> {
+    if tv != 0 {
+        let ns = k.wall_clock_ns();
+        let mut b = [0u8; 16];
+        b[..8].copy_from_slice(&((ns / 1_000_000_000) as i64).to_le_bytes());
+        b[8..12].copy_from_slice(&(((ns % 1_000_000_000) / 1000) as i32).to_le_bytes());
+        put(k, tv, &b)?;
+    }
+    ok(0)
 }
 
 fn fcntl(k: &mut dyn BsdKernel, fd: i32, cmd: u32, arg: u64) -> Result<Ret, u32> {

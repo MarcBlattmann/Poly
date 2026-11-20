@@ -63,6 +63,10 @@ impl Fake {
 }
 
 impl BsdKernel for Fake {
+    fn wall_clock_ns(&self) -> u64 {
+        1_700_000_000_123_456_789
+    }
+
     fn copy_in(&self, addr: u64, buf: &mut [u8]) -> Result<(), ()> {
         let o = addr.checked_sub(BASE).ok_or(())? as usize;
         let src = self.mem.get(o..o + buf.len()).ok_or(())?;
@@ -318,6 +322,18 @@ fn write_and_exit() {
     assert_eq!(k.call(nr::WRITE, &[1, 8, 4]), Err(EFAULT));
     k.call(nr::EXIT, &[263]).unwrap();
     assert_eq!(k.exited, Some(7));
+}
+
+#[test]
+fn gettimeofday_writes_a_timeval() {
+    let mut k = Fake::new();
+    k.poke(BUF, &[0xAA; 16]);
+    assert_eq!(k.call(nr::GETTIMEOFDAY, &[BUF, 0]).unwrap().value, 0);
+    // The fake's clock: 1_700_000_000.123456789 s.
+    assert_eq!(k.u64_at(BUF), 1_700_000_000);
+    assert_eq!(u32::from_le_bytes(k.peek(BUF + 8, 4).try_into().unwrap()), 123_456);
+    assert_eq!(k.call(nr::GETTIMEOFDAY, &[0, 0]).unwrap().value, 0, "a null timeval is allowed");
+    assert_eq!(k.call(nr::GETTIMEOFDAY, &[8, 0]), Err(EFAULT));
 }
 
 #[test]
