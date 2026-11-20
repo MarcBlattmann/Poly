@@ -614,6 +614,11 @@ pub fn fault(fault: &Fault) {
             crate::linux::Leave::Killed => end_thread(ExitStatus::Exited(0), 0),
         }
     }
+    // An XNU process's fault raises a Mach exception: a handler may take
+    // it and the thread goes on (ADR 0238).
+    if process.personality == poly_abi::Personality::Xnu && crate::xnu_mach::fault(process, fault) {
+        return;
+    }
     // An NT process's exception goes to its user-mode dispatcher, or ends
     // the process with the exception code (ADR 0068).
     if process.personality == poly_abi::Personality::Nt && crate::nt::fault(process, fault) {

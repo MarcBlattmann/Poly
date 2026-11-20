@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "lock_basic",
+      "exe_sha256": "1ca13362931cfd4768578badfade518414381bbfd9a745bb1d4d8efeec3fb60f",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZXhjbHVzaXZlIGxvY2sgMC4uMTYgdGhyb3VnaCBoYW5kbGUgQTogMQpleGNsdXNpdmUgbG9jayAwLi4xNiB0aHJvdWdoIGhhbmRsZSBCOiAwIChlcnJvciAzMykKZXhjbHVzaXZlIGxvY2sgMTYuLjMyIHRocm91Z2ggaGFuZGxlIEI6IDEKZXhjbHVzaXZlIGxvY2sgOC4uMjQgKG92ZXJsYXBzIGJvdGgpIHRocm91Z2ggaGFuZGxlIEI6IDAgKGVycm9yIDMzKQpzaGFyZWQgbG9jayAwLi40IHRocm91Z2ggaGFuZGxlIEI6IDAgKGVycm9yIDMzKQp0aGUgc2FtZSBleGNsdXNpdmUgbG9jayAwLi4xNiBhZ2FpbiB0aHJvdWdoIGhhbmRsZSBBOiAwIChlcnJvciAzMykKcmVhZCBvZiB0aGUgbG9ja2VkIHJhbmdlIHRocm91Z2ggaGFuZGxlIEI6IDAgKGVycm9yIDMzKSwgcmVhZCAwCnJlYWQgb2YgdGhlIGxvY2tlZCByYW5nZSB0aHJvdWdoIGhhbmRsZSBBOiAxLCByZWFkIDQKcmVhZCBvZiBhbiB1bmxvY2tlZCByYW5nZSB0aHJvdWdoIGhhbmRsZSBCOiAxLCByZWFkIDQKd3JpdGUgaW50byB0aGUgbG9ja2VkIHJhbmdlIHRocm91Z2ggaGFuZGxlIEI6IDAgKGVycm9yIDMzKSwgd3JvdGUgMAp3cml0ZSBpbnRvIHRoZSBsb2NrZWQgcmFuZ2UgdGhyb3VnaCBoYW5kbGUgQTogMSwgd3JvdGUgNAp3cml0ZSBpbnRvIEIncyBvd24gbG9ja2VkIHJhbmdlIHRocm91Z2ggaGFuZGxlIEI6IDEsIHdyb3RlIDQKdW5sb2NrIDAuLjggb2YgdGhlIDAuLjE2IGxvY2s6IDAgKGVycm9yIDE1OCkKdW5sb2NrIDAuLjE2OiAxCnVubG9jayAwLi4xNiBhZ2FpbjogMCAoZXJyb3IgMTU4KQp1bmxvY2sgMC4uMTYgb25jZSBtb3JlICh0aGUgc2Vjb25kIGxvY2sgdGhyb3VnaCBBKTogMCAoZXJyb3IgMTU4KQp1bmxvY2sgYSByYW5nZSB0aGF0IHdhcyBuZXZlciBsb2NrZWQ6IDAgKGVycm9yIDE1OCkKZXhjbHVzaXZlIGxvY2sgMC4uMTYgdGhyb3VnaCBoYW5kbGUgQiAoZnJlZSBub3cpOiAxCnVubG9jayBCJ3MgcmFuZ2UgMTYuLjMyOiAxCnVubG9jayBCJ3MgcmFuZ2UgMC4uMTYgdGhyb3VnaCBoYW5kbGUgQSAobm90IEEncyk6IDAgKGVycm9yIDE1OCkKdW5sb2NrIEIncyByYW5nZSAwLi4xNjogMQpzaGFyZWQgbG9jayAzMi4uNDggdGhyb3VnaCBBOiAxCnNoYXJlZCBsb2NrIDMyLi40OCB0aHJvdWdoIEI6IDEKZXhjbHVzaXZlIGxvY2sgMzIuLjQ4IHRocm91Z2ggQiBvdmVyIHNoYXJlZCBsb2NrczogMCAoZXJyb3IgMzMpCnJlYWQgb2YgYSBzaGFyZWQtbG9ja2VkIHJhbmdlIHRocm91Z2ggQjogMSwgcmVhZCA0CndyaXRlIGludG8gYSBzaGFyZWQtbG9ja2VkIHJhbmdlIHRocm91Z2ggQjogMCAoZXJyb3IgMzMpLCB3cm90ZSAwCndyaXRlIGludG8gYSBzaGFyZWQtbG9ja2VkIHJhbmdlIHRocm91Z2ggQTogMCAoZXJyb3IgMzMpLCB3cm90ZSAwCnVubG9jayBzaGFyZWQgMzIuLjQ4IHRocm91Z2ggQTogMQp1bmxvY2sgc2hhcmVkIDMyLi40OCB0aHJvdWdoIEI6IDEKbG9jayBvZiBsZW5ndGggMDogMQp1bmxvY2sgb2YgbGVuZ3RoIDA6IDEKbG9jayBvZiBsZW5ndGggMSBhdCAxMDAwIChwYXN0IHRoZSBlbmQpOiAxCnRoZSBzYW1lIHJhbmdlIHRocm91Z2ggQjogMCAoZXJyb3IgMzMpCnVubG9jayAxMDAwLi4xMDAxOiAxCmxvY2sgd2l0aCBhbiB1bmtub3duIGZsYWcgYml0IDQ6IDEKbG9jayB3aXRob3V0IEZBSUxfSU1NRURJQVRFTFkgYnV0IGZyZWUgcmFuZ2U6IDEKdW5sb2NrIDUwLi41NDogMQpleGNsdXNpdmUgbG9jayAwLi44IHRocm91Z2ggQTogMCAoZXJyb3IgMzMpCmV4Y2x1c2l2ZSBsb2NrIDAuLjggdGhyb3VnaCBCIGFmdGVyIEEgY2xvc2VkOiAxCnVubG9jayAwLi44OiAxCnJlc2VydmVkIHBhcmFtZXRlciAxOiAwIChlcnJvciA4NykKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "exclusive lock 0..16 through handle A: 1\nexclusive lock 0..16 through handle B: 0 (error 33)\nexclusive lock 16..32 through handle B: 1\nexclusive lock 8..24 (overlaps both) through handle B: 0 (error 33)\nshared lock 0..4 through handle B: 0 (error 33)\nthe same exclusive lock 0..16 again through handle A: 0 (error 33)\nread of the locked range through handle B: 0 (error 33), read 0\nread of the locked range through handle A: 1, read 4\nread of an unlocked range through handle B: 1, read 4\nwrite into the locked range through handle B: 0 (error 33), wrote 0\nwrite into the locked range through handle A: 1, wrote 4\nwrite into B's own locked range through handle B: 1, wrote 4\nunlock 0..8 of the 0..16 lock: 0 (error 158)\nunlock 0..16: 1\nunlock 0..16 again: 0 (error 158)\nunlock 0..16 once more (the second lock through A): 0 (error 158)\nunlock a range that was never locked: 0 (error 158)\nexclusive lock 0..16 through handle B (free now): 1\nunlock B's range 16..32: 1\nunlock B's range 0..16 through handle A (not A's): 0 (error 158)\nunlock B's range 0..16: 1\nshared lock 32..48 through A: 1\nshared lock 32..48 through B: 1\nexclusive lock 32..48 through B over shared locks: 0 (error 33)\nread of a shared-locked range through B: 1, read 4\nwrite into a shared-locked range through B: 0 (error 33), wrote 0\nwrite into a shared-locked range through A: 0 (error 33), wrote 0\nunlock shared 32..48 through A: 1\nunlock shared 32..48 through B: 1\nlock of length 0: 1\nunlock of length 0: 1\nlock of length 1 at 1000 (past the end): 1\nthe same range through B: 0 (error 33)\nunlock 1000..1001: 1\nlock with an unknown flag bit 4: 1\nlock without FAIL_IMMEDIATELY but free range: 1\nunlock 50..54: 1\nexclusive lock 0..8 through A: 0 (error 33)\nexclusive lock 0..8 through B after A closed: 1\nunlock 0..8: 1\nreserved parameter 1: 0 (error 87)\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

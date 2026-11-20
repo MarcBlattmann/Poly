@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_source_merge_data_basic",
+      "source_sha256": "fcdc7d4ada7326f9acbe117c99244e48f3e1bd29d9c7fd638ccbcf670c505c13",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "22bf9b0e95d15a50b9a0e4c792ba07d34411ad148a2a3b852c7b3a2cd938b112",
+          "exit_code": 0,
+          "stdout": "ok a single merge of 3: data 3\nok 8 threads x 1000 merges of 1: the handler's data adds up to 8003 in all\nok in fewer handler calls than merges (they coalesce)\nok the handler never saw a zero\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9115bf6ed575ed50b84f29f75aa2a1f912693ca36d98ed16251cc6c37daefb89",
+          "exit_code": 0,
+          "stdout": "ok a single merge of 3: data 3\nok 8 threads x 1000 merges of 1: the handler's data adds up to 8003 in all\nok in fewer handler calls than merges (they coalesce)\nok the handler never saw a zero\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_source_merge_data_or",
+      "source_sha256": "975bb424735b8f880e3675c8c3046253052cdf99fd2110498e080d5fa791ef4f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c7cb9a38139b52467c8291d4d345cb64d1cb5674fba53464c49e7a4ed092ad3a",
+          "exit_code": 0,
+          "stdout": "ok eight flags merged from eight tasks all arrived (0xff)\nok a later merge starts from 0: only the new flag\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3d00c871e29f8a631c1704e43e1fb52133cf2891757f9958b2f351a27a47c656",
+          "exit_code": 0,
+          "stdout": "ok eight flags merged from eight tasks all arrived (0xff)\nok a later merge starts from 0: only the new flag\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

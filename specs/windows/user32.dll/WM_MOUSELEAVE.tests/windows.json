@@ -1,0 +1,85 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "640cf2d46e54",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T09:06:50Z",
+  "tests": [
+    {
+      "name": "mlv_capture_leave",
+      "exe_sha256": "5b42b6047c7869fe29bde7661e9dd0945b8a70e5aa4ac781ab78d7e1d4e035be",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBTZXRDYXB0dXJlKEEpLCBSZWxlYXNlQ2FwdHVyZSwgcG9pbnRlciB1bm1vdmVkCiAgQSBXTV9DQVBUVVJFQ0hBTkdFRCBuZXc9bnVsbAogIEEgV01fU0VUQ1VSU09SIHdpbmRvdz1BIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBBIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9MTAwLDYwCiAgY3Vyc29yICgyMDgsMTkxKSBvdmVyIEEKPT0gU2V0Q2FwdHVyZShCKSwgQiBhIHdpbmRvdyB0aGUgcG9pbnRlciBpcyBub3Qgb3ZlciwgdGhlbiBSZWxlYXNlQ2FwdHVyZQogIEIgV01fU0hPV1dJTkRPVyBzaG93PTEgc3RhdHVzPTAKICBCIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9LTQwMCw2MAogIEEgV01fTU9VU0VMRUFWRQogIEIgV01fQ0FQVFVSRUNIQU5HRUQgbmV3PW51bGwKICBBIFdNX1NFVENVUlNPUiB3aW5kb3c9QSBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQSBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTEwMCw2MAogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBBCj09IFNldENhcHR1cmUoQSksIHRoZSBwb2ludGVyIG1vdmVzIG91dCAoU2V0Q3Vyc29yUG9zKSwgdGhlbiBSZWxlYXNlQ2FwdHVyZQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD01OTIsMjY5CiAgQSBXTV9NT1VTRUxFQVZFCiAgQSBXTV9DQVBUVVJFQ0hBTkdFRCBuZXc9bnVsbAogIGN1cnNvciAoNzAwLDQwMCkgb3ZlciBvdGhlcgo9PSBTZXRDYXB0dXJlKEEpLCB0aGUgcG9pbnRlciBtb3ZlcyBvdXQgYW5kIGJhY2ssIHRoZW4gUmVsZWFzZUNhcHR1cmUKICBBIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9NTkyLDI2OQogIEEgV01fTU9VU0VMRUFWRQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD0xMDAsNjAKICBBIFdNX0NBUFRVUkVDSEFOR0VEIG5ldz1udWxsCiAgQSBXTV9TRVRDVVJTT1Igd2luZG93PUEgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBBCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== SetCapture(A), ReleaseCapture, pointer unmoved\n  A WM_CAPTURECHANGED new=null\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\n== SetCapture(B), B a window the pointer is not over, then ReleaseCapture\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_MOUSEMOVE keys=0x0 client=-400,60\n  A WM_MOUSELEAVE\n  B WM_CAPTURECHANGED new=null\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\n== SetCapture(A), the pointer moves out (SetCursorPos), then ReleaseCapture\n  A WM_MOUSEMOVE keys=0x0 client=592,269\n  A WM_MOUSELEAVE\n  A WM_CAPTURECHANGED new=null\n  cursor (700,400) over other\n== SetCapture(A), the pointer moves out and back, then ReleaseCapture\n  A WM_MOUSEMOVE keys=0x0 client=592,269\n  A WM_MOUSELEAVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  A WM_CAPTURECHANGED new=null\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  cursor (208,191) over A\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3839
+    },
+    {
+      "name": "mlv_cover_clickthrough",
+      "exe_sha256": "e6d77156b4a86c81e68b7dfa6307342ceea4549c7c1af1d658cab4732c983214",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBwb3B1cCBXU19FWF9MQVlFUkVEIHwgV1NfRVhfVFJBTlNQQVJFTlQgc2hvd24gb3ZlciB0aGUgcG9pbnRlcgogIEIgV01fU0hPV1dJTkRPVyBzaG93PTEgc3RhdHVzPTAKICBBIFdNX1NFVENVUlNPUiB3aW5kb3c9QSBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQSBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTEwMCw2MAogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBBCj09IHBvcHVwIFdTX0VYX0xBWUVSRUQgfCBUUkFOU1BBUkVOVCB8IE5PQUNUSVZBVEUgfCBUT09MV0lORE9XIHwgVE9QTU9TVCBzaG93biB3aXRoIFNXUF9OT0FDVElWQVRFCiAgQSBXTV9TRVRDVVJTT1Igd2luZG93PUEgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD0xMDAsNjAKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQQo9PSBwb3B1cCAoc2FtZSB0aHJlYWQpIHRoYXQgYW5zd2VycyBXTV9OQ0hJVFRFU1Qgd2l0aCBIVFRSQU5TUEFSRU5UCiAgV2luZG93RnJvbVBvaW50IGlzIEEKICBCIFdNX1NIT1dXSU5ET1cgc2hvdz0xIHN0YXR1cz0wCiAgQSBXTV9TRVRDVVJTT1Igd2luZG93PUEgaGl0PTEgbXNnPVdNX01PVVNFTU9WRQogIEEgV01fTU9VU0VNT1ZFIGtleXM9MHgwIGNsaWVudD0xMDAsNjAKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQQo9PSBwb3B1cCBvd25lZCBieSBBCiAgQiBXTV9TSE9XV0lORE9XIHNob3c9MSBzdGF0dXM9MAogIEIgV01fU0VUQ1VSU09SIHdpbmRvdz1CIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBCIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9NTgsNzEKICBBIFdNX01PVVNFTEVBVkUKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQgo9PSBjaGlsZCB3aW5kb3cgb2YgQSBzaG93biBvdmVyIHRoZSBwb2ludGVyCiAgQiBXTV9TSE9XV0lORE9XIHNob3c9MSBzdGF0dXM9MAogIEIgV01fU0VUQ1VSU09SIHdpbmRvdz1CIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBBIFdNX1NFVENVUlNPUiB3aW5kb3c9QiBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQiBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTc5LDM5CiAgQSBXTV9NT1VTRUxFQVZFCiAgY3Vyc29yICgyMDgsMTkxKSBvdmVyIEIKPT0gdG9vbHRpcHNfY2xhc3MzMiB0cmFja2luZyB0b29sdGlwIHNob3duIG92ZXIgdGhlIHBvaW50ZXIKICB0b29sIGFkZGVkIDEsIHRvb2x0aXAgdmlzaWJsZSAxLCBjb3ZlcnMgdGhlIHBvaW50ZXIgdHJ1ZQogIEEgV01fTU9VU0VMRUFWRQogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBvdXJzCnN1bW1hcnkgMSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== popup WS_EX_LAYERED | WS_EX_TRANSPARENT shown over the pointer\n  B WM_SHOWWINDOW show=1 status=0\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\n== popup WS_EX_LAYERED | TRANSPARENT | NOACTIVATE | TOOLWINDOW | TOPMOST shown with SWP_NOACTIVATE\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\n== popup (same thread) that answers WM_NCHITTEST with HTTRANSPARENT\n  WindowFromPoint is A\n  B WM_SHOWWINDOW show=1 status=0\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\n== popup owned by A\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=58,71\n  A WM_MOUSELEAVE\n  cursor (208,191) over B\n== child window of A shown over the pointer\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  A WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=79,39\n  A WM_MOUSELEAVE\n  cursor (208,191) over B\n== tooltips_class32 tracking tooltip shown over the pointer\n  tool added 1, tooltip visible 1, covers the pointer true\n  A WM_MOUSELEAVE\n  cursor (208,191) over ours\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 5191
+    },
+    {
+      "name": "mlv_tme_states",
+      "exe_sha256": "f7a32919f71e7abb8a2d2cd5844c639c409bff74347789e2fb241567ea79b3de",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBUTUVfSE9WRVIgfCBUTUVfTEVBVkUgd2l0aCAxNTAgbXMsIHRoZW4gVE1FX0NBTkNFTCB8IFRNRV9IT1ZFUgogIHF1ZXJ5IGZsYWdzIDB4MyB3aW5kb3cgQSBob3ZlciB0aW1lIDE1MAogIGFmdGVyIGNhbmNlbGxpbmcgdGhlIGhvdmVyOiBmbGFncyAweDIgaG92ZXIgdGltZSAwCiAgYWZ0ZXIgY2FuY2VsbGluZyB0aGUgbGVhdmU6IGZsYWdzIDB4MCB3aW5kb3cgbnVsbAogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBBCj09IHF1ZXJ5IG9mIGFub3RoZXIgd2luZG93IHRoYW4gdGhlIHRyYWNrZWQgb25lCiAgQiAobm90IHRyYWNrZWQpOiBmbGFncyAweDIgd2luZG93IEEKICBBICh0cmFja2VkKTogZmxhZ3MgMHgyIHdpbmRvdyBBCiAgQSBhZnRlciBCIHdhcyB0cmFja2VkIGFzIHdlbGw6IGZsYWdzIDB4MgogIEI6IGZsYWdzIDB4MiB3aW5kb3cgQQogIEIgV01fTU9VU0VMRUFWRQogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBBCj09IFRNRV9MRUFWRSBmb3IgQSB3aGlsZSB0aGUgcG9pbnRlciBpcyBvdmVyIEI6IEEgZ2V0cyBXTV9NT1VTRUxFQVZFIGF0IG9uY2UKICBUcmFja01vdXNlRXZlbnQgcmV0dXJucyAxCiAgcXVlcnkgYWZ0ZXI6IGZsYWdzIDB4MAogIEEgV01fTU9VU0VMRUFWRQogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBCCj09IHRoZSB0cmFja2VkIHdpbmRvdyBkZXN0cm95ZWQsIHRoZSBuZXh0IHdpbmRvdyBvZiB0aGUgc2FtZSBjbGFzcyB0cmFja2VkCiAgbmV3IHdpbmRvdzogVHJhY2tNb3VzZUV2ZW50IDEgcXVlcnkgZmxhZ3MgMHgyCiAgQSBXTV9ERVNUUk9ZIHc9MHgwIGw9MHgwCiAgQSBXTV9TSE9XV0lORE9XIHNob3c9MSBzdGF0dXM9MAogIEEgV01fU0VUQ1VSU09SIHdpbmRvdz1BIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBBIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9MTAwLDYwCiAgY3Vyc29yICgyMDgsMTkxKSBvdmVyIEEKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== TME_HOVER | TME_LEAVE with 150 ms, then TME_CANCEL | TME_HOVER\n  query flags 0x3 window A hover time 150\n  after cancelling the hover: flags 0x2 hover time 0\n  after cancelling the leave: flags 0x0 window null\n  cursor (208,191) over A\n== query of another window than the tracked one\n  B (not tracked): flags 0x2 window A\n  A (tracked): flags 0x2 window A\n  A after B was tracked as well: flags 0x2\n  B: flags 0x2 window A\n  B WM_MOUSELEAVE\n  cursor (208,191) over A\n== TME_LEAVE for A while the pointer is over B: A gets WM_MOUSELEAVE at once\n  TrackMouseEvent returns 1\n  query after: flags 0x0\n  A WM_MOUSELEAVE\n  cursor (208,191) over B\n== the tracked window destroyed, the next window of the same class tracked\n  new window: TrackMouseEvent 1 query flags 0x2\n  A WM_DESTROY w=0x0 l=0x0\n  A WM_SHOWWINDOW show=1 status=0\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3841
+    },
+    {
+      "name": "mlv_tracked_gone",
+      "exe_sha256": "d17c8fa668a1d6583b4153d1d3f502265f39dca186b40790c77ea9bf52dfd3f6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBBIGhpZGRlbgogIEEgV01fU0hPV1dJTkRPVyBzaG93PTAgc3RhdHVzPTAKICBBIFdNX01PVVNFTEVBVkUKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgb3RoZXIKPT0gQSBkZXN0cm95ZWQKICBBIFdNX0RFU1RST1kgdz0weDAgbD0weDAKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgb3RoZXIKPT0gQSBtb3ZlZCBhd2F5CiAgQSBXTV9NT1VTRUxFQVZFCiAgY3Vyc29yICgyMDgsMTkxKSBvdmVyIG90aGVyCj09IEEgbW92ZWQgYnkgMTAgcGl4ZWxzLCBwb2ludGVyIHN0aWxsIGluc2lkZQogIEEgV01fU0VUQ1VSU09SIHdpbmRvdz1BIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBBIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9OTAsNTAKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQQo9PSBBIHJlc2l6ZWQgc28gdGhlIHBvaW50ZXIgaXMgb3V0c2lkZQogIEEgV01fTU9VU0VMRUFWRQogIGN1cnNvciAoMjA4LDE5MSkgb3ZlciBvdGhlcgpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== A hidden\n  A WM_SHOWWINDOW show=0 status=0\n  A WM_MOUSELEAVE\n  cursor (208,191) over other\n== A destroyed\n  A WM_DESTROY w=0x0 l=0x0\n  cursor (208,191) over other\n== A moved away\n  A WM_MOUSELEAVE\n  cursor (208,191) over other\n== A moved by 10 pixels, pointer still inside\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=90,50\n  cursor (208,191) over A\n== A resized so the pointer is outside\n  A WM_MOUSELEAVE\n  cursor (208,191) over other\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 4044
+    },
+    {
+      "name": "mlv_tracked_state",
+      "exe_sha256": "9bd7b31374549072a682b27c2828e1740922d48b521d3c1d23a777e09886e810",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBBIGRpc2FibGVkCiAgY3Vyc29yICgyMDgsMTkxKSBvdmVyIEEKPT0gQSBtaW5pbWl6ZWQKICBBIFdNX01PVVNFTEVBVkUKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgb3RoZXIKPT0gcG9wdXAgb3ZlciB0aGUgcG9pbnRlciwgdGhlbiBUTUVfUVVFUlkgb2YgQQogIGJlZm9yZTogcXVlcnkgZmxhZ3MgMHgyIHdpbmRvdyBBCiAgYWZ0ZXIgdGhlIGxlYXZlOiBxdWVyeSBmbGFncyAweDAgd2luZG93IG51bGwgaG92ZXIgdGltZSAwCiAgQiBXTV9TSE9XV0lORE9XIHNob3c9MSBzdGF0dXM9MAogIEIgV01fU0VUQ1VSU09SIHdpbmRvdz1CIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBCIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9NTgsNzEKICBBIFdNX01PVVNFTEVBVkUKICBjdXJzb3IgKDIwOCwxOTEpIG92ZXIgQgo9PSBwb3B1cCBvdmVyIHRoZSBwb2ludGVyLCB0aGVuIGhpZGRlbiBhZ2FpbiwgVE1FX0xFQVZFIGFza2VkIG9uY2UgbW9yZQogIHBvaW50ZXIgb3ZlciBBCiAgVHJhY2tNb3VzZUV2ZW50IHJldHVybnMgMQogIHF1ZXJ5IGZsYWdzIDB4MiB3aW5kb3cgQQogIEIgV01fU0hPV1dJTkRPVyBzaG93PTEgc3RhdHVzPTAKICBCIFdNX1NFVENVUlNPUiB3aW5kb3c9QiBoaXQ9MSBtc2c9V01fTU9VU0VNT1ZFCiAgQiBXTV9NT1VTRU1PVkUga2V5cz0weDAgY2xpZW50PTU4LDcxCiAgQSBXTV9NT1VTRUxFQVZFCiAgQiBXTV9TSE9XV0lORE9XIHNob3c9MCBzdGF0dXM9MAogIEEgV01fU0VUQ1VSU09SIHdpbmRvdz1BIGhpdD0xIG1zZz1XTV9NT1VTRU1PVkUKICBBIFdNX01PVVNFTU9WRSBrZXlzPTB4MCBjbGllbnQ9MTAwLDYwCiAgY3Vyc29yICgyMDgsMTkxKSBvdmVyIEEKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== A disabled\n  cursor (208,191) over A\n== A minimized\n  A WM_MOUSELEAVE\n  cursor (208,191) over other\n== popup over the pointer, then TME_QUERY of A\n  before: query flags 0x2 window A\n  after the leave: query flags 0x0 window null hover time 0\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=58,71\n  A WM_MOUSELEAVE\n  cursor (208,191) over B\n== popup over the pointer, then hidden again, TME_LEAVE asked once more\n  pointer over A\n  TrackMouseEvent returns 1\n  query flags 0x2 window A\n  B WM_SHOWWINDOW show=1 status=0\n  B WM_SETCURSOR window=B hit=1 msg=WM_MOUSEMOVE\n  B WM_MOUSEMOVE keys=0x0 client=58,71\n  A WM_MOUSELEAVE\n  B WM_SHOWWINDOW show=0 status=0\n  A WM_SETCURSOR window=A hit=1 msg=WM_MOUSEMOVE\n  A WM_MOUSEMOVE keys=0x0 client=100,60\n  cursor (208,191) over A\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 4235
+    }
+  ]
+}

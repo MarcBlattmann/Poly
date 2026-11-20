@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSString.compare%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSString.compare%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSString.compare:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSString compare:] returns NSOrderedAscending (-1), NSOrderedSame (0) or NSOrderedDescending (1)
+  and is -compare:options:0. Strings compare by UTF-16 unit like CFStringCompare: 'a' < 'b', 'a' > 'B'
+  (capitals before lower case), 'Z' < 'a', a prefix is smaller ('ab' < 'abc'), '' < 'a', 'a2' > 'a10'.
+  One difference to CFStringCompare with no options: canonically equal text is the same, so 'é'
+  (U+00E9) and 'e' + U+0301 compare NSOrderedSame, while NSLiteralSearch (2) compares the units and
+  gives NSOrderedDescending for them (CFStringCompare with option 0 says they differ, and
+  isEqualToString: is exact: false). Options (NSCaseInsensitiveSearch 1, NSLiteralSearch 2,
+  NSBackwardsSearch 4, NSNumericSearch 64) combine: case insensitive folds É with é; numeric orders
+  'a2' before 'a10' ('a2' vs 'a10' with NSNumericSearch is Ascending); caseInsensitiveCompare: is the
+  case-insensitive form. compare:options:range: compares a part of the receiver with the whole
+  argument ('xxabcxx' range (2,3) against 'abc': Same; 'abcdef' range (0,2) against 'abc': Ascending,
+  range (0,4): Descending; an empty range against a non-empty string: Ascending). Equal strings have
+  equal -hash (and the hash is CFHash). A nil argument did not raise (it returned a value) and is not
+  specified.
+returns:
+  ordered: "-1, 0 or 1 (NSComparisonResult, NSInteger)"
+errors:
+  range_out_of_bounds: "raises NSRangeException"
+  nil_argument: "not specified"
+side_effects: "none"
+threading: "objects are immutable or the class says otherwise; immutable values may be read from any thread"
+ordering: []
+timing:
+  typical: "microseconds, linear in the length"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

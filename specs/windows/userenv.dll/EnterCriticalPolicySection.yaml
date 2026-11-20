@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/userenv.dll/EnterCriticalPolicySection.yaml
+id: windows/api/userenv.dll/EnterCriticalPolicySection
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave the same output except where a sheet says what a 32-bit caller sees."
+  observed_by: spec-win-updater-services
+  date: 2026-11-20
+sources: >
+  Observations of our own 64-bit test programs on the machine above (each test ran at least twice with identical output). Microsoft Learn pages of the functions (kernel32 / fileapi.h, winbase.h, processthreadsapi.h, wow64apiset.h, memoryapi.h, synchapi.h, combaseapi.h, objbase.h, userenv.h) for names, parameters and the error values in winerror.h. What the documentation does not say (error codes, edge cases, the effect of access rights) is taken from the observations only. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Asks the Group Policy engine to hold off policy processing for the user (FALSE) or machine (TRUE) policy while the caller reads policy settings. Returns a handle that LeaveCriticalPolicySection takes back.
+interface:
+  signature: "HANDLE EnterCriticalPolicySection(BOOL bMachine)"
+installer: "Google's updater 157 and 159 (32-bit) import this function; their run on Poly reaches it while they install and start their two services and register their update service and scheduled task. What they pass is not known beyond the import."
+rules:
+  machine: "the machine section returns a non-NULL handle (also with a standard token and with an elevated token); two enters in a row return two different handles"
+  user: "the user section returns a non-NULL handle in an interactive session with a standard or an elevated token; in a session that is not interactive (a service-like logon without a loaded user profile) it returns NULL with ERROR_ACCESS_DENIED 5, and LeaveCriticalPolicySection of that NULL fails with ERROR_INVALID_PARAMETER 87"
+  no_blocking: "while one thread holds a section, another thread entering the same section is not blocked (it returned at once, user and machine alike); a thread can hold the user section and another thread enter the machine section"
+  flag: "the flag may be any value: 0 selects one section, every other value (1, 2, 0x100, -1) returned a handle that could be left"
+  nesting: "16 nested enters (8 of each kind) all return non-NULL, pairwise different handles, and all 16 are left again in reverse order; 300 enter-and-leave cycles in a row from one thread all succeed"
+  handle_value: "the returned value is not a kernel handle: GetHandleInformation and DuplicateHandle fail on it with ERROR_INVALID_HANDLE 6 (so it cannot be duplicated or inherited); see LeaveCriticalPolicySection for what leaves it"
+errors:
+  access_denied: "ERROR_ACCESS_DENIED 5 (user section without a user profile; the function returns NULL)"
+side_effects: "while a section is held the policy engine may wait to run; the tests hold it for at most a few hundred milliseconds"
+threading: "any thread; handles may be left from another thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, run on the oracle with the elevated token in the interactive session. Scenarios that could end the process (a NULL pointer where the function reads or writes through it) run in a child process of the same image (`--child ...`) and the parent prints the exit code. Observations are results, error codes, booleans and counts; never addresses, process or thread ids, times or the name of the machine. Files the tests make live next to the test program and are deleted by the test. The recorded run is the elevated interactive one; the NULL result of the user section was observed in a session without a user profile and is not part of the recorded output.
+not_covered: >
+  the effect on policy processing (waiting of the engine while a section is held), time-outs, other processes entering the same section at the same time, and sections entered during a policy refresh.

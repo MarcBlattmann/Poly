@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_apply_more",
+      "source_sha256": "47c32e09def0e8bbbf19ab36e724566ebfc1b21db29f2473dfe5a4140c3afa3d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0742eff6ac5fc7e87f167816f42985e7218cc9ba0fe6768e61644008016d377e",
+          "exit_code": 0,
+          "stdout": "ok 4096 results written by the iterations are all visible\nok 100000 iterations: sum 4999950000\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4d85f52c394f640e8b7a383aa29ba9a6ab0100eacabdcfd98f62fbdb50dae04d",
+          "exit_code": 0,
+          "stdout": "ok 4096 results written by the iterations are all visible\nok 100000 iterations: sum 4999950000\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_apply_threads",
+      "source_sha256": "57e7ffc08b72dd3664cb48b9153ad0ad6b6bd68f9ae15943d056f6987c067818",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "377d45c8500ac9462c4064cd498e989e6ce9645a0b2f064d3a3941c46050a89b",
+          "exit_code": 0,
+          "stdout": "ok the caller ran some iterations itself\nvalue every iteration ran on some thread 1\nok more than one thread took part (a slow body, 200 iterations)\nok an apply inside an apply: the sum of 0..63 is 2016\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7e862208f4bf311e7bbbc34cad2dafb411a0480edc9725d4981216a369ce7f9a",
+          "exit_code": 0,
+          "stdout": "ok the caller ran some iterations itself\nvalue every iteration ran on some thread 1\nok more than one thread took part (a slow body, 200 iterations)\nok an apply inside an apply: the sum of 0..63 is 2016\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

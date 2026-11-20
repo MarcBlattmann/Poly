@@ -1467,7 +1467,7 @@ pub const S5_REQUIRED: bool = true;
 
 /// The S5 window's steps: start, the same stop/reload at 50 s as stage 3 (a slow start still
 /// loads), and at about 125 s the green page at (200, 400).
-const S5_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000";
+const S5_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,waitpixel:200|400|008000|30";
 
 /// How many rendering GPU processes a run's log shows: `d3d11.dll` says once per process which
 /// kind of process loaded it and the names of its switches (ADR 0211). A `gpu-process` started
@@ -1548,14 +1548,16 @@ pub(crate) const S3_PAGE: &str =
 
 /// The steps of the stage 3 check, on the desktop: start Chrome; stop/reload the page twice at 50 s
 /// (a slow start still finishes loading, so the component updater's download task runs, which
-/// stopped the browser about 35 s after its first page before ADR 0207); at about
-/// 125 s the page area, (200, 400) of the 1280x800 screen, must be `green` (CSS: 008000). Then a
-/// navigation typed into the address field (Ctrl+L, the keys of the desktop's US layout, Enter:
-/// ADR 0209) to a page whose background is `blue` (0000ff), checked at the same place
-/// (ADR 0155 addendum "browsing").
-pub(crate) const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,pixel:200|400|008000,\
-                        chord:ctrl+l,sleep:2,type:data:text/html,<body bgcolor=blue>,key:ret,sleep:10,\
-                        pixel:200|400|0000ff";
+/// stopped the browser about 35 s after its first page before ADR 0207); from about
+/// 125 s the page area, (200, 400) of the 1280x800 screen, must be `green` (CSS: 008000) within
+/// 30 s. Then a navigation typed into the address field (Ctrl+L, the keys of the desktop's US
+/// layout, Enter: ADR 0209) to a page whose background is `blue` (0000ff), which must show at the
+/// same place within 60 s (ADR 0155 addendum "browsing"). Both wait for the colour instead of
+/// looking once after a fixed time: under load the navigation sometimes took longer than the 10 s
+/// the check used to give it, and the green page was still there.
+pub(crate) const S3_STEPS: &str = "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,waitpixel:200|400|008000|30,\
+                        chord:ctrl+l,sleep:2,type:data:text/html,<body bgcolor=blue>,key:ret,\
+                        waitpixel:200|400|0000ff|60";
 
 /// What one stage 3 run showed.
 #[derive(Debug, PartialEq, Eq)]

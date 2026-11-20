@@ -82,7 +82,7 @@ impl Wm {
     }
 
     /// The foreground window, if it still exists.
-    pub(super) fn foreground(&self) -> u32 {
+    pub fn foreground(&self) -> u32 {
         if self.is_window(u64::from(self.foreground)) { self.foreground } else { 0 }
     }
 

@@ -286,15 +286,17 @@ kernel_test! {
             return Ok(());
         }
         let path: &[u8] = b"/bin/time-test";
-        let run = || -> TestResult {
+        // Which run failed is in the message; which checks, in the program's own
+        // `time-test: FAIL <name>: <value>` lines just before it.
+        let run = |what: &'static str| -> TestResult {
             let process = program::exec_path(path, &[path], &[], false).map_err(|_| "exec_path /bin/time-test failed")?;
-            expect_exit(wait(&process)?, 0, "/bin/time-test reported failures")
+            expect_exit(wait(&process)?, 0, what)
         };
-        run()?;
+        run("/bin/time-test reported failures (the vDSO on the kernel's clock)")?;
         // Again with the vDSO computing the time from the TSC itself (which
         // the clock does not use on a CPU without a constant-rate TSC).
         let forced = vdso::force_tsc_for_tests(true);
-        let result = run();
+        let result = run("/bin/time-test reported failures (the vDSO computing from the TSC)");
         vdso::force_tsc_for_tests(false);
         if !forced {
             kprintln!("linux time test: no calibrated TSC, the vDSO's TSC path was not run");

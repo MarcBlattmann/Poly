@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSString+stringWithUTF8String%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSString+stringWithUTF8String%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSString+stringWithUTF8String:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  +[NSString stringWithUTF8String:] decodes a NUL-terminated UTF-8 C string and returns an
+  autoreleased string of UTF-16 units (é one unit, a character above U+FFFF two; read in tests through
+  CFStringGetLength / CFStringGetCharacterAtIndex), or nil when the bytes are not valid UTF-8: stray
+  lead or continuation bytes (FF FE, 80), a truncated sequence, overlong forms (C0 80), an encoded
+  surrogate (ED A0 80), a code point beyond U+10FFFF (F4 90 80 80). The empty C string gives an empty
+  string (not nil). A leading byte order mark EF BB BF is dropped (a string 'a' with a mark has length
+  1), one in the middle stays as the character U+FEFF. The result is a CFString (toll-free bridged:
+  CFGetTypeID is CFStringGetTypeID, CFEqual and CFHash agree with a CFString of the same text, [s
+  hash] equals CFHash) whatever its length (short strings may be represented without an allocation;
+  their objects are indistinguishable except by pointer, and two equal short strings can be the same
+  object); mutable subclasses answer the same. The class name of the result is an implementation
+  detail (short, long, constant strings differ) and is not part of the behaviour.
+returns:
+  success: "an autoreleased NSString"
+  invalid: "nil"
+errors:
+  null_pointer: "a nil or invalid receiver or argument not listed here is undefined; not to be relied on"
+side_effects: "allocates the string"
+threading: "objects are immutable or the class says otherwise; immutable values may be read from any thread"
+ordering: []
+timing:
+  typical: "microseconds, linear in the length"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

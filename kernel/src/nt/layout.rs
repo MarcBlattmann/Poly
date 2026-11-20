@@ -181,6 +181,8 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         ("oleacc.dll", super::OLEACC),
         ("uiautomationcore.dll", super::UIAUTOMATIONCORE),
         ("mfplat.dll", super::MFPLAT),
+        ("mmdevapi.dll", super::MMDEVAPI),
+        ("audioses.dll", super::AUDIOSES),
         ("powrprof.dll", super::POWRPROF),
         ("uxtheme.dll", super::UXTHEME),
         // ADR 0155, step 12.

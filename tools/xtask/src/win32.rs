@@ -95,6 +95,8 @@ pub const OUTPUTS: &[&str] = &[
     "oleacc.dll",
     "uiautomationcore.dll",
     "mfplat.dll",
+    "mmdevapi.dll",
+    "audioses.dll",
     "powrprof.dll",
     "uxtheme.dll",
     // ADR 0155, step 12.
@@ -339,6 +341,8 @@ fn cache_key(root: &Path) -> Result<u64> {
             "personalities/nt/win32/oleacc",
             "personalities/nt/win32/uiautomationcore",
             "personalities/nt/win32/mfplat",
+            "personalities/nt/win32/mmdevapi",
+            "personalities/nt/win32/audioses",
             "personalities/nt/win32/powrprof",
             "personalities/nt/win32/uxtheme",
             // The generated system DLLs (ADR 0155, step 10).

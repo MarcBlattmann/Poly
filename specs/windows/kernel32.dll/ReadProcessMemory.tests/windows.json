@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "rpm_self",
+      "exe_sha256": "172969caed4f9c89d824aa8ce41b5d878b1e6427650bf5e2ac5b136d49d27dd5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "MTYgYnl0ZXMgb2YgYSBzdGF0aWM6IDEsIGNvdW50IHJlcG9ydGVkIDE2LCBieXRlcyB3cml0dGVuIDE2CnRoZSBzYW1lIHdpdGhvdXQgYSBjb3VudCBwb2ludGVyOiAxLCBjb3VudCByZXBvcnRlZCAtMSwgYnl0ZXMgd3JpdHRlbiAxNgpzaXplIDA6IDEsIGNvdW50IHJlcG9ydGVkIDAsIGJ5dGVzIHdyaXR0ZW4gMAplbmRzIGV4YWN0bHkgYXQgdGhlIGVuZCBvZiB0aGUgY29tbWl0dGVkIHBhZ2U6IDEsIGNvdW50IHJlcG9ydGVkIDgsIGJ5dGVzIHdyaXR0ZW4gOAoxNiBieXRlcyBzdGFydGluZyA4IGJlZm9yZSB0aGUgdW5jb21taXR0ZWQgcGFnZTogMCAoZXJyb3IgMjk5KSwgY291bnQgcmVwb3J0ZWQgMCwgYnl0ZXMgd3JpdHRlbiAwCmFuIGFkZHJlc3MgaW4gdGhlIHVuY29tbWl0dGVkIHBhZ2U6IDAgKGVycm9yIDI5OSksIGNvdW50IHJlcG9ydGVkIDAsIGJ5dGVzIHdyaXR0ZW4gMAphIHBhZ2Ugd2l0aCBubyBhY2Nlc3M6IDAgKGVycm9yIDI5OSksIGNvdW50IHJlcG9ydGVkIDAsIGJ5dGVzIHdyaXR0ZW4gMAp0aGUgTlVMTCBhZGRyZXNzOiAwIChlcnJvciAyOTkpLCBjb3VudCByZXBvcnRlZCAwLCBieXRlcyB3cml0dGVuIDAKYWRkcmVzcyAweDEwOiAwIChlcnJvciAyOTkpLCBjb3VudCByZXBvcnRlZCAwLCBieXRlcyB3cml0dGVuIDAKYW4gYWRkcmVzcyBpbiB0aGUga2VybmVsIGhhbGY6IDAgKGVycm9yIDk5OCksIGNvdW50IHJlcG9ydGVkIDAsIGJ5dGVzIHdyaXR0ZW4gMAp0aGUgTlVMTCBoYW5kbGU6IDAgKGVycm9yIDYpLCBjb3VudCByZXBvcnRlZCAwLCBieXRlcyB3cml0dGVuIDAKYW4gaW52YWxpZCBoYW5kbGUgdmFsdWU6IDAgKGVycm9yIDYpLCBjb3VudCByZXBvcnRlZCAwLCBieXRlcyB3cml0dGVuIDAKYSBoYW5kbGUgd2l0aCBvbmx5IFNZTkNIUk9OSVpFOiAwIChlcnJvciA1KSwgY291bnQgcmVwb3J0ZWQgMCwgYnl0ZXMgd3JpdHRlbiAwCmEgcmVhbCBoYW5kbGUgd2l0aCBQUk9DRVNTX1ZNX1JFQUQ6IDEsIGNvdW50IHJlcG9ydGVkIDE2LCBieXRlcyB3cml0dGVuIDE2CnRoZSBjbG9zZWQgaGFuZGxlOiAwIChlcnJvciA2KSwgY291bnQgcmVwb3J0ZWQgMCwgYnl0ZXMgd3JpdHRlbiAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "16 bytes of a static: 1, count reported 16, bytes written 16\nthe same without a count pointer: 1, count reported -1, bytes written 16\nsize 0: 1, count reported 0, bytes written 0\nends exactly at the end of the committed page: 1, count reported 8, bytes written 8\n16 bytes starting 8 before the uncommitted page: 0 (error 299), count reported 0, bytes written 0\nan address in the uncommitted page: 0 (error 299), count reported 0, bytes written 0\na page with no access: 0 (error 299), count reported 0, bytes written 0\nthe NULL address: 0 (error 299), count reported 0, bytes written 0\naddress 0x10: 0 (error 299), count reported 0, bytes written 0\nan address in the kernel half: 0 (error 998), count reported 0, bytes written 0\nthe NULL handle: 0 (error 6), count reported 0, bytes written 0\nan invalid handle value: 0 (error 6), count reported 0, bytes written 0\na handle with only SYNCHRONIZE: 0 (error 5), count reported 0, bytes written 0\na real handle with PROCESS_VM_READ: 1, count reported 16, bytes written 16\nthe closed handle: 0 (error 6), count reported 0, bytes written 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

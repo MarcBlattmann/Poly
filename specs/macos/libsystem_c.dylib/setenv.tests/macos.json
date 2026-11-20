@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:50:27",
+  "tests": [
+    {
+      "name": "setenv_basic",
+      "source_sha256": "540d0e17b5e2a6d15ba943663d9c4a1f962087658397db552a4b1ff8429f6728",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4157288350766b9430f6ad1f6735dda3e02d94d8898c31771276355ae9ab524c",
+          "exit_code": 0,
+          "stdout": "ok setenv returns 0\nok the name and value were copied\nok the old name is the only one\nok overwrite 0 on an existing name returns 0\nok overwrite 0 keeps the old value\nok overwrite 1 returns 0\nok overwrite 1 replaces the value\nok overwrite 0 on a new name returns 0\nok overwrite 0 on a new name sets it\nok a nonzero overwrite other than 1 overwrites\nok value e\nok an empty value\nok is the empty string\nok environ[0] after the first setenv\nok environ[1]: new names are appended\nok environ[2]\nok environ is NULL terminated after 3\nok a replaced name keeps its place\nok a long value\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8ed2311c690301f351296b9d366d067ecb2884359d9bcbd756ce087bdf1cd5be",
+          "exit_code": 0,
+          "stdout": "ok setenv returns 0\nok the name and value were copied\nok the old name is the only one\nok overwrite 0 on an existing name returns 0\nok overwrite 0 keeps the old value\nok overwrite 1 returns 0\nok overwrite 1 replaces the value\nok overwrite 0 on a new name returns 0\nok overwrite 0 on a new name sets it\nok a nonzero overwrite other than 1 overwrites\nok value e\nok an empty value\nok is the empty string\nok environ[0] after the first setenv\nok environ[1]: new names are appended\nok environ[2]\nok environ is NULL terminated after 3\nok a replaced name keeps its place\nok a long value\nsummary 19 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "setenv_more",
+      "source_sha256": "17c7a90718aabb707173d3baa93ae76d2e6d344a59ee9551cea1b84db302ba96",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2d2ff151c2c5350222ddc6e854ac9f5f31775ca518bc3b18edaaa2d81711dd5c",
+          "exit_code": 0,
+          "stdout": "ok the new, longer value\nok a shorter value\nok a longer one again\nok after 100 overwrites\nok still one variable\nok overwrite 0 keeps it\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ef3ad5c38e10e785d27d69b274fc5769cd25755f65c8d802e455ce5303dc0c91",
+          "exit_code": 0,
+          "stdout": "ok the new, longer value\nok a shorter value\nok a longer one again\nok after 100 overwrites\nok still one variable\nok overwrite 0 keeps it\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

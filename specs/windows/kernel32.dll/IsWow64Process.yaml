@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/IsWow64Process.yaml
+id: windows/api/kernel32.dll/IsWow64Process
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave the same output except where a sheet says what a 32-bit caller sees."
+  observed_by: spec-win-updater-services
+  date: 2026-11-20
+sources: >
+  Observations of our own 64-bit test programs on the machine above (each test ran at least twice with identical output). Microsoft Learn pages of the functions (kernel32 / fileapi.h, winbase.h, processthreadsapi.h, wow64apiset.h, memoryapi.h, synchapi.h, combaseapi.h, objbase.h, userenv.h) for names, parameters and the error values in winerror.h. What the documentation does not say (error codes, edge cases, the effect of access rights) is taken from the observations only. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Tells whether a process is a 32-bit process on 64-bit Windows. For a 64-bit caller asking about itself or a 64-bit child the answer is FALSE. The handle needs PROCESS_QUERY_LIMITED_INFORMATION or PROCESS_QUERY_INFORMATION.
+interface:
+  signature: "BOOL IsWow64Process(HANDLE hProcess, PBOOL Wow64Process)"
+installer: "Google's updater 157 and 159 (32-bit) import this function; their run on Poly reaches it while they install and start their two services and register their update service and scheduled task. What they pass is not known beyond the import. Chrome's setup.exe, elevation service and notification helper import it as well."
+rules:
+  answer_64bit: "TRUE with *Wow64Process = FALSE for the process pseudo handle (-1), a real handle of the calling process opened with PROCESS_QUERY_LIMITED_INFORMATION (0x1000), PROCESS_QUERY_INFORMATION (0x400) or all rights, and a handle of a 64-bit child process of the same image"
+  access: "a handle opened with only one of PROCESS_TERMINATE, CREATE_THREAD, VM_OPERATION, VM_READ, VM_WRITE, DUP_HANDLE, CREATE_PROCESS, SET_QUOTA, SET_INFORMATION, SUSPEND_RESUME, SYNCHRONIZE or READ_CONTROL fails with ERROR_ACCESS_DENIED 5 and the output is left alone; a handle with all rights works"
+  null_handle: "a NULL handle gives TRUE and *Wow64Process = FALSE (observed; not documented)"
+  bad_handle: "a handle that is not a process (an event), a closed handle, the thread pseudo handle (-2) and the value 0x7FFF0 give FALSE with ERROR_INVALID_HANDLE 6 and the output left alone"
+  same_handle: "one handle used twice and from another thread gives the same answer"
+  caller_32bit: "the same tests built for 32-bit x86 (not recorded in the pipeline) give TRUE with *Wow64Process = TRUE for the caller's own pseudo handle, a real handle of the caller and a child of the same 32-bit image; the failures (access, bad handles, NULL handle) are the same as for a 64-bit caller"
+  null_output: "a NULL output pointer raises an access violation (exit code 0xC0000005 in the child): the function writes without checking; not exercised by the visible tests beyond the documentation here"
+errors:
+  access_denied: "ERROR_ACCESS_DENIED 5"
+  invalid_handle: "ERROR_INVALID_HANDLE 6"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, run on the oracle with the elevated token in the interactive session. Scenarios that could end the process (a NULL pointer where the function reads or writes through it) run in a child process of the same image (`--child ...`) and the parent prints the exit code. Observations are results, error codes, booleans and counts; never addresses, process or thread ids, times or the name of the machine. Files the tests make live next to the test program and are deleted by the test.
+not_covered: >
+  the answer for a real 32-bit process (the pipeline builds 64-bit tests only; the 32-bit view of the function is the 32-bit gap in docs/windows/updater-services-gap-check.md) and for processes of other architectures.

@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSThread+detachNewThreadSelector%3AtoTarget%3AwithObject%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSThread+detachNewThreadSelector%3AtoTarget%3AwithObject%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSThread+detachNewThreadSelector:toTarget:withObject:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  +[NSThread detachNewThreadSelector:toTarget:withObject:] starts a new thread that sends the selector
+  to the target with the object as argument, then ends; the call returns at once, before the work has
+  necessarily run (a worker that waits for a flag set after the call returned finishes only then), the
+  work runs on a thread that is not the main one, receives the argument object, and the target and
+  object are kept alive for it. Five threads started in a row all run to completion, each on its own
+  thread. The method should open its own autorelease pool (the tests do). Threads can be waited for
+  only by their own signalling (the tests poll a volatile flag with +sleepForTimeInterval:).
+  detachNewThreadWithBlock: is the block form; both start a real thread of the system.
+returns:
+  success: "nothing"
+errors: {}
+side_effects: "creates a thread"
+threading: "the new thread runs concurrently with the caller"
+ordering:
+  - "the caller continues before the selector necessarily runs"
+timing:
+  typical: "a few hundred microseconds to start; the selector runs shortly after"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

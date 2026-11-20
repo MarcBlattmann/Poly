@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_malloc.dylib/malloc_default_zone.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in malloc_default_zone.tests/macos.json.
+id: macos/api/libsystem_malloc.dylib/malloc_default_zone
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  malloc_default_zone() returns the zone malloc() uses, always the same pointer: a table of function pointers
+  (struct malloc_zone_t of <malloc/malloc.h>, 200 bytes) with version 10 and zone_name "DefaultMallocZone"; size,
+  malloc, calloc, valloc, free, realloc, destroy, batch_malloc, batch_free, introspect, memalign, free_definite_size,
+  pressure_relief and claimed_address are all filled in. Calling through the table agrees with malloc, free and
+  malloc_size: zone->size(zone, p) == malloc_size(p), zone->size of NULL or of a stack address is 0, zone->calloc zero
+  fills, zone->valloc is page aligned, zone->memalign honours the alignment, zone->realloc keeps the contents.
+  malloc_zone_from_ptr(p) of a malloc block is the default zone, of NULL or a stack address it is NULL.
+  malloc_get_zone_name gives the name. malloc_default_purgeable_zone() is another zone, also stable,
+  named "DefaultPurgeableMallocZone"; blocks taken from it with malloc_zone_malloc work, are sized, are freed by free()
+  and are reported by malloc_zone_from_ptr as belonging to the default zone, not to the purgeable one. Same on both
+  architectures.
+returns:
+  "zone": "pointer to the default zone, never NULL"
+errors:
+  "none": "no error result"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

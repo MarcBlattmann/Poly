@@ -136,6 +136,10 @@ pub static COMDLG32: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/comdlg32.
 pub static OLEACC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/oleacc.dll"));
 pub static UIAUTOMATIONCORE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/uiautomationcore.dll"));
 pub static MFPLAT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mfplat.dll"));
+/// Our `mmdevapi.dll` and `audioses.dll`: the audio endpoint and session classes (audio plan W2;
+/// scaffolds until W2 fills them).
+pub static MMDEVAPI: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/mmdevapi.dll"));
+pub static AUDIOSES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/audioses.dll"));
 pub static POWRPROF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/powrprof.dll"));
 // The system DLLs Poly generates as fail-only stubs for the Windows applications (ADR 0155, step 10),
 // `(file name, image)`; installed in `C:\Windows\System32` by `layout`.
@@ -1798,6 +1802,17 @@ pub fn own_pages() -> Vec<(u32, u64)> {
             (pid, resident.saturating_sub(cached + shared))
         })
         .collect()
+}
+
+/// Every NT process's out-of-memory score adjustment (ADR 0250 addendum,
+/// `poly_personality_nt::oomadj`): a child in a job its still running parent made, a lowered
+/// memory priority.
+pub fn oom_score_adjs() -> Vec<(u32, i32)> {
+    with_existing(|s| {
+        let alive = |p: ProcessId| s.processes.contains_key(&p) && !s.sys.process_exits.contains_key(&p);
+        s.processes.keys().map(|&pid| (pid.0, poly_personality_nt::oomadj::score_adj(&s.sys, pid, alive))).collect()
+    })
+    .unwrap_or_default()
 }
 
 /// The path of NT process `pid`'s executable below its volume, for logs.

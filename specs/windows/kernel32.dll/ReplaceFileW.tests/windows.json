@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "rf_basic",
+      "exe_sha256": "5d613e05b6e3a0e0e020eeb973c82567460ec5d9938415c68eac710521cbf765",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVwbGFjZSB3aXRob3V0IGJhY2t1cDogMTsgcmVwbGFjZWQgIm5ldy1CLWxvbmdlciIgKDEyIGJ5dGVzKSByZXBsYWNlbWVudCBtaXNzaW5nCnJlcGxhY2Ugd2l0aCBhIGJhY2t1cCBuYW1lIHRoYXQgZG9lcyBub3QgZXhpc3Q6IDE7IHJlcGxhY2VkICJuZXctQiIgKDUgYnl0ZXMpIHJlcGxhY2VtZW50IG1pc3NpbmcgYmFja3VwICJvbGQtQSIgKDUgYnl0ZXMpCnJlcGxhY2Ugd2l0aCBhIGJhY2t1cCBuYW1lIHRoYXQgZXhpc3RzOiAxOyByZXBsYWNlZCAibmV3LUIiICg1IGJ5dGVzKSByZXBsYWNlbWVudCBtaXNzaW5nIGJhY2t1cCAib2xkLUEiICg1IGJ5dGVzKQpmbGFncyAweDE6IDE7IHJlcGxhY2VkICJuZXctQiIgKDUgYnl0ZXMpIHJlcGxhY2VtZW50IG1pc3NpbmcKZmxhZ3MgMHgyOiAxOyByZXBsYWNlZCAibmV3LUIiICg1IGJ5dGVzKSByZXBsYWNlbWVudCBtaXNzaW5nCmZsYWdzIDB4NDogMTsgcmVwbGFjZWQgIm5ldy1CIiAoNSBieXRlcykgcmVwbGFjZW1lbnQgbWlzc2luZwpmbGFncyAweDc6IDE7IHJlcGxhY2VkICJuZXctQiIgKDUgYnl0ZXMpIHJlcGxhY2VtZW50IG1pc3NpbmcKdW5rbm93biBmbGFncyAweDg6IDAgKGVycm9yIDg3KTsgcmVwbGFjZWQgIm9sZC1BIiAoNSBieXRlcykgcmVwbGFjZW1lbnQgIm5ldy1CIiAoNSBieXRlcykKdW5rbm93biBmbGFncyAweDEwMDogMCAoZXJyb3IgODcpOyByZXBsYWNlZCAib2xkLUEiICg1IGJ5dGVzKSByZXBsYWNlbWVudCAibmV3LUIiICg1IGJ5dGVzKQp1bmtub3duIGZsYWdzIDB4ODAwMDAwMDA6IDAgKGVycm9yIDg3KTsgcmVwbGFjZWQgIm9sZC1BIiAoNSBieXRlcykgcmVwbGFjZW1lbnQgIm5ldy1CIiAoNSBieXRlcykKYmVmb3JlOiBib3RoIGNyZWF0aW9uIHRpbWVzIGFyZSBzZXQgMSwgdGhlIHR3byBkaWZmZXIgMQpyZXBsYWNlIG9mIGEgaGlkZGVuIGZpbGU6IDE7IHJlcGxhY2VkICJuZXctQiIgKDUgYnl0ZXMpIHJlcGxhY2VtZW50IG1pc3NpbmcKICBhdHRyaWJ1dGVzIG9mIHRoZSByZXBsYWNlZCBuYW1lIGJlZm9yZSBhbmQgYWZ0ZXI6IGhpZGRlbiBiaXQga2VwdCAxCiAgY3JlYXRpb24gdGltZSBhZnRlcjogZXF1YWxzIHRoZSBvbGQgZmlsZSdzIDEsIGVxdWFscyB0aGUgcmVwbGFjZW1lbnQncyAwCmEgbGFyZ2VyIHJlcGxhY2VtZW50OiAxOyByZXBsYWNlZCAienp6enp6enp6enp6Ii4uLiAoNTAwMCBieXRlcykgcmVwbGFjZW1lbnQgbWlzc2luZwogIHNpemUgb2YgdGhlIHJlcGxhY2VkIG5hbWUgYWZ0ZXJ3YXJkcyA1MDAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "replace without backup: 1; replaced \"new-B-longer\" (12 bytes) replacement missing\nreplace with a backup name that does not exist: 1; replaced \"new-B\" (5 bytes) replacement missing backup \"old-A\" (5 bytes)\nreplace with a backup name that exists: 1; replaced \"new-B\" (5 bytes) replacement missing backup \"old-A\" (5 bytes)\nflags 0x1: 1; replaced \"new-B\" (5 bytes) replacement missing\nflags 0x2: 1; replaced \"new-B\" (5 bytes) replacement missing\nflags 0x4: 1; replaced \"new-B\" (5 bytes) replacement missing\nflags 0x7: 1; replaced \"new-B\" (5 bytes) replacement missing\nunknown flags 0x8: 0 (error 87); replaced \"old-A\" (5 bytes) replacement \"new-B\" (5 bytes)\nunknown flags 0x100: 0 (error 87); replaced \"old-A\" (5 bytes) replacement \"new-B\" (5 bytes)\nunknown flags 0x80000000: 0 (error 87); replaced \"old-A\" (5 bytes) replacement \"new-B\" (5 bytes)\nbefore: both creation times are set 1, the two differ 1\nreplace of a hidden file: 1; replaced \"new-B\" (5 bytes) replacement missing\n  attributes of the replaced name before and after: hidden bit kept 1\n  creation time after: equals the old file's 1, equals the replacement's 0\na larger replacement: 1; replaced \"zzzzzzzzzzzz\"... (5000 bytes) replacement missing\n  size of the replaced name afterwards 5000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 202
+    }
+  ]
+}
