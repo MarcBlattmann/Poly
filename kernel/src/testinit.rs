@@ -108,12 +108,35 @@ pub fn apply(program: &Process, id: &Identity) {
         }
     };
     set(program, program.pid);
+    // An XNU program runs as the identity's user and group (ADR 0246).
+    if let Some(xnu) = &program.xnu {
+        *xnu.ids.lock() = Some((id.creds.fs_ids().uid, id.creds.fs_ids().gid));
+    }
     let init = INIT.lock().clone();
     if let Some(init) = init {
         set(&init, INIT_PID);
     }
     if let Some(mask) = id.umask {
         program.files.umask(mask);
+    }
+}
+
+/// Kernel argument: the directory the program starts in, made if it is
+/// missing and given to the identity's user (a scratch directory of its
+/// own, as the macOS tests ran in; ADR 0246).
+pub const CWD_ARG: &str = "poly.test.cwd";
+
+/// Make `dir` (as the kernel), give it to `id`'s user and group, and make it
+/// `program`'s working directory.
+pub fn enter(program: &Process, dir: &[u8], id: Option<&Identity>) {
+    let files = &program.files;
+    let _ = files.mkdirat(crate::fs::AT_FDCWD, dir, 0o755);
+    if let Some(id) = id {
+        let ids = id.creds.fs_ids();
+        let _ = files.fchownat(crate::fs::AT_FDCWD, dir, Some(ids.uid), Some(ids.gid), true);
+    }
+    if let Err(e) = files.chdir(dir) {
+        kprintln!("init: cannot enter {}: {e:?}", String::from_utf8_lossy(dir));
     }
 }
 

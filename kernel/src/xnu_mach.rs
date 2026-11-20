@@ -180,6 +180,9 @@ impl XnuKernel for MachThread<'_> {
         if let Some(memory) = self.memory() {
             let _ = memory.unmap(start, end - start);
         }
+        if let Some(state) = self.process.xnu.as_ref() {
+            state.unmapped(start, end);
+        }
     }
 
     fn protect(&mut self, start: u64, end: u64, bits: u32) {
@@ -194,9 +197,12 @@ impl XnuKernel for MachThread<'_> {
         }
     }
 
-    fn set_inherit(&mut self, _start: u64, _end: u64, _inherit: Inherit) {
-        // XNU processes do not fork yet; the inheritance takes effect with
-        // fork.
+    fn set_inherit(&mut self, start: u64, end: u64, inherit: Inherit) {
+        // NONE leaves the range out of a fork child (`crate::xnu`); SHARE of
+        // private memory and COPY of shared memory are not done yet.
+        if let Some(state) = self.process.xnu.as_ref() {
+            state.set_inherit(start, end, inherit == Inherit::None);
+        }
     }
 
     fn zero(&mut self, start: u64, end: u64) {
