@@ -199,10 +199,10 @@ pub fn font_dir(repo: &Path) -> Option<PathBuf> {
         return Some(PathBuf::from(d));
     }
     let mut roots = vec![repo.to_path_buf()];
-    if let Ok(common) = util::git_text(repo, &["rev-parse", "--path-format=absolute", "--git-common-dir"]) {
-        if let Some(main) = Path::new(&common).parent() {
-            roots.push(main.to_path_buf());
-        }
+    if let Ok(common) = util::git_text(repo, &["rev-parse", "--path-format=absolute", "--git-common-dir"])
+        && let Some(main) = Path::new(&common).parent()
+    {
+        roots.push(main.to_path_buf());
     }
     for root in roots {
         let Ok(rd) = std::fs::read_dir(root.join("target/fonts")) else { continue };
@@ -808,15 +808,9 @@ fn signal_of(_status: std::process::ExitStatus) -> Option<i32> {
     None
 }
 
-/// Run `exe` once in a fresh, empty `scratch` directory (its current
-/// directory), with an empty environment, stdin at end of file and a
-/// timeout.
-pub fn run_once(exe: &Path, scratch: &Path, timeout: Duration) -> Observation {
-    run_once_with(exe, scratch, timeout, &[])
-}
-
-/// As [`run_once`], with `files` (name, source path) copied into the scratch
-/// directory before the program starts.
+/// Run `exe` once in a fresh, empty `scratch` directory (its current directory)
+/// with `files` (name, source path) copied into it first, an empty environment,
+/// stdin at end of file and a timeout.
 pub fn run_once_with(exe: &Path, scratch: &Path, timeout: Duration, files: &[(String, PathBuf)]) -> Observation {
     use std::io::Read;
     use std::process::Stdio;
@@ -1263,7 +1257,7 @@ mod tests {
         let m = build(&crate::repo_root(), &base.join("bin8"), &sources_in(&impure).unwrap()).unwrap();
         assert_eq!(m.tests[0].executables.len(), 2);
         // The arm64 program runs here and passes its (empty) checks.
-        let o = run_once(&base.join("bin/arm64/pure_one"), &base.join("scratch"), Duration::from_secs(10));
+        let o = run_once_with(&base.join("bin/arm64/pure_one"), &base.join("scratch"), Duration::from_secs(10), &[]);
         assert_eq!((o.status.as_str(), o.exit_code), ("ran", Some(0)), "{o:?}");
         assert_eq!(o.stdout, b"summary 0 passed, 0 failed\n");
         assert!(!base.join("scratch").exists());
