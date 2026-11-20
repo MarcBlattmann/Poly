@@ -81,6 +81,10 @@
       "description": "Kernel interfaces that Linux package formats need (ADR 0132): squashfs, loop, fuse, overlayfs, namespaces, pivot_root, the new mount API, seccomp; entries named by the spec agents",
       "revision": "ADR 0132"
     },
+    "windows-audio-w2": {
+      "description": "The COM audio interfaces of mmdevapi and audioses that Chrome for Windows calls for shared-mode output (device enumerator, devices, IAudioClient, render client, clock, session control), found by a COM-level trace of Chrome on the Windows oracle (spec-win-wasapi); names from Microsoft Learn, mmdeviceapi.h, audioclient.h and audiopolicy.h",
+      "revision": "Windows 11 26H2 build 26300.9974"
+    },
     "windows-com-state": {
       "description": "COM state of a thread and process observed by spec agents on the Windows oracle where Chrome's browser process reaches it (TEB.ReservedForOle, the global interface table, BITS); the names come from Microsoft Learn, objidl.h and bits.h (spec-com-ole-tls)",
       "revision": "Windows 11 25H2 build 26200.9974"

@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_notify_quiet",
+      "exe_sha256": "661ea6e75a9a8f4d7818b1b972d4427a7e85632731da6c3b03af2a61fd6a311a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UmVnaXN0ZXIgPSBTX09LICgweDAwMDAwMDAwKQpvayBSZWdpc3RlcgpJbml0aWFsaXplID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgSW5pdGlhbGl6ZQpwcmVmaWxsID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgcHJlZmlsbApTdGFydCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFN0YXJ0ClN0b3AgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdG9wClJlc2V0ID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgUmVzZXQKY2FsbGJhY2tzIG90aGVyIHRoYW4gT25Qcm9wZXJ0eVZhbHVlQ2hhbmdlZDogMApvayBubyBkZXZpY2UgYWRkZWQsIHJlbW92ZWQsIHN0YXRlIG9yIGRlZmF1bHQtZGV2aWNlIG5vdGlmaWNhdGlvbgpzdW1tYXJ5IDcgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Register = S_OK (0x00000000)\nok Register\nInitialize = S_OK (0x00000000)\nok Initialize\nprefill = S_OK (0x00000000)\nok prefill\nStart = S_OK (0x00000000)\nok Start\nStop = S_OK (0x00000000)\nok Stop\nReset = S_OK (0x00000000)\nok Reset\ncallbacks other than OnPropertyValueChanged: 0\nok no device added, removed, state or default-device notification\nsummary 7 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 578
+    }
+  ]
+}

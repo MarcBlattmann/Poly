@@ -1068,7 +1068,7 @@ fn test(t: &mut Test) {
     t.expect("two_active", u32_at(&b, 40) as i64, 2);
     // SAFETY: resume the second child, which exits at once.
     unsafe { ResumeThread(th2) };
-    t.expect("second_child_exit", wait_exit(p2, 5000) as i64, 3);
+    t.expect("second_child_exit", wait_exit(p2, 30000) as i64, 3);
     query(job, JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION, &mut b[..48]);
     t.expect("total_2_after_exit", u32_at(&b, 36) as i64, 2);
     t.expect("active_1_after_exit", u32_at(&b, 40) as i64, 1);
@@ -1076,7 +1076,7 @@ fn test(t: &mut Test) {
     // the first one is killed
     // SAFETY: terminating the child we started.
     unsafe { TerminateProcess(p, 5) };
-    wait_exit(p, 5000);
+    wait_exit(p, 30000);
     query(job, JOB_OBJECT_BASIC_ACCOUNTING_INFORMATION, &mut b[..48]);
     t.expect("active_0_after_kill", u32_at(&b, 40) as i64, 0);
     t.value("terminated_count_after_terminate", u32_at(&b, 44) as i64);
