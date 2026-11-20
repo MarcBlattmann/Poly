@@ -70,6 +70,16 @@ name = "poly-a64"
 version = "0.0.1"
 
 [[package]]
+name = "poly-a64-jit"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "poly-a64",
+ "poly-macho",
+ "poly-personality-xnu",
+]
+
+[[package]]
 name = "poly-abi"
 version = "0.0.1"
 
