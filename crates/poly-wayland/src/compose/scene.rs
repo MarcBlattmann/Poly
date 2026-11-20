@@ -569,6 +569,8 @@ pub struct Scene {
     /// The software cursor's hot spot, logical, if it is shown.
     cursor: Option<(i32, i32)>,
     cursor_look: CursorLook,
+    /// The cursor theme's pictures (ADR 0252); without them Poly's own.
+    cursor_theme: Option<alloc::sync::Arc<super::CursorTheme>>,
     /// The windows whose backdrop is kept ([`Scene::set_backdrop`]).
     backdrops: BTreeMap<WindowId, Backdrop>,
     /// The windows' blurred shadows, kept from one frame to the next.
@@ -597,6 +599,7 @@ impl Scene {
             reserved_top: 0,
             cursor: None,
             cursor_look: CursorLook::Arrow,
+            cursor_theme: None,
             backdrops: BTreeMap::new(),
             shadows: super::paint::ShadowCache::new(),
         };
@@ -628,6 +631,9 @@ impl Scene {
     /// The rectangle the cursor covers with its hot spot at (`x`, `y`),
     /// logical.
     pub fn cursor_rect(&self, x: i32, y: i32) -> Rect {
+        if let Some(img) = self.cursor_image() {
+            return super::xcursor::logical_rect(img, x, y, self.scale);
+        }
         match &self.cursor_look {
             CursorLook::Arrow => Rect::new(x, y, CURSOR_SIZE.0, CURSOR_SIZE.1),
             CursorLook::Image { content, hx, hy } => {
@@ -679,6 +685,34 @@ impl Scene {
 
     pub fn cursor_look(&self) -> &CursorLook {
         &self.cursor_look
+    }
+
+    /// Draw the arrow, the busy arrow and the named looks from `theme`'s pictures where it has
+    /// one (ADR 0252); `None`: Poly's own pictures.
+    pub fn set_cursor_theme(&mut self, theme: Option<alloc::sync::Arc<super::CursorTheme>>) {
+        if let Some((x, y)) = self.cursor {
+            self.damage_logical(self.cursor_rect(x, y));
+        }
+        self.cursor_theme = theme;
+        if let Some((x, y)) = self.cursor {
+            self.damage_logical(self.cursor_rect(x, y));
+        }
+    }
+
+    /// The theme's picture of the current look at this output's scale, if it has one: the
+    /// arrow's, the busy arrow's frame for its phase, a named look's.
+    pub fn cursor_image(&self) -> Option<&super::XImage> {
+        let theme = self.cursor_theme.as_deref()?;
+        let s = self.scale;
+        match self.cursor_look {
+            CursorLook::Arrow => theme.image(super::NamedCursor::Arrow, s, 0),
+            CursorLook::Busy(phase) => {
+                let n = theme.frame_count(super::NamedCursor::Progress, s);
+                theme.image(super::NamedCursor::Progress, s, phase as usize * n / BUSY_PHASES.max(1) as usize)
+            }
+            CursorLook::Named(n) => theme.image(n, s, 0),
+            CursorLook::Image { .. } | CursorLook::Hidden => None,
+        }
     }
 
     /// Draw titles with `text` from now on (an outline font, ADR 0107).

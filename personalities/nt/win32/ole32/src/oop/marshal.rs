@@ -32,7 +32,11 @@ const KEY_READ: u32 = 0x2_0019;
 const REG_SZ: u32 = 1;
 const REG_EXPAND_SZ: u32 = 2;
 
-/// Per-process proxy/stub class id cache (`CoGetPSClsid` / `CoRegisterPSClsid`).
+/// The process's own proxy/stub registrations (`CoRegisterPSClsid`).
+static PS_REGISTERED: Locked<Vec<(Guid, Guid)>> = Locked::new(Vec::new());
+/// The registry's answers `CoGetPSClsid` remembers (sheet `CoGetPSClsid`, rule `cache`: a success
+/// stays, also after `UnRegisterTypeLib`). Marshalling does not use them (sheet
+/// `CoMarshalInterface`, rule `no_proxy_stub`: after `UnRegisterTypeLib` the interface fails).
 static PS_CACHE: Locked<Vec<(Guid, Guid)>> = Locked::new(Vec::new());
 
 /// Per-process table of live marshal packets (`NORMAL`, `TABLESTRONG`, `TABLEWEAK`).
@@ -41,6 +45,7 @@ static MARSHALS: Locked<MarshalTable> = Locked::new(MarshalTable::new());
 /// Clear the process-wide PSClsid cache when the last apartment in the process ends
 /// (sheet `CoRegisterPSClsid`, rule `scope`).
 pub(crate) fn clear_ps_cache() {
+    PS_REGISTERED.with(|c| c.clear());
     PS_CACHE.with(|c| c.clear());
 }
 
@@ -73,22 +78,14 @@ fn read_reg_default(root: isize, sub: &str) -> Option<String> {
     }
 }
 
-/// Look up the proxy/stub CLSID for `iid` in the cache or the merged HKCU/HKLM `Interface` view.
+/// The proxy/stub CLSID of `iid` as `CoGetPSClsid` answers: the process's registrations, the
+/// answers remembered, then the registry (a success is remembered).
 pub(crate) fn ps_clsid_lookup(iid: &Guid) -> Result<Guid, Hresult> {
-    if let Some(clsid) = PS_CACHE.with(|c| c.iter().find(|(i, _)| i == iid).map(|(_, cl)| *cl)) {
+    let known = |t: &Locked<Vec<(Guid, Guid)>>| t.with(|c| c.iter().find(|(i, _)| i == iid).map(|(_, cl)| *cl));
+    if let Some(clsid) = known(&PS_REGISTERED).or_else(|| known(&PS_CACHE)) {
         return Ok(clsid);
     }
-    let text = String::from_utf16_lossy(&iid.to_text());
-    let hkcu_path = alloc::format!(r"Software\Classes\Interface\{text}\ProxyStubClsid32");
-    let hklm_path = alloc::format!(r"SOFTWARE\Classes\Interface\{text}\ProxyStubClsid32");
-    let val = read_reg_default(HKCU, &hkcu_path).or_else(|| read_reg_default(HKLM, &hklm_path));
-    let Some(val) = val else {
-        return Err(REGDB_E_IIDNOTREG);
-    };
-    let units: Vec<u16> = val.encode_utf16().collect();
-    let Some(clsid) = Guid::parse(&units) else {
-        return Err(CO_E_CLASSSTRING);
-    };
+    let clsid = ps_clsid_registered(iid)?;
     PS_CACHE.with(|c| {
         if let Some(slot) = c.iter_mut().find(|(i, _)| i == iid) {
             slot.1 = clsid;
@@ -97,6 +94,28 @@ pub(crate) fn ps_clsid_lookup(iid: &Guid) -> Result<Guid, Hresult> {
         }
     });
     Ok(clsid)
+}
+
+/// The proxy/stub CLSID of `iid` as marshalling needs it now: the process's registrations, else
+/// the registry as it is (nothing remembered).
+pub(crate) fn ps_clsid_current(iid: &Guid) -> Result<Guid, Hresult> {
+    if let Some(clsid) = PS_REGISTERED.with(|c| c.iter().find(|(i, _)| i == iid).map(|(_, cl)| *cl)) {
+        return Ok(clsid);
+    }
+    ps_clsid_registered(iid)
+}
+
+/// The registry's `Interface\{iid}\ProxyStubClsid32` (the merged HKCU/HKLM view).
+fn ps_clsid_registered(iid: &Guid) -> Result<Guid, Hresult> {
+    let text = String::from_utf16_lossy(&iid.to_text());
+    let hkcu_path = alloc::format!(r"Software\Classes\Interface\{text}\ProxyStubClsid32");
+    let hklm_path = alloc::format!(r"SOFTWARE\Classes\Interface\{text}\ProxyStubClsid32");
+    let val = read_reg_default(HKCU, &hkcu_path).or_else(|| read_reg_default(HKLM, &hklm_path));
+    let Some(val) = val else {
+        return Err(REGDB_E_IIDNOTREG);
+    };
+    let units: Vec<u16> = val.encode_utf16().collect();
+    Guid::parse(&units).ok_or(CO_E_CLASSSTRING)
 }
 
 /// `CoGetPSClsid` (sheet `CoGetPSClsid`).
@@ -135,7 +154,7 @@ pub unsafe extern "system" fn CoRegisterPSClsid(riid: *const Guid, rclsid: *cons
     }
     // SAFETY: the caller's pointers.
     let (iid, clsid) = unsafe { (*riid, *rclsid) };
-    PS_CACHE.with(|c| {
+    PS_REGISTERED.with(|c| {
         if let Some(slot) = c.iter_mut().find(|(i, _)| *i == iid) {
             slot.1 = clsid;
         } else {
@@ -319,9 +338,9 @@ pub unsafe extern "system" fn CoMarshalInterface(
     // SAFETY: temporary reference from `query`.
     unsafe { release_unknown(itf) };
 
-    // Non-built-in interfaces must have a registered proxy/stub (sheet: `no_proxy_stub`).
+    // Non-built-in interfaces must have a registered proxy/stub now (sheet: `no_proxy_stub`).
     if iid != IID_IUNKNOWN && iid != IID_ICLASS_FACTORY {
-        if let Err(hr) = ps_clsid_lookup(&iid) {
+        if let Err(hr) = ps_clsid_current(&iid) {
             return hr;
         }
     }

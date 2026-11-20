@@ -102,6 +102,7 @@ unsafe extern "system" {
     fn CreatePipe(read: *mut HANDLE, write: *mut HANDLE, sa: *const SECURITY_ATTRIBUTES, size: u32) -> BOOL;
     fn CreateEventW(sa: *const SECURITY_ATTRIBUTES, manual: BOOL, initial: BOOL, name: *const u16) -> HANDLE;
     fn SetEvent(h: HANDLE) -> BOOL;
+    fn Sleep(ms: u32);
     fn WaitForSingleObject(h: HANDLE, ms: u32) -> u32;
     fn CreateThread(
         attrs: *mut c_void,
@@ -280,15 +281,27 @@ unsafe extern "system" fn client_main(p: *mut c_void) -> u32 {
             }
             SetThreadToken(core::ptr::null(), imp);
         }
-        let h = CreateFileW(
-            name.as_ptr(),
-            GENERIC_READ_WRITE,
-            0,
-            core::ptr::null(),
-            OPEN_EXISTING,
-            job.flags,
-            core::ptr::null_mut(),
-        );
+        // The server may not be listening yet (after DisconnectNamedPipe the instance is busy until the next
+        // ConnectNamedPipe): try again while the answer is ERROR_PIPE_BUSY (231), as callers of WaitNamedPipe do.
+        // Without it the server's ConnectNamedPipe waited for ever when this thread ran first (a CI timeout).
+        let mut h;
+        let mut tries = 0;
+        loop {
+            h = CreateFileW(
+                name.as_ptr(),
+                GENERIC_READ_WRITE,
+                0,
+                core::ptr::null(),
+                OPEN_EXISTING,
+                job.flags,
+                core::ptr::null_mut(),
+            );
+            if h != INVALID_HANDLE || GetLastError() != 231 || tries >= 4000 {
+                break;
+            }
+            tries += 1;
+            Sleep(5);
+        }
         job.result_open = h != INVALID_HANDLE;
         job.result_err = GetLastError();
         if job.identity != 0 {

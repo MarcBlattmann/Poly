@@ -521,6 +521,60 @@ fn named_cursors_are_drawn_scaled_around_their_hot_spot() {
     assert_eq!(fb.pixel(2, 20), Some(BG));
 }
 
+/// A cursor theme's picture (ADR 0252) replaces Poly's own at the output's scale: its pixels
+/// blended at the hot spot, inside the rectangle the scene damages; the busy arrow steps through
+/// the animation's frames; without a picture for a look, Poly's own is drawn.
+#[test]
+fn a_cursor_theme_draws_its_pictures() {
+    use super::xcursor::{CursorTheme, XCursor, XImage};
+    let img = |nominal: u32, side: u32, hot: (u32, u32), argb: u32| XImage {
+        nominal,
+        width: side,
+        height: side,
+        hot,
+        delay: 40,
+        pixels: alloc::vec![argb; (side * side) as usize],
+    };
+    let mut theme = CursorTheme::default();
+    theme.insert(
+        NamedCursor::Hand,
+        XCursor { images: alloc::vec![img(24, 24, (10, 1), 0xff00_ff00), img(48, 48, (21, 3), 0x8000_0080)] },
+    );
+    theme.insert(
+        NamedCursor::Progress,
+        XCursor { images: alloc::vec![img(48, 4, (0, 0), 0xff11_1111), img(48, 4, (0, 0), 0xff22_2222)] },
+    );
+    let mut scene = Scene::new(80, 80, 2);
+    scene.set_cursor_theme(Some(alloc::sync::Arc::new(theme)));
+    scene.set_cursor(Some((20, 20)));
+    scene.set_cursor_look(CursorLook::Named(NamedCursor::Hand));
+    // At 200 % the 48-pixel picture, its hot spot (21, 3) at physical (40, 40).
+    assert_eq!(scene.cursor_image().map(|i| i.nominal), Some(48));
+    let r = scene.cursor_rect(20, 20);
+    assert!(r.x * 2 <= 40 - 21 && r.y * 2 <= 40 - 3 && r.right() * 2 >= 40 - 21 + 48, "{r:?}");
+    let mut fb = MemoryFramebuffer::new(80, 80);
+    scene.render(&mut fb);
+    // Half-transparent blue (premultiplied 0x80) over the background.
+    let px = fb.pixel(19, 37).unwrap();
+    assert_eq!(px & 0xff, (0x80 + ((BG & 0xff) * 127 + 127) / 255).min(255), "{px:06x}");
+    assert_eq!(fb.pixel(18, 37), Some(BG), "left of the picture");
+    // The busy arrow: frame by phase.
+    scene.set_cursor_look(CursorLook::Busy(0));
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(40, 40), Some(0x111111));
+    scene.set_cursor_look(CursorLook::Busy(BUSY_PHASES - 1));
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(40, 40), Some(0x222222));
+    // No picture for the I-beam: Poly's own, as before.
+    scene.set_cursor_look(CursorLook::Named(NamedCursor::Text));
+    assert_eq!(scene.cursor_image(), None);
+    assert_eq!(scene.cursor_rect(20, 20).width, NamedCursor::Text.size().0);
+    // Without the theme, Poly's arrow again.
+    scene.set_cursor_look(CursorLook::Arrow);
+    scene.set_cursor_theme(None);
+    assert_eq!(scene.cursor_rect(20, 20), Rect::new(20, 20, CURSOR_SIZE.0, CURSOR_SIZE.1));
+}
+
 /// The picture behind a window: what is under it, without it, kept up to
 /// date with damage as things below it change, and left alone by changes
 /// elsewhere (ADR 0116; Liquid Glass samples it later).

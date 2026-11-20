@@ -215,9 +215,14 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let Some(state) = process.xnu.as_ref() else {
         return <poly_personality_xnu::Xnu as poly_abi::SyscallDispatch>::dispatch(regs);
     };
-    match bsd::dispatch_with(&mut Thread { process, state, flags }, regs) {
+    match bsd::dispatch_with(&mut Thread { process, state, flags: Arc::clone(&flags) }, regs) {
         Some(outcome) => outcome,
-        None => <poly_personality_xnu::Xnu as poly_abi::SyscallDispatch>::dispatch(regs),
+        // Not a call of the BSD layer (the registers are untouched): the
+        // Mach core's (ADR 0238).
+        None => {
+            let tid = user::current_tid().unwrap_or(0);
+            poly_personality_xnu::dispatch_with(&mut crate::xnu_mach::MachThread { process, flags, tid }, regs)
+        }
     }
 }
 
@@ -285,6 +290,7 @@ impl BsdKernel for Thread<'_> {
     }
 
     fn exit(&mut self, status: u8) {
+        crate::xnu_mach::task_ended(self.process.pid);
         let status = self.process.group_exit(ExitStatus::Exited(status));
         let _ = user::request_exit(status);
     }
@@ -522,6 +528,7 @@ impl BsdKernel for Thread<'_> {
     }
 
     fn exit_signal(&mut self, sig: u32) {
+        crate::xnu_mach::task_ended(self.process.pid);
         let status = self.process.group_exit(ExitStatus::Signaled { signal: sig, core: false });
         let _ = user::request_exit(status);
     }

@@ -97,3 +97,74 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
     Ok(())
 }
+
+/// The x86-64 builds of the spec tests in `macho-mach`
+/// (`personalities/xnu/tests/data`, ADR 0238).
+const MACH_DATA: &str = "personalities/xnu/tests/data";
+
+/// Tests whose x86-64 build checks less than the arm64 one (a part under
+/// `POLY_ARM64`): only their own checks must pass, not the recording.
+const ARM64_ONLY_PARTS: &[&str] = &["ulock_wait2_timeout"];
+
+/// The test-protocol lines of a boot's output (`ok`, `not ok`, `value`,
+/// `summary`).
+fn protocol_lines(output: &str) -> Vec<&str> {
+    output
+        .lines()
+        .map(|l| l.trim_end_matches('\r'))
+        .filter(|l| ["ok ", "not ok ", "value ", "summary "].iter().any(|p| l.starts_with(p)))
+        .collect()
+}
+
+/// The arm64 output macOS recorded for test `name` (`<dir>/macos.json`).
+fn recorded(dir: &Path, name: &str) -> Result<String> {
+    let path = dir.join("macos.json");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let json: serde_json::Value = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    json["tests"]
+        .as_array()
+        .and_then(|t| t.iter().find(|t| t["name"] == name))
+        .and_then(|t| t["results"]["arm64"]["stdout"].as_str())
+        .map(str::to_string)
+        .ok_or_else(|| format!("{}: no arm64 output for {name}", path.display()))
+}
+
+/// The boot test group `macho-mach`: the visible tests of the Mach core
+/// entries that run on Poly today, each as the first process; their output
+/// must be what macOS printed (arm64 recording).
+pub fn mach_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    let list = std::fs::read_to_string(root().join(MACH_DATA).join("tests.txt")).map_err(|e| e.to_string())?;
+    let sources: Vec<&str> = list.lines().filter(|l| !l.trim().is_empty()).collect();
+    let mut files = Vec::new();
+    for src in &sources {
+        let name = Path::new(src).file_stem().and_then(|s| s.to_str()).ok_or("a test path")?.to_string();
+        let p = root().join(MACH_DATA).join(&name);
+        let bytes = std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+        files.push((name, bytes, root().join(src).parent().ok_or("a test directory")?.to_path_buf()));
+    }
+    let programs: Vec<(&str, &[u8])> = files.iter().map(|(n, b, _)| (n.as_str(), b.as_slice())).collect();
+    let mut tree = Tree::default();
+    tree.files.push(("usr/lib/libSystem.B.dylib".into(), 0o755, read("libSystem_x64.dylib")?));
+    let image =
+        initramfs::write(&root(), "poly-macho-mach-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))?;
+    for (name, _, dir) in &files {
+        eprintln!("==> boot test: Mach core spec test {name} (x86-64) as the first process");
+        let b = run_as_init(kernel, syms, &image, name, "summary ")?;
+        let got = protocol_lines(&b.output);
+        if let Some(line) = got.iter().find(|l| l.starts_with("not ok ")) {
+            return Err(format!("/bin/{name}: {line}"));
+        }
+        if let Some(line) = b.output.lines().find(|l| l.contains(" not implemented")) {
+            return Err(format!("/bin/{name}: {line}"));
+        }
+        if ARM64_ONLY_PARTS.contains(&name.as_str()) {
+            continue;
+        }
+        let want = recorded(dir, name)?;
+        let want: Vec<&str> = want.lines().collect();
+        if got != want {
+            return Err(format!("/bin/{name}: output {got:#?}, macOS printed {want:#?}"));
+        }
+    }
+    Ok(())
+}

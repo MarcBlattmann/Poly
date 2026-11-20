@@ -1056,15 +1056,18 @@ static IME_UI_CLASS: [u16; 12] = [
 fn make_ime_ui(ime: H) -> H {
     // The last error stays as it was, as for the IME window itself.
     let error = poly_win32_gui::last_error();
-    let mut wc = [0u8; 80];
-    wc[0..4].copy_from_slice(&80u32.to_le_bytes());
-    wc[4..8].copy_from_slice(&0x0001_0000u32.to_le_bytes());
-    wc[8..16].copy_from_slice(&(DefWindowProcW as *const () as usize as u64).to_le_bytes());
-    wc[64..72].copy_from_slice(&(IME_UI_CLASS.as_ptr() as u64).to_le_bytes());
+    // WNDCLASSEXW in this process's layout (80 bytes on x64, 48 in a 32-bit process).
+    let wc = cstructs::WndClassEx {
+        size: core::mem::size_of::<cstructs::WndClassEx>() as u32,
+        style: 0x0001_0000,
+        wndproc: DefWindowProcW as *const () as usize,
+        class_name: IME_UI_CLASS.as_ptr() as usize,
+        ..Default::default()
+    };
     let style = metrics::WS_POPUP | metrics::WS_DISABLED;
     // SAFETY: a valid class description (the class may exist already); a hidden popup owned by `ime`.
     let ui = unsafe {
-        RegisterClassExW(wc.as_ptr());
+        RegisterClassExW((&raw const wc).cast());
         let ui = CreateWindowExW(0, IME_UI_CLASS.as_ptr(), IME_UI_CLASS.as_ptr(), style, 0, 0, 0, 0, ime, 0, 0, 0);
         if ui != 0 {
             call(Request::SetStyle { hwnd: ui as u32, which: -16, value: style | metrics::WS_CLIPSIBLINGS });
@@ -1083,16 +1086,17 @@ fn make_ime_window(hwnd: H) {
             return;
         }
     }
-    // WNDCLASSEXW (80 bytes): cbSize, style, wndproc, extra, extra, instance,
-    // icon, cursor, brush, menu name, class name, small icon.
-    let mut wc = [0u8; 80];
-    wc[0..4].copy_from_slice(&80u32.to_le_bytes());
-    wc[8..16].copy_from_slice(&(DefWindowProcW as *const () as usize as u64).to_le_bytes());
-    wc[64..72].copy_from_slice(&(IME_CLASS.as_ptr() as u64).to_le_bytes());
+    // WNDCLASSEXW in this process's layout (80 bytes on x64, 48 in a 32-bit process).
+    let wc = cstructs::WndClassEx {
+        size: core::mem::size_of::<cstructs::WndClassEx>() as u32,
+        wndproc: DefWindowProcW as *const () as usize,
+        class_name: IME_CLASS.as_ptr() as usize,
+        ..Default::default()
+    };
     // SAFETY: a valid class description (the class may exist already);
     // a hidden popup owned by the thread's first window.
     unsafe {
-        RegisterClassExW(wc.as_ptr());
+        RegisterClassExW((&raw const wc).cast());
         let style = metrics::WS_POPUP | metrics::WS_DISABLED;
         let ime = CreateWindowExW(0, IME_CLASS.as_ptr(), IME_CLASS.as_ptr(), style, 0, 0, 0, 0, hwnd, 0, 0, 0);
         // The window's own style has WS_CLIPSIBLINGS, though the procedure's `CREATESTRUCT` has
