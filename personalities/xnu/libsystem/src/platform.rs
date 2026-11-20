@@ -62,7 +62,9 @@ unsafe extern "C" fn OSSpinLockUnlock(l: *mut u32) {
     unsafe { word(l) }.store(0, Ordering::Release);
 }
 
-/// x86 keeps instruction and data caches coherent: nothing to do.
+/// Nothing to do: x86 keeps instruction and data caches coherent, and the
+/// arm64 translator notices every write to memory it made code from (ADR
+/// 0239, 0257).
 #[unsafe(no_mangle)]
 extern "C" fn sys_icache_invalidate(_start: *mut u8, _len: usize) {}
 
@@ -223,3 +225,4 @@ core::arch::global_asm!(
     "    csinc w0, w1, wzr, ne",
     "    ret",
 );
+

@@ -16,6 +16,8 @@ _pthread_detach
 _pthread_equal
 _pthread_exit
 _pthread_getspecific
+_pthread_jit_write_protect_np
+_pthread_jit_write_protect_supported_np
 _pthread_join
 _pthread_key_create
 _pthread_key_delete

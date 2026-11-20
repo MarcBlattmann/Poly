@@ -26,8 +26,14 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     let lua = read("tests/a64/cli/bin/lua")?;
     let sqlite = read("tests/a64/cli/bin/sqlite3")?;
     let threads = read("tests/a64/cli/bin/threads")?;
-    let programs: Vec<(&str, &[u8])> =
-        vec![("mhello-libsystem", &hello), ("lua", &lua), ("sqlite3", &sqlite), ("a64-threads", &threads)];
+    let jit = read("tests/a64/cli/bin/jit")?;
+    let programs: Vec<(&str, &[u8])> = vec![
+        ("mhello-libsystem", &hello),
+        ("lua", &lua),
+        ("sqlite3", &sqlite),
+        ("a64-threads", &threads),
+        ("a64-jit", &jit),
+    ];
     let mut tree = Tree { files: native::runtime_files()?, ..Default::default() };
     tree.files.push(("usr/share/poly-a64/hello.lua".into(), 0o644, read("tests/a64/cli/hello.lua")?));
     tree.files.push(("usr/share/poly-a64/session.sql".into(), 0o644, read("tests/a64/cli/session.sql")?));
@@ -66,5 +72,9 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     eprintln!("==> boot test: an arm64 C program with threads, signals and memory mappings");
     let b = run_ending(kernel, syms, &image, "a64-threads", &[], &[], "code=0")?;
     in_order("a64-threads", &b.output, &["threads: done, 0 failed".to_string()])?;
+
+    eprintln!("==> boot test: an arm64 program that writes its own code (MAP_JIT, mprotect flips)");
+    let b = run_ending(kernel, syms, &image, "a64-jit", &[], &[], "code=0")?;
+    in_order("a64-jit", &b.output, &["jit: done, 0 failed".to_string()])?;
     Ok(())
 }

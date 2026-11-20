@@ -81,6 +81,11 @@ const MAP_ANON: u64 = 0x1000;
 const ENOMEM: u64 = 12;
 const EINVAL: u64 = 22;
 
+/// The code of Poly's machine-dependent call that sets the thread's
+/// `MAP_JIT` mode (`x16` = 0x80000000, `x3` = this, `x0` = 1 for execute,
+/// 0 for write): what Poly's `pthread_jit_write_protect_np` makes.
+pub const JIT_WRITE_PROTECT: u64 = 0x504f_4c59;
+
 /// The `svc` result that stops the guest for the runtime: a deferred call
 /// or the end of a guest thread (see the module docs).
 pub const YIELD: i32 = i32::MIN;
@@ -454,6 +459,11 @@ impl<H: Host> Kernel for Bridge<H> {
                 Ok(0)
             }),
             (Class::Bsd, sys::BSDTHREAD_CREATE) => Some(self.create_thread(&cpu.x, mem)),
+            (Class::MachineDependent, _) if cpu.x[3] == JIT_WRITE_PROTECT => {
+                mem.set_jit_write_protect(cpu.x[0] != 0);
+                cpu.x[0] = 0;
+                return None;
+            }
             (Class::Bsd, sys::SIGACTION) => Some(self.sigaction(&cpu.x, mem)),
             (Class::Bsd, sys::SIGPROCMASK) => {
                 let r = self.sigprocmask(&cpu.x, mem);

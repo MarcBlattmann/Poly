@@ -707,3 +707,35 @@ extern "C" fn sched_yield() -> i32 {
     crate::set_errno(saved);
     0
 }
+
+/// The code of Poly's machine-dependent call that sets a translated
+/// thread's `MAP_JIT` mode (arm64, ADR 0257 addendum; the runtime answers
+/// it: `"POLY"` in `x3`, the mode in `x0`, `x16` = 0x80000000).
+#[cfg(target_arch = "aarch64")]
+const POLY_JIT_WRITE_PROTECT: u64 = 0x504f_4c59;
+
+/// `pthread_jit_write_protect_np(enabled)`: `MAP_JIT` memory executable
+/// and not writable (`enabled`), or writable and not executable. On arm64
+/// the translator keeps the pages' modes; x86-64 Macs have no such modes.
+#[unsafe(no_mangle)]
+extern "C" fn pthread_jit_write_protect_np(enabled: i32) {
+    #[cfg(target_arch = "aarch64")]
+    // SAFETY: the machine-dependent call with Poly's code; it changes no
+    // memory the compiler knows about.
+    unsafe {
+        core::arch::asm!(
+            "svc #0x80",
+            inlateout("x0") u64::from(enabled != 0) => _,
+            in("x3") POLY_JIT_WRITE_PROTECT,
+            in("x16") 0x8000_0000u64,
+            options(nostack),
+        );
+    }
+    #[cfg(target_arch = "x86_64")]
+    let _ = enabled;
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn pthread_jit_write_protect_supported_np() -> i32 {
+    i32::from(cfg!(target_arch = "aarch64"))
+}

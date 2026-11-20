@@ -45,6 +45,7 @@ unzip -q sqlite.zip
 
 # Poly's own test of threads, signals and mappings.
 clang $CFLAGS -o "$out/threads" "$here/threads.c"
+clang $CFLAGS -o "$out/jit" "$here/jit.c"
 
 strip -S "$out/lua" "$out/sqlite3"
 ls -l "$out"
