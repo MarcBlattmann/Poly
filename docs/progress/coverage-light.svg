@@ -450,7 +450,7 @@
 </g>
 <g><title>libsystem_kernel: 0 / 1,625 done (0.0%)</title>
 <rect x="677.9" y="236.6" width="20.0" height="22.1" fill="#e6eaef"/>
-<rect x="677.9" y="236.6" width="0.3" height="22.1" fill="#218bff"/>
+<rect x="677.9" y="236.6" width="1.9" height="22.1" fill="#218bff"/>
 <rect x="676.9" y="235.6" width="22.0" height="24.1" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>Tcl: 0 / 1,585 done (0.0%)</title>
@@ -492,7 +492,7 @@
 </g>
 <g><title>libsystem_c: 0 / 1,352 done (0.0%)</title>
 <rect x="743.3" y="212.4" width="19.0" height="18.9" fill="#e6eaef"/>
-<rect x="743.3" y="212.4" width="0.2" height="18.9" fill="#218bff"/>
+<rect x="743.3" y="212.4" width="1.4" height="18.9" fill="#218bff"/>
 <rect x="742.3" y="211.4" width="21.0" height="20.9" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>EventKit: 0 / 1,351 done (0.0%)</title>
@@ -1197,7 +1197,7 @@
 </g>
 <g><title>libdyld: 0 / 228 done (0.0%)</title>
 <rect x="846.0" y="372.9" width="6.1" height="7.2" fill="#e6eaef"/>
-<rect x="846.0" y="372.9" width="0.2" height="7.2" fill="#218bff"/>
+<rect x="846.0" y="372.9" width="0.4" height="7.2" fill="#218bff"/>
 <rect x="845.0" y="371.9" width="8.1" height="9.2" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>ContactsUI: 0 / 227 done (0.0%)</title>
@@ -1242,7 +1242,7 @@
 </g>
 <g><title>libsystem_pthread: 0 / 209 done (0.0%)</title>
 <rect x="870.5" y="382.1" width="5.8" height="6.7" fill="#e6eaef"/>
-<rect x="870.5" y="382.1" width="0.4" height="6.7" fill="#218bff"/>
+<rect x="870.5" y="382.1" width="0.8" height="6.7" fill="#218bff"/>
 <rect x="869.5" y="381.1" width="7.8" height="8.7" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>libibverbs: 0 / 207 done (0.0%)</title>
@@ -1267,6 +1267,7 @@
 </g>
 <g><title>libsystem_platform: 0 / 198 done (0.0%)</title>
 <rect x="870.8" y="390.9" width="5.7" height="6.4" fill="#e6eaef"/>
+<rect x="870.8" y="390.9" width="0.8" height="6.4" fill="#218bff"/>
 <rect x="869.8" y="389.9" width="7.7" height="8.4" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>GLKit: 0 / 192 done (0.0%)</title>
