@@ -183,6 +183,34 @@ fn sizes_the_address_space_cannot_hold_and_the_commit_limit() {
     assert_eq!(allocate(&mut f, 0, 0x1000, MEM_RESERVE | MEM_COMMIT, rw).0, STATUS_SUCCESS);
 }
 
+/// The system's commit charge (ADR 0250): commits add to it, decommits and releases give it
+/// back, and a commit that would pass the system's limit fails with `STATUS_COMMITMENT_LIMIT`.
+#[test]
+fn the_system_commit_charge_and_its_limit() {
+    let mut f = Fake::new();
+    let rw = PAGE_READWRITE;
+    f.sys.commit_limit = 0x10_0000;
+    // A reservation charges nothing; committing part of it charges that part.
+    let (st, base, _) = allocate(&mut f, 0, 0x8_0000, MEM_RESERVE, rw);
+    assert_eq!((st, f.sys.commit_total), (STATUS_SUCCESS, 0));
+    assert_eq!(allocate(&mut f, base, 0x4000, MEM_COMMIT, rw).0, STATUS_SUCCESS);
+    assert_eq!((f.sys.commit_total, f.proc.commit_charged), (0x4000, 0x4000));
+    // Committing it again charges nothing more.
+    assert_eq!(allocate(&mut f, base, 0x8000, MEM_COMMIT, rw).0, STATUS_SUCCESS);
+    assert_eq!(f.sys.commit_total, 0x8000);
+    // Past the limit: refused, and nothing is charged.
+    assert_eq!(allocate(&mut f, 0, 0x10_0000, MEM_RESERVE | MEM_COMMIT, rw).0, STATUS_COMMITMENT_LIMIT);
+    assert_eq!(f.sys.commit_total, 0x8000);
+    // A decommit gives its committed pages back, a release the rest.
+    assert_eq!(free(&mut f, base, 0x2000, MEM_DECOMMIT).0, STATUS_SUCCESS);
+    assert_eq!(f.sys.commit_total, 0x6000);
+    assert_eq!(free(&mut f, base, 0, MEM_RELEASE).0, STATUS_SUCCESS);
+    assert_eq!((f.sys.commit_total, f.proc.commit_charged), (0, 0));
+    // Up to the limit works again.
+    assert_eq!(allocate(&mut f, 0, 0x10_0000, MEM_RESERVE | MEM_COMMIT, rw).0, STATUS_SUCCESS);
+    assert_eq!(f.sys.commit_total, 0x10_0000);
+}
+
 #[test]
 fn memory_of_another_process_is_allocated_written_read_protected_and_freed() {
     let mut f = Fake::new();

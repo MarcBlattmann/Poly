@@ -224,6 +224,7 @@ mod basic;
 mod bigpipe;
 mod chrome2;
 mod inherit;
+mod oom;
 mod sevenzip;
 mod slice2;
 
@@ -432,6 +433,10 @@ fn ends_with_ignore_case(w: &[u16], a: &[u8]) -> bool {
 pub extern "system" fn k32test_main(_peb: *mut u8) -> u32 {
     // SAFETY: a kernel32 call.
     let cmd = wslice(unsafe { GetCommandLineW() });
+    if contains(cmd, b"--oom") {
+        // SAFETY: as below.
+        unsafe { oom::run(cmd) }
+    }
     if contains(cmd, b"--child") {
         // SAFETY: as below.
         unsafe { child(cmd) }

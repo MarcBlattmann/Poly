@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "spb_args",
-      "exe_sha256": "78b4b3b3246839ba66da9deb9a0891c60747e797af3a98f5528b9e3f25e55e46",
+      "exe_sha256": "ad44e40e45b999c6b70ec3defb04a0988313e61ec94c6605fc01677860bb0893",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -28,7 +28,7 @@
     },
     {
       "name": "spb_scope",
-      "exe_sha256": "9633569efcb2e93c4f1816d946115df6cf05cec3c1fac6846acc6c69fc49b6da",
+      "exe_sha256": "6a9d7f9fff0dc0ad3926471c1b795ad992f82528da5e69596df857d2447cc9f5",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
