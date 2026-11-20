@@ -88,9 +88,99 @@ pub fn check(d: &Desc1, composition: bool) -> Result<(), HRESULT> {
     Ok(())
 }
 
+/// A rectangle: left, top, right, bottom (a `RECT`).
+pub type Rect = [i32; 4];
+
+/// What a flip-model back buffer of `width` x `height` still has to take from the last presented
+/// frame when it is presented: the area `owed` (where it holds an older frame) less the `drawn`
+/// rectangles (the present's dirty rectangles, which the app redrew whole: Present1.yaml; none
+/// means all of it). Rectangles are clipped to the buffer; the result does not overlap.
+///
+/// The buffer is filled at its own present and not right after the one before (ADR 0224
+/// addendum), so a frame the app redraws whole (Chrome's scrolled page) is not copied at all.
+pub fn carry(owed: &[Rect], drawn: &[Rect], width: u32, height: u32) -> alloc::vec::Vec<Rect> {
+    use alloc::vec::Vec;
+    let (w, h) = (width.min(i32::MAX as u32) as i32, height.min(i32::MAX as u32) as i32);
+    let clip = |r: &Rect| [r[0].clamp(0, w), r[1].clamp(0, h), r[2].clamp(0, w), r[3].clamp(0, h)];
+    let owed: Vec<Rect> = owed.iter().map(clip).filter(|r| r[0] < r[2] && r[1] < r[3]).collect();
+    let drawn: Vec<Rect> = drawn.iter().map(clip).filter(|r| r[0] < r[2] && r[1] < r[3]).collect();
+    let mut out = Vec::new();
+    if owed.is_empty() || drawn.is_empty() {
+        return out;
+    }
+    // Bands of rows between the rectangles' edges: in each, the owed spans less the drawn ones.
+    let mut ys: Vec<i32> = owed.iter().chain(&drawn).flat_map(|r| [r[1], r[3]]).collect();
+    ys.sort_unstable();
+    ys.dedup();
+    let spans = |rects: &[Rect], y0: i32, y1: i32| -> Vec<(i32, i32)> {
+        let mut s: Vec<(i32, i32)> = rects.iter().filter(|r| r[1] <= y0 && r[3] >= y1).map(|r| (r[0], r[2])).collect();
+        s.sort_unstable();
+        let mut merged: Vec<(i32, i32)> = Vec::new();
+        for (a, b) in s {
+            match merged.last_mut() {
+                Some(last) if a <= last.1 => last.1 = last.1.max(b),
+                _ => merged.push((a, b)),
+            }
+        }
+        merged
+    };
+    for band in ys.windows(2) {
+        let (y0, y1) = (band[0], band[1]);
+        let cut = spans(&drawn, y0, y1);
+        for (mut a, b) in spans(&owed, y0, y1) {
+            for &(ca, cb) in &cut {
+                if cb <= a || ca >= b {
+                    continue;
+                }
+                if ca > a {
+                    out.push([a, y0, ca, y1]);
+                }
+                a = a.max(cb);
+                if a >= b {
+                    break;
+                }
+            }
+            if a < b {
+                out.push([a, y0, b, y1]);
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn area(rs: &[Rect]) -> i64 {
+        rs.iter().map(|r| i64::from(r[2] - r[0]) * i64::from(r[3] - r[1])).sum()
+    }
+
+    #[test]
+    fn carry_leaves_what_the_app_redrew() {
+        let all = [0, 0, 100, 50];
+        // Redrawn whole (no dirty rectangles) or nothing owed: nothing to take.
+        assert!(carry(&[all], &[], 100, 50).is_empty());
+        assert!(carry(&[], &[all], 100, 50).is_empty());
+        // The same area owed and drawn (a scrolled page): nothing.
+        assert!(carry(&[[0, 10, 100, 50]], &[[0, 10, 100, 50]], 100, 50).is_empty());
+        // Owed all, a 10x10 drawn in the middle: the rest, 4900 pixels, none of them drawn.
+        let r = carry(&[all], &[[40, 20, 50, 30]], 100, 50);
+        assert_eq!(area(&r), 5000 - 100);
+        for p in &r {
+            assert!(p[2] <= 40 || p[0] >= 50 || p[3] <= 20 || p[1] >= 30, "{p:?} overlaps the drawn square");
+        }
+        // Owed a small square, drawn elsewhere: the square.
+        assert_eq!(carry(&[[1, 1, 3, 3]], &[[50, 40, 60, 45]], 100, 50), alloc::vec![[1, 1, 3, 3]]);
+        // Overlapping owed rectangles are taken once; parts outside the buffer are clipped.
+        let r = carry(&[[0, 0, 20, 20], [10, 10, 30, 30], [90, 40, 200, 90]], &[[0, 0, 1, 1]], 100, 50);
+        assert_eq!(area(&r), 400 + 400 - 100 - 1 + 10 * 10);
+        // Two drawn spans cut one owed span into three.
+        let r = carry(&[[0, 0, 100, 1]], &[[10, 0, 20, 1], [30, 0, 40, 1]], 100, 50);
+        assert_eq!(r, alloc::vec![[0, 0, 10, 1], [20, 0, 30, 1], [40, 0, 100, 1]]);
+        // Empty and reversed rectangles count for nothing.
+        assert!(carry(&[[5, 5, 5, 9], [9, 9, 2, 2]], &[[0, 0, 1, 1]], 100, 50).is_empty());
+    }
 
     fn d(effect: u32, buffers: u32) -> Desc1 {
         [64, 32, 87, 0, 1, 0, 0x20, buffers, 0, effect, 0, 0]
