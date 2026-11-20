@@ -1517,3 +1517,29 @@ fn a_window_made_hidden_and_maximized_waits_for_its_show_at_the_maximized_size()
         assert!(info.visible && info.maximized);
     });
 }
+
+/// A caller's `MSG` gets `MSG_BYTES` bytes and not one more (`wow64-gui-overrun`: 28 on x86, where
+/// a whole `CMsg` overran a message loop's stack cookie; 48 on x64, `private` in the padding).
+#[test]
+fn a_callers_msg_gets_exactly_its_own_size() {
+    #[repr(C)]
+    struct Guarded {
+        msg: [u8; 48],
+        guard: u32,
+    }
+    let mut g = Guarded { msg: [0xAB; 48], guard: 0xC0C0_C0C0 };
+    let m = CMsg { hwnd: 7, message: 0x12, w: 3, l: 4, time: 5, pt: CPoint { x: 6, y: 8 }, private: 9 };
+    // SAFETY: a buffer of at least MSG_BYTES bytes.
+    unsafe { put_msg(g.msg.as_mut_ptr() as *mut CMsg, &m) };
+    assert_eq!(g.guard, 0xC0C0_C0C0);
+    assert!(g.msg[MSG_BYTES..].iter().all(|&b| b == 0xAB), "nothing after the structure");
+    // SAFETY: as above.
+    let back = unsafe { get_msg(g.msg.as_ptr() as *const CMsg) };
+    assert_eq!(
+        (back.hwnd, back.message, back.w, back.l, back.time, back.pt),
+        (7, 0x12, 3, 4, 5, CPoint { x: 6, y: 8 })
+    );
+    // On x64 the unit of a VK_PACKET travels in the padding.
+    assert_eq!(back.private, if MSG_BYTES == 48 { 9 } else { 0 });
+    assert_eq!(MSG_BYTES, 48);
+}
