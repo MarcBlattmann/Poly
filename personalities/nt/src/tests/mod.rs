@@ -269,6 +269,11 @@ pub struct Fake {
     pub children: Vec<(NtProcess, Mem)>,
     /// Makes the sockets of `socket_create` (the `\Device\Afd` tests).
     pub sockets: Option<SocketFactory>,
+    /// The sound card `audio_device` reports and the streams `audio_open`
+    /// makes (the `PolyAudio` device tests, ADR 0244).
+    pub audio: Option<(poly_audio::nt::DeviceInfo, AudioFactory)>,
+    /// The waits `audio_pend` was given, for the test to finish.
+    pub audio_waits: Vec<crate::audio::AudioWait>,
     /// Bump allocator in the scratch area.
     next: u64,
     /// The last context `load_context` was given, when [`Fake::accept_contexts`] is set (the
@@ -276,6 +281,11 @@ pub struct Fake {
     pub loaded: Option<poly_seh::Context>,
     pub accept_contexts: bool,
 }
+
+/// What the fake's `audio_open` calls.
+pub type AudioFactory = alloc::boxed::Box<
+    dyn FnMut(poly_audio::Format, u32) -> Result<alloc::sync::Arc<dyn crate::audio::NtAudioStream>, NtStatus>,
+>;
 
 /// What the fake's `socket_create` calls.
 pub type SocketFactory = alloc::boxed::Box<
@@ -305,6 +315,26 @@ impl NtKernel for Fake {
 
     fn net_info(&self) -> (Vec<[u8; 4]>, alloc::string::String) {
         (vec![[10, 0, 2, 3]], "polytest".into())
+    }
+
+    fn audio_device(&mut self) -> Option<poly_audio::nt::DeviceInfo> {
+        self.audio.as_ref().map(|(d, _)| *d)
+    }
+
+    fn audio_open(
+        &mut self,
+        format: poly_audio::Format,
+        buffer_frames: u32,
+    ) -> Result<alloc::sync::Arc<dyn crate::audio::NtAudioStream>, NtStatus> {
+        match &mut self.audio {
+            Some((_, f)) => f(format, buffer_frames),
+            None => Err(crate::audio::STATUS_NO_SUCH_DEVICE),
+        }
+    }
+
+    fn audio_pend(&mut self, w: crate::audio::AudioWait) -> Result<(), crate::audio::AudioWait> {
+        self.audio_waits.push(w);
+        Ok(())
     }
 
     fn load_context(&mut self, ctx: &poly_seh::Context, _flags: u32) -> Result<(), NtStatus> {
@@ -575,6 +605,8 @@ impl Fake {
             next_tid: TID.0,
             children: Vec::new(),
             sockets: None,
+            audio: None,
+            audio_waits: Vec::new(),
             next: SCRATCH,
             loaded: None,
             accept_contexts: false,

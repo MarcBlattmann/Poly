@@ -48,6 +48,7 @@ extern crate alloc;
 
 pub mod abi;
 pub mod afd;
+pub mod audio;
 pub mod backend;
 pub mod consent;
 pub mod console;

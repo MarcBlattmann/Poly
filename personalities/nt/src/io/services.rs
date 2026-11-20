@@ -561,7 +561,8 @@ pub fn read_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus>
             Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: false }),
             // Sockets are read before this (`afd::services::read_file`).
             Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
-            Target::PipeRoot | Target::PipeDevice => Err(STATUS_INVALID_DEVICE_REQUEST),
+            // A sound stream takes its frames through its device requests (ADR 0244).
+            Target::PipeRoot | Target::PipeDevice | Target::Audio(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
             // A volume device ([`super::volume`]): whole sectors at the offset or the position.
             Target::Volume(v) => {
                 let at = match offset {
@@ -756,7 +757,8 @@ fn write_file_whole<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStat
             // (`2>&1`) interleaves rather than overwrites.
             Target::Host(open) => Ok(Plan::Inline { open: open.clone(), offset: rec.position, file, append: true }),
             Target::Socket(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
-            Target::PipeRoot | Target::PipeDevice => Err(STATUS_INVALID_DEVICE_REQUEST),
+            // A sound stream takes its frames through its device requests (ADR 0244).
+            Target::PipeRoot | Target::PipeDevice | Target::Audio(_) => Err(STATUS_INVALID_DEVICE_REQUEST),
             // The null device: everything is written, and dropped.
             Target::Null => {
                 n.signal_done(sys, &caller, file, STATUS_SUCCESS, len as u64);

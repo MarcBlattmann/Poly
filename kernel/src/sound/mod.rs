@@ -29,6 +29,9 @@
 //!   every active capture client (`poly_audio::server::deliver`), after
 //!   the "Capture" controls. The device stream starts with the first
 //!   client and stops [`IDLE_NS`] after the last.
+//! - **The Windows side's streams** (ADR 0244, [`ntstream`]): the
+//!   streams of `\Device\PolyAudio` are mixed beside the substreams, from
+//!   ring buffers of the kernel's that their device requests fill.
 //! - **The hardware** ([`Hw`]) is virtio-sound (`virtio.rs`) if there is
 //!   one, else an Intel HDA controller (`hda.rs`, output only).
 //! - **The audio thread** wakes on the device's interrupt, when a client
@@ -38,6 +41,7 @@
 pub mod alsa;
 pub mod buffer;
 mod hda;
+pub mod ntstream;
 mod tests;
 mod virtio;
 
@@ -308,6 +312,9 @@ pub struct Inner {
     out: OutState,
     inp: InState,
     scratch: Vec<u8>,
+    /// The streams of `\Device\PolyAudio` (ADR 0244), mixed beside the
+    /// substreams.
+    pub nt: Vec<Weak<ntstream::NtStream>>,
 }
 
 /// The sound card.
@@ -562,9 +569,9 @@ fn gains_of(g: [u32; 2]) -> [u32; MAX_CHANNELS] {
 
 /// Mix and hand over as many output periods as the device has room for.
 fn serve_output(inner: &mut Inner, now: Timespec, now_ns: u64) -> bool {
-    let Inner { hw, subs, controls, out, scratch, stats, .. } = inner;
+    let Inner { hw, subs, controls, out, scratch, stats, nt, .. } = inner;
     let Some(hwf) = hw.output() else { return false };
-    let want = subs.iter().any(|s| s.soft.dir == Dir::Playback && s.soft.active);
+    let want = subs.iter().any(|s| s.soft.dir == Dir::Playback && s.soft.active) || ntstream::any_running(nt);
     if want && !out.running {
         if !hw.out_start() {
             return false;
@@ -592,13 +599,14 @@ fn serve_output(inner: &mut Inner, now: Timespec, now_ns: u64) -> bool {
             let m = mix_source(&mut Play { rt, soft, now }, &mut out.acc, scratch);
             changed |= m.consumed > 0 || !soft.active;
         }
+        ntstream::mix(nt, &mut out.acc, scratch, hwf.format);
         render(&out.acc, ch, &gains, hwf.format.sample, &mut out.bytes);
         hw.out_push(&out.bytes);
         stats.periods_out += 1;
         pushed += 1;
     }
     hw.out_kick();
-    let still = subs.iter().any(|s| s.soft.dir == Dir::Playback && s.soft.active);
+    let still = subs.iter().any(|s| s.soft.dir == Dir::Playback && s.soft.active) || ntstream::any_running(nt);
     if still {
         out.idle_since = None;
     } else {
@@ -711,6 +719,7 @@ fn audio_thread(_: usize) -> usize {
         if changed {
             card.notify();
         }
+        ntstream::after_round();
         let interval = if INTERRUPT_DRIVEN.load(SeqCst) { SAFETY_POLL_NS } else { POLL_INTERVAL_NS };
         if active {
             AUDIO_WAIT.wait_until_deadline(|| WAKE.load(SeqCst) != seen, time::now_ns() + interval);
@@ -796,6 +805,7 @@ pub fn init(_boot: &BootInfo) {
             out: OutState::default(),
             inp: InState::default(),
             scratch: vec![0; SCRATCH_BYTES],
+            nt: Vec::new(),
         }),
         queue: Arc::new(poly_vfs::WaitQueue::new()),
         ctl_queue: Arc::new(poly_vfs::WaitQueue::new()),

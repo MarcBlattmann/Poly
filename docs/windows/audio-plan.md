@@ -109,6 +109,12 @@ still serves other programs.
   the log. Checked on WHPX: the plain desktop boots on `dsound` with the mixer control present, and Linux
   Chromium's 440 Hz tone was recorded through `--record-sound`. In the `polyd` container, `alsa` fails and the
   probe falls back quietly.
+- **W0 done** (`windows-audio-path`, [ADR 0244](../adr/0244-the-windows-side-reaches-the-mixer-through-a-poly-audio-device.md)).
+  It differs from the sketch above: a device, `\Device\PolyAudio`, with Poly's I/O control codes
+  (`poly_audio::nt`). The frames are copied in by a `WRITE` request, not shared in a section. A `WAIT` request that
+  finishes at a played-frame count replaces a kernel-set event, so `WOM_DONE` and a WASAPI period event are each a
+  pending request. Playback only. A scratch Windows probe played 2 s of 441 Hz through it on Poly, and QEMU recorded
+  it. W1 and W2 build on it.
 
 ## 4. Where this plan is least certain
 

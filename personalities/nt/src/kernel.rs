@@ -429,6 +429,32 @@ pub trait NtKernel {
         Err(alloc::boxed::Box::new(io))
     }
 
+    /// The sound card's output stream (`\Device\PolyAudio`, ADR 0244);
+    /// `None` without a card.
+    fn audio_device(&mut self) -> Option<poly_audio::nt::DeviceInfo> {
+        None
+    }
+
+    /// Make a stream of the audio server in `format` with a buffer of
+    /// `buffer_frames` (ADR 0244). A kernel without a card answers
+    /// `STATUS_NO_SUCH_DEVICE`.
+    fn audio_open(
+        &mut self,
+        format: poly_audio::Format,
+        buffer_frames: u32,
+    ) -> Result<alloc::sync::Arc<dyn crate::audio::NtAudioStream>, NtStatus> {
+        let _ = (format, buffer_frames);
+        Err(crate::audio::STATUS_NO_SUCH_DEVICE)
+    }
+
+    /// Queue a pending `\Device\PolyAudio` wait (ADR 0244): the kernel's
+    /// worker completes it ([`crate::audio::finish_wait`]) once its stream
+    /// has played enough. A kernel without one gives it back, and the
+    /// request stays pending until it is cancelled.
+    fn audio_pend(&mut self, w: crate::audio::AudioWait) -> Result<(), crate::audio::AudioWait> {
+        Err(w)
+    }
+
     /// The DNS servers and the host name `ws2_32` uses
     /// (`poly_winsock::afd::NET_INFO`).
     fn net_info(&self) -> (alloc::vec::Vec<[u8; 4]>, alloc::string::String) {
