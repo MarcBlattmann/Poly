@@ -131,8 +131,8 @@ mod tests {
         for a in [RUNTIME_HEAP, CODE_AREA, HANDOFF] {
             assert!(a >= Layout::POLY.window_end);
         }
-        assert!(RUNTIME_HEAP + RUNTIME_HEAP_SIZE <= CODE_AREA);
-        assert!(CODE_AREA + CODE_AREA_SIZE <= HANDOFF);
+        const { assert!(RUNTIME_HEAP + RUNTIME_HEAP_SIZE <= CODE_AREA) };
+        const { assert!(CODE_AREA + CODE_AREA_SIZE <= HANDOFF) };
         assert_eq!(Layout::POLY.library_base, poly_dyld::Options::ARM64.library_base);
     }
 }

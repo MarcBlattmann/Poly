@@ -215,7 +215,8 @@ mod tests {
     #[test]
     fn kernel_part_lists_the_kernel_and_every_native_program() {
         let native = native_files();
-        assert_eq!(native.len(), crate::native::PROGRAMS.len());
+        assert_eq!(native.len(), crate::native::PROGRAMS.len() + crate::native::RUNTIMES.len());
+        assert!(native.iter().any(|p| p.ends_with("poly-a64")));
         assert!(native.iter().all(|p| p.starts_with(root().join("target/native"))));
     }
 
