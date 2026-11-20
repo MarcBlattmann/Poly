@@ -14,7 +14,7 @@
 {"symbol":"CoAddRefServerProcess","status":"green","tests_visible":3,"tests_held_out":2,"forward":"combase.CoAddRefServerProcess","src":["wine-spec"]},
 {"symbol":"CoAllowSetForegroundWindow","status":"stub","src":["wine-spec"]},
 {"symbol":"CoBuildVersion","src":["wine-spec"]},
-{"symbol":"CoCopyProxy","status":"green","tests_visible":1,"tests_held_out":1,"forward":"combase.CoCopyProxy","src":["wine-spec"]},
+{"symbol":"CoCopyProxy","status":"claimed","claimed_by":"impl-chrome-installer-com-b2b","forward":"combase.CoCopyProxy","src":["wine-spec"]},
 {"symbol":"CoCreateFreeThreadedMarshaler","status":"green","tests_visible":1,"tests_held_out":1,"forward":"combase.CoCreateFreeThreadedMarshaler","src":["wine-spec"],"seeds":["wine:ole32/tests/marshal.c:test_freethreadedmarshaler"]},
 {"symbol":"CoCreateGuid","status":"claimed","claimed_by":"spec-win-updater-services","forward":"combase.CoCreateGuid","src":["wine-spec"],"seeds":["wine:ole32/tests/compobj.c:test_CoCreateGuid"]},
 {"symbol":"CoCreateInstance","status":"green","tests_visible":2,"tests_held_out":1,"forward":"combase.CoCreateInstance","src":["wine-spec"],"seeds":["wine:ole32/tests/compobj.c:test_CoCreateInstance","wine:ole32/tests/marshal.c:test_cocreateinstance_proxy","wine:ole32/tests/compobj.c:test_CoCreateInstanceFromApp","wine:ole32/tests/marshal.c:test_inproc_handler","wine:ole32/tests/marshal.c:test_manualresetevent","wine:ole32/tests/compobj.c:test_GlobalOptions","wine:ole32/tests/moniker.c:test_item_moniker","wine:ole32/tests/clipboard.c:test_get_clipboard_uninitialized"]},
