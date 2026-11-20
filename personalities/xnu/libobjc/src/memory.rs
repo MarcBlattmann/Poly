@@ -215,7 +215,9 @@ fn weak_target_check(obj: u64) {
         crate::msgsend::push_dec(&mut m, unsafe { crate::sys::getpid() } as u64);
         m.extend_from_slice(b"]: Cannot form weak reference to instance (");
         push_hex(&mut m, obj);
-        m.extend_from_slice(b"). It is possible that this object was over-released, or is in the process of deallocation.\n");
+        m.extend_from_slice(
+            b"). It is possible that this object was over-released, or is in the process of deallocation.\n",
+        );
         fatal(&m);
     }
     send0(obj, sel(b"allowsWeakReference"));
@@ -263,8 +265,7 @@ pub extern "C" fn objc_loadWeakRetained(location: *mut u64) -> u64 {
 
 fn send1_bool_noarg(obj: u64, s: u64) -> bool {
     // SAFETY: a BOOL method of (self, _cmd).
-    let f: extern "C" fn(u64, u64) -> i8 =
-        unsafe { core::mem::transmute(crate::msgsend::objc_msgSend as *const ()) };
+    let f: extern "C" fn(u64, u64) -> i8 = unsafe { core::mem::transmute(crate::msgsend::objc_msgSend as *const ()) };
     f(obj, s) != 0
 }
 
@@ -340,11 +341,7 @@ pub extern "C" fn objc_getAssociatedObject(obj: u64, key: u64) -> u64 {
         return 0;
     }
     let Some(a) = lock().assoc.get(obj, key) else { return 0 };
-    if policy::atomic(a.policy) {
-        objc_autorelease(objc_retain(a.value))
-    } else {
-        a.value
-    }
+    if policy::atomic(a.policy) { objc_autorelease(objc_retain(a.value)) } else { a.value }
 }
 
 #[unsafe(no_mangle)]

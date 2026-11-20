@@ -176,7 +176,12 @@ pub(crate) struct State {
 }
 
 static LOCKED: AtomicBool = AtomicBool::new(false);
-static mut STATE: Option<State> = None;
+
+/// The state, made on the first lock.
+struct StateCell(core::cell::UnsafeCell<Option<State>>);
+// SAFETY: every access is under `LOCKED` (see `lock` and `Guard`).
+unsafe impl Sync for StateCell {}
+static STATE: StateCell = StateCell(core::cell::UnsafeCell::new(None));
 
 /// The runtime's state, locked until the guard goes. Never held across a
 /// call into the program.
@@ -186,14 +191,14 @@ impl core::ops::Deref for Guard {
     type Target = State;
     fn deref(&self) -> &State {
         // SAFETY: the guard holds the lock; `lock` made the state.
-        unsafe { (*(&raw const STATE)).as_ref().unwrap_unchecked() }
+        unsafe { (*STATE.0.get()).as_ref().unwrap_unchecked() }
     }
 }
 
 impl core::ops::DerefMut for Guard {
     fn deref_mut(&mut self) -> &mut State {
         // SAFETY: as for `deref`; the lock makes this the only reference.
-        unsafe { (*(&raw mut STATE)).as_mut().unwrap_unchecked() }
+        unsafe { (*STATE.0.get()).as_mut().unwrap_unchecked() }
     }
 }
 
@@ -210,7 +215,7 @@ pub(crate) fn lock() -> Guard {
     }
     // SAFETY: the lock is held.
     unsafe {
-        let s = &mut *(&raw mut STATE);
+        let s = &mut *STATE.0.get();
         if s.is_none() {
             *s = Some(State {
                 rt: Runtime::new(),

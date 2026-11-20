@@ -33,6 +33,8 @@ pub struct Plan {
     pub wintrace: bool,
     /// Poly's libSystem crate (fmt and clippy for its Darwin target).
     pub libsystem: bool,
+    /// Poly's libobjc crate (fmt and clippy for its Darwin target).
+    pub libobjc: bool,
 }
 
 impl Plan {
@@ -50,6 +52,7 @@ impl Plan {
             win32: true,
             wintrace: true,
             libsystem: true,
+            libobjc: true,
         }
     }
 
@@ -70,6 +73,7 @@ impl Plan {
             (self.win32, "win32 (fmt)"),
             (self.wintrace, "wintrace (fmt)"),
             (self.libsystem, "libsystem"),
+            (self.libobjc, "libobjc"),
         ] {
             if on {
                 units.push(name.into());
@@ -108,9 +112,14 @@ pub fn plan(changed: &[String], members: &[(String, String)]) -> std::result::Re
             plan.wintrace = true;
         } else if under(file, "personalities/xnu/libsystem") {
             plan.libsystem = true;
+        } else if under(file, "personalities/xnu/libobjc") {
+            plan.libobjc = true;
         } else if let Some((_, package)) =
             members.iter().filter(|(dir, _)| under(file, dir)).max_by_key(|(dir, _)| dir.len())
         {
+            if package == "poly-objc" {
+                plan.libobjc = true;
+            }
             if !plan.packages.contains(package) {
                 plan.packages.push(package.clone());
             }
@@ -290,6 +299,7 @@ mod tests {
                 win32: true,
                 wintrace: true,
                 libsystem: true,
+                libobjc: false,
             }
         );
         assert!(p.describe().starts_with("poly-nt, xtask, xtask for Windows, the kernel"));

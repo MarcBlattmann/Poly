@@ -92,7 +92,8 @@ fn inputs(root: &Path) -> Result<Vec<PathBuf>> {
 /// The inputs and the libSystem it links against (its directory name is
 /// libSystem's own content hash).
 fn hash_inputs(root: &Path, sys: &Path) -> Result<u64> {
-    let extra = format!("{RUSTFLAGS} {} {}", LINK_FLAGS.join(" "), sys.file_name().unwrap_or_default().to_string_lossy());
+    let extra =
+        format!("{RUSTFLAGS} {} {}", LINK_FLAGS.join(" "), sys.file_name().unwrap_or_default().to_string_lossy());
     ntdll::hash_files(root, &extra, &inputs(root)?)
 }
 
@@ -257,7 +258,8 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
     }
     let (path, bytes) = tree_file()?;
     tree.files.push((path, 0o755, bytes));
-    let image = initramfs::write(&root(), "poly-objc-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))?;
+    let image =
+        initramfs::write(&root(), "poly-objc-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))?;
     eprintln!("==> boot test: an Objective-C program (classes, a category, ARC, pools) with Poly's libobjc.A.dylib");
     let b = run_as_init(kernel, syms, &image, "mobjc", HELLO_DONE)?;
     if let Some(line) = b.output.lines().find(|l| l.contains("not ok ") || l.contains(" not implemented")) {
@@ -280,10 +282,7 @@ fn recorded(name: &str) -> Option<String> {
         }
         let text = std::fs::read_to_string(entry.path().join("macos.json")).ok()?;
         let json: serde_json::Value = serde_json::from_str(&text).ok()?;
-        return json["tests"]
-            .as_array()?
-            .iter()
-            .find(|t| t["name"] == name)?["results"]["arm64"]["stdout"]
+        return json["tests"].as_array()?.iter().find(|t| t["name"] == name)?["results"]["arm64"]["stdout"]
             .as_str()
             .map(str::to_string);
     }
@@ -402,11 +401,11 @@ pub fn spec_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         }
     }
     eprintln!(
-        "==> {passed} of {} libobjc spec tests pass ({} of them x86-64 parts); {} wait for: {}",
+        "==> {passed} of {} libobjc spec tests pass ({} of them x86-64 parts); {} wait for the unwinder, threads, \
+         blocks, fork or dlopen",
         results.len(),
         X86_64_PARTS.len(),
         SPEC_NOT_YET.len(),
-        "the unwinder, threads, blocks, fork, dlopen"
     );
     if failed.is_empty() { Ok(()) } else { Err(format!("libobjc spec tests failing: {failed:?}")) }
 }

@@ -96,6 +96,8 @@
 //!                       build Poly's libSystem.B.dylib and its sub-libraries (or take them from
 //!                       the content-hash cache), verify them, optionally copy them into <dir>/usr/lib
 //!                       (libsystem.rs, ADR 0258)
+//!   libobjc [--out <dir>] build Poly's libobjc.A.dylib (or take it from the content-hash cache),
+//!                       verify it, optionally copy it into <dir>/usr/lib (libobjc.rs, ADR 0259)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -160,8 +162,8 @@ mod input;
 mod installer;
 mod installer2;
 mod ktest;
-mod libsearch;
 mod libobjc;
+mod libsearch;
 mod libsystem;
 mod linuxchrome;
 mod macho;
@@ -2223,6 +2225,14 @@ fn fmt_checks(plan: &quicklint::Plan) -> Result {
                 .arg(root().join("personalities/xnu/libsystem/Cargo.toml")),
         )?;
     }
+    if plan.libobjc {
+        step(
+            "fmt (libobjc)",
+            cargo()
+                .args(["fmt", "--check", "--manifest-path"])
+                .arg(root().join("personalities/xnu/libobjc/Cargo.toml")),
+        )?;
+    }
     if plan.win32 {
         step(
             "fmt (win32)",
@@ -2345,6 +2355,9 @@ fn lint_units(plan: &quicklint::Plan) -> Result {
     // Poly's libSystem, for its Darwin target (ADR 0258).
     if plan.libsystem {
         libsystem::lint()?;
+    }
+    // Poly's libobjc, for its Darwin target (ADR 0259).
+    if plan.libobjc {
         libobjc::lint()?;
     }
     Ok(())

@@ -173,7 +173,7 @@ pub extern "C" fn class_respondsToSelector(cls: u64, s: u64) -> i8 {
     i8::from(responds(cls, s))
 }
 
-fn types_of<'a>(t: *const c_char, buf: &'a mut Vec<u8>) -> Option<&'a [u8]> {
+fn types_of(t: *const c_char, buf: &mut Vec<u8>) -> Option<&[u8]> {
     if t.is_null() {
         return None;
     }
@@ -270,9 +270,8 @@ pub extern "C" fn objc_allocateClassPair(superclass: u64, name: *const c_char, e
     let mut z = cstr(name);
     z.push(0);
     // SAFETY: fresh zeroed class objects.
-    let (cls, meta) = unsafe {
-        (sys::calloc(1, abi::CLASS_SIZE as usize) as u64, sys::calloc(1, abi::CLASS_SIZE as usize) as u64)
-    };
+    let (cls, meta) =
+        unsafe { (sys::calloc(1, abi::CLASS_SIZE as usize) as u64, sys::calloc(1, abi::CLASS_SIZE as usize) as u64) };
     let mut g = lock();
     let n = Raw.alloc(&z);
     if !g.rt.allocate_class_pair(&mut Raw, superclass, n, cls, meta) {
@@ -484,7 +483,8 @@ pub extern "C" fn objc_copyClassNamesForImage(path: *const c_char, out_count: *m
     let names: Vec<u64> = {
         let g = lock();
         let image = g.rt.images().iter().position(|im| Raw.cstr(im.path) == want);
-        image.map(|i| g.rt.classes_of_image(i).iter().filter_map(|&c| g.rt.class(c).map(|k| k.name)).collect())
+        image
+            .map(|i| g.rt.classes_of_image(i).iter().filter_map(|&c| g.rt.class(c).map(|k| k.name)).collect())
             .unwrap_or_default()
     };
     if !out_count.is_null() {

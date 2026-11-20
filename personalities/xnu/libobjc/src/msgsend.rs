@@ -222,8 +222,7 @@ pub(crate) fn initialize(cls: u64) {
     }
     let (sup, meta) = {
         let g = lock();
-        let c = g.rt.class(cls).map(|c| (c.superclass, c.isa)).unwrap_or((0, 0));
-        c
+        g.rt.class(cls).map(|c| (c.superclass, c.isa)).unwrap_or((0, 0))
     };
     initialize(sup);
     let s = sel(b"initialize");
