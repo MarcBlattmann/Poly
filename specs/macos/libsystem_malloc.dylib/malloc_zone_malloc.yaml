@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_malloc.dylib/malloc_zone_malloc.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in malloc_zone_malloc.tests/macos.json.
+id: macos/api/libsystem_malloc.dylib/malloc_zone_malloc
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  malloc_zone_malloc, malloc_zone_calloc, malloc_zone_realloc, malloc_zone_free, malloc_zone_valloc and
+  malloc_zone_memalign allocate from a given zone. In the default zone the blocks are sized like malloc's
+  (malloc_zone_malloc(z, 50) is malloc_good_size(50)); realloc grows and shrinks keeping the contents, realloc(NULL, n)
+  acts as malloc, free(NULL) is a no-op, calloc zero-fills, valloc is page aligned, memalign(128) is 128 aligned. In a
+  zone made with malloc_create_zone blocks belong to that zone (malloc_zone_from_ptr gives it, malloc_size knows
+  them, realloc keeps them in it; a 5000000 byte block there was sized 5013504 on arm64); 1000 blocks of two zones kept
+  their owner and contents and were freed in a different order, with free() or malloc_zone_free. Failure: an
+  impossible size gives NULL (SIZE_MAX, calloc overflow); malloc, calloc and realloc of impossible sizes set errno
+  ENOMEM (12) (realloc leaves the old block valid) but the malloc_zone_* calls leave errno unchanged (0).
+returns:
+  "success": "pointer"
+  "failure": "NULL"
+errors:
+  "ENOMEM": "12: set by malloc/calloc/realloc, not by the malloc_zone_* calls"
+side_effects: "allocates or frees heap blocks"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

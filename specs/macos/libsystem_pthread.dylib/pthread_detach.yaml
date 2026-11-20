@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_detach.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_detach.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_detach
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_detach(thread) marks a thread as not to be joined and returns 0; its resources are freed when it
+  ends. A second detach of a running thread is EINVAL (22), and joining a detached running thread is EINVAL.
+  After a detached thread has ended its id is gone: detach and join then give ESRCH (3). Detaching a thread that
+  has already ended but was not joined works (0) and the id is gone afterwards; detaching an id that was joined
+  is ESRCH, a zero id too. A thread can detach itself (0). 200 further threads, half detached by their
+  creator, all ran. Same on both architectures.
+returns:
+  "success": "0"
+errors:
+  "EINVAL": "22: already detached (thread still running)"
+  "ESRCH": "3: no such thread (ended and detached, joined, or zero id)"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

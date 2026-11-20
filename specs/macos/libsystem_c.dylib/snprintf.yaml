@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_c.dylib/snprintf.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in snprintf.tests/macos.json.
+id: macos/api/libsystem_c.dylib/snprintf
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  snprintf(buf, size, format, ...) writes at most size-1 characters and a NUL and returns the length the
+  whole output would have had (so result >= size means truncation); with size 0 nothing is written and
+  buf may be NULL (the call measures); a size above INT_MAX is not an error here. A NUL from %c counts as
+  a character and is stored. %n stores the characters so far (and does not count as output); %hn and %hhn store
+  into a short and a char. Details seen: BSD long forms %D %O %U are long int / unsigned (printing "5", "10",
+  "7"); %C and %S are %lc and %ls; %q, %z and a lone % at the end of the format print nothing, other unknown
+  conversions (%b, %m, %y, %@) print the letter; %5% prints '%' padded to width 5; %p prints "0x" and hex
+  ("0x0" for NULL; %#p the same); a NULL %s prints "(null)" and obeys precision and width ("(n", "    (null)");
+  %lc / %ls of a wide character above 0xFF fail with -1 and errno EILSEQ (92); %lc of 0xE9 gives the byte 0xE9
+  (the byte value is kept in the C locale); %.1s cuts bytes, not characters. Integers: %hhd 300 -> 44, %hd 70000 ->
+  4464, %u -1 -> 4294967295, %#o 8 -> 010, %#x 0 -> 0, %.0d of 0 prints nothing, %05d -7 -> -0007, %'d
+  1234567 -> 1234567 (no grouping in the C locale); negative width from * left-justifies; negative precision
+  from * is ignored; positional arguments %2$d %1$d work, also repeated (%1$s %1$s), and mixing with %d
+  uses the next argument number. Floating point: %f of 1.5 -> 1.500000, -0.0 -> -0.000000, %e 12345.678 ->
+  1.234568e+04, %g 0.0001 -> 0.0001, 0.00001 -> 1e-05, 123456789 -> 1.23457e+08, %.1g 150 -> 2e+02, %.20f of 0.1
+  -> 0.10000000000000000555, %.0f rounds half to even (0.5 -> 0, 1.5 -> 2, 2.5 -> 2), %#.0f keeps the point;
+  inf and nan print as "inf", "-inf", "nan" ("INF", "NAN" for the upper case conversions), padded with spaces
+  even when the 0 flag is given, "+inf" with +; %a is hexadecimal ("0x1p+0", %A "0X1.FEP+7", %.2a "0x1.00p+0");
+  %Lf works. Huge precision and width are honoured (%.400f is 402 characters, %1500d is 1500). The only observed
+  difference between the architectures is %La of a long double: arm64 "0x1p+0", x86_64 (80 bit) "0x8p-3"
+  for the same 1.0.
+returns:
+  "length": "number of characters the full output has (without the NUL); -1 on an encoding error"
+errors:
+  "EILSEQ": "92: a wide character above 0xFF for %lc or %ls (result -1)"
+side_effects: "writes at most size bytes into buf"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "%La of a long double 1.0: arm64 0x1p+0, x86_64 0x8p-3"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 2  # count kept by the diff runner

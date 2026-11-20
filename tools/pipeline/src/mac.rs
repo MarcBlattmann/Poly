@@ -46,6 +46,21 @@ pub const ARCHES: [&str; 2] = ["x86_64", "arm64"];
 /// libSystem, which macOS needs to start any program.
 pub const ALLOWED_DYLIBS: [&str; 1] = ["/usr/lib/libSystem.B.dylib"];
 
+/// A test about libSystem's own functions says so in its header comment with
+/// this line, and may then call them (`tests/macos/include/poly_mlibc.h`);
+/// the output still goes through raw system calls, so what the test reports
+/// is not routed through the code under test. Other tests import nothing.
+pub const LIBSYSTEM_DIRECTIVE: &str = "poly-mac: libsystem";
+
+/// Whether `source` carries [`LIBSYSTEM_DIRECTIVE`] in a comment line among
+/// its first 30 lines.
+pub fn uses_libsystem(source: &str) -> bool {
+    source.lines().take(30).any(|l| {
+        let l = l.trim_start();
+        (l.starts_with("//") || l.starts_with('*') || l.starts_with("/*")) && l.contains(LIBSYSTEM_DIRECTIVE)
+    })
+}
+
 /// The flags every test is compiled with (besides `-arch`, `-isysroot`
 /// and the include directory).
 pub const CFLAGS: [&str; 9] =
@@ -178,9 +193,9 @@ pub fn collect(dirs: &[PathBuf], only: &[String]) -> Result<Vec<Source>> {
 // Checking an executable.
 
 /// What `mac build` accepts: a thin 64-bit `MH_EXECUTE` for `arch` that
-/// loads only [`ALLOWED_DYLIBS`] and imports no symbol. Returns the
-/// libraries it loads.
-pub fn check_executable(bytes: &[u8], arch: &str) -> Result<Vec<String>> {
+/// loads only [`ALLOWED_DYLIBS`] and, unless `allow_imports` (a test with
+/// [`LIBSYSTEM_DIRECTIVE`]), imports no symbol. Returns the libraries it loads.
+pub fn check_executable(bytes: &[u8], arch: &str, allow_imports: bool) -> Result<Vec<String>> {
     use poly_macho::{CpuKind, FileType, MachO, N_EXT, N_TYPE, N_UNDF};
     let want = match arch {
         "x86_64" => CpuKind::X86_64,
@@ -199,7 +214,7 @@ pub fn check_executable(bytes: &[u8], arch: &str) -> Result<Vec<String>> {
     if let Some(d) = dylibs.iter().find(|d| !ALLOWED_DYLIBS.contains(&d.as_str())) {
         return Err(format!("loads {d}; a test may load only {}", ALLOWED_DYLIBS.join(", ")));
     }
-    if let Some(symtab) = m.symtab().map_err(|e| format!("{e:?}"))? {
+    if let (false, Some(symtab)) = (allow_imports, m.symtab().map_err(|e| format!("{e:?}"))?) {
         let mut imports = Vec::new();
         for sym in symtab.iter() {
             if sym.n_type & N_EXT != 0 && sym.n_type & N_TYPE == N_UNDF {
@@ -277,6 +292,7 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
     let include = repo.join(INCLUDE_DIR);
     let mut tests = Vec::new();
     for s in sources {
+        let allow_imports = uses_libsystem(&String::from_utf8_lossy(&util::read(&s.path)?));
         let mut executables = BTreeMap::new();
         for arch in ARCHES {
             let exe = out.join(arch).join(&s.name);
@@ -301,7 +317,7 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
                 ));
             }
             let bytes = util::read(&exe)?;
-            check_executable(&bytes, arch).map_err(|e| format!("{} ({arch}): {e}", s.path.display()))?;
+            check_executable(&bytes, arch, allow_imports).map_err(|e| format!("{} ({arch}): {e}", s.path.display()))?;
             executables.insert(arch.to_string(), sha256::hex(&bytes));
         }
         tests.push(BuiltTest {
@@ -845,6 +861,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
     }
 
+    #[test]
+    fn the_libsystem_directive_is_found_in_comments_only() {
+        assert!(uses_libsystem("/* x\n * poly-mac: libsystem\n */\nint main(void) { return 0; }\n"));
+        assert!(uses_libsystem("// poly-mac: libsystem\n"));
+        assert!(!uses_libsystem("int main(void) { return 0; }\n"));
+        assert!(!uses_libsystem("const char *s = \"poly-mac: libsystem\";\n"));
+    }
+
     /// The executable check, on programs this Mac's clang builds (skipped
     /// elsewhere).
     #[test]
@@ -863,15 +887,23 @@ mod tests {
         let m2 = build(&crate::repo_root(), &base.join("bin2"), &sources).unwrap();
         assert_eq!(m.tests, m2.tests);
         let arm = util::read(&base.join("bin/arm64/pure_one")).unwrap();
-        assert_eq!(check_executable(&arm, "arm64").unwrap(), ["/usr/lib/libSystem.B.dylib"]);
-        assert!(check_executable(&arm, "x86_64").unwrap_err().contains("not x86_64"));
-        assert!(check_executable(b"not a program", "arm64").is_err());
+        assert_eq!(check_executable(&arm, "arm64", false).unwrap(), ["/usr/lib/libSystem.B.dylib"]);
+        assert!(check_executable(&arm, "x86_64", false).unwrap_err().contains("not x86_64"));
+        assert!(check_executable(b"not a program", "arm64", false).is_err());
         // A test that calls into libSystem is refused.
         let impure = base.join("impure");
         util::write(&impure.join("impure_one.c"), "#include <unistd.h>\nint main(void) { return getpid() < 0; }\n")
             .unwrap();
         let err = build(&crate::repo_root(), &base.join("bin3"), &sources_in(&impure).unwrap()).unwrap_err();
         assert!(err.contains("imports _getpid"), "{err}");
+        // ... unless it says in its header that it tests libSystem.
+        util::write(
+            &impure.join("impure_one.c"),
+            "// poly-mac: libsystem\n#include <unistd.h>\nint main(void) { return getpid() < 0; }\n",
+        )
+        .unwrap();
+        let m = build(&crate::repo_root(), &base.join("bin4"), &sources_in(&impure).unwrap()).unwrap();
+        assert_eq!(m.tests[0].executables.len(), 2);
         // The arm64 program runs here and passes its (empty) checks.
         let o = run_once(&base.join("bin/arm64/pure_one"), &base.join("scratch"), Duration::from_secs(10));
         assert_eq!((o.status.as_str(), o.exit_code), ("ran", Some(0)), "{o:?}");

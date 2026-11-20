@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_attr_setstacksize.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_attr_setstacksize.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_attr_setstacksize
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_attr_init sets the default detach state to joinable (PTHREAD_CREATE_JOINABLE = 1;
+  PTHREAD_CREATE_DETACHED = 2) and a default stack size of 524288 bytes (512 KiB), read back with
+  pthread_attr_getstacksize. pthread_attr_setstacksize(attr, size) accepts a size that is a multiple of 4096
+  and not below the minimum, returns 0 and the size reads back unchanged: accepted: 8192, 12288, 16384, 32768,
+  81920, 1 MiB, 16 MiB, 2^40, 2^47. Refused with EINVAL (22), leaving the old value: 0, 1000, 8191, 8193,
+  16383, 16385, 20000. The minimum differs: PTHREAD_STACK_MIN (<limits.h>) is 16384 on arm64 and 8192 on
+  x86_64, but a size of 4096 is accepted (0) on arm64 and refused (EINVAL) on x86_64; 12288 is accepted on both.
+  The huge values are accepted by the attribute; creating a thread with them would fail. The page size is
+  16384 on arm64 and 4096 on x86_64 (getpagesize). Setting the stack size does not change the detach state and
+  the other way round; a second pthread_attr_init starts at the defaults again. pthread_attr_setdetachstate
+  with a value other than 1 or 2 is EINVAL. An attribute after pthread_attr_destroy refuses everything with
+  EINVAL (get and set). A thread created with the size can use it (see pthread_create).
+returns:
+  "success": "0"
+errors:
+  "EINVAL": "22: size not a multiple of 4096, below the minimum, or attr destroyed; bad detach state"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "size 4096: arm64 accepts, x86_64 EINVAL; PTHREAD_STACK_MIN 16384 vs 8192; page size 16384 vs 4096"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

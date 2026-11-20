@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_c.dylib/strlcat.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in strlcat.tests/macos.json.
+id: macos/api/libsystem_c.dylib/strlcat
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  strlcat(dst, src, size) appends src to the NUL-terminated string in dst so that the whole is at most
+  size-1 bytes plus a NUL. The result is the length it tried to make: strlen(dst) + strlen(src) when dst
+  has a NUL within size bytes, otherwise size + strlen(src). A result >= size means truncation. Observed:
+  room for everything: appended, result is the full length (foo + bar -> 6); exact fit (size 7 for 6
+  characters): complete; size 6: "fooba" and a NUL, result 6, the byte after the size untouched; size 4
+  with a 3 byte dst: dst unchanged (the only room is the NUL), result 6. When dst has no NUL within size
+  (size 8 over eight 'a'), size is smaller than or equal to strlen(dst) (sizes 2 and 3 for "abcdef"
+  and "abc"), or size is 0: dst is not touched at all and the result is size + strlen(src). An empty dst
+  or empty src works as expected. A path built in a 16 byte buffer from "/usr", "/local", "/lib/x86"
+  ended at "/usr/local/lib/" (15 bytes), result >= 16; once full, further calls change nothing and
+  return 15 + strlen(src). Same on both architectures.
+returns:
+  "full_length": "strlen(dst) + strlen(src), or size + strlen(src) if dst has no NUL in the first size bytes"
+errors:
+  "none": "the function has no error result"
+side_effects: "writes into dst at most size bytes, never past size-1 plus the NUL"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

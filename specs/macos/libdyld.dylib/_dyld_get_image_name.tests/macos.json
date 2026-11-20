@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "dyld_get_image_name_basic",
+      "source_sha256": "1c51452a94feeb3f8b0e4d5f2dd4ffb71ca19fab082865b516f54066d2353c9f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "72bb1b2daf2b3dd814fea0c8abc808a4010a7c15bb3a4ec9a7f605e2aeede379",
+          "exit_code": 0,
+          "stdout": "ok image 0 has a name\nok image 0 is an absolute path\nok _NSGetExecutablePath works\nok image 0 is the path the program was started with\nok image 1 is libSystem\nok every name is an absolute path\nok every other image of a libSystem-only program is under /usr/lib\nok the same string every time\nok index == count: NULL\nok index -1: NULL\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9603482e6458ed470c884e523315f7a20b71d2b6e0daac720ca5ff710911ea7d",
+          "exit_code": 0,
+          "stdout": "ok image 0 has a name\nok image 0 is an absolute path\nok _NSGetExecutablePath works\nok image 0 is the path the program was started with\nok image 1 is libSystem\nok every name is an absolute path\nok every other image of a libSystem-only program is under /usr/lib\nok the same string every time\nok index == count: NULL\nok index -1: NULL\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dyld_get_image_name_more",
+      "source_sha256": "b826e0b0667431212f813a2df3d288d754147b636aca261ef611c74b6515333c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "28948803a73d39c8eb0a1a3cb45262ed9e1b91158a650fcee6f8a61dc7059209",
+          "exit_code": 0,
+          "stdout": "ok dlopen via the libz.dylib link\nok the image is listed under its real name libz.1.dylib\nok and not under the link's name\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d0a2588dc5daaf964ec9bb37309fff3c3c2084bb29b4a21558cfd6126e7dcf43",
+          "exit_code": 0,
+          "stdout": "ok dlopen via the libz.dylib link\nok the image is listed under its real name libz.1.dylib\nok and not under the link's name\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

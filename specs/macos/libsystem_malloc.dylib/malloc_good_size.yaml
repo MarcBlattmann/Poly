@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_malloc.dylib/malloc_good_size.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in malloc_good_size.tests/macos.json.
+id: macos/api/libsystem_malloc.dylib/malloc_good_size
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  malloc_good_size(n) returns the size malloc(n) would really give: 0 -> 16, 1..16 -> 16, 17..32 -> 32,
+  33 -> 48, 100 -> 112, 113..128 -> 128; the same table as malloc_size (it equals malloc_size(malloc(n)) for every n
+  tested) and a size class is its own good size. It never decreases and never goes below n, is a multiple of 16
+  (and of 4096 above 100000 bytes, within 64 KiB above the request); a huge request (SIZE_MAX, 0xFFFFFFFF) is not
+  turned into a small answer. For requests above 128 bytes the classes differ between architectures: 129 -> 160 on
+  arm64 and 144 on x86_64; 513 -> 640 and 528; 1000 -> 1024 and 1008; 1025 -> 1280 and 1536; 15000 -> 16384 and
+  15360; 1 MiB needs no more than 1 MiB and 1 MiB + 1 is more.
+returns:
+  "size": "the rounded size"
+errors:
+  "none": "no error result"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+arch_differences: "classes above 128 bytes differ"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

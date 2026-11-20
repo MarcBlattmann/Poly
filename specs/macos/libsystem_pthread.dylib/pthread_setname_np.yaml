@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_pthread.dylib/pthread_setname_np.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in pthread_setname_np.tests/macos.json.
+id: macos/api/libsystem_pthread.dylib/pthread_setname_np
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  pthread_setname_np(name) names the calling thread (the name is the one the debugger and the system show);
+  pthread_getname_np(thread, buf, len) copies the name of any thread into buf (cut to len-1 bytes and NUL-terminated
+  when it does not fit: a buffer of 6 gives "short" for "short-name", a buffer of 1 gives just the NUL; bytes past
+  len are untouched) and returns 0. A new thread has an empty name (it does not inherit its creator's); the main
+  thread too. The name of another running thread can be read; for a thread that has been joined getname returns
+  ESRCH (3). Names up to 63 bytes are accepted; longer names (64 and more) fail with -1 and errno set to
+  ENAMETOOLONG (63) (not an error number as the result) and the old name stays. An empty name is accepted and clears the name; any
+  bytes are kept (spaces, a tab, UTF-8). 16 live threads each showed their own name to the main thread, and each
+  could rename itself. Same on both architectures.
+returns:
+  "set": "0"
+  "get": "0, buffer filled"
+errors:
+  "ENAMETOOLONG": "63: name of 64 bytes or more; the call returns -1 and sets errno"
+  "ESRCH": "3: getname of a thread that no longer exists"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
