@@ -161,6 +161,7 @@ mod installer;
 mod installer2;
 mod ktest;
 mod libsearch;
+mod libobjc;
 mod libsystem;
 mod linuxchrome;
 mod macho;
@@ -288,6 +289,7 @@ const COMMANDS: &[&str] = &[
     "nls-tables",
     "system-messages",
     "libsystem",
+    "libobjc",
     "ntdll",
     "win32",
     "wow64",
@@ -329,6 +331,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("fonts") => fonts::command(rest),
         Some("wayland") => wayland::run(&root(), rest),
         Some("libsystem") => libsystem::command(rest),
+        Some("libobjc") => libobjc::command(rest),
         Some("ntdll") => ntdll::command(rest),
         Some("win32") => win32::command(rest),
         Some("wow64") => wow64::command(rest),
@@ -1701,6 +1704,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // An SDK-linked C program with Poly's own libSystem.B.dylib (libsystem.rs,
     // ADR 0258).
     ("libsystem", libsystem::boot_test),
+    // An Objective-C program with Poly's own libobjc.A.dylib (libobjc.rs,
+    // ADR 0259).
+    ("objc", libobjc::boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
@@ -1864,6 +1870,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "macho",
             "macho-mach",
             "libsystem",
+            "objc",
             "busybox",
             "rootdisk",
             "toolkits",
@@ -2335,6 +2342,7 @@ fn lint_units(plan: &quicklint::Plan) -> Result {
     // Poly's libSystem, for its Darwin target (ADR 0258).
     if plan.libsystem {
         libsystem::lint()?;
+        libobjc::lint()?;
     }
     Ok(())
 }

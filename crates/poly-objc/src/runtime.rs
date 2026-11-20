@@ -175,6 +175,11 @@ impl Runtime {
         self.classes.get_mut(&cls)
     }
 
+    /// The class whose metaclass is `meta`.
+    pub fn class_for_meta(&self, meta: u64) -> Option<u64> {
+        self.classes.values().find(|c| !c.meta && c.isa == meta).map(|c| c.addr)
+    }
+
     /// The registered class named `name`.
     pub fn class_named(&self, name: &[u8]) -> Option<u64> {
         self.by_name.get(name).copied()
