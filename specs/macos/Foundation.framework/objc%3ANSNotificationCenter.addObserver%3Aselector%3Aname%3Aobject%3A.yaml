@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSNotificationCenter.addObserver%3Aselector%3Aname%3Aobject%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSNotificationCenter.addObserver%3Aselector%3Aname%3Aobject%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSNotificationCenter.addObserver:selector:name:object:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSNotificationCenter addObserver:selector:name:object:] registers an observer whose selector
+  receives the NSNotification (name, object, userInfo) when a notification is posted with the same
+  name (a nil name matches every name) and, when an object was given, the same object (pointer
+  identity: an equal but different object does not match; a nil object matches any; short strings may
+  be one object, so tests use long strings to tell). Adding the same observer twice for one name
+  delivers twice. Two observers of one name are called in the order they were added. removeObserver:
+  stops delivery for all registrations of that observer; removeObserver: of a block token (from
+  addObserverForName:object:queue:usingBlock:) stops that one. The block form with queue nil calls the
+  block before the post returns on the posting thread (a post from a worker thread calls it on that
+  worker thread).
+returns:
+  success: "nothing"
+errors: {}
+side_effects: "registers the observer"
+threading: "safe from any thread"
+ordering:
+  - "observers of one notification are called in the order they were added"
+timing:
+  typical: "microseconds, no system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

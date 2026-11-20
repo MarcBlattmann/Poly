@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsbundle_mainbundle_application",
+      "source_sha256": "2d918a53f1445b161cb5f3f094558ac1e7942c050e8be3456178bd964115c133",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9716ba68dceea1c21da151d42caf445fcd839daa3f8e044ae4f66149da1c330f",
+          "exit_code": 0,
+          "stdout": "ok b != nil && b == [NSBundle mainBundle]\nok [b.bundlePath hasSuffix:@\"/T.app\"]\nok ns_is(b.bundleIdentifier, \"test.poly.probe\")\nok [NSBundle bundleWithIdentifier:@\"test.poly.probe\"] == b\nok [NSBundle bundleWithIdentifier:@\"test.poly.nobody\"] == nil\nok [NSBundle bundleWithPath:b.bundlePath] == b\nok [b.executablePath hasSuffix:@\"/T.app/Contents/MacOS/t\"]\nok [b.resourcePath hasSuffix:@\"/T.app/Contents/Resources\"]\nok [[NSBundle allBundles] containsObject:b]\nok b.bundleURL.isFileURL\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "491f2d620b308d2961120427c25474ab2c95fbedce8509afc01ce288b185a2f5",
+          "exit_code": 0,
+          "stdout": "ok b != nil && b == [NSBundle mainBundle]\nok [b.bundlePath hasSuffix:@\"/T.app\"]\nok ns_is(b.bundleIdentifier, \"test.poly.probe\")\nok [NSBundle bundleWithIdentifier:@\"test.poly.probe\"] == b\nok [NSBundle bundleWithIdentifier:@\"test.poly.nobody\"] == nil\nok [NSBundle bundleWithPath:b.bundlePath] == b\nok [b.executablePath hasSuffix:@\"/T.app/Contents/MacOS/t\"]\nok [b.resourcePath hasSuffix:@\"/T.app/Contents/Resources\"]\nok [[NSBundle allBundles] containsObject:b]\nok b.bundleURL.isFileURL\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsbundle_mainbundle_threads",
+      "source_sha256": "8bf38a4ba69d73d27ef02c7abd4760c40dfe40de6d8115b22e58dd0c1e0a7735",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "fe7a0857eaafa4337400a7bc75b7fa76c8f90807b388fa195f22926e8c1715a5",
+          "exit_code": 0,
+          "stdout": "ok done && from_thread == b\nok [path_from_thread isEqualToString:b.bundlePath]\nok [from_thread.infoDictionary isEqualToDictionary:b.infoDictionary]\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9afb42d14a8bc11b01461021de8ee70f2858d6ea6f6150f1e241e792d0f20f80",
+          "exit_code": 0,
+          "stdout": "ok done && from_thread == b\nok [path_from_thread isEqualToString:b.bundlePath]\nok [from_thread.infoDictionary isEqualToDictionary:b.infoDictionary]\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

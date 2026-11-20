@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nssearchpathfordirectories_consistency",
+      "source_sha256": "1849c0e0d206758d5ed2dc0551695a3c69e56690a88fb70111cf633442a215b1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "31b30c4600598a9ad85c935149a1956c19ce364d7e2bddc95e7afcb4ea3d2eda",
+          "exit_code": 0,
+          "stdout": "ok p.count == 1 && urls.count == 1 && [p[0] isEqualToString:[urls[0] path]]\nok [p isEqualToArray:NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES)]\nok [[t[0] stringByExpandingTildeInPath] isEqualToString:p[0]]\nok CFGetTypeID((__bridge CFTypeRef)p) == CFArrayGetTypeID() && CFGetTypeID((__bridge CFTypeRef)p[0]) == CFStringGetTypeID()\nok [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0] isEqualToString:[NSHomeDirectory() stringByAppendingPathComponent:@\"Documents\"]]\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "290a7d7bbb041c43bcb0e7e64eaf08ab09e14c067e0b3b52917c7fce161f2b73",
+          "exit_code": 0,
+          "stdout": "ok p.count == 1 && urls.count == 1 && [p[0] isEqualToString:[urls[0] path]]\nok [p isEqualToArray:NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES)]\nok [[t[0] stringByExpandingTildeInPath] isEqualToString:p[0]]\nok CFGetTypeID((__bridge CFTypeRef)p) == CFArrayGetTypeID() && CFGetTypeID((__bridge CFTypeRef)p[0]) == CFStringGetTypeID()\nok [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0] isEqualToString:[NSHomeDirectory() stringByAppendingPathComponent:@\"Documents\"]]\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nssearchpathfordirectories_system_domains",
+      "source_sha256": "580c9a667767ba8d8767a4cedd1caf44cbe84af94d378588d3f6c8b59487133b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3d5cbac106aca934e177bea1c0241889c9bcd564f66e6b49d668d9e8ff296e05",
+          "exit_code": 0,
+          "stdout": "ok apps.count == 1 && ns_is(apps[0], \"/Applications\")\nok lib.count == 1 && ns_is(lib[0], \"/Library\")\nok all.count >= 4\nok [all[0] hasPrefix:NSHomeDirectory()] && [all[0] hasSuffix:@\"/Library\"]\nok [all containsObject:@\"/Library\"] && [all containsObject:@\"/System/Library\"] && [all containsObject:@\"/Network/Library\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok CFGetTypeID((__bridge CFTypeRef)all) == CFArrayGetTypeID()\nok user.count == 1 && [user[0] isEqualToString:all[0]]\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9855711fc1cdbceb56c64fdb476974f9d1ef5c6269c1bd79792fe63b1bbb536f",
+          "exit_code": 0,
+          "stdout": "ok apps.count == 1 && ns_is(apps[0], \"/Applications\")\nok lib.count == 1 && ns_is(lib[0], \"/Library\")\nok all.count >= 4\nok [all[0] hasPrefix:NSHomeDirectory()] && [all[0] hasSuffix:@\"/Library\"]\nok [all containsObject:@\"/Library\"] && [all containsObject:@\"/System/Library\"] && [all containsObject:@\"/Network/Library\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok [p isKindOfClass:[NSString class]] && [p hasPrefix:@\"/\"]\nok CFGetTypeID((__bridge CFTypeRef)all) == CFArrayGetTypeID()\nok user.count == 1 && [user[0] isEqualToString:all[0]]\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -554,6 +554,7 @@ mod tests {
             session: None,
             token: None,
             sound: None,
+            arch: None,
         }
     }
 

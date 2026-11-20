@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_main_q_runloop",
+      "source_sha256": "b093f2e093aea43f8ed9fcdf98ba89ac088ffe39b16d2c54906d965a4c1674cc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "033f557b9b225cd2d4d07c559ba8948b4db074957143aad23e5226a3bc094f95",
+          "exit_code": 0,
+          "stdout": "ok the main queue's label\nok dispatch_get_main_queue is the same on every call\nok it is not a global queue\nok blocks on the main queue wait for the run loop: none ran yet\nok the run loop drained the main queue: 4 blocks\nok in submission order (blocks from two threads: 1, 2 from here, 3, 4 from the worker)\nok all on the main thread\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "03e9833a2be8f0d86bc5d42812367577732ea6c48d6ec861fec421fc66f225b8",
+          "exit_code": 0,
+          "stdout": "ok the main queue's label\nok dispatch_get_main_queue is the same on every call\nok it is not a global queue\nok blocks on the main queue wait for the run loop: none ran yet\nok the run loop drained the main queue: 4 blocks\nok in submission order (blocks from two threads: 1, 2 from here, 3, 4 from the worker)\nok all on the main thread\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_main_q_sync",
+      "source_sha256": "6cc707677d5880520731e82734d776490caa5a3d0588b6ec77ca1531e1ddfaca",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a8176cb7048be991342e646b6fdef2019c7957ff9d85f24b0770dbbf9e903b83",
+          "exit_code": 0,
+          "stdout": "ok the block ran on the main thread\nok the worker's dispatch_sync returned after the block (it saw 42)\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8f4ad816604673df65c6ce00164bece98d3c562091791e85cd4d6653b3cd9506",
+          "exit_code": 0,
+          "stdout": "ok the block ran on the main thread\nok the worker's dispatch_sync returned after the block (it saw 42)\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

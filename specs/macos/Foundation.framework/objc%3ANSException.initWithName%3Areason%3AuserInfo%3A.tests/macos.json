@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsexception_initwithname_properties",
+      "source_sha256": "3fcf99baabc4849518b239f7f182c4ee58f21718826650dfd8c775101ae6c3e9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "447b2b3b16fa78adb1576becf605937cdfc12c01d14cde08b90a3c84fad890f7",
+          "exit_code": 0,
+          "stdout": "ok ns_is(e.name, \"PolyName\") && ns_is(e.reason, \"some reason\") && [e.userInfo[@\"a\"] intValue] == 1\nok ns_is(bare.name, \"Bare\") && bare.reason == nil && bare.userInfo == nil\nok ns_is(e.description, \"some reason\")\nok ns_is(bare.description, \"Bare\")\nok e != twin\nok e.callStackReturnAddresses.count == 0 && e.callStackSymbols.count == 0\nok c == e\nok c.callStackSymbols.count > 0\nok [e isKindOfClass:[NSException class]] && [e isKindOfClass:[NSObject class]]\nok ns_is(named.name, \"Fac\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "328a49fccc84e916ee1c75f16da385b5ee85a1830ea3526ac388ca0a970edf20",
+          "exit_code": 0,
+          "stdout": "ok ns_is(e.name, \"PolyName\") && ns_is(e.reason, \"some reason\") && [e.userInfo[@\"a\"] intValue] == 1\nok ns_is(bare.name, \"Bare\") && bare.reason == nil && bare.userInfo == nil\nok ns_is(e.description, \"some reason\")\nok ns_is(bare.description, \"Bare\")\nok e != twin\nok e.callStackReturnAddresses.count == 0 && e.callStackSymbols.count == 0\nok c == e\nok c.callStackSymbols.count > 0\nok [e isKindOfClass:[NSException class]] && [e isKindOfClass:[NSObject class]]\nok ns_is(named.name, \"Fac\")\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsexception_initwithname_subclass_and_unraised",
+      "source_sha256": "40936bcf5acfb05a4657a2efd27794abdf6477c9c5cb8de6b80ef8d77d43d3d4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5b225ca47a5a07acb9bbb4a91b6b30af3e1fd2df18b254996b6a32d7a7926795",
+          "exit_code": 0,
+          "stdout": "ok ns_is(e.name, \"PolyError\") && ns_is(e.reason, \"custom\") && [e.userInfo[@\"code\"] intValue] == 7\nok p == e\nok which == 2\nok ns_is(x.name, \"Plain\")\nok which == 5\nok [e isKindOfClass:[NSException class]]\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "483e53f29227b9ddde39a151c5e28f7b3f4bbdd80ebcbffe340d08560dc7daed",
+          "exit_code": 0,
+          "stdout": "ok ns_is(e.name, \"PolyError\") && ns_is(e.reason, \"custom\") && [e.userInfo[@\"code\"] intValue] == 7\nok p == e\nok which == 2\nok ns_is(x.name, \"Plain\")\nok which == 5\nok [e isKindOfClass:[NSException class]]\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

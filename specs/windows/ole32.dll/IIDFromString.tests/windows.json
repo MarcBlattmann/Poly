@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "iid_parse",
+      "exe_sha256": "45d2440584a73c41eee2357bb8b26ce87d20d62552b00ddbe7a6cfb68ce805a1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlIENvSW5pdGlhbGl6ZUV4LCB2YWxpZDogMHgwMDAwMDAwMCwgb3V0cHV0IHdyaXR0ZW4KICB2YWx1ZSAwMDAyMDQyNCAwMDAwIDAwMDAgW2MwLCAwMCwgMDAsIDAwLCAwMCwgMDAsIDAwLCA0Nl0KdmFsaWQsIHVwcGVyIGNhc2U6IDB4MDAwMDAwMDAsIG91dHB1dCB3cml0dGVuCiAgdmFsdWUgMDAwMjA0MjQgMDAwMCAwMDAwIFtjMCwgMDAsIDAwLCAwMCwgMDAsIDAwLCAwMCwgNDZdCnZhbGlkLCBsb3dlciBjYXNlOiAweDAwMDAwMDAwLCBvdXRwdXQgd3JpdHRlbgogIHZhbHVlIDAwMDAwMTViIDAwMDAgMDAwMCBbYzAsIDAwLCAwMCwgMDAsIDAwLCAwMCwgMDAsIDQ2XQp2YWxpZCwgbWl4ZWQgY2FzZTogMHgwMDAwMDAwMCwgb3V0cHV0IHdyaXR0ZW4KICB2YWx1ZSBhYmNkZWYwMSAyMzQ1IDY3ODkgW2FiLCBjZCwgZWYsIDAxLCAyMywgNDUsIDY3LCA4OV0KR1VJRF9OVUxMOiAweDAwMDAwMDAwLCBvdXRwdXQgR1VJRF9OVUxMCiAgdmFsdWUgMDAwMDAwMDAgMDAwMCAwMDAwIFswMCwgMDAsIDAwLCAwMCwgMDAsIDAwLCAwMCwgMDBdCmFsbCBGOiAweDAwMDAwMDAwLCBvdXRwdXQgd3JpdHRlbgogIHZhbHVlIGZmZmZmZmZmIGZmZmYgZmZmZiBbZmYsIGZmLCBmZiwgZmYsIGZmLCBmZiwgZmYsIGZmXQpubyBicmFjZXM6IDB4ODAwNzAwNTcsIG91dHB1dCB1bnRvdWNoZWQKbm8gY2xvc2luZyBicmFjZTogMHg4MDA3MDA1Nywgb3V0cHV0IHVudG91Y2hlZApubyBvcGVuaW5nIGJyYWNlOiAweDgwMDcwMDU3LCBvdXRwdXQgdW50b3VjaGVkCnRleHQgYWZ0ZXIgdGhlIGNsb3NpbmcgYnJhY2U6IDB4ODAwNzAwNTcsIG91dHB1dCB1bnRvdWNoZWQKYSBzcGFjZSBiZWZvcmU6IDB4ODAwNzAwNTcsIG91dHB1dCB1bnRvdWNoZWQKYSBzcGFjZSBhZnRlcjogMHg4MDA3MDA1Nywgb3V0cHV0IHVudG91Y2hlZApvbmUgZGlnaXQgdG9vIGZldzogMHg4MDA3MDA1Nywgb3V0cHV0IHVudG91Y2hlZApvbmUgZGlnaXQgdG9vIG1hbnk6IDB4ODAwNzAwNTcsIG91dHB1dCB1bnRvdWNoZWQKbm9uLWhleGFkZWNpbWFsIGNoYXJhY3RlcjogMHg4MDA0MDFmNCwgb3V0cHV0IHdyaXR0ZW4KaHlwaGVuIG1pc3Npbmc6IDB4ODAwNzAwNTcsIG91dHB1dCB1bnRvdWNoZWQKaHlwaGVuIGluIHRoZSB3cm9uZyBwbGFjZTogMHg4MDA0MDFmNCwgb3V0cHV0IHdyaXR0ZW4KZW1wdHkgc3RyaW5nOiAweDgwMDcwMDU3LCBvdXRwdXQgdW50b3VjaGVkCm9ubHkgYnJhY2VzOiAweDgwMDcwMDU3LCBvdXRwdXQgdW50b3VjaGVkCmEgUHJvZ0lEOiAweDgwMDcwMDU3LCBvdXRwdXQgdW50b3VjaGVkCmEgUHJvZ0lEIHdpdGggYSB2ZXJzaW9uOiAweDgwMDcwMDU3LCBvdXRwdXQgdW50b3VjaGVkCk5VTEwgc3RyaW5nOiAweDAwMDAwMDAwLCBvdXRwdXQgR1VJRF9OVUxMCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before CoInitializeEx, valid: 0x00000000, output written\n  value 00020424 0000 0000 [c0, 00, 00, 00, 00, 00, 00, 46]\nvalid, upper case: 0x00000000, output written\n  value 00020424 0000 0000 [c0, 00, 00, 00, 00, 00, 00, 46]\nvalid, lower case: 0x00000000, output written\n  value 0000015b 0000 0000 [c0, 00, 00, 00, 00, 00, 00, 46]\nvalid, mixed case: 0x00000000, output written\n  value abcdef01 2345 6789 [ab, cd, ef, 01, 23, 45, 67, 89]\nGUID_NULL: 0x00000000, output GUID_NULL\n  value 00000000 0000 0000 [00, 00, 00, 00, 00, 00, 00, 00]\nall F: 0x00000000, output written\n  value ffffffff ffff ffff [ff, ff, ff, ff, ff, ff, ff, ff]\nno braces: 0x80070057, output untouched\nno closing brace: 0x80070057, output untouched\nno opening brace: 0x80070057, output untouched\ntext after the closing brace: 0x80070057, output untouched\na space before: 0x80070057, output untouched\na space after: 0x80070057, output untouched\none digit too few: 0x80070057, output untouched\none digit too many: 0x80070057, output untouched\nnon-hexadecimal character: 0x800401f4, output written\nhyphen missing: 0x80070057, output untouched\nhyphen in the wrong place: 0x800401f4, output written\nempty string: 0x80070057, output untouched\nonly braces: 0x80070057, output untouched\na ProgID: 0x80070057, output untouched\na ProgID with a version: 0x80070057, output untouched\nNULL string: 0x00000000, output GUID_NULL\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    }
+  ]
+}

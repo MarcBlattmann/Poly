@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_group_notify_basic",
+      "source_sha256": "f40fe74731e75fc66a5a08d3c2ec5a000511514e765d8171005a38f85fa0bf6d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2fe9f8e4d1026ada0b1b6b799a38df8b6df7550a9ea24577e639d17da726379b",
+          "exit_code": 0,
+          "stdout": "ok not run while the group is not empty\nok run after the leave\nok on the queue it was given\nok three notify blocks on one group all ran\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cde067a6c17280222aa0afe5815459162ad64bf52cc6ac2556d490d07a44c860",
+          "exit_code": 0,
+          "stdout": "ok not run while the group is not empty\nok run after the leave\nok on the queue it was given\nok three notify blocks on one group all ran\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_group_notify_more",
+      "source_sha256": "953be44f8343829c0f28a3945d9248ebb65259bffa960350e200950bef17229f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0f6541cd3b400899b062a8097f9c87a2a2192a5af23d96063ed8f6ae89a27244",
+          "exit_code": 0,
+          "stdout": "ok the group was empty but the main queue is not being drained: nothing ran\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3c50bf1f08e599cb3aa19118ca7aaa196181b2e4c005c223a36433615079fcda",
+          "exit_code": 0,
+          "stdout": "ok the group was empty but the main queue is not being drained: nothing ran\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
