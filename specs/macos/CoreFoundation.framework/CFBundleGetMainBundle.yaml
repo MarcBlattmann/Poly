@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFBundleGetMainBundle.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFBundleGetMainBundle.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFBundleGetMainBundle
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFBundleGetMainBundle() returns the bundle of the running program, the same CFBundle object on every
+  call (type CFBundleGetTypeID), not retained for the caller. Observed with a small application built
+  by the test itself at run time (T.app/Contents/{Info.plist, MacOS/t, Resources/}) whose executable
+  is started from inside it: the main bundle is that .app, CFBundleGetIdentifier is the plist's
+  CFBundleIdentifier, CFBundleGetBundleWithIdentifier(id) finds it (an unknown id gives NULL),
+  CFBundleCopyBundleURL is the .app directory, CFBundleCopyExecutableURL is T.app/Contents/MacOS/t,
+  CFBundleGetPackageInfo gives type 'APPL' (0x4150504c) and creator '????' (0x3f3f3f3f) for
+  CFBundlePackageType APPL, and CFBundleGetVersionNumber is non-zero for a plist that has a
+  CFBundleVersion. A program that is not inside a bundle still has a main bundle object: no identifier
+  (NULL), an empty Info dictionary (count 0), CFBundleCopyBundleURL the directory that holds the
+  executable (a directory file URL, equal to the executable URL with its last component removed), no
+  resources (lookups give NULL), package type 'BNDL' (0x424e444c) with creator '????' and version
+  number 0. Tests run as plain executables, so the plain case is tested directly and the .app facts by
+  tests that build and start their own copy.
+returns:
+  success: "the main CFBundleRef (never NULL, not owned)"
+errors: {}
+side_effects: "the first call reads the executable's bundle and its Info.plist"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "first call a few hundred microseconds to milliseconds (reads files); later calls constant"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

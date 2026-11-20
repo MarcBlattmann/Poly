@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFRunLoopSourceCreate.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFRunLoopSourceCreate.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFRunLoopSourceCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFRunLoopSourceCreate(alloc, order, context) with a version 0 CFRunLoopSourceContext makes a custom
+  source (CFRunLoopSourceGetTypeID), valid, with the order given (CFRunLoopSourceGetOrder) and the
+  context copied (CFRunLoopSourceGetContext reads it back; the context's retain callback runs once at
+  creation and release once when the source is freed, with the info pointer as argument).
+  schedule(info, rl, mode) is called when the source is added to a loop for a mode (once per mode),
+  cancel(info, rl, mode) when it is removed from a mode with CFRunLoopRemoveSource and again when an
+  added source is invalidated with CFRunLoopSourceInvalidate (which makes CFRunLoopSourceIsValid false
+  and stops its performs); perform(info) is called during a run in a mode the source is in after
+  CFRunLoopSourceSignal, never at the call to Signal itself; two signals before the run give one
+  perform; a source signalled and then removed is not performed; a source added to two modes and
+  signalled is performed once, in whichever mode runs first (the signal is per source), and a second
+  signal is performed again. A source with every callback NULL can be added and signalled; the run
+  reports HandledSource for it. Sources of other versions (port based, version 1) are not part of this
+  entry.
+returns:
+  success: "a new source (retain count 1)"
+errors:
+  null_context: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "allocates; calls the context retain once"
+threading: "signalling may be done from any thread together with CFRunLoopWakeUp; performs run on the loop's thread"
+ordering: 
+  - "schedule when added, perform in a run after signal, cancel when removed or invalidated"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

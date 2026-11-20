@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfpreferencessetappvalue_value_is_copied",
+      "source_sha256": "371c291c35ee78f54d398e51a9881b5e608ad1f42bc9f4672077ce1dca447420",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "17fe279e42372e668ab0157e2205be8bee7260675bf446dcec924a4ec421040e",
+          "exit_code": 0,
+          "stdout": "ok got != NULL && CFArrayGetCount(got) == 1\nok gd != NULL && CFDictionaryGetCount(gd) == 1\nok CFGetRetainCount(data) == rc\nok gn != NULL && CFEqual(gn, nested)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d6b54b33a9d2bfce8a18945c8458c72b9f98033e09f68f95d5092b1beb9a1d97",
+          "exit_code": 0,
+          "stdout": "ok got != NULL && CFArrayGetCount(got) == 1\nok gd != NULL && CFDictionaryGetCount(gd) == 1\nok CFGetRetainCount(data) == rc\nok gn != NULL && CFEqual(gn, nested)\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

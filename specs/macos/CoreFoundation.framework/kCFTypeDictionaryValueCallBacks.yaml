@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/kCFTypeDictionaryValueCallBacks.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in kCFTypeDictionaryValueCallBacks.tests/macos.json.
+id: macos/api/CoreFoundation.framework/kCFTypeDictionaryValueCallBacks
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  kCFTypeDictionaryValueCallBacks is the exported CFDictionaryValueCallBacks table of 40 bytes:
+  version 0, retain, release, copyDescription, equal all non-NULL (no hash), equal being CFEqual. A
+  dictionary with it retains stored values and releases them when replaced, removed or freed (counts
+  shown by CFGetRetainCount), compares values with CFEqual in CFDictionaryContainsValue (case
+  sensitive) and in CFEqual of two dictionaries, and prints them in its description (`{\n    k =
+  other;\n}`). Layout of the SDK's CFDictionary.h.
+returns:
+  value: "the table"
+errors: {}
+side_effects: "none"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "a few nanoseconds to microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

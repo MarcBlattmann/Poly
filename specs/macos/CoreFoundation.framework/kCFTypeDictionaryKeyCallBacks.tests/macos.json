@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "kcftypedictionarykeycallbacks_in_use",
+      "source_sha256": "e7c759ce9586894a0fbfaeb14d134c68532b0672c4ac3b0bb0f528f9796e658a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "00dd986c09d494c6e120e74b8653ffd9b8172238d75863c9850fd95f38c3d45e",
+          "exit_code": 0,
+          "stdout": "ok CFDictionaryGetCount(d) == 2\nok cf_is(CFDictionaryGetValue(d, S(\"1\")), \"string one\")\nok cf_is(CFDictionaryGetValue(d, CFNumberCreate(kCFAllocatorDefault, kCFNumberLongLongType, &one64)), \"number one\")\nok CFGetRetainCount(k) == 2\nok cf_is(CFDictionaryGetValue(d, CFDataCreate(kCFAllocatorDefault, (const UInt8 *)\"key\", 3)), \"data\")\nok CFGetRetainCount(k) == 1\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "77cf038835a52e8abdb3abbcfc553f178a012cf3ca7312eb0985e99e9b2feedd",
+          "exit_code": 0,
+          "stdout": "ok CFDictionaryGetCount(d) == 2\nok cf_is(CFDictionaryGetValue(d, S(\"1\")), \"string one\")\nok cf_is(CFDictionaryGetValue(d, CFNumberCreate(kCFAllocatorDefault, kCFNumberLongLongType, &one64)), \"number one\")\nok CFGetRetainCount(k) == 2\nok cf_is(CFDictionaryGetValue(d, CFDataCreate(kCFAllocatorDefault, (const UInt8 *)\"key\", 3)), \"data\")\nok CFGetRetainCount(k) == 1\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

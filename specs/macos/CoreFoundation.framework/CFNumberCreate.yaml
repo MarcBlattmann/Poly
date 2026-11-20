@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFNumberCreate.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFNumberCreate.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFNumberCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFNumberCreate(alloc, theType, valuePtr) makes a number from the C value of the given type
+  (kCFNumberSInt8Type 1, SInt16 2, SInt32 3, SInt64 4, Float32 5, Float64 6, Char 7, Short 8, Int 9,
+  Long 10, LongLong 11, Float 12, Double 13, CFIndex 14, NSInteger 15, CGFloat 16). CFNumberGetType
+  gives the fixed-size form of the same width: Char -> SInt8, Short -> SInt16, Int -> SInt32, Long,
+  LongLong and CFIndex -> SInt64 (64-bit long), Float -> Float32, Double and CGFloat -> Float64;
+  CFNumberGetByteSize is 1, 2, 4 or 8 for the integer widths and 4 for float, 8 for double.
+  CFNumberIsFloatType is true for the floating types, kCFNumberNaN and the infinities
+  (kCFNumberPositiveInfinity, kCFNumberNegativeInfinity, kCFNumberNaN are constant numbers of float
+  type; creating a double NaN gives the very object kCFNumberNaN). Small values may be stored without
+  an allocation, so two numbers made from the same small value may be one object; do not count on
+  object identity. CFNumberCompare(a, b, NULL) orders by value across types (1 < 1.5, 2.5 > 2, 7 =
+  7.0, -1 < 1), NaN equals NaN and is less than every other number, the infinities bracket everything.
+  An unknown type value (99) did not return NULL on this system; not specified. Extremes (INT64_MAX,
+  INT64_MIN) read back exactly.
+returns:
+  success: "a number object; its CFNumberGetType and value as above"
+errors:
+  null_valueptr: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "allocates (or returns a stored small value)"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "a few nanoseconds to microseconds; no system call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

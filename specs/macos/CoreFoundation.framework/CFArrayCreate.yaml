@@ -1,0 +1,38 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFArrayCreate.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFArrayCreate.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFArrayCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFArrayCreate(alloc, values, numValues, callBacks) makes an immutable array of numValues pointers
+  copied from the list (later changes to the list do not matter), in order, calling callBacks->retain
+  once per value (with the array's allocator) and, when the array is freed, callBacks->release once
+  per value. Count 0 is allowed and gives an empty array, also with values NULL. Duplicates are kept.
+  With callBacks NULL the values are plain pointers: they are not retained, compared by pointer, may
+  be any value including NULL (a NULL element reads back as NULL) and need not be objects. The
+  callback table's version must be 0. CFArrayCreateCopy makes an equal array;
+  CFArrayCreateMutable(alloc, capacity, callBacks) makes an empty mutable array whatever capacity (0
+  means unlimited; a positive capacity is a hint and the array grows past it, 100 appends from
+  capacity 2 work), and CFArrayCreateMutableCopy copies the values leaving the original untouched. A
+  mutable array has the type identifier of an array. NULL value pointers with the standard callbacks
+  (CFArrayAppendValue(m, NULL), or CFArrayCreate with values NULL and a count above 0) raise an
+  Objective-C exception and end the process.
+returns:
+  success: "a new array (retain count 1)"
+errors:
+  null_value_with_type_callbacks: "raises an exception: not supported"
+  null_list_with_count: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "allocates the array; calls retain once per value"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: 
+  - "retain callbacks run during creation, in index order; release callbacks run while the array is freed"
+timing:
+  typical: "microseconds; linear in numValues"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

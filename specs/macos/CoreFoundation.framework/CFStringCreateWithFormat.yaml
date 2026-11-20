@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFStringCreateWithFormat.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFStringCreateWithFormat.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFStringCreateWithFormat
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFStringCreateWithFormat(alloc, formatOptions, format, ...) builds a string like printf with a
+  CFString format (formatOptions NULL). Integer conversions %d %i %u %x %X %o with the length
+  modifiers hh h l ll z t j; width, precision, flags - + space # 0 and * for a width from an argument
+  behave as in printf ('[%5d]' of 42 is '[   42]', '[%-5d]' '[42   ]', '[%05d]' '[00042]', '[%.3d]' of
+  7 '[007]', '%#x' of 255 '0xff', '%08x' of 0xbeef '0000beef'). %c a character, %C a UniChar (the euro
+  sign), %S a NUL-terminated UniChar string, %% a percent sign. %s reads a C string as Mac Roman, not
+  UTF-8: the bytes C3 A9 give the two characters U+221A U+00A9 ('h√©'); width and precision work
+  ('[%5s]' of 'ab' '[   ab]', '[%.1s]' of 'abc' '[a]'). %@ inserts an object's text: a string as
+  itself, a number as its value ('7'), a Boolean as 'true' or 'false', a NULL pointer as '(null)', an
+  array as its description ('(\n    a\n)'). Floating point %f %e %g with %lf, %Lf, precision and width
+  follow C printf: '3.141590', '%.2f' '3.14', '[%10.3f]' '[     3.142]', '%.0f' of 2.5 '2', '%.1f' of
+  0.05 '0.1', '%e' of 12345.678 '1.234568e+04', '%g' of 0.0001 '0.0001' and of 1e10 '1e+10', '-0.0'
+  '-0.000000', infinity 'inf', NaN 'nan'. %p of a null pointer is '0x0'. Positional arguments %n$ work
+  for all kinds ('%2$@ %1$@' with 'one','two' gives 'two one'; '%3$d' with 1,2,3 gives '3'). An
+  unknown conversion letter is written as itself, using no argument ('%y' gives 'y'); a lone trailing
+  % is dropped ('abc%' gives 'abc'). Text longer than 70 characters passes through. The result never
+  has NULL for a valid format.
+returns:
+  success: "a new string"
+errors:
+  null_format: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+  argument_mismatch: "undefined, as in printf"
+side_effects: "allocates the string"
+threading: "thread safe: reference counts change atomically; an object may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
