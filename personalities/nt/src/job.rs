@@ -72,6 +72,9 @@ pub struct Job {
     pub end_of_job: u32,
     /// The completion port and key (it holds a reference on the port object).
     pub port: Option<PortAssoc>,
+    /// The process that made the job (`NtCreateJobObject`): a parent that puts its children
+    /// in jobs of its own manages them (the out-of-memory policy's score, `crate::oomadj`).
+    pub creator: Option<ProcessId>,
 }
 
 /// What a successful query answers.
@@ -148,6 +151,7 @@ impl Job {
             ui: 0,
             end_of_job: 0,
             port: None,
+            creator: None,
         }
     }
 
@@ -476,8 +480,20 @@ pub struct Jobs {
 }
 
 impl Jobs {
-    pub fn create(&mut self, cookie: u64, object: ObjectId) {
-        self.jobs.insert(cookie, Job::new(Some(object)));
+    /// A new job object made by process `creator`.
+    pub fn create(&mut self, cookie: u64, object: ObjectId, creator: Option<ProcessId>) {
+        let mut job = Job::new(Some(object));
+        job.creator = creator;
+        self.jobs.insert(cookie, job);
+    }
+
+    /// Whether `pid` is in a job that another process made and that process is still there
+    /// (`alive`): a child its parent manages, as a browser does its renderers.
+    pub fn managed_by_another(&self, pid: ProcessId, alive: impl Fn(ProcessId) -> bool) -> bool {
+        self.jobs_of(pid)
+            .iter()
+            .filter_map(|j| self.jobs.get(j))
+            .any(|j| j.creator.is_some_and(|c| c != pid && alive(c)))
     }
 
     pub fn job(&self, cookie: u64) -> Option<&Job> {
@@ -738,7 +754,7 @@ pub fn create_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<N
         if let Ok(c) = &r
             && sys.objects.cookie(c.object) == Some(cookie)
         {
-            sys.jobs.create(cookie, c.object);
+            sys.jobs.create(cookie, c.object, Some(caller.process));
         }
         sys.reap(b);
         r
@@ -952,7 +968,7 @@ mod tests {
     fn new_job(jobs: &mut Jobs, om: &mut ObjectManager, cookie: u64) {
         let new = NewObject::Opaque { kind: ObjectType::Job, cookie, signaled: Some(false), parse: false };
         let object = om.new_object(new, ThreadRef(1)).expect("object");
-        jobs.create(cookie, object);
+        jobs.create(cookie, object, None);
     }
 
     fn chain(jobs: &Jobs, pid: u32) -> Vec<u64> {
