@@ -298,6 +298,52 @@ user_prog_touch:
     mov eax, {exit}
     syscall
     ud2
+/* Stale check (ADR 0254): RDI is a control page, RSI this reader's number.
+   [RDI] is a sequence (odd while it changes), [RDI+8] the published slot's
+   address, [RDI+16] the generation written in it, [RDI+24] the stop word;
+   this reader counts its turns at [RDI+64+8*RSI]. Read the publication
+   consistently, then the slot: if the slot holds another generation while
+   the publication is still the same, a translation of the slot was stale.
+   Record the value, the generation and the slot at [RDI+32..56] and exit
+   BAD; exit 0 when told to stop. */
+    .global user_prog_stale_check
+user_prog_stale_check:
+    lea r8, [rdi + rsi*8 + 64]
+    xor r9, r9
+1:
+    inc r9
+    mov qword ptr [r8], r9
+    mov rcx, qword ptr [rdi + 24]
+    test rcx, rcx
+    jnz 9f
+    mov rax, qword ptr [rdi]
+    test al, 1
+    jnz 1b
+    mov r10, qword ptr [rdi + 8]
+    mov r11, qword ptr [rdi + 16]
+    mov rdx, qword ptr [rdi]
+    cmp rax, rdx
+    jne 1b
+    test r10, r10
+    jz 1b
+    mov rdx, qword ptr [r10]
+    cmp rdx, r11
+    je 1b
+    mov rcx, qword ptr [rdi]
+    cmp rcx, rax
+    jne 1b
+    mov qword ptr [rdi + 32], rdx
+    mov qword ptr [rdi + 40], r11
+    mov qword ptr [rdi + 48], r10
+    mov edi, {bad}
+    mov eax, {exit}
+    syscall
+    ud2
+9:
+    xor edi, edi
+    mov eax, {exit}
+    syscall
+    ud2
 /* A place to resume at: exit 0x99. */
     .global user_prog_return_target
 user_prog_return_target:
@@ -343,6 +389,7 @@ unsafe extern "C" {
     static user_prog_return_target: u8;
     static user_prog_fail_return: u8;
     static user_prog_touch: u8;
+    static user_prog_stale_check: u8;
 }
 
 /// The programs, by where they start.
@@ -367,6 +414,7 @@ pub enum Program {
     ReturnTarget,
     FailReturn,
     Touch,
+    StaleCheck,
 }
 
 impl Program {
@@ -392,6 +440,7 @@ impl Program {
             Program::ReturnTarget => &raw const user_prog_return_target,
             Program::FailReturn => &raw const user_prog_fail_return,
             Program::Touch => &raw const user_prog_touch,
+            Program::StaleCheck => &raw const user_prog_stale_check,
         };
         start as u64 - (&raw const user_programs_start) as u64
     }

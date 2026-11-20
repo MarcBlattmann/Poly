@@ -1,5 +1,6 @@
 //! The user-space half of Poly's dyld: the start code a dynamically linked
-//! program's first thread runs before `main`.
+//! program's first thread runs before `main`, for x86-64 and for arm64 (run
+//! by the translator, ADR 0257).
 //!
 //! The loader (in the kernel, using this crate) maps every image and applies
 //! every fixup at exec time, so what is left for user space is small: call
@@ -19,6 +20,11 @@
 //!
 //! The thread starts with the stack of [`crate::stack`] (the header address
 //! below `argc`).
+//!
+//! The arm64 start code ([`ARM64_START`], `stub/start_arm64.s`) does the
+//! same with the same data block at [`DATA_OFFSET`]; its thread-local thunk
+//! (at [`ARM64_TLV_GET`]) takes the descriptor in `x0` and returns the
+//! variable's address in `x0`, changing no other register.
 
 use alloc::vec::Vec;
 
@@ -49,6 +55,32 @@ pub const X86_64_TLV_GET: u64 = 0xa0;
 /// The offset of the [`StartData`] block from the start code (the next
 /// 4 KiB page).
 pub const DATA_OFFSET: u64 = 0x1000;
+
+/// The arm64 start code (`stub/start_arm64.s`) as instruction words, then
+/// the thread-local thunk at [`ARM64_TLV_GET`].
+#[rustfmt::skip]
+pub const ARM64_START: [u32; 70] = [
+    0x10000013, 0x91400673, 0x910003f4, 0xf9400695, 0x91004296, 0x8b150ed7,
+    0x910022f7, 0xaa1703f8, 0xf8408709, 0xb5ffffe9, 0xd2800019, 0xf9400e69,
+    0xeb09033f, 0x54000162, 0x9100826a, 0xf879794a, 0x91000739, 0xaa1503e0,
+    0xaa1603e1, 0xaa1703e2, 0xaa1803e3, 0xd2800004, 0xd63f0140, 0x17fffff4,
+    0xf9400669, 0xf100053f, 0x540000a1, 0x91002289, 0x9100013f, 0xf9400269,
+    0xd61f0120, 0xaa1503e0, 0xaa1603e1, 0xaa1703e2, 0xaa1803e3, 0xf9400269,
+    0xd63f0120, 0xf9400a69, 0xb4000049, 0xd63f0120, 0xd2800030, 0xd4001001,
+    0xd4200020, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f,
+    0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f,
+    0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f,
+    0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xf81f0fe1, 0xf9400801,
+    0xf9400400, 0x8b010000, 0xf84107e1, 0xd65f03c0,
+];
+
+/// The offset of the thread-local thunk in [`ARM64_START`] (bytes).
+pub const ARM64_TLV_GET: u64 = 0x100;
+
+/// [`ARM64_START`] as little-endian bytes, to copy into memory.
+pub fn arm64_start_bytes() -> Vec<u8> {
+    ARM64_START.iter().flat_map(|w| w.to_le_bytes()).collect()
+}
 
 /// What the start code does after the initializers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -112,5 +144,19 @@ mod tests {
         // The raw exit call: mov $0x2000001,%eax; syscall.
         let exit = [0xb8, 0x01, 0x00, 0x00, 0x02, 0x0f, 0x05];
         assert!(X86_64_START.windows(7).any(|w| w == exit));
+    }
+
+    #[test]
+    fn arm64_code_fits_and_has_the_thunk() {
+        let bytes = arm64_start_bytes();
+        assert!(bytes.len() as u64 <= DATA_OFFSET);
+        // str x1, [sp, #-16]!; ldr x1, [x0, #16]; ldr x0, [x0, #8];
+        // add x0, x0, x1; ldr x1, [sp], #16; ret
+        let t = &ARM64_START[(ARM64_TLV_GET / 4) as usize..];
+        assert_eq!(t, [0xf81f0fe1, 0xf9400801, 0xf9400400, 0x8b010000, 0xf84107e1, 0xd65f03c0]);
+        // adr x19, .; add x19, x19, #0x1000: the data block.
+        assert_eq!(ARM64_START[..2], [0x10000013, 0x91400673]);
+        // The raw exit call: mov x16, #1; svc #0x80.
+        assert!(ARM64_START.windows(2).any(|w| w == [0xd2800030, 0xd4001001]));
     }
 }

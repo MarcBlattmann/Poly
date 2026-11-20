@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:50:31",
+  "tests": [
+    {
+      "name": "pthread_attr_setstacksize_more",
+      "source_sha256": "6253d19a5936a8944b5aa333d21cc2c9fa380bdcd9ecc1a05a42c460b79b234b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "93b0485ce7db026ea33f063bf43ad4cba38a87654468aa8464fe06338e0b12a6",
+          "exit_code": 0,
+          "stdout": "ok default detach state is joinable (1)\nok setting the stack size keeps the detach state (2)\nok and holds 1 MiB\nok setting the detach state keeps the stack size\nok a bad detach state: EINVAL\nok a second attr starts at the default\nvalue PTHREAD_STACK_MIN (<limits.h>; 16384 on arm64, 8192 on x86_64) 16384\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "55b11d3bf4cb11f00eddfeb05c13ab6b6879727f0b82b2d1b7fe515c2f180007",
+          "exit_code": 0,
+          "stdout": "ok default detach state is joinable (1)\nok setting the stack size keeps the detach state (2)\nok and holds 1 MiB\nok setting the detach state keeps the stack size\nok a bad detach state: EINVAL\nok a second attr starts at the default\nvalue PTHREAD_STACK_MIN (<limits.h>; 16384 on arm64, 8192 on x86_64) 8192\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "pthread_attr_setstacksize_values",
+      "source_sha256": "041640f6ee2129194b9e5387606adc4f2846d804e325a3e20212e23a29c2c5fe",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "857958a832493d55c3ee5cc4f23024de33ecc7b43eb832a0d36f573d5cd31a98",
+          "exit_code": 0,
+          "stdout": "ok attr_init\nok getstacksize\nok the default is 512 KiB\nok 16384: 0\nok ... and read back\nok 8192: 0\nok 32768: 0\nok ... read back 32768\nok 81920 (5 * 16384): 0\nok 16 MiB: 0\nok ... read back 16 MiB\nvalue setstacksize 4096 (0 on arm64, EINVAL on x86_64) 0\nok 12288 (a multiple of 4096): 0\nok 1000: EINVAL (22)\nok 0: EINVAL\nok 20000 (not a multiple of 4096): EINVAL\nok 16385: EINVAL\nok failures leave the old value (16 MiB)\nok destroy\nok an attribute after destroy: EINVAL\nok set after destroy: EINVAL\nvalue page size 16384\nsummary 20 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "89482ed670ed8e3d108228e601cc0010a7f97b6ff6536c09a0ac8ba3061aa7af",
+          "exit_code": 0,
+          "stdout": "ok attr_init\nok getstacksize\nok the default is 512 KiB\nok 16384: 0\nok ... and read back\nok 8192: 0\nok 32768: 0\nok ... read back 32768\nok 81920 (5 * 16384): 0\nok 16 MiB: 0\nok ... read back 16 MiB\nvalue setstacksize 4096 (0 on arm64, EINVAL on x86_64) 22\nok 12288 (a multiple of 4096): 0\nok 1000: EINVAL (22)\nok 0: EINVAL\nok 20000 (not a multiple of 4096): EINVAL\nok 16385: EINVAL\nok failures leave the old value (16 MiB)\nok destroy\nok an attribute after destroy: EINVAL\nok set after destroy: EINVAL\nvalue page size 4096\nsummary 20 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
