@@ -21,6 +21,10 @@
       "description": "Public Swift API of the macOS SDK modules, by name, from the .swiftinterface files (ADR 0187)",
       "revision": "macOS SDK 27.0 (26A425)"
     },
+    "ms-learn-chrome-net": {
+      "description": "Microsoft Learn Winsock, I/O completion port, overlapped I/O, named pipe and thread pool wait reference, and the observed call trace of Chrome for Testing's network service on Windows (names, counts and first-call order): what Chrome's network stack does per page load, observed by the spec agent spec-win-chrome-setup",
+      "revision": "Windows 11 26H2 build 26300.9974"
+    },
     "ms-learn-commctrl": {
       "description": "Microsoft Learn common controls reference and the public SDK header commctrl.h: the window classes of comctl32 and their messages and notifications (entries named by class, version 5.82)",
       "revision": "Windows SDK 10.0.26100.0"
@@ -93,9 +97,12 @@
       "description": "Exported names of Windows 11 system DLLs (kernelbase.dll, userenv.dll) found by spec agents on the oracle where Chrome's sandbox set-up reaches them; names only (spec-chrome-win-s2b)",
       "revision": "Windows 11 25H2 build 26200.9974"
     },
+    "windows-registry-defaults": {
+      "description": "What a Windows machine's registry holds by default in the 64-bit and the 32-bit view (HKLM\\SOFTWARE and its Wow6432Node, the Classes roots, CurrentVersion, the standard COM interface, class and type-library registrations), read by test programs on the oracle; names and the small values the behaviour needs (spec-win-wow64-defaults, docs/windows/registry-defaults.md)",
+      "revision": "Windows 11 26H2 build 26300.9974"
+    },
     "windows-stack-state": {
       "description": "How the memory manager grows, guards and runs out a thread's stack (guard region, first touches below the committed pages, STATUS_STACK_OVERFLOW, SetThreadStackGuarantee, thread stack reservations), observed by spec agents on the Windows oracle where Chrome's decoder threads touch the stack; the names are ours, the facts come from Microsoft Learn (VirtualQuery, CreateThread, SetThreadStackGuarantee, ntstatus.h) and observation (spec-win-stack-roundrect)",
-      "revision": "Windows 11 26H2 build 26300.9974"
     },
     "windows-typelib-file": {
       "description": "The binary type-library file (.tlb and the TYPELIB resource of an exe or dll) as ITypeLib and ITypeInfo read it, by black-box observation of files written with CreateTypeLib2 and of the updater's own libraries (docs/windows/typelib-file-format.md; spec-win-typelib-format)",

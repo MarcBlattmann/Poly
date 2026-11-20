@@ -33,6 +33,8 @@ pub struct Plan {
     pub wintrace: bool,
     /// Poly's libSystem crate (fmt and clippy for its Darwin target).
     pub libsystem: bool,
+    /// Poly's CoreFoundation crate (fmt and clippy for its Darwin target).
+    pub corefoundation: bool,
 }
 
 impl Plan {
@@ -50,6 +52,7 @@ impl Plan {
             win32: true,
             wintrace: true,
             libsystem: true,
+            corefoundation: true,
         }
     }
 
@@ -70,6 +73,7 @@ impl Plan {
             (self.win32, "win32 (fmt)"),
             (self.wintrace, "wintrace (fmt)"),
             (self.libsystem, "libsystem"),
+            (self.corefoundation, "corefoundation"),
         ] {
             if on {
                 units.push(name.into());
@@ -108,6 +112,8 @@ pub fn plan(changed: &[String], members: &[(String, String)]) -> std::result::Re
             plan.wintrace = true;
         } else if under(file, "personalities/xnu/libsystem") {
             plan.libsystem = true;
+        } else if under(file, "personalities/xnu/corefoundation") {
+            plan.corefoundation = true;
         } else if let Some((_, package)) =
             members.iter().filter(|(dir, _)| under(file, dir)).max_by_key(|(dir, _)| dir.len())
         {
@@ -273,6 +279,7 @@ mod tests {
             "userland/native/hello/src/main.rs",
             "tools/wintrace/proxy/common.rs",
             "personalities/xnu/libsystem/src/c.rs",
+            "personalities/xnu/corefoundation/src/lib.rs",
             "tools/xtask/src/main.rs",
         ])
         .unwrap();
@@ -290,6 +297,7 @@ mod tests {
                 win32: true,
                 wintrace: true,
                 libsystem: true,
+                corefoundation: true,
             }
         );
         assert!(p.describe().starts_with("poly-nt, xtask, xtask for Windows, the kernel"));

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "impblock_basic",
+      "source_sha256": "27682fb5f899b95dfe89faa24fee2a9134c0e8fb45651dda939fd826e044151d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "deece593de61da0814fff09b14790f9da0e783a6312d468529ebd2ec336b3398",
+          "exit_code": 0,
+          "stdout": "ok an IMP is returned\nok installed as a method\nok a message calls the block\nok the block receives self\nok arguments follow self\nok a captured variable is copied when the IMP is made\nok a double argument and result\nok a struct result\nok every IMP is distinct\nok even for an identical block\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d0cad4b5631ec9e93be69cc59d787505f57000498c36bbc95835da0e03195b13",
+          "exit_code": 0,
+          "stdout": "ok an IMP is returned\nok installed as a method\nok a message calls the block\nok the block receives self\nok arguments follow self\nok a captured variable is copied when the IMP is made\nok a double argument and result\nok a struct result\nok every IMP is distinct\nok even for an identical block\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "impblock_shared",
+      "source_sha256": "55513c20e8393b277169c9ae2e9c3aa1417f4b6d13375e56bcb4a8d898813d4e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d70089706d43612eefe6282f689d9d1ce0120a09a0773edc3b31e2a8ef5bd2db",
+          "exit_code": 0,
+          "stdout": "ok added to class A\nok same IMP added to class B\nok and under another selector\nok A\nok B\nok other selector\nvalue block calls 3\nok class_replaceMethod returns the block IMP\nok replacement runs\nok exchange: who is the old block\nok exchange: whoElse is the replacement\nok method_getImplementation returns the block IMP\nok it can be called directly with self and _cmd\nok a block as a class method sees the class as self\nok ... for a subclass too\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7752f23b75d1b4a07e39b6bf47b861efb676b21018a5c21c24268e7c4a76a8ff",
+          "exit_code": 0,
+          "stdout": "ok added to class A\nok same IMP added to class B\nok and under another selector\nok A\nok B\nok other selector\nvalue block calls 3\nok class_replaceMethod returns the block IMP\nok replacement runs\nok exchange: who is the old block\nok exchange: whoElse is the replacement\nok method_getImplementation returns the block IMP\nok it can be called directly with self and _cmd\nok a block as a class method sees the class as self\nok ... for a subclass too\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

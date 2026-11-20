@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/WSAEventSelect.TcpLifecycle.yaml
+id: windows/api/ws2_32.dll/WSAEventSelect.TcpLifecycle
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory; the loopback and the internet were available"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above, and the observed call trace of Chrome for Testing 157 (its network service, headless, github.com and bbc.com, specs/windows/apps/chrome/traces/net-*.trace.json: function names, counts and first-call order only). Microsoft Learn: WSAEventSelect, WSAEnumNetworkEvents, WSASend, WSAIoctl, SIO_KEEPALIVE_VALS, ioctlsocket, recv, send, shutdown, RegisterWaitForSingleObject. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  The life cycle of one TCP client socket as Chrome's network service drives it, on loopback: an overlapped-capable socket made non-blocking, TCP_NODELAY and SIO_KEEPALIVE_VALS, WSAEventSelect(FD_CONNECT) and a non-blocking connect (-1, WSAEWOULDBLOCK), the event watched by a registered wait, WSAEnumNetworkEvents reading and resetting it, a MSG_PEEK probe, WSASend with an OVERLAPPED event that completes inline, the select mask changed to FD_READ | FD_CLOSE, reading until WSAEWOULDBLOCK, and the peer's shutdown.
+interface:
+  signature: "see the sheets of the calls named in the summary"
+rules:
+  connect: "FIONBIO 0, TCP_NODELAY 0, SIO_KEEPALIVE_VALS (12-byte tcp_keepalive, no output buffer) 0 with 0 bytes returned, WSAEventSelect(FD_CONNECT) 0; connect to the loopback listener: -1 with WSAEWOULDBLOCK (10035); the event is signalled by the connection, the listener's accept returns, a wait registered on the event (flags 12) calls back; UnregisterWaitEx(wait, INVALID_HANDLE_VALUE) TRUE; WSAEnumNetworkEvents(s, event) returns 0 with events FD_CONNECT (0x10) and error 0 and resets the event; getsockname: 0, length 16, family AF_INET, a non-zero port."
+  probe_and_write: "recv(s, buf, 1, MSG_PEEK) with nothing to read: -1, WSAEWOULDBLOCK; WSASend of 100 bytes with an OVERLAPPED whose hEvent is a WSA event: 0 (completed), 100 sent, the event signalled; WSAResetEvent clears it; the peer reads 100 bytes."
+  read_interest: "WSAEventSelect(s, event, FD_READ | FD_CLOSE): 0, the event is not signalled (nothing to read; the socket had been writable, FD_WRITE not selected); recv: -1 WSAEWOULDBLOCK; after the peer sends 50 bytes the event is signalled, WSAEnumNetworkEvents gives FD_READ (1) with error 0 and resets it; recv returns 50, the next recv -1 WSAEWOULDBLOCK, the event stays non-signalled; the next 50 bytes from the peer signal it again with FD_READ."
+  unread_data: "data left unread after WSAEnumNetworkEvents has consumed the event: a further send by the peer signals the event again (FD_READ 1); selecting FD_READ | FD_CLOSE again with data unread does not signal at once (observed: no)."
+  write_interest: "WSAEventSelect(s, event, FD_WRITE) on a connected socket signals the event at once; WSAEnumNetworkEvents gives FD_WRITE (2), error 0."
+  peer_shutdown: "the peer's shutdown(SD_SEND) signals the event; WSAEnumNetworkEvents gives FD_CLOSE (0x20) with error 0; recv then returns 0."
+errors:
+  wouldblock: "WSAEWOULDBLOCK (10035) from connect and recv on a non-blocking socket"
+side_effects: "none outside the test's own handles"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except the waits named in the rules"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), the same program three times (cnet_tcp, cnet_tcp_b, cnet_tcp_c): each makes every call and writes every third observation line (the first line is the first file's, the second the second file's, and so on), so each program is complete and the three together give the whole list. Each declares what it calls from Learn's prototypes; observations are return values, error codes, counts and relations, never handles, addresses, ports or times.
+not_covered: >
+  IPv6 and dual-stack sockets, refused connections, many sockets at once, data larger than the socket buffers, an overlapped WSASend that stays pending, TLS.

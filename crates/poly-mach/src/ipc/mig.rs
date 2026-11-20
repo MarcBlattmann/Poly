@@ -10,7 +10,7 @@
 //! Variable-sized inline arrays travel packed: as many elements as their
 //! count says, the next field right after them.
 
-use super::{Carried, HEADER, Ipc, KObject, Message, PortId, RcvKey, SenderInfo, TaskId, WakeReason};
+use super::{Carried, HEADER, Ipc, KObject, Message, PortId, SenderInfo, TaskId};
 use crate::consts::{kern::*, msg::*};
 use crate::exc::{self, Handler, HandlerTable};
 use crate::waitq::ThreadId;
@@ -26,6 +26,8 @@ pub const MIG_BAD_ARGUMENTS: u32 = -304i32 as u32;
 pub const TASK_SET_EXCEPTION_PORTS: u32 = 3413;
 pub const TASK_GET_EXCEPTION_PORTS: u32 = 3414;
 pub const TASK_SWAP_EXCEPTION_PORTS: u32 = 3415;
+pub const TASK_GET_SPECIAL_PORT: u32 = 3409;
+pub const TASK_SET_SPECIAL_PORT: u32 = 3410;
 pub const SEMAPHORE_CREATE: u32 = 3418;
 pub const SEMAPHORE_DESTROY: u32 = 3419;
 pub const THREAD_GET_STATE: u32 = 3603;
@@ -33,6 +35,8 @@ pub const THREAD_SET_STATE: u32 = 3604;
 pub const THREAD_SET_EXCEPTION_PORTS: u32 = 3613;
 pub const THREAD_GET_EXCEPTION_PORTS: u32 = 3614;
 pub const THREAD_SWAP_EXCEPTION_PORTS: u32 = 3615;
+/// The `mach_port` subsystem's base id (`mach/mach_port.h`).
+pub const MACH_PORT_SUBSYSTEM: u32 = 3200;
 /// The largest number of handlers a get or swap returns
 /// (`EXC_TYPES_COUNT` entries in the reply's arrays).
 pub const MAX_HANDLERS: usize = 32;
@@ -71,8 +75,7 @@ fn descriptor(out: &mut Vec<u8>) {
     out.extend_from_slice(&[0; 12]);
 }
 
-/// A reply the server built: id, body, port descriptors, complex.
-type Reply = (u32, Vec<u8>, Vec<(usize, Option<Carried>)>, bool);
+use super::tasks::Reply;
 
 /// An exception a thread raised.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -263,17 +266,14 @@ impl Ipc {
 
     /// Queue `m` on `port` (the kernel ignores the queue limit) and wake a
     /// receiver.
-    fn deliver(&mut self, port: PortId, m: Message) -> Option<ThreadId> {
+    pub(super) fn deliver(&mut self, port: PortId, m: Message) -> Option<ThreadId> {
         let Some(q) = self.ports.get_mut(&port) else {
             let mut woken = Vec::new();
             self.destroy_message(m, &mut woken);
             return None;
         };
         q.queue.push_back(m);
-        let set = q.set;
-        self.rcv_waiters
-            .wake_one(RcvKey::Port(port), WakeReason::Ready)
-            .or_else(|| set.and_then(|s| self.rcv_waiters.wake_one(RcvKey::Set(s), WakeReason::Ready)))
+        self.wake_receiver(port)
     }
 
     /// Serve a request sent to a kernel object; queue its reply on the
@@ -326,6 +326,16 @@ impl Ipc {
             Some((id + 100, out, Vec::new(), false))
         };
         let complex = req.other_bits & MACH_MSGH_BITS_COMPLEX != 0;
+        match kobject {
+            KObject::Bootstrap => return Some(self.answer_bootstrap(caller, req)),
+            KObject::Task(t) if (MACH_PORT_SUBSYSTEM..MACH_PORT_SUBSYSTEM + 100).contains(&id) => {
+                return Some(self.answer_port(caller, t, req));
+            }
+            KObject::Task(t) if matches!(id, TASK_GET_SPECIAL_PORT | TASK_SET_SPECIAL_PORT) => {
+                return Some(self.answer_special(t, req));
+            }
+            _ => {}
+        }
         let target = match kobject {
             KObject::Task(t) => Target::Task(t),
             KObject::Thread(t) => Target::Thread(t),
@@ -451,6 +461,7 @@ impl Ipc {
 
 #[cfg(test)]
 mod tests {
+    use super::super::{RcvKey, WakeReason};
     use super::*;
     use crate::consts::port::*;
     use crate::exc::*;

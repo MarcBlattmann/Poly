@@ -92,6 +92,10 @@
 //!                       (Linux), make target/poly-chromium-disk.img
 //!   chromium [--release] [--fresh-disk] [--scale=N] [STEP...]
 //!                       boot Chromium's disk to the desktop, steps as for toolkits (--scale=N: a HiDPI desktop)
+//!   corefoundation [--out <dir>] [--cache-key]
+//!                       build Poly's CoreFoundation.framework (or take it from the content-hash
+//!                       cache), verify it, optionally copy it into <dir>/System/Library/Frameworks
+//!                       (corefoundation.rs, ADR 0260)
 //!   libsystem [--out <dir>] [--cache-key]
 //!                       build Poly's libSystem.B.dylib and its sub-libraries (or take them from
 //!                       the content-hash cache), verify them, optionally copy them into <dir>/usr/lib
@@ -143,6 +147,7 @@ mod compositor;
 mod compositor_kms;
 mod conflicts;
 mod console;
+mod corefoundation;
 mod cursors;
 mod desktop;
 mod drm;
@@ -290,6 +295,7 @@ const COMMANDS: &[&str] = &[
     "nls-tables",
     "system-messages",
     "libsystem",
+    "corefoundation",
     "ntdll",
     "win32",
     "wow64",
@@ -331,6 +337,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("fonts") => fonts::command(rest),
         Some("wayland") => wayland::run(&root(), rest),
         Some("libsystem") => libsystem::command(rest),
+        Some("corefoundation") => corefoundation::command(rest),
         Some("ntdll") => ntdll::command(rest),
         Some("win32") => win32::command(rest),
         Some("wow64") => wow64::command(rest),
@@ -1712,6 +1719,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // An SDK-linked C program with Poly's own libSystem.B.dylib (libsystem.rs,
     // ADR 0258).
     ("libsystem", libsystem::boot_test),
+    // CoreFoundation's spec tests and a C program with Poly's own
+    // CoreFoundation.framework (corefoundation.rs, ADR 0260).
+    ("corefoundation", corefoundation::boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
@@ -1877,6 +1887,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "macho-specs",
             "macho-a64",
             "libsystem",
+            "corefoundation",
             "busybox",
             "rootdisk",
             "toolkits",
@@ -2226,6 +2237,14 @@ fn fmt_checks(plan: &quicklint::Plan) -> Result {
                 .arg(root().join("personalities/xnu/libsystem/Cargo.toml")),
         )?;
     }
+    if plan.corefoundation {
+        step(
+            "fmt (corefoundation)",
+            cargo()
+                .args(["fmt", "--check", "--manifest-path"])
+                .arg(root().join("personalities/xnu/corefoundation/Cargo.toml")),
+        )?;
+    }
     if plan.win32 {
         step(
             "fmt (win32)",
@@ -2348,6 +2367,10 @@ fn lint_units(plan: &quicklint::Plan) -> Result {
     // Poly's libSystem, for its Darwin target (ADR 0258).
     if plan.libsystem {
         libsystem::lint()?;
+    }
+    // Poly's CoreFoundation, for its Darwin target (ADR 0260).
+    if plan.corefoundation {
+        corefoundation::lint()?;
     }
     Ok(())
 }

@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_registerClassPair.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in objc_registerClassPair.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_registerClassPair
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  void objc_registerClassPair(Class cls). Makes a class made by objc_allocateClassPair real: from the
+  moment it returns the class is found by objc_getClass and objc_lookUpClass under its name, instances
+  can be made and messaged (for example through the inherited +new), instance methods and class
+  methods added before registration (class methods through the metaclass) answer, inherited methods
+  (-class, -isKindOfClass:, -respondsToSelector: ...) work, and the instance size is fixed (an
+  unchanged NSObject subclass has NSObject's size). The class and metaclass objects are the ones
+  allocated: object_getClass(cls) is the same metaclass as before. The superclass chain is as
+  allocated: a subclass of a registered run-time class works the same way, and a metaclass chain
+  mirrors the class chain down to NSObject's metaclass. Methods can still be added to a registered
+  class (class_addMethod returns YES for new selectors), instance variables cannot (class_addIvar
+  returns NO). Registration does not send +initialize: the first message to a class sends it,
+  superclass before subclass and once per class; of lookups, class_getInstanceMethod,
+  class_respondsToSelector, class_getName, object_getClass, class_getInstanceSize,
+  class_createInstance and objc_allocateClassPair of a subclass none starts +initialize, while a
+  message and class_getMethodImplementation do. Registering a class twice, or one not made by
+  objc_allocateClassPair, was not tried (it is fatal).
+returns:
+  none: "void"
+errors:
+  twice: "not observed (fatal in the runtime)"
+side_effects: "the class becomes findable by name; its instance size is fixed; its ivars can no longer be added"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "+initialize of a class and its superclasses runs on the first message, superclass first, after registration"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

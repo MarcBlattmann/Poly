@@ -503,6 +503,11 @@ impl Process {
     /// [`detach_thread`]: Self::detach_thread
     /// [`wait`]: Self::wait
     pub fn ended(&self) {
+        // Its Mach task goes (its ports die, its name port too) before a
+        // waiter can see it ended, whatever ended it.
+        if self.personality == poly_abi::Personality::Xnu {
+            crate::xnu_mach::task_ended(self.pid);
+        }
         self.ended.store(true, Ordering::SeqCst);
         EVENTS.wake_all();
         // Native process handles of it turn readable (ADR 0125).

@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/user32.dll/WM_KILLFOCUS.yaml
+id: windows/api/user32.dll/WM_KILLFOCUS
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, one monitor 1920x1080 at 100 %, 96 dpi), tests run by tools/pipeline/windows/poly-oracle.ps1 -Interactive: in the interactive desktop session (session 1) of the logged-on user through a one-time scheduled task, with the runner's \"keeper\" window in the foreground; keyboard events are injected with SendInput (virtual key and the scan code of the keyboard layout, press and release) while a window of the test is the foreground window; the pointer is parked at (1500, 600); no mouse is attached; every test ran twice with identical output; the test programs carry no manifest (common controls 5.82, no visual styles)"
+  observed_by: spec-win-focus-keys
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: SetFocus, GetFocus, GetGUIThreadInfo, GUITHREADINFO, AttachThreadInput, GetInputState, GetKeyState, GetAsyncKeyState, GetQueueStatus, SendInput, PeekMessage, TranslateMessage, PostMessage, SetForegroundWindow, WM_KEYDOWN, WM_KEYUP, WM_CHAR, WM_SETFOCUS, WM_KILLFOCUS, "About Keyboard Input", "Keyboard Input Overview", "Message Queue"; winuser.h for constants and layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Order and parameters of the focus messages and what a handler can do inside them. When the handler sends keys with SendInput, the keys wait in the queue and are routed after the focus change is complete. Observed with E losing the focus to F, G or NULL.
+interface:
+  signature: "WM_KILLFOCUS (0x0008), wParam the window that gets the focus (NULL when none): sent to the window that loses the keyboard focus"
+rules:
+  order: "SetFocus(F) with the focus on E: E gets WM_KILLFOCUS(other=F) first, then F gets WM_SETFOCUS(other=E). SetFocus(G): the same with G. In E's handler GetFocus already returns the new window (F, G) and GetActiveWindow returns P. SetFocus(NULL) with the focus on G: G gets WM_KILLFOCUS(other=NULL), GetFocus in the handler is NULL; the later SetFocus(E) gives E WM_SETFOCUS(other=NULL) and GetFocus E."
+  keys_sent_inside: "E's WM_KILLFOCUS handler sends the key a (press and release, 2 events inserted) and then sleeps 100 ms (or does not sleep): E gets nothing for it; after the handler returned F gets WM_SETFOCUS(other=E) and then the key-down, WM_CHAR 0x61 and key-up of a: the text of F is \"a\", the text of E empty. Keys sent from inside a handler wait in the queue behind the keys that are already there."
+  keys_sent_inside_with_ctrl_l: "Focus moved by Ctrl+L with a, b, c queued behind it, E's WM_KILLFOCUS handler sends x: F gets a, b, c and then x (text of F \"abcx\"); nothing goes to E after the focus change."
+errors:
+  none: "The message has no error result."
+side_effects: "none beyond the rules above"
+threading: "the keyboard focus, the active window and the key state belong to the input queue of a thread (threads whose input is attached share them); a window belongs to the thread that created it; tests with a second thread use one extra thread"
+ordering: []
+timing:
+  typical: "the messages after a change arrive within about 100 ms"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations and a message log; run with poly-oracle.ps1 -Interactive (see docs/AGENT_PIPELINE.md) because injected keys need the visible desktop. Window P (520x260 at 100,100, WS_EX_NOACTIVATE) is made the foreground window and has three EDIT children E, F, G (200x26 at x 10, y 10/50/90; the edit procedure is replaced by a logging one that calls the original); the focus starts on E; tests that need a second thread start one with its own window Q (WS_EX_NOACTIVATE, 320x120 at 700,100), its EDIT child H, and a message loop of GetMessage, TranslateMessage, DispatchMessage. Every scene prints the key and focus messages of every window of the test in the order they arrived under the window's tag letter (P, E, F, G, Q, H; handles are never printed), repeated identical lines once, then the texts of the three edits, the focus and whether a window of the test is in the foreground; scenes with a handler that moves the focus say so in the log. Keys sent in one SendInput call are left in the queue for 120 ms (no message read) where a scene says so; otherwise the loop reads them as they come. A scene takes about 300 to 600 ms and ends with the window destroyed.
+not_covered: >
+  WM_KILLFOCUS when the window is destroyed or hidden (see SetFocus), the message sent to a window of another thread (see AttachThreadInput), focus loss by deactivating the application, focus changes made by a click or by Tab in a dialog.

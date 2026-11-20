@@ -131,6 +131,27 @@ pub fn uses_foundation(source: &str) -> bool {
     })
 }
 
+/// A test about the Objective-C runtime (`libobjc.A.dylib`) itself says so
+/// with this line: its `.c` file is compiled as Objective-C and linked
+/// against libobjc only (no Foundation), and it may import libobjc's and
+/// libSystem's symbols (`tests/macos/include/poly_mobjc.h`). Output still
+/// goes through raw system calls.
+pub const LIBOBJC_DIRECTIVE: &str = "poly-mac: libobjc";
+
+/// With [`LIBOBJC_DIRECTIVE`], this line (`poly-mac: arc`) compiles the test
+/// with `-fobjc-arc`. Clang then links Foundation on its own;
+/// `-dead_strip_dylibs` drops it again, as the program uses nothing of it.
+pub const ARC_DIRECTIVE: &str = "poly-mac: arc";
+
+/// Whether `source` carries `directive` in a comment line among its first 30
+/// lines.
+pub fn has_directive(source: &str, directive: &str) -> bool {
+    source.lines().take(30).any(|l| {
+        let l = l.trim_start();
+        (l.starts_with("//") || l.starts_with('*') || l.starts_with("/*")) && l.contains(directive)
+    })
+}
+
 /// A Foundation test about a class that ARC does not allow (NSAutoreleasePool)
 /// says so with this line besides [`FOUNDATION_DIRECTIVE`]; it is then built
 /// with `-fno-objc-arc`.
@@ -252,6 +273,9 @@ pub enum Imports {
     CoreFoundation,
     /// Foundation's, CoreFoundation's and the Objective-C runtime's ([`FOUNDATION_DIRECTIVE`]).
     Foundation,
+    /// The Objective-C runtime's and libSystem's symbols, libobjc as the only extra library
+    /// ([`LIBOBJC_DIRECTIVE`]); the flag says whether the test is built with ARC.
+    Objc { arc: bool },
     /// CoreGraphics's and CoreFoundation's ([`COREGRAPHICS_DIRECTIVE`]).
     CoreGraphics,
     /// CoreText's, CoreGraphics' and CoreFoundation's ([`CORETEXT_DIRECTIVE`]).
@@ -262,6 +286,8 @@ impl Imports {
     pub fn of_source(source: &str) -> Imports {
         if uses_foundation(source) {
             Imports::Foundation
+        } else if has_directive(source, LIBOBJC_DIRECTIVE) {
+            Imports::Objc { arc: has_directive(source, ARC_DIRECTIVE) }
         } else if uses_coregraphics(source) {
             Imports::CoreGraphics
         } else if uses_coretext(source) {
@@ -438,11 +464,13 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
             || (imports_kind == Imports::CoreGraphics && d == COREGRAPHICS_DYLIB)
             || (imports_kind == Imports::CoreText && (d == CORETEXT_DYLIB || d == COREGRAPHICS_DYLIB))
             || (imports_kind == Imports::Foundation && (d == FOUNDATION_DYLIB || d == OBJC_DYLIB))
+            || (matches!(imports_kind, Imports::Objc { .. }) && d == OBJC_DYLIB)
     };
     if let Some(d) = dylibs.iter().find(|d| !allowed(d)) {
         return Err(format!("loads {d}; a test may load only {}", ALLOWED_DYLIBS.join(", ")));
     }
-    if let (false, Some(symtab)) = (imports_kind == Imports::LibSystem, m.symtab().map_err(|e| format!("{e:?}"))?) {
+    let any_symbol = matches!(imports_kind, Imports::LibSystem | Imports::Objc { .. });
+    if let (false, Some(symtab)) = (any_symbol, m.symtab().map_err(|e| format!("{e:?}"))?) {
         let mut imports = Vec::new();
         for sym in symtab.iter() {
             if sym.n_type & N_EXT != 0 && sym.n_type & N_TYPE == N_UNDF {
@@ -450,7 +478,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
             }
         }
         match imports_kind {
-            Imports::Raw | Imports::LibSystem => {}
+            Imports::Raw | Imports::LibSystem | Imports::Objc { .. } => {}
             Imports::CoreFoundation => imports.retain(|i| !is_corefoundation_symbol(i)),
             Imports::Foundation => imports.retain(|i| !is_foundation_symbol(i)),
             Imports::CoreGraphics => imports.retain(|i| !is_coregraphics_symbol(i)),
@@ -461,7 +489,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
                 "imports {}; a test makes raw system calls only (poly_mtest.h) and imports nothing{}",
                 imports.join(", "),
                 match imports_kind {
-                    Imports::Raw | Imports::LibSystem => "",
+                    Imports::Raw | Imports::LibSystem | Imports::Objc { .. } => "",
                     Imports::CoreFoundation => " but CoreFoundation's own symbols",
                     Imports::Foundation => " but those of Foundation, CoreFoundation and the Objective-C runtime",
                     Imports::CoreGraphics => " but CoreGraphics's and CoreFoundation's own symbols",
@@ -548,6 +576,12 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
             cc.args(["-arch", arch, "-isysroot", &sdk_path]).args(CFLAGS);
             match imports_kind {
                 Imports::Raw | Imports::LibSystem => {}
+                Imports::Objc { arc } => {
+                    cc.args(["-x", "objective-c", "-lobjc"]);
+                    if arc {
+                        cc.args(["-fobjc-arc", "-Wl,-dead_strip_dylibs"]);
+                    }
+                }
                 Imports::CoreFoundation => {
                     cc.args(["-framework", "CoreFoundation"]);
                 }
@@ -1232,6 +1266,16 @@ mod tests {
         assert!(!uses_no_arc("int x; // no arc\n"));
     }
 
+    #[test]
+    fn the_objc_directives_are_found_in_comments_only() {
+        assert!(has_directive("/* x\n * poly-mac: libobjc\n */\nint x;\n", LIBOBJC_DIRECTIVE));
+        assert!(has_directive("// poly-mac: libobjc\n// poly-mac: arc\n", ARC_DIRECTIVE));
+        assert!(!has_directive("int main(void) { return 0; }\n", LIBOBJC_DIRECTIVE));
+        assert!(!has_directive("const char *s = \"poly-mac: libobjc\";\n", LIBOBJC_DIRECTIVE));
+        assert_eq!(Imports::of_source("// poly-mac: libobjc\n"), Imports::Objc { arc: false });
+        assert_eq!(Imports::of_source("// poly-mac: libobjc\n// poly-mac: arc\n"), Imports::Objc { arc: true });
+    }
+
     /// The executable check, on programs this Mac's clang builds (skipped
     /// elsewhere).
     #[test]
@@ -1304,6 +1348,14 @@ mod tests {
         )
         .unwrap();
         let m = build(&crate::repo_root(), &base.join("bin8"), &sources_in(&impure).unwrap()).unwrap();
+        assert_eq!(m.tests[0].executables.len(), 2);
+        // ... or the Objective-C runtime (libobjc only; with ARC it must not keep Foundation).
+        util::write(
+            &impure.join("impure_one.c"),
+            "// poly-mac: libobjc\n// poly-mac: arc\n#include <objc/runtime.h>\nint main(void) { return objc_getClass(\"NSObject\") == 0; }\n",
+        )
+        .unwrap();
+        let m = build(&crate::repo_root(), &base.join("bin9"), &sources_in(&impure).unwrap()).unwrap();
         assert_eq!(m.tests[0].executables.len(), 2);
         // The arm64 program runs here and passes its (empty) checks.
         let o = run_once_with(&base.join("bin/arm64/pure_one"), &base.join("scratch"), Duration::from_secs(10), &[]);

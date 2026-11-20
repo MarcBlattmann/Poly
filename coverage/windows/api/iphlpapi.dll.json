@@ -9,6 +9,7 @@
 {"symbol":"AllocateAndGetTcpTableFromStack","src":["wine-spec"]},
 {"symbol":"AllocateAndGetUdpTableFromStack","src":["wine-spec"]},
 {"symbol":"CancelIPChangeNotify","status":"claimed","claimed_by":"impl-chrome-b35","src":["wine-spec"],"seeds":["wine:iphlpapi/tests/iphlpapi.c:testNotifyAddrChange"]},
+{"symbol":"CancelIPChangeNotify.Pending","status":"claimed","claimed_by":"chrome-qa-fixes","src":["ms-learn-chrome-net"]},
 {"symbol":"CancelMibChangeNotify2","status":"stub","src":["wine-spec"],"seeds":["wine:iphlpapi/tests/iphlpapi.c:test_NotifyUnicastIpAddressChange"]},
 {"symbol":"ConvertGuidToStringA","src":["wine-spec"],"seeds":["wine:iphlpapi/tests/iphlpapi.c:test_ConvertGuidToString"]},
 {"symbol":"ConvertGuidToStringW","src":["wine-spec"],"seeds":["wine:iphlpapi/tests/iphlpapi.c:test_ConvertGuidToString"]},

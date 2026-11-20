@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "respondsto_resolver",
+      "source_sha256": "bea9720c4343590f654de51ba86163003552992f871e8c24978ffe04f7c61d8b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9fa63841ea497ba1a42f94a1bbfc66c9afbfafa0c6d78bf81e36275c13fee2c7",
+          "exit_code": 0,
+          "stdout": "value respondsToSelector(lazy): result 1\nvalue respondsToSelector(lazy): resolver calls 1\nok the resolver got the class as receiver\nok the resolved method now exists in the class\nvalue respondsToSelector(lazy) again: resolver calls so far 1\nvalue respondsToSelector(nope): result 0\nvalue respondsToSelector(nope): resolver calls 1\nvalue respondsToSelector(nope) twice: resolver calls 1\nvalue class_getInstanceMethod(lazy) result non-NULL 1\nvalue class_getInstanceMethod(lazy): resolver calls 1\nvalue class_getInstanceMethod(nope) result non-NULL 0\nvalue class_getInstanceMethod(nope): resolver calls 1\nvalue then class_respondsToSelector(nope) adds calls 1\nvalue class_getMethodImplementation(lazy): resolver calls 1\nvalue ... and then the method exists 1\nvalue -respondsToSelector:(lazy) result 1\nvalue -respondsToSelector:(lazy) resolver calls 1\nvalue +instancesRespondToSelector:(lazy) result 1\nvalue +instancesRespondToSelector:(lazy) resolver calls 1\nok a message reaches the resolver and the added method\nvalue message: resolver calls 1\nok a second message does not call it again\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "651dca7a3fb07e63067288d27f0b7a44caaf5c405012709e18d04caf1a588fa6",
+          "exit_code": 0,
+          "stdout": "value respondsToSelector(lazy): result 1\nvalue respondsToSelector(lazy): resolver calls 1\nok the resolver got the class as receiver\nok the resolved method now exists in the class\nvalue respondsToSelector(lazy) again: resolver calls so far 1\nvalue respondsToSelector(nope): result 0\nvalue respondsToSelector(nope): resolver calls 1\nvalue respondsToSelector(nope) twice: resolver calls 1\nvalue class_getInstanceMethod(lazy) result non-NULL 1\nvalue class_getInstanceMethod(lazy): resolver calls 1\nvalue class_getInstanceMethod(nope) result non-NULL 0\nvalue class_getInstanceMethod(nope): resolver calls 1\nvalue then class_respondsToSelector(nope) adds calls 1\nvalue class_getMethodImplementation(lazy): resolver calls 1\nvalue ... and then the method exists 1\nvalue -respondsToSelector:(lazy) result 1\nvalue -respondsToSelector:(lazy) resolver calls 1\nvalue +instancesRespondToSelector:(lazy) result 1\nvalue +instancesRespondToSelector:(lazy) resolver calls 1\nok a message reaches the resolver and the added method\nvalue message: resolver calls 1\nok a second message does not call it again\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

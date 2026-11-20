@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "replacemethod_basic",
+      "source_sha256": "d4914906a5084ff4bfd2cf71ee41194fd5e391c95e075070b5d4a44f48ce615c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "dfa999cfb9a0a5c3d74c93468adeb92ea5010011348e6c497614903896031f77",
+          "exit_code": 0,
+          "stdout": "ok a new selector: returns NULL\nok it is now there\nok it is the given implementation\nok it answers 1\nok replacing returns the previous implementation\nok the next message uses the new one\nok again\nok and again the new one is used\nok replacing an inherited method returns NULL\nok the class now has its own\nok the superclass is unchanged\nok an NSObject instance still hashes the old way\nok the override is used\nok replacing again returns the class's own\nvalue type after adding q@:\nvalue type after replacing with another string q@:\nvalue the implementation was replaced 1\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5f18db86080aadc839e15b14693f7132c7280d37344a931ab00b434518e342cb",
+          "exit_code": 0,
+          "stdout": "ok a new selector: returns NULL\nok it is now there\nok it is the given implementation\nok it answers 1\nok replacing returns the previous implementation\nok the next message uses the new one\nok again\nok and again the new one is used\nok replacing an inherited method returns NULL\nok the class now has its own\nok the superclass is unchanged\nok an NSObject instance still hashes the old way\nok the override is used\nok replacing again returns the class's own\nvalue type after adding q@:\nvalue type after replacing with another string q@:\nvalue the implementation was replaced 1\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "replacemethod_subclass",
+      "source_sha256": "626fd4b34b5b906bef3855744348318bb81bf22144d885bfdd5294af58cf6ff0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ce1c99415ac6af5212616eb137c8c2f22e74ed68fd1b3a1752d21030ba2c6b34",
+          "exit_code": 0,
+          "stdout": "ok replacing in the superclass returns its old IMP\nok the superclass uses the new\nok a subclass without its own sees it\nok a subclass with its own keeps it\nok replacing in the subclass returns NULL (inherited only)\nok subclass now uses its own\nok superclass keeps the replaced\nok class method new: NULL\nok class method works\nok class method replaced: returns old\nok class method updated\nok subclass inherits the class method\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4d4c659a801e6570216755119a2e91fe746ce62505e20cb4a6d5d4165daf5176",
+          "exit_code": 0,
+          "stdout": "ok replacing in the superclass returns its old IMP\nok the superclass uses the new\nok a subclass without its own sees it\nok a subclass with its own keeps it\nok replacing in the subclass returns NULL (inherited only)\nok subclass now uses its own\nok superclass keeps the replaced\nok class method new: NULL\nok class method works\nok class method replaced: returns old\nok class method updated\nok subclass inherits the class method\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

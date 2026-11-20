@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "2c44ff600c90",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:21:59Z",
+  "tests": [
+    {
+      "name": "fk_attach_keys",
+      "exe_sha256": "f5b56cd5b6511ef2754b5be73c5ff6a7f1902f70de10fff12547025221a4907a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBhdHRhY2hlZDogQ3RybCtMIGluIHRoZSBrZXktZG93biBvZiBFIG1vdmVzIHRoZSBmb2N1cyB0byBIIG9mIHRoZSBvdGhlciB0aHJlYWQsIGFiYyBxdWV1ZWQgYmVoaW5kIGl0CiAgaW5zZXJ0ZWQgMTAKICBFIFdNX0tFWURPV04gdms9MHgxMSBsPTB4MDAxZDAwMDEKICAgICAgZm9jdXMgRSBjdHJsIHRydWUga2V5IHRydWUKICBFIFdNX0tFWURPV04gdms9MHg0YyBsPTB4MDAyNjAwMDEKICAgICAgZm9jdXMgRSBjdHJsIHRydWUga2V5IHRydWUKICBFIFdNX0tJTExGT0NVUyBvdGhlcj1RCiAgICAgIEdldEZvY3VzIFEgYWN0aXZlIFEKICBRIFdNX1NFVEZPQ1VTIG90aGVyPUUKICBRIFdNX0tJTExGT0NVUyBvdGhlcj1ICiAgSCBXTV9TRVRGT0NVUyBvdGhlcj1RCiAgICAgIEdldEZvY3VzIEggYWN0aXZlIFEKICBFIGhhbmRsZXI6IFNldEZvY3VzKGVkaXQgMykKICBFIFdNX0NIQVIgY2g9MHgwMDBjIGw9MHgwMDI2MDAwMQogIEggV01fS0VZVVAgdms9MHg0YyBsPTB4YzAyNjAwMDEKICBIIFdNX0tFWVVQIHZrPTB4MTEgbD0weGMwMWQwMDAxCiAgSCBXTV9LRVlET1dOIHZrPTB4NDEgbD0weDAwMWUwMDAxCiAgICAgIGZvY3VzIEggY3RybCBmYWxzZSBrZXkgdHJ1ZQogIEggV01fQ0hBUiBjaD0weDAwNjEgbD0weDAwMWUwMDAxCiAgSCBXTV9LRVlVUCB2az0weDQxIGw9MHhjMDFlMDAwMQogIEggV01fS0VZRE9XTiB2az0weDQyIGw9MHgwMDMwMDAwMQogICAgICBmb2N1cyBIIGN0cmwgZmFsc2Uga2V5IHRydWUKICBIIFdNX0NIQVIgY2g9MHgwMDYyIGw9MHgwMDMwMDAwMQogIEggV01fS0VZVVAgdms9MHg0MiBsPTB4YzAzMDAwMDEKICBIIFdNX0tFWURPV04gdms9MHg0MyBsPTB4MDAyZTAwMDEKICAgICAgZm9jdXMgSCBjdHJsIGZhbHNlIGtleSB0cnVlCiAgSCBXTV9DSEFSIGNoPTB4MDA2MyBsPTB4MDAyZTAwMDEKICBIIFdNX0tFWVVQIHZrPTB4NDMgbD0weGMwMmUwMDAxCiAgdGV4dCBvZiBIOiAiYWJjIgogIEdVSSBpbmZvIG9mIG1haW46IG9rIHRydWUgYWN0aXZlIFEgZm9jdXMgSCBjYXB0dXJlIG51bGwKICBHVUkgaW5mbyBvZiBvdGhlcjogb2sgdHJ1ZSBhY3RpdmUgUSBmb2N1cyBIIGNhcHR1cmUgbnVsbAogIHRleHRzOiBFICIiIEYgIiIgRyAiIjsgZm9jdXMgbnVsbDsgZm9yZWdyb3VuZCBvdXJzIHRydWUKPT0gbm90IGF0dGFjaGVkLCB0aGUgc2FtZTogU2V0Rm9jdXMgZmFpbHMsIHRoZSBrZXlzIHN0YXkgd2l0aCBFCiAgaW5zZXJ0ZWQgMTAKICBFIFdNX0tFWURPV04gdms9MHgxMSBsPTB4MDAxZDAwMDEKICBFIFdNX0tFWURPV04gdms9MHg0YyBsPTB4MDAyNjAwMDEKICBFIGhhbmRsZXI6IFNldEZvY3VzKGVkaXQgMykKICBFIFdNX0NIQVIgY2g9MHgwMDBjIGw9MHgwMDI2MDAwMQogIEUgV01fS0VZVVAgdms9MHg0YyBsPTB4YzAyNjAwMDEKICBFIFdNX0tFWVVQIHZrPTB4MTEgbD0weGMwMWQwMDAxCiAgRSBXTV9LRVlET1dOIHZrPTB4NDEgbD0weDAwMWUwMDAxCiAgRSBXTV9DSEFSIGNoPTB4MDA2MSBsPTB4MDAxZTAwMDEKICBFIFdNX0tFWVVQIHZrPTB4NDEgbD0weGMwMWUwMDAxCiAgRSBXTV9LRVlET1dOIHZrPTB4NDIgbD0weDAwMzAwMDAxCiAgRSBXTV9DSEFSIGNoPTB4MDA2MiBsPTB4MDAzMDAwMDEKICBFIFdNX0tFWVVQIHZrPTB4NDIgbD0weGMwMzAwMDAxCiAgRSBXTV9LRVlET1dOIHZrPTB4NDMgbD0weDAwMmUwMDAxCiAgRSBXTV9DSEFSIGNoPTB4MDA2MyBsPTB4MDAyZTAwMDEKICBFIFdNX0tFWVVQIHZrPTB4NDMgbD0weGMwMmUwMDAxCiAgdGV4dCBvZiBIOiAiIgogIHRleHRzOiBFICJhYmMiIEYgIiIgRyAiIjsgZm9jdXMgRTsgZm9yZWdyb3VuZCBvdXJzIHRydWUKc3VtbWFyeSAxIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== attached: Ctrl+L in the key-down of E moves the focus to H of the other thread, abc queued behind it\n  inserted 10\n  E WM_KEYDOWN vk=0x11 l=0x001d0001\n      focus E ctrl true key true\n  E WM_KEYDOWN vk=0x4c l=0x00260001\n      focus E ctrl true key true\n  E WM_KILLFOCUS other=Q\n      GetFocus Q active Q\n  Q WM_SETFOCUS other=E\n  Q WM_KILLFOCUS other=H\n  H WM_SETFOCUS other=Q\n      GetFocus H active Q\n  E handler: SetFocus(edit 3)\n  E WM_CHAR ch=0x000c l=0x00260001\n  H WM_KEYUP vk=0x4c l=0xc0260001\n  H WM_KEYUP vk=0x11 l=0xc01d0001\n  H WM_KEYDOWN vk=0x41 l=0x001e0001\n      focus H ctrl false key true\n  H WM_CHAR ch=0x0061 l=0x001e0001\n  H WM_KEYUP vk=0x41 l=0xc01e0001\n  H WM_KEYDOWN vk=0x42 l=0x00300001\n      focus H ctrl false key true\n  H WM_CHAR ch=0x0062 l=0x00300001\n  H WM_KEYUP vk=0x42 l=0xc0300001\n  H WM_KEYDOWN vk=0x43 l=0x002e0001\n      focus H ctrl false key true\n  H WM_CHAR ch=0x0063 l=0x002e0001\n  H WM_KEYUP vk=0x43 l=0xc02e0001\n  text of H: \"abc\"\n  GUI info of main: ok true active Q focus H capture null\n  GUI info of other: ok true active Q focus H capture null\n  texts: E \"\" F \"\" G \"\"; focus null; foreground ours true\n== not attached, the same: SetFocus fails, the keys stay with E\n  inserted 10\n  E WM_KEYDOWN vk=0x11 l=0x001d0001\n  E WM_KEYDOWN vk=0x4c l=0x00260001\n  E handler: SetFocus(edit 3)\n  E WM_CHAR ch=0x000c l=0x00260001\n  E WM_KEYUP vk=0x4c l=0xc0260001\n  E WM_KEYUP vk=0x11 l=0xc01d0001\n  E WM_KEYDOWN vk=0x41 l=0x001e0001\n  E WM_CHAR ch=0x0061 l=0x001e0001\n  E WM_KEYUP vk=0x41 l=0xc01e0001\n  E WM_KEYDOWN vk=0x42 l=0x00300001\n  E WM_CHAR ch=0x0062 l=0x00300001\n  E WM_KEYUP vk=0x42 l=0xc0300001\n  E WM_KEYDOWN vk=0x43 l=0x002e0001\n  E WM_CHAR ch=0x0063 l=0x002e0001\n  E WM_KEYUP vk=0x43 l=0xc02e0001\n  text of H: \"\"\n  texts: E \"abc\" F \"\" G \"\"; focus E; foreground ours true\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2591
+    }
+  ]
+}

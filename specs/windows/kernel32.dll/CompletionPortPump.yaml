@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CompletionPortPump.yaml
+id: windows/api/kernel32.dll/CompletionPortPump
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory; the loopback and the internet were available"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above, and the observed call trace of Chrome for Testing 157 (its network service, headless, github.com and bbc.com, specs/windows/apps/chrome/traces/net-*.trace.json: function names, counts and first-call order only). Microsoft Learn: CreateIoCompletionPort, GetQueuedCompletionStatus, PostQueuedCompletionStatus, I/O Completion Ports, CancelIoEx. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  A completion port used as Chrome's message pump: a port made with concurrency 1, pipe handles associated with keys, packets posted from other threads; what GetQueuedCompletionStatus (never the Ex form) returns for posted packets, for inline and pending pipe I/O, for failures and cancellation, and how a blocked waiter wakes. Every completion of an associated handle, also an inline one, queues exactly one packet.
+interface:
+  signature: "HANDLE CreateIoCompletionPort(HANDLE file, HANDLE port, ULONG_PTR key, DWORD threads); BOOL GetQueuedCompletionStatus(HANDLE port, LPDWORD n, PULONG_PTR key, LPOVERLAPPED *ov, DWORD ms); BOOL PostQueuedCompletionStatus(HANDLE port, DWORD n, ULONG_PTR key, LPOVERLAPPED ov)"
+rules:
+  empty: "an empty port, timeout 0 or 50 ms: FALSE with WAIT_TIMEOUT (258), the OVERLAPPED pointer NULL, the count and key outputs not written."
+  posted: "PostQueuedCompletionStatus(port, 1, 99, &ov), (port, 2, 99, NULL) and (port, 3, 0, NULL) come out in this order with exactly the count, key and OVERLAPPED pointer posted (TRUE)."
+  associate: "CreateIoCompletionPort(pipe, port, key, 1) returns the port handle; associating the same handle a second time with another key: NULL with ERROR_INVALID_PARAMETER (87)."
+  inline_packets: "an overlapped WriteFile that completed inline on an associated handle (count 5) and an inline ReadFile of the 5 waiting bytes each queue one packet: (count 5, the handle's key, the call's OVERLAPPED), no second packet."
+  pending_packets: "a ReadFile with no data (997) queues nothing until the peer writes; then the peer's 10-byte write gives two packets, the read's (server key, count 10) first and the write's (client key, count 10) second, nothing more."
+  failures: "a read cancelled by CancelIoEx: a packet with FALSE, error 995, count 0, the read's OVERLAPPED (Internal STATUS_CANCELLED 0xC0000120); a pending read ended by the peer's close: FALSE, error 109, the read's OVERLAPPED, key of its handle."
+  waiter: "a thread blocked in GetQueuedCompletionStatus(port, INFINITE) keeps waiting; one PostQueuedCompletionStatus(port, 77, 99, NULL) from another thread wakes it with TRUE, count 77, key 99."
+errors:
+  timeout: "WAIT_TIMEOUT (258)"
+  aborted: "ERROR_OPERATION_ABORTED (995) in a packet"
+  broken: "ERROR_BROKEN_PIPE (109) in a packet"
+  twice: "ERROR_INVALID_PARAMETER (87): a handle associated twice"
+side_effects: "none outside the test's own handles"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except the waits named in the rules"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), the same program three times (cnet_iocp, cnet_iocp_b, cnet_iocp_c): each makes every call and writes every third observation line (the first line is the first file's, the second the second file's, and so on), so each program is complete and the three together give the whole list. Each declares what it calls from Learn's prototypes; observations are return values, error codes, counts and relations, never handles, addresses, ports or times.
+not_covered: >
+  GetQueuedCompletionStatusEx and SetFileCompletionNotificationModes (Chrome 157 uses neither: the trace shows no call), more than one waiter, concurrency above 1, sockets as associated handles, closing the port with waiters.

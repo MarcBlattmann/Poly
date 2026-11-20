@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_destroyweak_basic",
+      "source_sha256": "a3e2074499f7cdbfd8c93d0194e3fd938bd5d8912ca67c7017ad7c41e9b33ed8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a7148cd2653d196de30742c81582679986f77f63f804e989994d3bbe614dd019",
+          "exit_code": 0,
+          "stdout": "value retainCount unchanged by destroyWeak 1\nvalue deallocs 0\nvalue deallocs after release 1\nok the storage was not written by the object's dealloc\nvalue destroyWeak on a nil weak location survived 1\nok the remaining location is zeroed\nok the destroyed one is left alone\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3cd4a00188e7f737e1adb0e7216f5d7aedd512c1071aa261b9fad047050f0b61",
+          "exit_code": 0,
+          "stdout": "value retainCount unchanged by destroyWeak 1\nvalue deallocs 0\nvalue deallocs after release 1\nok the storage was not written by the object's dealloc\nvalue destroyWeak on a nil weak location survived 1\nok the remaining location is zeroed\nok the destroyed one is left alone\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_destroyweak_value",
+      "source_sha256": "c9da84b6c3debc01cbfede7fea58d024c37ad17fca4196173836df43cd97c500",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "af0cfa56770b34660417a8c8a5b79087b3195fb2fa697ace36ca40b4200b51a5",
+          "exit_code": 0,
+          "stdout": "ok initialised again after destroyWeak\nok loads the object\nok zeroed by the death\nvalue destroy after the death survived 1\nok registered again\nvalue destroy of a nil location survived 1\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ba42a5891cb3055dac7bbdda01390586b1ab52d7c4488a00cbc506cb340ee4d3",
+          "exit_code": 0,
+          "stdout": "ok initialised again after destroyWeak\nok loads the object\nok zeroed by the death\nvalue destroy after the death survived 1\nok registered again\nvalue destroy of a nil location survived 1\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
