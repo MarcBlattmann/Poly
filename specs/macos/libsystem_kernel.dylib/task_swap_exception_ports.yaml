@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/task_swap_exception_ports.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mexc.h; ADR 0182);
+# results per architecture in task_swap_exception_ports.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/task_swap_exception_ports
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mexc.h, poly_mlibc.h) so that they call libSystem; each makes its own faults in its own threads or child processes and catches them with exception ports of its own, in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); results are equal on both except where the sheet names a difference"
+  observed_by: spec-macos-mach-exc
+  date: 2026-11-20
+summary: >
+  task_swap_exception_ports(task, mask, port, behavior, flavor, old...) sets the exception ports as task_set_exception_ports does and returns the entries
+  it replaced, as task_get_exception_ports would have given them just before: the old port, behavior and flavor of the exceptions in mask (only those
+  bits), an entry with a null port for those that had none; send rights to the old ports come back as user references. Swapping in MACH_PORT_NULL removes the
+  port. The refusals are those of task_set_exception_ports (KERN_INVALID_ARGUMENT for a behavior, flavor or mask that is none or the thread port,
+  MACH_SEND_INVALID_DEST for an invalid task), and a refused call changes nothing. After a swap the new port gets the exceptions and the old one does not.
+  Observations of both architectures agree unless a difference is named (x86_64 was observed under Rosetta 2: a few answers there are the
+  translator's, named below). Exception ports: a task starts with no port for the classic exceptions 1 to 9 (EXC_MASK_CLASSIC, 0x3fe); on arm64 the
+  harness's processes also inherited a port for EXC_RESOURCE (mask 0x800, behavior 0xa0000004), which the tests never look at.
+returns:
+  success: "KERN_SUCCESS (0); the old entries"
+errors:
+  invalid_argument: "KERN_INVALID_ARGUMENT (4)"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "as task_set_exception_ports"
+threading: "no thread-specific behaviour observed besides what is said"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call (an exception round trip is some tens of microseconds)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

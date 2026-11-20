@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/semaphore_create.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mexc.h; ADR 0182);
+# results per architecture in semaphore_create.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/semaphore_create
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mexc.h, poly_mlibc.h) so that they call libSystem; each makes its own faults in its own threads or child processes and catches them with exception ports of its own, in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); results are equal on both except where the sheet names a difference"
+  observed_by: spec-macos-mach-exc
+  date: 2026-11-20
+summary: >
+  semaphore_create(task, &sem, policy, value) makes a semaphore and stores a send right to it in *sem (type 0x10000, one user reference, another name for each call).
+  value is the initial count: 0 up to 2147483647 are accepted, a negative one is KERN_INVALID_ARGUMENT (4) and *sem is left alone; with value 2 two semaphore_wait calls return at once, a
+  semaphore_timedwait for a third gives KERN_OPERATION_TIMED_OUT (49), a signal lets one more wait through, and semaphore_signal_all with no waiter does not raise the count.
+  policy: SYNC_POLICY_FIFO (0) releases the waiter that waited first for each signal; SYNC_POLICY_LIFO (2, SYNC_POLICY_REVERSED alone also) the one that waited last;
+  SYNC_POLICY_FIXED_PRIORITY (1) and 99 are KERN_INVALID_ARGUMENT; the value 4 was accepted (recorded as a value). A task that is MACH_PORT_NULL or a name that is nothing is
+  MACH_SEND_INVALID_DEST (0x10000003); the host port is KERN_INVALID_ARGUMENT. A NULL out pointer crashes the caller.
+returns:
+  success: "KERN_SUCCESS (0); *sem is a send right to the new semaphore"
+errors:
+  invalid_argument: "KERN_INVALID_ARGUMENT (4)"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "a semaphore is created"
+threading: "safe from several threads"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call (an exception round trip is some tens of microseconds)"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

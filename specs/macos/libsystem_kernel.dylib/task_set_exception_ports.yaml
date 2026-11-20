@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/task_set_exception_ports.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mexc.h; ADR 0182);
+# results per architecture in task_set_exception_ports.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/task_set_exception_ports
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mexc.h, poly_mlibc.h) so that they call libSystem; each makes its own faults in its own threads or child processes and catches them with exception ports of its own, in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); results are equal on both except where the sheet names a difference"
+  observed_by: spec-macos-mach-exc
+  date: 2026-11-20
+summary: >
+  task_set_exception_ports(task, mask, port, behavior, flavor) sets the port that gets the exceptions of mask (bits of EXC_MASK_*; 0 changes
+  nothing) for all the task's threads that have no port of their own. behavior is EXCEPTION_DEFAULT (1), EXCEPTION_STATE (2) or
+  EXCEPTION_STATE_IDENTITY (3), optionally with MACH_EXCEPTION_CODES (0x80000000): messages then carry 64-bit codes. flavor is a thread state
+  flavor (the architecture's: x86_THREAD_STATE64 4, ARM_THREAD_STATE64 6) or THREAD_STATE_NONE (13 on x86_64, 5 on arm64); it is kept as given for
+  every behavior. task_get_exception_ports reads back exactly what was set (merged entries, see its sheet). Each call adds a user reference to the
+  port's send right. MACH_PORT_NULL as the port takes the port away (the entries stay, with a null port). The behavior 99, a flavor that is none (999)
+  with any behavior, and a mask with bits that are no exception (0x80000000) are KERN_INVALID_ARGUMENT (4) and change nothing; EXCEPTION_STATE with
+  THREAD_STATE_NONE is accepted; an invalid task (MACH_PORT_NULL, a name that is nothing) is MACH_SEND_INVALID_DEST (0x10000003); the thread
+  version given the task port is KERN_INVALID_ARGUMENT. MACH_PORT_DEAD as the port is accepted. Differences: a port that is a receive right only, or
+  a name that does not exist, is MACH_SEND_INVALID_RIGHT (0x1000000a) on arm64 and accepted on x86_64 (Rosetta); a behavior with the bit 0x40000000 is accepted on arm64
+  and KERN_INVALID_ARGUMENT on x86_64; MACH_EXCEPTION_BACKTRACE_PREFERRED (0x20000000) is KERN_INVALID_ARGUMENT on both. What a task port does with an
+  exception: the faulting thread stops, a message is sent to the port (formats: see exception_raise, exception_raise_state,
+  exception_raise_state_identity), and the thread is resumed when the reply says KERN_SUCCESS; when the handler replies a failure, or there is no
+  port, the exception becomes a BSD signal: a write to an unmapped address SIGSEGV (11), a write to a PROT_NONE page or an execute from a non-executable
+  page SIGBUS (10), an undefined instruction SIGILL (4), a breakpoint SIGTRAP (5), integer division by zero SIGFPE (8) on x86_64 (on arm64 division by zero
+  does not fault).
+  Observations of both architectures agree unless a difference is named (x86_64 was observed under Rosetta 2: a few answers there are the
+  translator's, named below). Exception ports: a task starts with no port for the classic exceptions 1 to 9 (EXC_MASK_CLASSIC, 0x3fe); on arm64 the
+  harness's processes also inherited a port for EXC_RESOURCE (mask 0x800, behavior 0xa0000004), which the tests never look at.
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  invalid_argument: "KERN_INVALID_ARGUMENT (4): behavior, flavor or mask that is none, or a thread port"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "the task's exception port table changes; a user reference is added to the port"
+threading: "no thread-specific behaviour observed besides what is said"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call (an exception round trip is some tens of microseconds)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
