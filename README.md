@@ -153,7 +153,7 @@ itself as on Windows; see
 | Linux | syscalls | 370 | 353 | 0 | 8 | 3 | 6 | 0 |
 | Linux | user-mode API | 35 | 35 | 0 | 0 | 0 | 0 | 0 |
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
-| Windows | user-mode DLL exports | 130,581 | 1,045 | 3,497 | 3,749 | 52,994 | 0 | 69,296 |
+| Windows | user-mode DLL exports | 130,582 | 1,045 | 3,496 | 3,751 | 52,994 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 0 | 0 | 75 | 442 | 0 | 0 |
 | macOS | framework API | 880,557 | 0 | 0 | 0 | 880,557 | 0 | 0 |
 
@@ -170,6 +170,7 @@ Seeded from (names only):
 - `ms-learn-d3d11`: Microsoft Learn Direct3D 11, DXGI and DirectComposition reference and the public SDK headers d3d11*.h, dxgi*.h, dcomp.h, dxcore*.h: the COM interfaces and methods of d3d11.dll, dxgi.dll, dcomp.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-dwrite`: Microsoft Learn DirectWrite reference and the public SDK headers dwrite.h .. dwrite_3.h: the COM interfaces and methods of dwrite.dll (entries named Interface.Method) @ `Windows SDK 10.0.26100.0`
 - `ms-learn-eventlog`: Microsoft Learn event logging reference (event sources, EVENTLOGRECORD, the EventLog registry keys) as Chrome's setup.exe uses it, observed by the spec agents (spec-win-chrome-setup); entries named by behaviour @ `Windows 11 25H2 build 26200.9974`
+- `ms-learn-input-idle`: Microsoft Learn WaitForInputIdle, ShellExecuteEx (SEE_MASK_WAITFORINPUTIDLE) and the message-queue functions that make a process 'idle for input': what the oracle does for console and GUI processes (entries named by function, the ShellExecuteEx mask by dotted name) @ `Windows 11 build 26300.9974`
 - `ms-learn-netfw`: Microsoft Learn Windows Firewall with Advanced Security API (netfw.h: INetFwPolicy2, INetFwRules, INetFwRule) as Chrome's setup.exe uses it to add its inbound mDNS rule, observed by the spec agents (spec-win-chrome-setup); entries named by class @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-setup-files`: Microsoft Learn file, process and snapshot reference (winbase.h, fileapi.h, tlhelp32.h) for what Chrome's own setup.exe calls, observed by the spec agent spec-win-chrome-setup (docs/windows/chrome-setup-plan.md); entries named by function or behaviour @ `Windows 11 25H2 build 26200.9974`
 - `ms-learn-shell-download`: Microsoft Learn and the public SDK headers shobjidl_core.h, shellapi.h, shlobj_core.h, fileapi.h, winbase.h: the COM interfaces and methods Chrome's download path uses in shell32.dll, comdlg32.dll (entries named Interface.Method) and the kernel32.dll functions beside them @ `Windows SDK 10.0.26100.0`
