@@ -82,5 +82,12 @@ longest of those holds.
   threads in each of four processes allocating, protecting, querying, decommitting, releasing and mapping at once,
   while the parent works on each child's memory (`VirtualAllocEx`, `WriteProcessMemory`, `ReadProcessMemory`,
   `VirtualProtectEx`, `VirtualQueryEx`, `VirtualFreeEx`).
-- Open: views under a process's lock (a section store split from the NT state's), and the other memory calls on
-  other processes without the NT state's lock.
+- **Measured** (one boot, the path switched on and off between warm Chrome starts, timeline for the lock figures):
+  - In the 3 s after Enter, `NtAllocateVirtualMemory` ran 8,866 times with 304 ms inside, against 2,939 times with
+    2,168 ms inside. It no longer waits for the NT state's lock, and no longer holds it (≈700 ms of other threads'
+    waits per start before). The process locks' waits are ≈125 ms per start.
+  - Warm start on a heavily loaded host: median 4.6 s against 5.9 s.
+  - The NT state's lock stays saturated by `NtMapViewOfSection` (≈1.0–1.3 s of other threads' waits per start) and
+    `NtCreateFile` (≈1.2 s), so the total of the waits for it did not shrink.
+- Open: views under a process's lock (a section store split from the NT state's), file opens without the NT state's
+  lock, and the other memory calls on other processes without it.
