@@ -267,6 +267,8 @@ crate::wire_enum! {
         /// `SendStart` of `WM_COPYDATA` (Learn: the system copies the data to the receiving
         /// process): `dw_data` and the bytes of the sender's `COPYDATASTRUCT` (ADR 0234).
         123 => SendCopy { hwnd: u64, w: u64, dw_data: u64, data: Vec<u8> },
+        /// `GetShellWindow`: a `Handle`, 0 when the session has no shell (`Wm::shell_window`).
+        126 => ShellWindow {},
         /// A thread of the caller found its queue empty and blocks for messages (`blocking`), or
         /// only looked (an empty `PeekMessage`): `crate::idle` (ADR 0245). `Ok`.
         124 => InputIdle { blocking: bool },

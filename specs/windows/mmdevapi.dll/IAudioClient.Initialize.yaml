@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/mmdevapi.dll/IAudioClient.Initialize.yaml
+id: windows/api/mmdevapi.dll/IAudioClient.Initialize
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; the audio service runs and Core Audio reaches the card from there; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-wasapi
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only), and of Chrome for Testing 157.0.8103.38 playing a Web Audio page on it through a logging COM wrapper (docs/windows/wasapi-trace.md, specs/windows/apps/chrome/traces/s6-audio.trace.json). Microsoft Learn: "Core Audio APIs", "IMMDeviceEnumerator", "IMMDeviceCollection", "IMMDevice", "IMMNotificationClient", "IAudioClient", "IAudioClient2", "IAudioClient3", "IAudioRenderClient", "IAudioClock", "IAudioSessionControl", "IAudioSessionEvents", "WAVEFORMATEXTENSIBLE", "Rendering a Stream", "Audio Client Return Codes"; constants and layouts from mmdeviceapi.h, audioclient.h, audiopolicy.h, audiosessiontypes.h, mmreg.h, ksmedia.h, winerror.h. No Wine, ReactOS or Chromium source was read and no Microsoft or Google binary was disassembled or debugged.
+summary: >
+  IAudioClient::Initialize (and IAudioClient3::InitializeSharedAudioStream) in shared mode: sets up the stream, its buffer and the services.
+interface:
+  signature: "HRESULT IAudioClient::Initialize(AUDCLNT_SHAREMODE, DWORD streamFlags, REFERENCE_TIME bufferDuration, REFERENCE_TIME periodicity, const WAVEFORMATEX*, LPCGUID session) (slot 3); HRESULT IAudioClient3::InitializeSharedAudioStream(DWORD streamFlags, UINT32 periodInFrames, const WAVEFORMATEX*, LPCGUID session) (slot 20)"
+chrome: "Chrome for Windows' audio service makes these calls (the COM-level oracle trace): it creates the enumerator, opens a client on the default render device in shared mode with an event callback, and renders silence-or-tone in a loop of one 480-frame write per event."
+rules:
+  chrome_call: "Initialize(SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK (0x40000), 0, 0, mix format, NULL) is S_OK (it took about 200 ms on the oracle). Afterwards GetBufferSize is 1056 frames (two engine periods of 480 and 96 more), GetStreamLatency 0, GetCurrentPadding 0, GetDevicePeriod unchanged; SetEventHandle(event) is S_OK; a second Initialize, with the same or other arguments, is AUDCLNT_E_ALREADY_INITIALIZED and changes nothing"
+  buffer_duration: "in shared mode the buffer duration (100 ns units) sets the buffer size in frames at the stream's rate: 100 ms = 4800 frames, 200 ms = 9600, 5 s = 240000, 20 s = 960000 (no upper limit seen); a duration of 0, 1 ms or 10 ms gives the minimum, 1056 frames; the event flag does not change it; the periodicity is ignored in shared mode; a negative duration is E_INVALIDARG; the stream latency is 0 in every case"
+  errors: "a share mode of 2 and stream flags with bit 0x20 are E_INVALIDARG; the flag 0x1 is AUDCLNT_E_INVALID_STREAM_FLAG (0x88890021); a NULL format is E_POINTER; a format of another rate or channel count without AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM (44100 Hz float, 44100 Hz mono 16 bit, mono at the mix rate) is AUDCLNT_E_UNSUPPORTED_FORMAT; an extensible format with cbSize 0 fails; none of them initialises the client (GetBufferSize stays AUDCLNT_E_NOT_INITIALIZED) and a good Initialize afterwards succeeds"
+  autoconvert: "with AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM (0x80000000), also with SRC_DEFAULT_QUALITY (0x08000000) and the event flag, a 44100 Hz float stereo, 44100 Hz 16 bit stereo and 44100 Hz 16 bit mono format is S_OK, the buffer is at least 441 frames, the padding 0, the render client works and its padding counts the frames written. A format at the mix rate and channel count (16 bit stereo at 48000 Hz) needs no flag. (The exact buffer size of a converted stream is not specified.)"
+  client3: "InitializeSharedAudioStream(0, 480, mix format) is S_OK (buffer 1056 frames; GetCurrentSharedModeEnginePeriod then gives 480); a period of 240 is AUDCLNT_E_INVALID_DEVICE_PERIOD (0x88890020) and leaves the client uninitialised; the event flag is accepted; a second initialisation, by either method, is AUDCLNT_E_ALREADY_INITIALIZED"
+  not_specified: "exclusive mode: the oracle's endpoint refuses it (AUDCLNT_E_UNSUPPORTED_FORMAT); the loopback and rate-adjust flags were accepted but are not specified"
+errors:
+  already_initialized: "AUDCLNT_E_ALREADY_INITIALIZED (0x88890002)"
+  invalid_argument: "E_INVALIDARG (0x80070057)"
+  invalid_stream_flag: "AUDCLNT_E_INVALID_STREAM_FLAG (0x88890021)"
+  unsupported_format: "AUDCLNT_E_UNSUPPORTED_FORMAT (0x88890008)"
+  invalid_device_period: "AUDCLNT_E_INVALID_DEVICE_PERIOD (0x88890020)"
+  null_pointer: "E_POINTER (0x80004003)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "the first Initialize of a process takes about 200 ms, later ones a few ms"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing ole32.dll and kernel32.dll by name and calling the COM interfaces through their vtables (slot numbers from the interface headers). Every test but the two that exercise COM before it is initialised needs a sound device and COM initialised; audio data is silence only (the SILENT buffer flag, or zero bytes). Observations are result codes, counts, sizes in frames, flags and relations ("the position equals the bytes written", "about fifty events in 500 ms"), never pointers, handles, thread ids or times. The values that belong to the oracle's device are the mix format (48000 Hz, two channels, 32-bit float), the engine period (480 frames = 10 ms) and what follows from them; a device with another mix format would give other numbers by the same formulas. Waits are bounded (a second or less per condition).
+not_covered: >
+  Exclusive mode (the oracle's endpoint refuses it with AUDCLNT_E_UNSUPPORTED_FORMAT); capture endpoints and the capture client; other devices than the default render endpoint; a sandboxed audio process; device removal while a stream runs; ISimpleAudioVolume, IAudioStreamVolume and IAudioEndpointVolume; IAudioClient2's offload methods; ActivateAudioInterfaceAsync (mmdevapi ordinal 17, which chrome.dll delay-loads; Chrome activated through IMMDevice::Activate in every run).

@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "appid_access_a",
-      "exe_sha256": "c1acb3a4a9bf40888fd55665c3b84c95ad6b7efe22f6143badcb22521d1951fa",
+      "exe_sha256": "1764b4a9ef296246b8f60d68681145aa70de5f69d1bfddf5fd4dc1fd2714e8dc",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -28,7 +28,7 @@
     },
     {
       "name": "appid_launch_a",
-      "exe_sha256": "76181a35ab543fca83badc09b325afde8b52b2dfae35f7afeb5cb2003ec96fe6",
+      "exe_sha256": "f5960cdb974d908b489f0b8bf011040acd9ead332617475d407ee27f1cbf1828",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -42,7 +42,7 @@
     },
     {
       "name": "appid_launch_b",
-      "exe_sha256": "04daa1aa49d49c39d0be912ea57fdbd5dfa2ca4772b1c29802a5f42a48eaba14",
+      "exe_sha256": "ee3577507028012364e0354c678b76d571654c847f6df03d18ac71f01a635c4a",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

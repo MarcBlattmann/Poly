@@ -155,10 +155,11 @@ pub unsafe extern "system" fn LsaQueryInformationPolicy(handle: *mut u8, class: 
         let tail = out.add(size);
         let put_name = |at: *mut u8, text: &[u16], area: *mut u8| {
             core::ptr::copy_nonoverlapping(text.as_ptr().cast::<u8>(), area, text.len() * 2);
-            // LSA_UNICODE_STRING: Length, MaximumLength, Buffer.
+            // LSA_UNICODE_STRING: Length, MaximumLength, Buffer (at a pointer's size: 8, or 4 in
+            // a 32-bit process).
             at.cast::<u16>().write_unaligned(((text.len() - 1) * 2) as u16);
             at.cast::<u16>().add(1).write_unaligned((text.len() * 2) as u16);
-            at.add(8).cast::<*mut u8>().write_unaligned(area);
+            at.add(core::mem::size_of::<usize>()).cast::<*mut u8>().write_unaligned(area);
         };
         match class {
             // Primary domain of a workgroup machine: the workgroup, no SID.
@@ -166,9 +167,11 @@ pub unsafe extern "system" fn LsaQueryInformationPolicy(handle: *mut u8, class: 
             // The account domain is the machine itself: its name and the machine SID.
             5 | 14 => {
                 put_name(out, MACHINE, tail);
+                // POLICY_ACCOUNT_DOMAIN_INFO: the name (an LSA_UNICODE_STRING, two pointers'
+                // size), then the SID pointer.
                 let at = tail.add(16);
                 core::ptr::copy_nonoverlapping(sid.as_ptr(), at, 24);
-                out.add(16).cast::<*mut u8>().write_unaligned(at);
+                out.add(2 * core::mem::size_of::<usize>()).cast::<*mut u8>().write_unaligned(at);
             }
             6 => out.cast::<u32>().write_unaligned(3),
             // DNS domain information of a workgroup machine: the workgroup name, no DNS names, no SID.

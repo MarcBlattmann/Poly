@@ -1,0 +1,62 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/CreateRemoteThreadEx.yaml
+id: windows/api/kernel32.dll/CreateRemoteThreadEx
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account \"server\" (member of Administrators) with its elevated administrator token; the target processes are started by the test itself, as its children, with the same token; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-remote-thread
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (one image in two roles: the test, and the child
+  process that is the target). Microsoft Learn: CreateRemoteThreadEx, CreateRemoteThread, InitializeProcThreadAttributeList,
+  UpdateProcThreadAttribute, DeleteProcThreadAttributeList, GetThreadIdealProcessorEx, GetThreadGroupAffinity,
+  ResumeThread, GetExitCodeThread, GetProcessIdOfThread, Thread Stack Size, winerror.h and ntstatus.h. No Microsoft or
+  Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read. The sheet of
+  kernel32!CreateRemoteThread has the rules of everything the two calls share.
+summary: >
+  The same call as CreateRemoteThread with one more parameter, an optional list of thread attributes. With a NULL list
+  (what Chrome-style callers use; CreateRemoteThread is CreateRemoteThreadEx with a NULL list) every behaviour of
+  CreateRemoteThread's sheet holds: a thread in the target process, start routine and parameter delivered, thread id
+  and process id of the thread, handle access 0x1FFFFF, CREATE_SUSPENDED and ResumeThread, stack sizes, the same errors
+  with the same codes. An attribute list made by InitializeProcThreadAttributeList may be empty, or carry the thread
+  attributes ideal processor and group affinity, which the new thread has afterwards; a list with a process-creation
+  attribute is refused.
+interface:
+  signature: "HANDLE CreateRemoteThreadEx(HANDLE hProcess, LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter, DWORD dwCreationFlags, LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList, LPDWORD lpThreadId)"
+  result: "a thread handle, or NULL with the last error set"
+rules:
+  null_list_is_createremotethread: "with lpAttributeList NULL: handle returned, thread id non-zero and different from the caller's and the target's first thread's, GetThreadId(handle) = that id, GetProcessIdOfThread = the target's process id (not the caller's), start routine kernel32!ExitThread with parameter 0x1234 ends with exit code 0x1234 (wait WAIT_OBJECT_0), granted access of the handle 0x1FFFFF, lpThreadId NULL allowed (the thread runs: exit code 7 for parameter 7)"
+  code_in_target: "a start routine written into the target (VirtualAllocEx + WriteProcessMemory) created with CREATE_SUSPENDED: not run after a 300 ms wait (WAIT_TIMEOUT), its marker in the target's memory unwritten; ResumeThread returns 1; the thread then ends (WAIT_OBJECT_0) with the routine's return value (0x77) as exit code; the routine saw the target's process id and the returned thread id"
+  stack: "dwStackSize and STACK_SIZE_PARAM_IS_A_RESERVATION as in CreateRemoteThread: 256 KiB as commit gives a 1024 KiB reserve (the image's), 2 MiB as a reserve gives 2048 KiB, 100000 bytes as a reserve gives 128 KiB (rounded to 64 KiB)"
+  empty_list: "a list that InitializeProcThreadAttributeList made with room for one attribute and in which none was set is accepted: a handle, the thread runs in the target"
+  uninitialised_list: "memory that was never made a list (all zero) is accepted as an empty list: a handle, the thread runs in the target"
+  ideal_processor: "attribute PROC_THREAD_ATTRIBUTE_IDEAL_PROCESSOR (0x30005) with a PROCESSOR_NUMBER of group 0, number 0: the thread is created, and GetThreadIdealProcessorEx on the returned handle reports group 0, number 0"
+  group_affinity: "attribute PROC_THREAD_ATTRIBUTE_GROUP_AFFINITY (0x30003) with a GROUP_AFFINITY of group 0, mask 1: the thread is created, and GetThreadGroupAffinity on the returned handle reports group 0, mask 1"
+  process_attribute_refused: "a list holding the process-creation attribute PROC_THREAD_ATTRIBUTE_PARENT_PROCESS (0x20000, a process handle): NULL, ERROR_INVALID_PARAMETER (87), STATUS_INVALID_PARAMETER 0xC000000D. (UpdateProcThreadAttribute itself accepts that attribute into the list)"
+  sandboxed_targets: "against targets under a restricted token, at low integrity, in a job or in an AppContainer, from a medium-integrity caller, with the handle CreateProcessAsUser returned, the call (NULL attribute list) creates the thread as for an ordinary target: ExitThread with parameter 0x2468 ends with exit code 0x2468 and the thread is in the target. See the CreateRemoteThread sheet for all the cases and for the handle-rights rules, which are the same"
+  wow64_callers_and_targets: "the same as CreateRemoteThread (its sheet has the observation): a 32-bit caller to a 64-bit target gets ERROR_ACCESS_DENIED / STATUS_ACCESS_DENIED 0xC0000022; a 64-bit caller can create a thread in a 32-bit target. Only CreateRemoteThread and NtCreateThreadEx were tried from the 32-bit side"
+  rights: "the process handle's rights matter exactly as for CreateRemoteThread (a handle with no rights, with PROCESS_CREATE_THREAD only, with PROCESS_QUERY_LIMITED_INFORMATION only each worked, because the caller owns the target; the pseudo handle GetCurrentProcess() created a thread in the caller's own process)"
+errors:
+  invalid_handle: "NULL, or a number that is no handle: NULL, ERROR_INVALID_HANDLE (6), STATUS_INVALID_HANDLE 0xC0000008"
+  wrong_type: "an event handle, a thread handle: NULL, ERROR_INVALID_HANDLE (6), STATUS_OBJECT_TYPE_MISMATCH 0xC0000024"
+  process_ended: "a handle to a process that has ended: NULL, ERROR_ACCESS_DENIED (5), STATUS_PROCESS_IS_TERMINATING 0xC000010A"
+  process_attribute: "see process_attribute_refused"
+side_effects: "creates a thread in the target process and a thread handle in the caller"
+threading: "may be called from any thread of the caller"
+ordering: []
+timing:
+  typical: "the thread starts within a few milliseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, one image in two roles (the test, and its child process that is the
+  target; the target signals a named event once it runs its own code). Attribute lists are built in the test with the
+  documented calls; the thread's ideal processor and group affinity are read back with kernel32's getters.
+  Observations are booleans, exit codes, wait results, Win32 codes, NTSTATUS and sizes in KiB, never ids, handles or
+  addresses; the ideal processor of a thread created without the attribute is not printed (it varies from run to run).
+not_covered: >
+  Other thread attributes (PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, PROC_THREAD_ATTRIBUTE_PREFERRED_NODE,
+  attribute values of the wrong size); an attribute list with more than one attribute; sandboxed targets with an
+  attribute list (the call with a NULL list was observed: see sandboxed_targets).

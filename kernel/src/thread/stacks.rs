@@ -25,6 +25,11 @@ impl StackFrames {
         let phys = {
             let mut frames = FRAMES.lock();
             let alloc = frames.as_mut().ok_or(SpawnError::NoMemory)?;
+            // Threads come and go with what programs do (a browser's hundreds): their stacks
+            // leave half of the kernel's reserve to the heap and the page tables (ADR 0250).
+            if alloc.free_frames() < crate::frames::reserve() / 2 + (1 << STACK_ORDER) {
+                return Err(SpawnError::NoMemory);
+            }
             alloc.allocate(STACK_ORDER).ok_or(SpawnError::NoMemory)?
         };
         // Painted through the direct map before anything runs on it, so

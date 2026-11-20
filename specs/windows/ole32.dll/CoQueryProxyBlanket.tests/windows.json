@@ -14,7 +14,7 @@
   "tests": [
     {
       "name": "qpb_defaults",
-      "exe_sha256": "96986ed60231806b22c2ae3e11a12d0badeb3f21008fa6a9fbb94568380e59e2",
+      "exe_sha256": "ac44301f4cb3112e5ef8fc257b64caad53b93f52f881e12f6738574d8694e9ff",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

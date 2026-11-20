@@ -58,7 +58,6 @@ poly_win32_rt::fail_exports!(
         HeapCompact,
         HeapValidate,
         IsApiSetImplemented,
-        K32EnumProcessModules,
         K32GetModuleFileNameExW,
         LockFile,
         OpenSemaphoreW,

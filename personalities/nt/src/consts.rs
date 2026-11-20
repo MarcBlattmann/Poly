@@ -83,6 +83,16 @@ pub const THREAD_QUERY_LIMITED_INFORMATION: u32 = 0x0800;
 // ----- NtCreateThreadEx `CreateFlags` (Learn / `ntpsapi.h`, documented via
 // the `THREAD_CREATE_FLAGS_*` names).
 pub const THREAD_CREATE_FLAGS_CREATE_SUSPENDED: u32 = 0x0001;
+/// The loader does not run `DLL_THREAD_ATTACH` / `DLL_THREAD_DETACH` for the thread.
+pub const THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH: u32 = 0x0002;
+/// `ThreadHideFromDebugger` reports 1 for the thread.
+pub const THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER: u32 = 0x0004;
+/// The bits `NtCreateThreadEx` accepts; any other is `STATUS_INVALID_PARAMETER_7`
+/// (specs/windows/ntdll.dll/NtCreateThreadEx.yaml, `create_flags`: 0x1 to 0x40).
+pub const THREAD_CREATE_FLAGS_KNOWN: u32 = 0x7F;
+/// The smallest `PS_ATTRIBUTE_LIST` `NtCreateThreadEx` takes: its `TotalLength` and one
+/// 32-byte attribute (a list that is only a header, or shorter, is `STATUS_INVALID_PARAMETER`).
+pub const PS_ATTRIBUTE_LIST_MINIMUM: u64 = 8 + 32;
 
 /// Poly's own `NtCreateUserProcess` `ProcessFlags` bit (ADR 0089; no
 /// public header defines the flags): the new process inherits the

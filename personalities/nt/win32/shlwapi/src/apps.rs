@@ -62,8 +62,6 @@ poly_win32_rt::fail_exports!(
         PathCompactPathExW,
         PathCompactPathW,
         PathCreateFromUrlW,
-        PathFileExistsA,
-        PathFileExistsW,
         PathFindExtensionA,
         PathFindFileNameA,
         PathGetCharTypeW,

@@ -311,6 +311,11 @@ impl UserThread {
         (self.process_arc().pid, self.tid)
     }
 
+    /// The thread as timeline records name it (ADR 0247).
+    pub(crate) fn timeline_ident(&self) -> u64 {
+        poly_timeline::ident(self.process.as_ref().map_or(0, |p| p.pid), self.tid)
+    }
+
     /// Its process.
     pub(crate) fn process(&self) -> &Process {
         self.process_arc()
@@ -689,6 +694,14 @@ pub fn page_fault_in(addr: u64, access: memory::Access, kernel: bool) -> Result<
         let write = access == memory::Access::Write;
         result = crate::linux::uffd::fault(&memory, uffd, addr, write, tid, kernel, &stop)
             .and_then(|()| memory.fault(addr, access));
+    }
+    // No frame for the desktop's own programs: they wait while the out-of-memory policy frees
+    // memory (ADR 0250), rather than end.
+    if let Err(FaultError::OutOfMemory) = result
+        && let Some(p) = current_process()
+    {
+        result =
+            crate::oom::wait_for_memory(&p, || memory.fault(addr, access), |e| matches!(e, FaultError::OutOfMemory));
     }
     match result {
         Ok(()) => {

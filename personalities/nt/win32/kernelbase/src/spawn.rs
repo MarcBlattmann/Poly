@@ -457,6 +457,10 @@ unsafe fn create(
     if let Some(v) = parsed.child_policy {
         record(6, u64::from(v), 4);
     }
+    // Kind 7: the parent process's handle; the child is its child and gets a copy of its token.
+    if let Some(h) = parsed.parent {
+        record(7, h as u64, 0);
+    }
     if !job_words.is_empty() {
         record(3, job_words.as_ptr() as u64, job_words.len() as u64 * 8);
     }

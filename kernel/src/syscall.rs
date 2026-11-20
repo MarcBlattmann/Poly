@@ -13,6 +13,25 @@ use poly_personality_xnu::Xnu;
 /// (`crate::linux`); a bare record only the personality's answers without
 /// them (`-ENOSYS`). The same holds for native processes (`crate::native`).
 pub fn dispatch(process: &Process, regs: &mut SyscallRegs) -> Outcome {
+    if !crate::timeline::on() {
+        return route(process, regs);
+    }
+    // The timeline (ADR 0247): the call, its first argument and its result.
+    let (table, arg) = match (process.native.is_active(), process.personality) {
+        (true, _) | (_, Personality::Native) => (poly_timeline::NATIVE, regs.rdi),
+        (_, Personality::Linux) => (poly_timeline::LINUX, regs.rdi),
+        (_, Personality::Nt) => (poly_timeline::NT, regs.r10),
+        (_, Personality::Xnu) => (poly_timeline::XNU, regs.rdi),
+    };
+    let call = poly_timeline::call(table, regs.rax);
+    crate::timeline::syscall(true, call, arg);
+    let outcome = route(process, regs);
+    crate::timeline::syscall(false, call, regs.rax);
+    outcome
+}
+
+/// [`dispatch`]'s routing.
+fn route(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     // A native process: started from a native program, or a Linux process
     // that `execve`d one (it keeps its Linux tag and state).
     if process.native.is_active() {

@@ -342,6 +342,7 @@ dependencies = [
 name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
+ "poly-audio",
  "poly-ldr",
  "poly-nls",
  "poly-ntobj",
@@ -661,6 +662,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-timeline"
+version = "0.0.1"
+
+[[package]]
 name = "poly-tty"
 version = "0.0.1"
 dependencies = [
@@ -756,6 +761,7 @@ name = "poly-win32k"
 version = "0.0.1"
 dependencies = [
  "poly-nls",
+ "poly-png",
 ]
 
 [[package]]
