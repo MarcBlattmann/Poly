@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "ih_far",
+      "exe_sha256": "b4da72a0abb2c8bb475dfa86ff5e9517a771381ebacd24206f1a12f2c25442d7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZV9sZmFuZXcgMHgzMDAwIHdpdGggdGhlIHNpZ25hdHVyZSB0aGVyZTogYmFzZSsxMjI4OAplX2xmYW5ldyAweDEwMDAwIHdpdGggdGhlIHNpZ25hdHVyZSB0aGVyZTogYmFzZSs2NTUzNgplX2xmYW5ldyAweGZmZmZmYyB3aXRoIHRoZSBzaWduYXR1cmUgdGhlcmU6IGJhc2UrMTY3NzcyMTIKZV9sZmFuZXcgMHhmZmZmZmZjIHdpdGggdGhlIHNpZ25hdHVyZSB0aGVyZTogYmFzZSsyNjg0MzU0NTIKZV9sZmFuZXcgMHgxMDAwMDAwMCB3aXRoIHRoZSBzaWduYXR1cmUgdGhlcmU6IE5VTEwKZV9sZmFuZXcgMHgxMDAwMDAwNCB3aXRoIHRoZSBzaWduYXR1cmUgdGhlcmU6IE5VTEwKZV9sZmFuZXcgMHgyMDAwMDAwMCB3aXRoIHRoZSBzaWduYXR1cmUgdGhlcmU6IE5VTEwKZV9sZmFuZXcgMHg3ZmZmZmZmYyB3aXRoIHRoZSBzaWduYXR1cmUgdGhlcmU6IE5VTEwKZV9sZmFuZXcgMHg4MDAwMDAwMCB3aXRoIHRoZSBzaWduYXR1cmUgdGhlcmU6IE5VTEwKZV9sZmFuZXcgMHhmZmZmZmZmYyB3aXRoIHRoZSBzaWduYXR1cmUgdGhlcmU6IE5VTEwKZV9sZmFuZXcgMHhmZmZmZmY4MCB3aXRoIHRoZSBzaWduYXR1cmUgdGhlcmU6IE5VTEwKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "e_lfanew 0x3000 with the signature there: base+12288\ne_lfanew 0x10000 with the signature there: base+65536\ne_lfanew 0xfffffc with the signature there: base+16777212\ne_lfanew 0xffffffc with the signature there: base+268435452\ne_lfanew 0x10000000 with the signature there: NULL\ne_lfanew 0x10000004 with the signature there: NULL\ne_lfanew 0x20000000 with the signature there: NULL\ne_lfanew 0x7ffffffc with the signature there: NULL\ne_lfanew 0x80000000 with the signature there: NULL\ne_lfanew 0xfffffffc with the signature there: NULL\ne_lfanew 0xffffff80 with the signature there: NULL\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    },
+    {
+      "name": "ih_module",
+      "exe_sha256": "88ef54fe3c4adb99c9738367dc739d521a12249d4596126c559fa88013ef7d37",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGJnaGVscC5kbGwgbG9hZGVkLCBJbWFnZU50SGVhZGVyIGZvdW5kCnRoaXMgZXhlY3V0YWJsZTogTVogdHJ1ZSBlX2xmYW5ldyA9PSByZXN1bHQgLSBiYXNlIHRydWUgc2lnbmF0dXJlIDB4NDU1MCBlcnIgdW5jaGFuZ2VkCiAgbWFjaGluZSAweDg2NjQgb3B0aW9uYWwgaGVhZGVyIG1hZ2ljIDB4MjBiIHNpemUgb2Ygb3B0aW9uYWwgaGVhZGVyIDI0MApudGRsbC5kbGw6IE1aIHRydWUgZV9sZmFuZXcgPT0gcmVzdWx0IC0gYmFzZSB0cnVlIHNpZ25hdHVyZSAweDQ1NTAgZXJyIHVuY2hhbmdlZAogIG1hY2hpbmUgMHg4NjY0IG9wdGlvbmFsIGhlYWRlciBtYWdpYyAweDIwYiBzaXplIG9mIG9wdGlvbmFsIGhlYWRlciAyNDAKa2VybmVsMzIuZGxsOiBNWiB0cnVlIGVfbGZhbmV3ID09IHJlc3VsdCAtIGJhc2UgdHJ1ZSBzaWduYXR1cmUgMHg0NTUwIGVyciB1bmNoYW5nZWQKICBtYWNoaW5lIDB4ODY2NCBvcHRpb25hbCBoZWFkZXIgbWFnaWMgMHgyMGIgc2l6ZSBvZiBvcHRpb25hbCBoZWFkZXIgMjQwCmdkaTMyLmRsbDogbm90IGxvYWRlZAp1c2VyMzIuZGxsOiBub3QgbG9hZGVkCmJhc2UrNCAobm90IGFuIGltYWdlIHN0YXJ0KTogcmVzdWx0IGlzIE5VTEwgdHJ1ZQpjYWxscyBhcmUgcmVwZWF0YWJsZTogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "dbghelp.dll loaded, ImageNtHeader found\nthis executable: MZ true e_lfanew == result - base true signature 0x4550 err unchanged\n  machine 0x8664 optional header magic 0x20b size of optional header 240\nntdll.dll: MZ true e_lfanew == result - base true signature 0x4550 err unchanged\n  machine 0x8664 optional header magic 0x20b size of optional header 240\nkernel32.dll: MZ true e_lfanew == result - base true signature 0x4550 err unchanged\n  machine 0x8664 optional header magic 0x20b size of optional header 240\ngdi32.dll: not loaded\nuser32.dll: not loaded\nbase+4 (not an image start): result is NULL true\ncalls are repeatable: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 49
+    }
+  ]
+}

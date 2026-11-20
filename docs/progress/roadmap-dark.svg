@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="436" viewBox="0 0 900 436" role="img" aria-label="Roadmap: 113 of 171 milestones done">
-<rect x="0.5" y="0.5" width="899.0" height="435.0" fill="#0d1117" rx="8" stroke="#30363d"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="466" viewBox="0 0 900 466" role="img" aria-label="Roadmap: 115 of 189 milestones done">
+<rect x="0.5" y="0.5" width="899.0" height="465.0" fill="#0d1117" rx="8" stroke="#30363d"/>
 <text x="16.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="16" font-weight="600" fill="#e6edf3" text-anchor="start">Roadmap</text>
-<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">113 / 171 milestones · 66%</text>
+<text x="884.0" y="28.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="end">115 / 189 milestones · 61%</text>
 <text x="16.0" y="65.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#e6edf3" text-anchor="start"> 0  Foundation</text>
 <g><title>✔ Repository layout, pinned toolchain, cargo xtask build/run/test driver</title>
 <rect x="340.0" y="53.0" width="41.3" height="16.0" fill="#2ea043" rx="3"/>
@@ -540,10 +540,66 @@
 <rect x="748.0" y="383.0" width="66.0" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
 </g>
 <text x="884.0" y="395.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">0/7</text>
-<rect x="16.0" y="413.0" width="10.0" height="10.0" fill="#2ea043" rx="2" stroke="#30363d"/>
-<text x="31.0" y="422.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">done</text>
-<rect x="72.0" y="413.0" width="10.0" height="10.0" fill="#4493f8" rx="2" stroke="#30363d"/>
-<text x="87.0" y="422.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">next up</text>
-<rect x="144.5" y="413.0" width="10.0" height="10.0" fill="#161b22" rx="2" stroke="#30363d"/>
-<text x="159.5" y="422.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">to do</text>
+<text x="16.0" y="425.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" font-weight="400" fill="#9198a1" text-anchor="start">12  Desktop choice and the lean OS installer</text>
+<g><title>udev for foreign desktops: the kernel's uevent netlink socket, /sys/class/input and its attributes, Debian's systemd-udevd filling the udev database (weston on DRM with keyboard and mouse, boot test)</title>
+<rect x="340.0" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Seat and VT semantics: /dev/tty0 and more VTs, VT switching ioctls, DRM master handed over and taken back on a switch, the DRM cursor (weston and sway on stock seatd)</title>
+<rect x="366.4" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Login plumbing in the Debian base: the system D-Bus, a logind (elogind or systemd-logind), cgroup v2, PAM sessions and polkit (KWin and Mutter start on DRM from a logind session)</title>
+<rect x="392.9" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>A minimal KDE Plasma session starts on Poly (with PipeWire, the XDG desktop portals and a NetworkManager stand-in where it needs them)</title>
+<rect x="419.3" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>A minimal GNOME session starts on Poly (with systemd --user or its replacement, and the same services)</title>
+<rect x="445.8" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Session choice: Poly's own login screen lists the users and the installed sessions (Poly is the default, GNOME, KDE Plasma); desktops are added and removed from Settings</title>
+<rect x="472.2" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>✔ ⚖️ Decided (owner, 2026-11-20): the desktop is quickly swappable later, never by reinstalling: the chosen desktops stay installed side by side</title>
+<rect x="498.7" y="413.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
+</g>
+<g><title>Quick switch: Settings → Desktop → Switch now logs out and straight back into the other desktop within seconds, without asking for the password again; each desktop keeps its own settings, while keyboard, language, time zone and scale follow the user</title>
+<rect x="525.1" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Session restore across a switch: the apps that were open come back where they support it (Poly's list of open apps, the desktops' own restore, RegisterApplicationRestart for Windows apps)</title>
+<rect x="551.6" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Live switch for Poly's own apps: Windows (and later macOS) apps keep running through a switch and their windows move to the new desktop, like a remote-desktop reconnect (Linux apps cannot be carried over; they restart through session restore)</title>
+<rect x="578.0" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Windows (and later macOS) apps under a foreign desktop: a bridge shows each window as a Wayland window of GNOME's or Plasma's compositor, with input, focus, popups and its frame</title>
+<rect x="604.4" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Poly's features under a foreign desktop: launcher entries for Windows apps, Poly's installer opens .deb/.rpm/AppImage/.exe/.msi from the foreign file manager, notifications and tray icons through D-Bus</title>
+<rect x="630.9" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Real user accounts: the user made at install logs in, the desktop and apps run as that user (not root), and the Windows side's profile follows the name</title>
+<rect x="657.3" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>One language and keyboard setting for everything: locale, the shell, the console, X11 and foreign desktops, the Windows side</title>
+<rect x="683.8" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Desktops and browsers install into a root from pinned package sets, offline from the install medium or downloaded (Chromium is preinstalled; Firefox and Google Chrome on request); Settings → Desktop and Default apps use the same path</title>
+<rect x="710.2" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>✔ ⚖️ Decided (owner, 2026-11-20): the OS installer works like Windows' setup but asks only six things (language and keyboard, disk, user and password, desktop with Poly as the default, default browser, finish); no telemetry, account or ad pages; everything else has defaults that Settings changes later</title>
+<rect x="736.7" y="413.0" width="24.4" height="16.0" fill="#2ea043" rx="3"/>
+</g>
+<g><title>The lean OS installer in those six steps, on Phase 11's disk and UEFI boot: GPT, EFI partition and ext4 root, the chosen desktop and browser installed, the first boot logs the new user straight into the chosen desktop</title>
+<rect x="763.1" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<g><title>Milestone: the same Poly install logs into Poly's desktop, GNOME and KDE Plasma in turn, and Windows and Linux apps run in each</title>
+<rect x="789.6" y="413.0" width="24.4" height="16.0" fill="#161b22" rx="3" stroke="#30363d"/>
+</g>
+<text x="884.0" y="425.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12" font-weight="400" fill="#9198a1" text-anchor="end">2/18</text>
+<rect x="16.0" y="443.0" width="10.0" height="10.0" fill="#2ea043" rx="2" stroke="#30363d"/>
+<text x="31.0" y="452.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">done</text>
+<rect x="72.0" y="443.0" width="10.0" height="10.0" fill="#4493f8" rx="2" stroke="#30363d"/>
+<text x="87.0" y="452.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">next up</text>
+<rect x="144.5" y="443.0" width="10.0" height="10.0" fill="#161b22" rx="2" stroke="#30363d"/>
+<text x="159.5" y="452.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">to do</text>
 </svg>

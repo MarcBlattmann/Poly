@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "pfea_files",
+      "exe_sha256": "7a666b24d7c539be638f7fa4cf285d686f7141c48126a04fc14c026d03247708",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZGlyZWN0b3J5OiAxIGVyciB1bmNoYW5nZWQKZmlsZTogMSBlcnIgdW5jaGFuZ2VkCmVtcHR5IGZpbGU6IDEgZXJyIHVuY2hhbmdlZApzdWIgZGlyZWN0b3J5OiAxIGVyciB1bmNoYW5nZWQKZmlsZSBpbiBzdWIgZGlyZWN0b3J5OiAxIGVyciB1bmNoYW5nZWQKbWlzc2luZyBmaWxlOiAwIGVyciAyCm1pc3NpbmcgZGlyZWN0b3J5OiAwIGVyciAzCmZpbGUgdXNlZCBhcyBhIGRpcmVjdG9yeTogMCBlcnIgMwp1cHBlciBjYXNlIHNwZWxsaW5nOiAxIGVyciB1bmNoYW5nZWQKYSBuYW1lIHdpdGggYSBzcGFjZTogMSBlcnIgdW5jaGFuZ2VkCmRpcmVjdG9yeSBhZnRlciB0aGUgY2xlYW4tdXA6IDAgZXJyIDIKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "directory: 1 err unchanged\nfile: 1 err unchanged\nempty file: 1 err unchanged\nsub directory: 1 err unchanged\nfile in sub directory: 1 err unchanged\nmissing file: 0 err 2\nmissing directory: 0 err 3\nfile used as a directory: 0 err 3\nupper case spelling: 1 err unchanged\na name with a space: 1 err unchanged\ndirectory after the clean-up: 0 err 2\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}

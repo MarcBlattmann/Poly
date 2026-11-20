@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "cwi_errors",
+      "exe_sha256": "f8661db883531c5780471334b13874dc2d53059b8e18dadcabb4a08b21eb9cb9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aW5kZXggMTg6IHJlc3VsdCAxIGVyciB1bmNoYW5nZWQgd2lkdGggMTYKaW5kZXggMTk6IHJlc3VsdCAxIGVyciB1bmNoYW5nZWQgd2lkdGggMTAKaW5kZXggMjU6IHJlc3VsdCAxIGVyciB1bmNoYW5nZWQgd2lkdGggMTAKaW5kZXggNjU1MzU6IHJlc3VsdCAxIGVyciB1bmNoYW5nZWQgd2lkdGggMTAKcnVuIDE3Li4yMDogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZCB3aWR0aHMgWzAsIDE2LCAxMCwgMTBdCmNvdW50IDA6IHJlc3VsdCAxIGVyciB1bmNoYW5nZWQgdW50b3VjaGVkIHRydWUKTlVMTCBidWZmZXI6IHJlc3VsdCAwIGVyciA4NwpOVUxMIGRjOiByZXN1bHQgMCBlcnIgNgptYWRlLXVwIGRjOiByZXN1bHQgMCBlcnIgNgpkZWxldGVkIGRjOiByZXN1bHQgMCBlcnIgNgpzdG9jayBPRU1fRklYRURfRk9OVDogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZApzdG9jayBTWVNURU1fRk9OVDogcmVzdWx0IDEgZXJyIHVuY2hhbmdlZApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "index 18: result 1 err unchanged width 16\nindex 19: result 1 err unchanged width 10\nindex 25: result 1 err unchanged width 10\nindex 65535: result 1 err unchanged width 10\nrun 17..20: result 1 err unchanged widths [0, 16, 10, 10]\ncount 0: result 1 err unchanged untouched true\nNULL buffer: result 0 err 87\nNULL dc: result 0 err 6\nmade-up dc: result 0 err 6\ndeleted dc: result 0 err 6\nstock OEM_FIXED_FONT: result 1 err unchanged\nstock SYSTEM_FONT: result 1 err unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    },
+    {
+      "name": "cwi_own",
+      "exe_sha256": "a18849ecdbb2fb30f2a912c8ff77c2dd8991e139400a029080235195d25b8275",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YWxsIDE5IGdseXBocyBhdCAtMTY6IHJlc3VsdCAxIGVyciB1bmNoYW5nZWQgd2lkdGhzIFsxMCwgNiwgMTIsIDgsIDEyLCAxMiwgMTAsIDEwLCAxMCwgNCwgNCwgNSwgOCwgMTEsIDAsIDExLCAxNCwgMCwgMTZdCnJ1biBmcm9tIDMsIDUgZ2x5cGhzOiByZXN1bHQgMSBlcnIgdW5jaGFuZ2VkIHdpZHRocyBbOCwgMTIsIDEyLCAxMCwgMTBdCnRoZSBhcnJheSB3aW5zIG92ZXIgZmlyc3Q6IHJlc3VsdCAxIHdpZHRocyBbNCwgNSwgOCwgMTEsIDBdCmF0IC0xMDI0OiByZXN1bHQgMSB3aWR0aHMgWzY0MCwgMzg0LCA3NjgsIDUxMiwgNzY4LCA3NjgsIDY0MCwgNjQwLCA2NDAsIDI1NiwgMjU2LCAzMjAsIDUxMiwgNzA0LCAwLCA3MDQsIDg5NiwgMCwgMTAyNF0KYXQgLTEzOiByZXN1bHQgMSB3aWR0aHMgWzgsIDUsIDEwLCA3LCAxMCwgMTAsIDgsIDgsIDgsIDMsIDMsIDQsIDcsIDksIDAsIDksIDExLCAwLCAxM10KYXQgLTc6IHJlc3VsdCAxIHdpZHRocyBbNCwgMywgNSwgNCwgNSwgNSwgNCwgNCwgNCwgMiwgMiwgMiwgNCwgNSwgMCwgNSwgNiwgMCwgN10KYXQgLTMyOiByZXN1bHQgMSB3aWR0aHMgWzIwLCAxMiwgMjQsIDE2LCAyNCwgMjQsIDIwLCAyMCwgMjAsIDgsIDgsIDEwLCAxNiwgMjIsIDAsIDIyLCAyOCwgMCwgMzJdCmF0IDIwOiByZXN1bHQgMSB3aWR0aHMgWzEzLCA4LCAxNSwgMTAsIDE1LCAxNSwgMTMsIDEzLCAxMywgNSwgNSwgNiwgMTAsIDE0LCAwLCAxNCwgMTgsIDAsIDIwXQp3aWR0aCBieSBpbmRleCBlcXVhbHMgR2V0Q2hhcldpZHRoMzJXIGJ5IGNoYXJhY3RlciBmb3IgMTIgY2hhcmFjdGVyczogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "all 19 glyphs at -16: result 1 err unchanged widths [10, 6, 12, 8, 12, 12, 10, 10, 10, 4, 4, 5, 8, 11, 0, 11, 14, 0, 16]\nrun from 3, 5 glyphs: result 1 err unchanged widths [8, 12, 12, 10, 10]\nthe array wins over first: result 1 widths [4, 5, 8, 11, 0]\nat -1024: result 1 widths [640, 384, 768, 512, 768, 768, 640, 640, 640, 256, 256, 320, 512, 704, 0, 704, 896, 0, 1024]\nat -13: result 1 widths [8, 5, 10, 7, 10, 10, 8, 8, 8, 3, 3, 4, 7, 9, 0, 9, 11, 0, 13]\nat -7: result 1 widths [4, 3, 5, 4, 5, 5, 4, 4, 4, 2, 2, 2, 4, 5, 0, 5, 6, 0, 7]\nat -32: result 1 widths [20, 12, 24, 16, 24, 24, 20, 20, 20, 8, 8, 10, 16, 22, 0, 22, 28, 0, 32]\nat 20: result 1 widths [13, 8, 15, 10, 15, 15, 13, 13, 13, 5, 5, 6, 10, 14, 0, 14, 18, 0, 20]\nwidth by index equals GetCharWidth32W by character for 12 characters: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}
