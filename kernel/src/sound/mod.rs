@@ -276,6 +276,8 @@ pub struct ServerStats {
 #[derive(Debug, Default)]
 struct OutState {
     running: bool,
+    /// Periods handed to the device and not yet played.
+    in_flight: u32,
     idle_since: Option<u64>,
     acc: Vec<i32>,
     bytes: Vec<u8>,
@@ -588,6 +590,10 @@ fn serve_output(inner: &mut Inner, now: Timespec, now_ns: u64) -> bool {
     out.bytes.resize(hwf.period_bytes(), 0);
     let gains = gains_of(controls.playback_gains());
     let mut changed = false;
+    // The periods the device finished since the last round.
+    let now_in_flight = hwf.periods.saturating_sub(hw.out_room() as u32);
+    ntstream::completed(nt, Some(out.in_flight.saturating_sub(now_in_flight)));
+    out.in_flight = now_in_flight.min(out.in_flight);
     let mut pushed = 0;
     while pushed < hwf.periods && hw.out_room() > 0 {
         out.acc.fill(0);
@@ -603,6 +609,7 @@ fn serve_output(inner: &mut Inner, now: Timespec, now_ns: u64) -> bool {
         render(&out.acc, ch, &gains, hwf.format.sample, &mut out.bytes);
         hw.out_push(&out.bytes);
         stats.periods_out += 1;
+        out.in_flight += 1;
         pushed += 1;
     }
     hw.out_kick();
@@ -615,6 +622,8 @@ fn serve_output(inner: &mut Inner, now: Timespec, now_ns: u64) -> bool {
             hw.out_stop();
             out.running = false;
             out.idle_since = None;
+            out.in_flight = 0;
+            ntstream::completed(nt, None);
         }
     }
     changed
