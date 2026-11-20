@@ -277,3 +277,16 @@ fn snprintf_buffer_keeps_what_fits() {
     assert_eq!((n, b.len), (7, 4));
     assert_eq!(&buf, b"123-");
 }
+
+#[test]
+fn apple_arm64_va_list_reads_8_byte_slots() {
+    // printf("%d %s %.1f %Lf %c", 7, "x", 2.5, 1.25L, 'q') on arm64: five
+    // slots, the long double as a double.
+    let s = b"x\0";
+    let slots: [u64; 5] = [7, s.as_ptr() as u64, 2.5f64.to_bits(), 1.25f64.to_bits(), u64::from(b'q')];
+    let mut out = [0u8; 64];
+    let mut sink = Buffer { buf: &mut out, len: 0 };
+    // SAFETY: the `%s` argument points to a NUL-terminated string.
+    let n = unsafe { format(b"%d %s %.1f %Lf %c", &mut StackSlots(slots.as_ptr().cast()), &mut sink) }.unwrap();
+    assert_eq!(&out[..n], b"7 x 2.5 1.250000 q");
+}

@@ -69,7 +69,7 @@ fn read(rel: &str) -> Result<Vec<u8>> {
 }
 
 /// Check that `lines` appear in `output` in order.
-fn in_order(program: &str, output: &str, lines: &[String]) -> Result {
+pub(crate) fn in_order(program: &str, output: &str, lines: &[String]) -> Result {
     let mut at = 0;
     for line in lines {
         match output[at..].find(line.as_str()) {
@@ -88,7 +88,7 @@ fn run(kernel: &Path, syms: &Arc<Symbols>, image: &Path, program: &str, args: &[
 
 /// [`run`] for a program that ends as `end` says (`code=<n>` or
 /// `signal=<n>` of its `POLY-EXIT` record).
-fn run_ending(
+pub(crate) fn run_ending(
     kernel: &Path,
     syms: &Arc<Symbols>,
     image: &Path,

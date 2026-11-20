@@ -4,6 +4,7 @@
 //! dylib with Apple's install name, so programs linked against the macOS
 //! SDK load them in place of Apple's. `cargo xtask libsystem` builds this
 //! crate once per library (one feature each) for `x86_64-apple-darwin` and
+//! `aarch64-apple-darwin` (ADR 0257: arm64 programs run translated) and
 //! links every build with `rust-lld -flavor darwin`; the export lists are
 //! in `exports/`.
 //!
@@ -87,6 +88,7 @@ fn errno() -> i32 {
 /// A raw BSD call with up to three arguments; `Err(errno)` on failure.
 /// Used where a library must not depend on another one (the panic path).
 #[allow(dead_code)]
+#[cfg(target_arch = "x86_64")]
 fn raw3(n: u64, a: u64, b: u64, c: u64) -> Result<u64, u64> {
     let rax: u64;
     let cf: u8;
@@ -107,6 +109,30 @@ fn raw3(n: u64, a: u64, b: u64, c: u64) -> Result<u64, u64> {
         );
     }
     if cf != 0 { Err(rax) } else { Ok(rax) }
+}
+
+/// [`raw3`] on arm64: `svc #0x80`, the number in `x16`.
+#[allow(dead_code)]
+#[cfg(target_arch = "aarch64")]
+fn raw3(n: u64, a: u64, b: u64, c: u64) -> Result<u64, u64> {
+    let x0: u64;
+    let cf: u64;
+    // SAFETY: a Darwin system call: arguments in x0..x2, the number in
+    // x16; x1 may come back changed (a second result); the carry flag
+    // tells failure.
+    unsafe {
+        core::arch::asm!(
+            "svc #0x80",
+            "cset {cf}, cs",
+            cf = out(reg) cf,
+            inlateout("x0") a => x0,
+            inlateout("x1") b => _,
+            in("x2") c,
+            in("x16") n,
+            options(nostack),
+        );
+    }
+    if cf != 0 { Err(x0) } else { Ok(x0) }
 }
 
 /// Print `msg` on stderr and end the process with SIGABRT (or status 134

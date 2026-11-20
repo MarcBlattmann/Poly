@@ -12,8 +12,8 @@
 //            1 = jump to the program counter with sp at argc
 //  16  exit function (0: the raw exit system call)
 //  24  number of initializers
-//  32  the initializers, called with (argc, argv, envp, apple, 0); the
-//      x86-64 start code passes the data block instead of 0 (ADR 0258)
+//  32  the initializers, called with (argc, argv, envp, apple, the data
+//      block) (ADR 0258: libdyld reads the image table after them)
 //
 // x19 to x26 are callee-saved (AAPCS64), so they survive every call.
     .text
@@ -41,7 +41,7 @@ _poly_dyld_start:
     mov x1, x22
     mov x2, x23
     mov x3, x24
-    mov x4, #0
+    mov x4, x19
     blr x10
     b 2b
 3:  ldr x9, [x19, #8]

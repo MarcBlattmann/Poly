@@ -101,6 +101,7 @@ extern "C" fn flsll(v: i64) -> i32 {
 
 // The jump buffer: rbx, rbp, r12-r15, the stack pointer after return,
 // the return address, the x87 control word and MXCSR.
+#[cfg(target_arch = "x86_64")]
 core::arch::global_asm!(
     ".globl _setjmp",
     ".globl __setjmp",
@@ -145,4 +146,54 @@ core::arch::global_asm!(
     "    ldmxcsr [rdi + 68]",
     "    mov rsp, [rdi + 48]",
     "    jmp qword ptr [rdi + 56]",
+);
+
+// arm64 (ADR 0257): x19 to x28, the frame pointer, the link register, the
+// stack pointer and d8 to d15 (the registers AAPCS64 says a call keeps),
+// 168 of the SDK's 192-byte `jmp_buf`.
+#[cfg(target_arch = "aarch64")]
+core::arch::global_asm!(
+    ".globl _setjmp",
+    ".globl __setjmp",
+    ".globl _sigsetjmp",
+    ".p2align 2",
+    "_setjmp:",
+    "__setjmp:",
+    "_sigsetjmp:",
+    "    stp x19, x20, [x0]",
+    "    stp x21, x22, [x0, #16]",
+    "    stp x23, x24, [x0, #32]",
+    "    stp x25, x26, [x0, #48]",
+    "    stp x27, x28, [x0, #64]",
+    "    stp x29, x30, [x0, #80]",
+    "    mov x9, sp",
+    "    str x9, [x0, #96]",
+    "    stp d8, d9, [x0, #104]",
+    "    stp d10, d11, [x0, #120]",
+    "    stp d12, d13, [x0, #136]",
+    "    stp d14, d15, [x0, #152]",
+    "    mov w0, #0",
+    "    ret",
+    ".globl _longjmp",
+    ".globl __longjmp",
+    ".globl _siglongjmp",
+    ".p2align 2",
+    "_longjmp:",
+    "__longjmp:",
+    "_siglongjmp:",
+    "    ldp x19, x20, [x0]",
+    "    ldp x21, x22, [x0, #16]",
+    "    ldp x23, x24, [x0, #32]",
+    "    ldp x25, x26, [x0, #48]",
+    "    ldp x27, x28, [x0, #64]",
+    "    ldp x29, x30, [x0, #80]",
+    "    ldr x9, [x0, #96]",
+    "    mov sp, x9",
+    "    ldp d8, d9, [x0, #104]",
+    "    ldp d10, d11, [x0, #120]",
+    "    ldp d12, d13, [x0, #136]",
+    "    ldp d14, d15, [x0, #152]",
+    "    cmp w1, #0",
+    "    csinc w0, w1, wzr, ne",
+    "    ret",
 );

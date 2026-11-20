@@ -6,7 +6,9 @@
 //! result, with it set `rax` is the errno, which goes to `errno` (a
 //! thread-local variable) and the wrapper returns -1. A Mach trap is
 //! 0x1000000 | number and returns its `kern_return_t`. Arguments past the
-//! sixth stay where the caller put them, on the stack.
+//! sixth stay where the caller put them, on the stack. On arm64 (ADR
+//! 0257) the number goes in `x16` (a Mach trap's negated), `svc #0x80`,
+//! and the carry flag means `x0` is the errno.
 //!
 //! The wrappers cover the calls that have spec sheets (`specs/macos/bsd`,
 //! `specs/macos/mach`), under the names the SDK exports them by. The
@@ -17,6 +19,7 @@
 //! split their `mach_timespec_t`.
 
 /// A BSD wrapper per (name, number), then the error tail.
+#[cfg(target_arch = "x86_64")]
 macro_rules! bsd {
     ($($name:literal = $num:literal),* $(,)?) => {
         core::arch::global_asm!(
@@ -37,7 +40,29 @@ macro_rules! bsd {
     };
 }
 
+/// arm64 (ADR 0257): `svc #0x80` with the number in `x16`; the carry flag
+/// set means `x0` is the errno.
+#[cfg(target_arch = "aarch64")]
+macro_rules! bsd {
+    ($($name:literal = $num:literal),* $(,)?) => {
+        core::arch::global_asm!(
+            $(
+                concat!(".globl \"_", $name, "\""),
+                ".p2align 2",
+                concat!("\"_", $name, "\":"),
+                concat!("    mov x16, #", $num),
+                "    svc #0x80",
+                "    b.cc 2f",
+                "    b _poly_cerror",
+                "2:",
+                "    ret",
+            )*
+        );
+    };
+}
+
 /// A Mach trap wrapper per trap, under one or more names.
+#[cfg(target_arch = "x86_64")]
 macro_rules! mach {
     ($($num:literal => [$($name:literal),+]),* $(,)?) => {
         core::arch::global_asm!(
@@ -48,6 +73,23 @@ macro_rules! mach {
                 concat!("    mov eax, 0x1000000 + ", $num),
                 "    mov r10, rcx",
                 "    syscall",
+                "    ret",
+            )*
+        );
+    };
+}
+
+/// arm64: a Mach trap is `x16` = minus its number.
+#[cfg(target_arch = "aarch64")]
+macro_rules! mach {
+    ($($num:literal => [$($name:literal),+]),* $(,)?) => {
+        core::arch::global_asm!(
+            $(
+                $(concat!(".globl \"_", $name, "\""),)+
+                ".p2align 2",
+                $(concat!("\"_", $name, "\":"),)+
+                concat!("    mov x16, #-", $num),
+                "    svc #0x80",
                 "    ret",
             )*
         );
@@ -104,9 +146,9 @@ bsd! {
     "__psynch_cvwait" = 305,
     "issetugid" = 327,
     "__proc_info" = 336,
-    "stat$INODE64" = 338, "stat64" = 338,
-    "fstat$INODE64" = 339, "fstat64" = 339,
-    "lstat$INODE64" = 340, "lstat64" = 340,
+    "stat64" = 338,
+    "fstat64" = 339,
+    "lstat64" = 340,
     "__getdirentries64" = 344,
     "__bsdthread_create" = 360,
     "kqueue" = 362,
@@ -117,7 +159,7 @@ bsd! {
     "getattrlistbulk" = 461,
     "clonefileat" = 462,
     "renameat" = 465,
-    "fstatat$INODE64" = 470, "fstatat64" = 470,
+    "fstatat64" = 470,
     "renameatx_np" = 488,
     "getentropy" = 500,
     "__ulock_wait" = 515,
@@ -150,6 +192,25 @@ mach! {
     89 => ["mach_timebase_info_trap", "mach_timebase_info"],
 }
 
+// The 64-bit `stat` calls: `$INODE64` names on x86-64, plain names on
+// arm64, where `stat` always has 64-bit inodes (the SDK's `.tbd`).
+#[cfg(target_arch = "x86_64")]
+bsd! {
+    "stat$INODE64" = 338,
+    "fstat$INODE64" = 339,
+    "lstat$INODE64" = 340,
+    "fstatat$INODE64" = 470,
+}
+
+#[cfg(target_arch = "aarch64")]
+bsd! {
+    "stat" = 338,
+    "fstat" = 339,
+    "lstat" = 340,
+    "fstatat" = 470,
+}
+
+#[cfg(target_arch = "x86_64")]
 core::arch::global_asm!(
     // pipe(fds): the two descriptors come back in rax and rdx.
     ".globl _pipe",
@@ -191,9 +252,47 @@ core::arch::global_asm!(
     "    ret",
 );
 
+#[cfg(target_arch = "aarch64")]
+core::arch::global_asm!(
+    // pipe(fds): the two descriptors come back in x0 and x1 (the pipe
+    // sheet).
+    ".globl _pipe",
+    ".p2align 2",
+    "_pipe:",
+    "    mov x9, x0",
+    "    mov x16, #42",
+    "    svc #0x80",
+    "    b.cc 2f",
+    "    b _poly_cerror",
+    "2:",
+    "    stp w0, w1, [x9]",
+    "    mov w0, #0",
+    "    ret",
+    // semaphore_timedwait(sem, mach_timespec_t {sec, nsec}): the struct
+    // comes in one register; the trap takes (sem, sec, nsec).
+    ".globl _semaphore_timedwait",
+    ".p2align 2",
+    "_semaphore_timedwait:",
+    "    lsr x2, x1, #32",
+    "    mov w1, w1",
+    "    mov x16, #-38",
+    "    svc #0x80",
+    "    ret",
+    // semaphore_timedwait_signal(wait, signal, mach_timespec_t).
+    ".globl _semaphore_timedwait_signal",
+    ".p2align 2",
+    "_semaphore_timedwait_signal:",
+    "    lsr x3, x2, #32",
+    "    mov w2, w2",
+    "    mov x16, #-39",
+    "    svc #0x80",
+    "    ret",
+);
+
 // errno: one `int` per thread, a Mach-O thread-local variable. dyld points
 // the descriptor's thunk at its own; `_poly_tlv_unbound` only fills the
 // word until then.
+#[cfg(target_arch = "x86_64")]
 core::arch::global_asm!(
     ".section __DATA,__thread_vars,thread_local_variables",
     ".p2align 3",
@@ -212,6 +311,30 @@ core::arch::global_asm!(
     "    movq _poly_errno@TLVP(%rip), %rdi",
     "    jmpq *(%rdi)",
     options(att_syntax),
+);
+
+#[cfg(target_arch = "aarch64")]
+core::arch::global_asm!(
+    ".section __DATA,__thread_vars,thread_local_variables",
+    ".p2align 3",
+    "_poly_errno:",
+    "    .quad _poly_tlv_unbound",
+    "    .quad 0",
+    "    .quad _poly_errno_init",
+    ".tbss _poly_errno_init, 4, 2",
+    ".text",
+    ".p2align 2",
+    "_poly_tlv_unbound:",
+    "    brk #1",
+    // The descriptor's address in x0, then its thunk, which returns the
+    // variable's address in x0 (and changes no other register).
+    ".globl ___error",
+    ".p2align 2",
+    "___error:",
+    "    adrp x0, _poly_errno@TLVPPAGE",
+    "    ldr x0, [x0, _poly_errno@TLVPPAGEOFF]",
+    "    ldr x16, [x0]",
+    "    br x16",
 );
 
 unsafe extern "C" {

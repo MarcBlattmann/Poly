@@ -42,9 +42,7 @@ _fgetxattr
 _flistxattr
 _fremovexattr
 _fsetxattr
-_fstat$INODE64
 _fstat64
-_fstatat$INODE64
 _fstatat64
 _getattrlist
 _getattrlistbulk
@@ -59,7 +57,6 @@ _kevent64
 _kill
 _kqueue
 _listxattr
-_lstat$INODE64
 _lstat64
 _mach_host_self
 _mach_msg
@@ -115,7 +112,6 @@ _setxattr
 _sigpending
 _sigprocmask
 _sigsuspend
-_stat$INODE64
 _stat64
 _task_self_trap
 _thread_self_trap

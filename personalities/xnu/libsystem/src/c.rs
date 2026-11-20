@@ -12,7 +12,17 @@
 
 use core::ffi::{c_char, c_void};
 use poly_libsystem::atexit::{AtExit, Handler};
-use poly_libsystem::printf::{self, Sink, VaList, VaListTag};
+use poly_libsystem::printf::{self, Sink};
+#[cfg(target_arch = "x86_64")]
+use poly_libsystem::printf::{VaList, VaListTag};
+
+/// A C `va_list` as a function receives it: a pointer to the System V
+/// `__va_list_tag` on x86-64, a pointer to the next 8-byte argument slot on
+/// arm64 (Apple's arm64 ABI, ADR 0257).
+#[cfg(target_arch = "x86_64")]
+pub type CVaList = *mut VaListTag;
+#[cfg(target_arch = "aarch64")]
+pub type CVaList = *const u8;
 use poly_libsystem::stdio::{self, File, Mode, Output, Stream};
 use poly_libsystem::sys::errno::*;
 use poly_libsystem::{cstr, sys};
@@ -303,8 +313,9 @@ unsafe extern "C" fn fileno(f: *mut File) -> i32 {
 // The variadic functions save the argument registers into a System V
 // register save area, build a `va_list` over it and call their `v`
 // function with it as the argument after the fixed ones.
+#[cfg(target_arch = "x86_64")]
 macro_rules! variadic {
-    ($($name:literal => $v:literal, $fixed:literal, $reg:literal;)*) => {
+    ($($name:literal => $v:literal, $fixed:literal, $reg:literal, $areg:literal;)*) => {
         core::arch::global_asm!(
             $(
                 concat!(".globl _", $name),
@@ -345,15 +356,33 @@ macro_rules! variadic {
     };
 }
 
+// arm64 (ADR 0257): the variadic arguments are already on the stack, one
+// 8-byte slot each, so the `va_list` is the stack pointer at the call: put
+// it in the register after the fixed arguments and jump.
+#[cfg(target_arch = "aarch64")]
+macro_rules! variadic {
+    ($($name:literal => $v:literal, $fixed:literal, $reg:literal, $areg:literal;)*) => {
+        core::arch::global_asm!(
+            $(
+                concat!(".globl _", $name),
+                ".p2align 2",
+                concat!("_", $name, ":"),
+                concat!("    mov ", $areg, ", sp"),
+                concat!("    b _", $v),
+            )*
+        );
+    };
+}
+
 variadic! {
-    "printf" => "vprintf", 1, "rsi";
-    "fprintf" => "vfprintf", 2, "rdx";
-    "sprintf" => "vsprintf", 2, "rdx";
-    "dprintf" => "vdprintf", 2, "rdx";
-    "asprintf" => "vasprintf", 2, "rdx";
-    "snprintf" => "vsnprintf", 3, "rcx";
-    "__sprintf_chk" => "__vsprintf_chk", 4, "r8";
-    "__snprintf_chk" => "__vsnprintf_chk", 5, "r9";
+    "printf" => "vprintf", 1, "rsi", "x1";
+    "fprintf" => "vfprintf", 2, "rdx", "x2";
+    "sprintf" => "vsprintf", 2, "rdx", "x2";
+    "dprintf" => "vdprintf", 2, "rdx", "x2";
+    "asprintf" => "vasprintf", 2, "rdx", "x2";
+    "snprintf" => "vsnprintf", 3, "rcx", "x3";
+    "__sprintf_chk" => "__vsprintf_chk", 4, "r8", "x4";
+    "__snprintf_chk" => "__vsnprintf_chk", 5, "r9", "x5";
 }
 
 /// The result of a `printf` call: the count, or -1 with `errno`.
@@ -377,9 +406,13 @@ fn result(r: Result<usize, printf::Error>) -> i32 {
 
 /// # Safety
 /// `fmt` is a string and `ap` the arguments it names.
-unsafe fn run<S: Sink>(fmt: *const u8, ap: *mut VaListTag, sink: &mut S) -> Result<usize, printf::Error> {
+unsafe fn run<S: Sink>(fmt: *const u8, ap: CVaList, sink: &mut S) -> Result<usize, printf::Error> {
+    #[cfg(target_arch = "x86_64")]
+    let mut args = VaList(ap);
+    #[cfg(target_arch = "aarch64")]
+    let mut args = printf::StackSlots(ap);
     // SAFETY: the caller's contract.
-    unsafe { printf::format(core::slice::from_raw_parts(fmt, cstr::strlen(fmt)), &mut VaList(ap), sink) }
+    unsafe { printf::format(core::slice::from_raw_parts(fmt, cstr::strlen(fmt)), &mut args, sink) }
 }
 
 struct ToFile {
@@ -397,7 +430,7 @@ impl Sink for ToFile {
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn vfprintf(f: *mut File, fmt: *const u8, ap: *mut VaListTag) -> i32 {
+unsafe extern "C" fn vfprintf(f: *mut File, fmt: *const u8, ap: CVaList) -> i32 {
     let mut sink = ToFile { f, failed: false };
     // SAFETY: the C contract.
     let r = unsafe { run(fmt, ap, &mut sink) };
@@ -405,13 +438,13 @@ unsafe extern "C" fn vfprintf(f: *mut File, fmt: *const u8, ap: *mut VaListTag) 
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn vprintf(fmt: *const u8, ap: *mut VaListTag) -> i32 {
+unsafe extern "C" fn vprintf(fmt: *const u8, ap: CVaList) -> i32 {
     // SAFETY: the C contract.
     unsafe { vfprintf(std_file(1), fmt, ap) }
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn vdprintf(fd: i32, fmt: *const u8, ap: *mut VaListTag) -> i32 {
+unsafe extern "C" fn vdprintf(fd: i32, fmt: *const u8, ap: CVaList) -> i32 {
     struct ToFd(Stream, bool);
     impl Sink for ToFd {
         fn put(&mut self, bytes: &[u8]) {
@@ -441,7 +474,7 @@ impl Sink for Unbounded {
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn vsprintf(buf: *mut u8, fmt: *const u8, ap: *mut VaListTag) -> i32 {
+unsafe extern "C" fn vsprintf(buf: *mut u8, fmt: *const u8, ap: CVaList) -> i32 {
     let mut sink = Unbounded(buf, 0);
     // SAFETY: the C contract.
     let r = unsafe { run(fmt, ap, &mut sink) };
@@ -451,7 +484,7 @@ unsafe extern "C" fn vsprintf(buf: *mut u8, fmt: *const u8, ap: *mut VaListTag) 
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn vsnprintf(buf: *mut u8, n: usize, fmt: *const u8, ap: *mut VaListTag) -> i32 {
+unsafe extern "C" fn vsnprintf(buf: *mut u8, n: usize, fmt: *const u8, ap: CVaList) -> i32 {
     if n == 0 {
         // SAFETY: the C contract; nothing is written.
         return result(unsafe { run(fmt, ap, &mut printf::Count(0)) });
@@ -467,19 +500,25 @@ unsafe extern "C" fn vsnprintf(buf: *mut u8, n: usize, fmt: *const u8, ap: *mut 
 }
 
 #[unsafe(no_mangle)]
-unsafe extern "C" fn vasprintf(out: *mut *mut u8, fmt: *const u8, ap: *mut VaListTag) -> i32 {
+unsafe extern "C" fn vasprintf(out: *mut *mut u8, fmt: *const u8, ap: CVaList) -> i32 {
     // Two passes: a copy of the va_list for the count (`va_copy` copies
-    // the System V structure).
+    // the System V structure on x86-64, the pointer on arm64).
     // SAFETY: the C contract.
     unsafe {
         *out = core::ptr::null_mut();
-        let mut copy = VaListTag {
+        #[cfg(target_arch = "x86_64")]
+        let mut tag = VaListTag {
             gp_offset: (*ap).gp_offset,
             fp_offset: (*ap).fp_offset,
             overflow_arg_area: (*ap).overflow_arg_area,
             reg_save_area: (*ap).reg_save_area,
         };
-        let n = result(run(fmt, &mut copy, &mut printf::Count(0)));
+        #[cfg(target_arch = "x86_64")]
+        let copy: CVaList = &mut tag;
+        // arm64: the va_list is a pointer, copied by value.
+        #[cfg(target_arch = "aarch64")]
+        let copy: CVaList = ap;
+        let n = result(run(fmt, copy, &mut printf::Count(0)));
         if n < 0 {
             return n;
         }
@@ -498,7 +537,7 @@ unsafe extern "C" fn vasprintf(out: *mut *mut u8, fmt: *const u8, ap: *mut VaLis
 /// `__vsprintf_chk(buf, flag, size of buf, fmt, ap)`: `vsprintf` that
 /// stops the program if the output does not fit (`<secure/_stdio.h>`).
 #[unsafe(no_mangle)]
-unsafe extern "C" fn __vsprintf_chk(buf: *mut u8, _flag: i32, size: usize, fmt: *const u8, ap: *mut VaListTag) -> i32 {
+unsafe extern "C" fn __vsprintf_chk(buf: *mut u8, _flag: i32, size: usize, fmt: *const u8, ap: CVaList) -> i32 {
     if size == 0 {
         chk_fail();
     }
@@ -518,7 +557,7 @@ unsafe extern "C" fn __vsnprintf_chk(
     _flag: i32,
     size: usize,
     fmt: *const u8,
-    ap: *mut VaListTag,
+    ap: CVaList,
 ) -> i32 {
     if n > size {
         chk_fail();
@@ -941,6 +980,21 @@ unsafe extern "C" fn setprogname(name: *const c_char) {
     }
 }
 
+/// A counter that differs from run to run: the time stamp counter, or on
+/// arm64 the virtual counter (`CNTVCT_EL0`).
+fn cycle_count() -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    // SAFETY: RDTSC has no preconditions in user mode.
+    return unsafe { core::arch::x86_64::_rdtsc() };
+    #[cfg(target_arch = "aarch64")]
+    {
+        let v: u64;
+        // SAFETY: reading the virtual counter, readable at EL0 on macOS.
+        unsafe { core::arch::asm!("mrs {v}, cntvct_el0", v = out(reg) v, options(nomem, nostack)) };
+        v
+    }
+}
+
 extern "C" fn init(_: i32, _: *const *const u8, _: *const *const u8, _: *const *const u8, _: *const u8) {
     let mut guard = 0u64;
     // SAFETY: 8 bytes of our own; initializers run before any other code
@@ -948,8 +1002,7 @@ extern "C" fn init(_: i32, _: *const *const u8, _: *const *const u8, _: *const *
     unsafe {
         if getentropy((&raw mut guard).cast(), 8) != 0 {
             // No entropy (yet): mix what differs from run to run.
-            guard = (&raw const guard as u64).rotate_left(17)
-                ^ (core::arch::x86_64::_rdtsc()).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            guard = (&raw const guard as u64).rotate_left(17) ^ cycle_count().wrapping_mul(0x9e37_79b9_7f4a_7c15);
         }
         // A zero byte stops string functions from reading the canary.
         __stack_chk_guard = guard & !0xff;

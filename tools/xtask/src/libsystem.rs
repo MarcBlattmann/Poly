@@ -4,7 +4,8 @@
 //! # The build
 //!
 //! `personalities/xnu/libsystem` is a `no_std` crate built for
-//! `x86_64-apple-darwin` with `-Zbuild-std` (under `RUSTC_BOOTSTRAP=1`, as
+//! `x86_64-apple-darwin` and `aarch64-apple-darwin` (arm64 programs run in
+//! the translator with arm64 libraries, ADR 0257) with `-Zbuild-std` (under `RUSTC_BOOTSTRAP=1`, as
 //! `ntdll.dll` is built, ADR 0071), once per library with that library's
 //! feature, as a static library. Each archive is then linked into a dylib by
 //! the toolchain's own `rust-lld` in its Mach-O flavour (`-flavor darwin`,
@@ -13,7 +14,8 @@
 //! `exports/<library>.txt`, chained fixups, dead code stripped. A library
 //! that calls another links against the dylib just made, so its
 //! `LC_LOAD_DYLIB` names the other's install name; `libSystem.B.dylib`
-//! re-exports the six (`LC_REEXPORT_DYLIB`). No Apple tool, SDK or library
+//! re-exports the six (`LC_REEXPORT_DYLIB`). The two architectures' dylibs
+//! of a library are put into one universal file. No Apple tool, SDK or library
 //! takes part: the same commands work on a Linux or Windows host.
 //!
 //! # Delivery
@@ -24,7 +26,8 @@
 //!
 //! # The check
 //!
-//! Every dylib is read back with `poly-macho`: a 64-bit x86-64 dylib, its
+//! Every dylib is read back with `poly-macho`: a universal file with a slice
+//! per architecture, each a 64-bit dylib for its CPU with its
 //! install name and versions, the libraries it loads (only ours), exactly the
 //! exports of its list, and every exported name in the SDK's export list of
 //! that library (`coverage/macos/api/<library>.dylib.json`), so Poly's
@@ -114,17 +117,60 @@ const LIBS: [Lib; 7] = [
     },
 ];
 
+/// One architecture the dylibs are built for: x86-64 natively, arm64 for
+/// programs the translator runs (ADR 0257). Each library is a universal
+/// (fat) file with both slices, as Apple ships it.
+struct Arch {
+    /// The name in file names and in `exports/<library>.<name>.txt`.
+    name: &'static str,
+    /// The Rust target.
+    target: &'static str,
+    /// The compiler flags.
+    rustflags: &'static str,
+    /// `rust-lld -arch`.
+    lld_arch: &'static str,
+    /// The CPU of the slice (`<mach/machine.h>`).
+    cpu: poly_macho::CpuKind,
+    cputype: u32,
+    cpusubtype: u32,
+    /// The slice's alignment in a universal file, as a power of two.
+    align: u32,
+}
+
+const ARCHES: [Arch; 2] = [
+    // The baseline x86-64 instruction set: the Rust target's default CPU
+    // assumes SSSE3, which QEMU's default CPU lacks.
+    Arch {
+        name: "x86_64",
+        target: "x86_64-apple-darwin",
+        rustflags: "-Ctarget-cpu=x86-64",
+        lld_arch: "x86_64",
+        cpu: poly_macho::CpuKind::X86_64,
+        cputype: 0x0100_0007,
+        cpusubtype: 3,
+        align: 12,
+    },
+    // The baseline A64 instruction set (no LSE atomics, no CRC, ...):
+    // fewer instructions for the translator to know.
+    Arch {
+        name: "arm64",
+        target: "aarch64-apple-darwin",
+        rustflags: "-Ctarget-cpu=generic",
+        lld_arch: "arm64",
+        cpu: poly_macho::CpuKind::Arm64,
+        cputype: 0x0100_000c,
+        cpusubtype: 0,
+        align: 14,
+    },
+];
+
 /// The crate.
 const CRATE: &str = "personalities/xnu/libsystem";
-/// The Rust target.
-const TARGET: &str = "x86_64-apple-darwin";
 /// The oldest macOS the dylibs say they run on (Chrome's minimum, ADR 0157).
 const MIN_MACOS: &str = "13.0";
-/// The compiler flags: the baseline x86-64 instruction set (the Rust
-/// target's default CPU assumes SSSE3, which QEMU's default CPU lacks).
-const RUSTFLAGS: &str = "-Ctarget-cpu=x86-64";
-/// The link flags every library shares (part of the cache key).
-const LINK_FLAGS: &[&str] = &["-flavor", "darwin", "-arch", "x86_64", "-dylib", "-fixup_chains", "-dead_strip"];
+/// The link flags every library shares (part of the cache key; `-arch`
+/// comes from [`Arch`]).
+const LINK_FLAGS: &[&str] = &["-flavor", "darwin", "-dylib", "-fixup_chains", "-dead_strip"];
 
 /// Where each library goes in a Poly file tree.
 fn tree_path(lib: &Lib) -> String {
@@ -151,8 +197,9 @@ pub fn command(args: &[String]) -> Result {
     for lib in &LIBS {
         let p = dir.join(format!("{}.dylib", lib.name));
         let size = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
-        let exports = read_exports(lib)?.len();
-        eprintln!("{:<56} {size:>7} bytes, {exports:>3} exports", lib.install);
+        let exports: Vec<String> =
+            ARCHES.iter().map(|a| Ok(format!("{} {}", read_exports(lib, a)?.len(), a.name))).collect::<Result<_>>()?;
+        eprintln!("{:<56} {size:>7} bytes, exports {}", lib.install, exports.join(", "));
     }
     Ok(())
 }
@@ -215,7 +262,8 @@ fn inputs(root: &Path) -> Result<Vec<PathBuf>> {
 }
 
 fn hash_inputs(root: &Path) -> Result<u64> {
-    ntdll::hash_files(root, &format!("{RUSTFLAGS} {}", LINK_FLAGS.join(" ")), &inputs(root)?)
+    let flags: Vec<String> = ARCHES.iter().map(|a| format!("{} {} {}", a.target, a.rustflags, a.lld_arch)).collect();
+    ntdll::hash_files(root, &format!("{} {}", flags.join(" "), LINK_FLAGS.join(" ")), &inputs(root)?)
 }
 
 /// The toolchain's `rust-lld`.
@@ -235,8 +283,57 @@ fn rust_lld() -> Result<PathBuf> {
     Ok(lld)
 }
 
-/// Build every library's archive and link the dylibs into `out`.
+/// Build every library for every architecture, link each, and put the
+/// universal dylibs into `out`.
 fn build(work: &Path, out: &Path) -> Result {
+    let mut slices: Vec<Vec<(&Arch, Vec<u8>)>> = LIBS.iter().map(|_| Vec::new()).collect();
+    for arch in &ARCHES {
+        let thin = work.join(arch.name).join("out");
+        let _ = std::fs::remove_dir_all(&thin);
+        std::fs::create_dir_all(&thin).map_err(|e| format!("{}: {e}", thin.display()))?;
+        build_arch(arch, &work.join(arch.name), &thin)?;
+        for (i, lib) in LIBS.iter().enumerate() {
+            let p = thin.join(format!("{}.dylib", lib.name));
+            slices[i].push((arch, std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?));
+        }
+    }
+    for (lib, slices) in LIBS.iter().zip(&slices) {
+        let p = out.join(format!("{}.dylib", lib.name));
+        std::fs::write(&p, universal(slices)).map_err(|e| format!("{}: {e}", p.display()))?;
+    }
+    Ok(())
+}
+
+/// A universal (fat) Mach-O file of `slices` (`<mach-o/fat.h>`: a
+/// big-endian header and one `fat_arch` per slice, each slice at a
+/// multiple of its alignment).
+fn universal(slices: &[(&Arch, Vec<u8>)]) -> Vec<u8> {
+    let mut at = 8 + 20 * slices.len();
+    let mut table = Vec::new();
+    let mut body: Vec<(usize, &[u8])> = Vec::new();
+    for (arch, bytes) in slices {
+        let align = 1usize << arch.align;
+        at = at.next_multiple_of(align);
+        for w in [arch.cputype, arch.cpusubtype, at as u32, bytes.len() as u32, arch.align] {
+            table.extend_from_slice(&w.to_be_bytes());
+        }
+        body.push((at, bytes));
+        at += bytes.len();
+    }
+    let mut out = Vec::with_capacity(at);
+    out.extend_from_slice(&0xcafe_babe_u32.to_be_bytes());
+    out.extend_from_slice(&(slices.len() as u32).to_be_bytes());
+    out.extend_from_slice(&table);
+    for (offset, bytes) in body {
+        out.resize(offset, 0);
+        out.extend_from_slice(bytes);
+    }
+    out
+}
+
+/// Build every library's archive for `arch` and link the thin dylibs into
+/// `out`.
+fn build_arch(arch: &Arch, work: &Path, out: &Path) -> Result {
     let manifest = root().join(CRATE).join("Cargo.toml");
     let vendor = ntdll::vendor_dir()?;
     let target_dir = work.join("cargo");
@@ -246,13 +343,13 @@ fn build(work: &Path, out: &Path) -> Result {
         let mut cmd = cargo();
         cmd.env("RUSTC_BOOTSTRAP", "1")
             .env("CARGO_INCREMENTAL", "0")
-            .env("RUSTFLAGS", RUSTFLAGS)
+            .env("RUSTFLAGS", arch.rustflags)
             .arg("build")
             .arg("--release")
             .arg("--manifest-path")
             .arg(&manifest)
             .args(["--features", lib.feature])
-            .args(["-Zbuild-std=core,compiler_builtins", "--target", TARGET])
+            .args(["-Zbuild-std=core,compiler_builtins", "--target", arch.target])
             .arg("--target-dir")
             .arg(&target_dir)
             .arg("--offline")
@@ -260,16 +357,19 @@ fn build(work: &Path, out: &Path) -> Result {
             .arg("source.crates-io.replace-with=\"rustsrc\"")
             .arg("--config")
             .arg(format!("source.rustsrc.directory={:?}", vendor.to_string_lossy()));
-        step(&format!("build {} (Rust)", lib.name), &mut cmd)?;
-        let a = target_dir.join(TARGET).join("release").join("liblibsystem.a");
+        step(&format!("build {} for {} (Rust)", lib.name, arch.name), &mut cmd)?;
+        let a = target_dir.join(arch.target).join("release").join("liblibsystem.a");
         let to = archives.join(format!("{}.a", lib.name));
         std::fs::copy(&a, &to).map_err(|e| format!("{}: {e}", a.display()))?;
     }
     let lld = rust_lld()?;
     for lib in &LIBS {
-        let list = root().join(CRATE).join("exports").join(format!("{}.txt", lib.name));
+        let list = work.join(format!("{}.exports", lib.name));
+        let names: Vec<String> = read_exports(lib, arch)?.into_iter().collect();
+        std::fs::write(&list, names.join("\n") + "\n").map_err(|e| format!("{}: {e}", list.display()))?;
         let mut cmd = Command::new(&lld);
         cmd.args(LINK_FLAGS)
+            .args(["-arch", arch.lld_arch])
             .args(["-platform_version", "macos", MIN_MACOS, MIN_MACOS])
             .args(["-install_name", lib.install])
             .args(["-compatibility_version", lib.compatibility, "-current_version", lib.current])
@@ -287,39 +387,53 @@ fn build(work: &Path, out: &Path) -> Result {
                 cmd.arg("-reexport_library").arg(out.join(format!("{}.dylib", other.name)));
             }
         }
-        step(&format!("link {}.dylib (rust-lld, Mach-O)", lib.name), &mut cmd)?;
+        step(&format!("link {}.dylib for {} (rust-lld, Mach-O)", lib.name, arch.name), &mut cmd)?;
     }
     Ok(())
 }
 
-/// Clippy of the crate for its target, every library's module at once
+/// Clippy of the crate for each target, every library's module at once
 /// (`cargo xtask ci lint`).
 pub fn lint() -> Result {
     let vendor = ntdll::vendor_dir()?;
-    let mut cmd = cargo();
-    cmd.env("RUSTC_BOOTSTRAP", "1")
-        .env("RUSTFLAGS", RUSTFLAGS)
-        .arg("clippy")
-        .arg("--manifest-path")
-        .arg(root().join(CRATE).join("Cargo.toml"))
-        .args(["--features", &LIBS.map(|l| l.feature).join(",")])
-        .args(["-Zbuild-std=core,compiler_builtins", "--target", TARGET])
-        .arg("--target-dir")
-        .arg(root().join("target").join("libsystem").join("clippy"))
-        .arg("--offline")
-        .arg("--config")
-        .arg("source.crates-io.replace-with=\"rustsrc\"")
-        .arg("--config")
-        .arg(format!("source.rustsrc.directory={:?}", vendor.to_string_lossy()))
-        .args(["--", "-D", "warnings"]);
-    step("clippy (libsystem)", &mut cmd)
+    for arch in &ARCHES {
+        let mut cmd = cargo();
+        cmd.env("RUSTC_BOOTSTRAP", "1")
+            .env("RUSTFLAGS", arch.rustflags)
+            .arg("clippy")
+            .arg("--manifest-path")
+            .arg(root().join(CRATE).join("Cargo.toml"))
+            .args(["--features", &LIBS.map(|l| l.feature).join(",")])
+            .args(["-Zbuild-std=core,compiler_builtins", "--target", arch.target])
+            .arg("--target-dir")
+            .arg(root().join("target").join("libsystem").join("clippy"))
+            .arg("--offline")
+            .arg("--config")
+            .arg("source.crates-io.replace-with=\"rustsrc\"")
+            .arg("--config")
+            .arg(format!("source.rustsrc.directory={:?}", vendor.to_string_lossy()))
+            .args(["--", "-D", "warnings"]);
+        step(&format!("clippy (libsystem, {})", arch.name), &mut cmd)?;
+    }
+    Ok(())
 }
 
-/// The names of `exports/<library>.txt`.
-fn read_exports(lib: &Lib) -> Result<BTreeSet<String>> {
-    let p = root().join(CRATE).join("exports").join(format!("{}.txt", lib.name));
-    let text = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
-    Ok(text.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect())
+/// The names `lib` exports on `arch`: `exports/<library>.txt`, plus
+/// `exports/<library>.<arch>.txt` where the SDK names differ by
+/// architecture (the `$INODE64` calls on x86-64, for one).
+fn read_exports(lib: &Lib, arch: &Arch) -> Result<BTreeSet<String>> {
+    let dir = root().join(CRATE).join("exports");
+    let mut names = BTreeSet::new();
+    for (file, required) in [(format!("{}.txt", lib.name), true), (format!("{}.{}.txt", lib.name, arch.name), false)] {
+        let p = dir.join(file);
+        let text = match std::fs::read_to_string(&p) {
+            Ok(t) => t,
+            Err(e) if !required && e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("{}: {e}", p.display())),
+        };
+        names.extend(text.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string));
+    }
+    Ok(names)
 }
 
 /// The SDK's export names of `component` (`coverage/macos/api`), as the
@@ -342,12 +456,32 @@ fn map_name(symbol: &str) -> &str {
 
 /// Read every dylib back and check it (see the module documentation).
 fn verify(dir: &Path) -> Result {
-    let ours: BTreeSet<&str> = LIBS.iter().map(|l| l.install).collect();
     for lib in &LIBS {
         let p = dir.join(format!("{}.dylib", lib.name));
         let bytes = std::fs::read(&p).map_err(|e| format!("{}: {e}", p.display()))?;
-        let err = |what: String| format!("{}: {what}", p.display());
-        let m = MachO::parse(&bytes).map_err(|e| err(format!("not a Mach-O file: {e:?}")))?;
+        let fat =
+            poly_macho::Fat::parse(&bytes).map_err(|e| format!("{}: not a universal file: {e:?}", p.display()))?;
+        if fat.len() != ARCHES.len() {
+            return Err(format!("{}: {} slices, expected {}", p.display(), fat.len(), ARCHES.len()));
+        }
+        for arch in &ARCHES {
+            let slice = poly_macho::select_slice(&bytes, arch.cpu)
+                .map_err(|e| format!("{}: no {} slice: {e:?}", p.display(), arch.name))?;
+            verify_slice(lib, arch, &format!("{} ({})", p.display(), arch.name), slice)?;
+        }
+    }
+    Ok(())
+}
+
+/// Check one slice of `lib` (see the module documentation).
+fn verify_slice(lib: &Lib, arch: &Arch, what: &str, bytes: &[u8]) -> Result {
+    let ours: BTreeSet<&str> = LIBS.iter().map(|l| l.install).collect();
+    {
+        let err = |e: String| format!("{what}: {e}");
+        let m = MachO::parse(bytes).map_err(|e| err(format!("not a Mach-O file: {e:?}")))?;
+        if m.cpu().kind() != arch.cpu {
+            return Err(err(format!("a {:?} file", m.cpu().kind())));
+        }
         let id = m.dylib_id().ok_or_else(|| err("no LC_ID_DYLIB".into()))?;
         if id.name != lib.install {
             return Err(err(format!("install name {}, expected {}", id.name, lib.install)));
@@ -390,7 +524,7 @@ fn verify(dir: &Path) -> Result {
             })
             .map_err(|e| err(format!("export trie: {e:?}")))?;
         }
-        let listed = read_exports(lib)?;
+        let listed = read_exports(lib, arch)?;
         if exported != listed {
             let missing: Vec<_> = listed.difference(&exported).collect();
             let extra: Vec<_> = exported.difference(&listed).collect();
@@ -408,7 +542,7 @@ fn verify(dir: &Path) -> Result {
 /// The C program of the boot test (`tests/macos/libsystem`), linked by
 /// Apple's linker against the SDK's `libSystem.tbd`, and what it prints.
 const HELLO: &str = "tests/macos/libsystem/hello_x64";
-const HELLO_LINES: &[&str] = &[
+pub(crate) const HELLO_LINES: &[&str] = &[
     "hello, world",
     "ok printf: 42 -7 2a 0x2a 3.14 1.5e+03 [  pad] [left ] (null) %",
     "ok puts and putchar",
@@ -464,8 +598,10 @@ mod tests {
     fn export_lists_name_only_sdk_symbols() {
         for lib in &LIBS {
             let sdk = sdk_names(&format!("{}.dylib", lib.name)).unwrap();
-            for s in read_exports(lib).unwrap() {
-                assert!(sdk.contains(map_name(&s)), "{}: {s} is not in the SDK's list", lib.name);
+            for arch in &ARCHES {
+                for s in read_exports(lib, arch).unwrap() {
+                    assert!(sdk.contains(map_name(&s)), "{} ({}): {s} is not in the SDK's list", lib.name, arch.name);
+                }
             }
         }
         for (i, lib) in LIBS.iter().enumerate() {

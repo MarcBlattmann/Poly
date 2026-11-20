@@ -63,7 +63,7 @@ pub const ARM64_START: [u32; 70] = [
     0x10000013, 0x91400673, 0x910003f4, 0xf9400695, 0x91004296, 0x8b150ed7,
     0x910022f7, 0xaa1703f8, 0xf8408709, 0xb5ffffe9, 0xd2800019, 0xf9400e69,
     0xeb09033f, 0x54000162, 0x9100826a, 0xf879794a, 0x91000739, 0xaa1503e0,
-    0xaa1603e1, 0xaa1703e2, 0xaa1803e3, 0xd2800004, 0xd63f0140, 0x17fffff4,
+    0xaa1603e1, 0xaa1703e2, 0xaa1803e3, 0xaa1303e4, 0xd63f0140, 0x17fffff4,
     0xf9400669, 0xf100053f, 0x540000a1, 0x91002289, 0x9100013f, 0xf9400269,
     0xd61f0120, 0xaa1503e0, 0xaa1603e1, 0xaa1703e2, 0xaa1803e3, 0xf9400269,
     0xd63f0120, 0xf9400a69, 0xb4000049, 0xd63f0120, 0xd2800030, 0xd4001001,
@@ -205,5 +205,8 @@ mod tests {
         assert_eq!(ARM64_START[..2], [0x10000013, 0x91400673]);
         // The raw exit call: mov x16, #1; svc #0x80.
         assert!(ARM64_START.windows(2).any(|w| w == [0xd2800030, 0xd4001001]));
+        // Initializers get the data block as their fifth argument:
+        // mov x4, x19 right before the call (blr x10).
+        assert!(ARM64_START.windows(2).any(|w| w == [0xaa1303e4, 0xd63f0140]));
     }
 }

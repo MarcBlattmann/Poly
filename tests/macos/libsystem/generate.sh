@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Rebuilds hello_x64 from hello.c (written for Poly). Dev-time only: the
+# Rebuilds hello_x64 and hello_a64 (arm64, run by the translator, ADR 0257)
+# from hello.c (written for Poly). Dev-time only: the
 # boot test (`cargo xtask boot-tests --only libsystem`) reads the committed
 # file, so no other host needs a Mac.
 #
@@ -13,4 +14,6 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 clang -arch x86_64 -march=x86-64 -mmacosx-version-min=13.0 -O1 -fno-builtin -fstack-protector-strong -fno-ident \
     -Wall -Wno-format -o "$here/hello_x64" "$here/hello.c"
-ls -l "$here/hello_x64"
+clang -arch arm64 -mmacosx-version-min=13.0 -O1 -fno-builtin -fstack-protector-strong -fno-ident \
+    -Wall -Wno-format -o "$here/hello_a64" "$here/hello.c"
+ls -l "$here/hello_x64" "$here/hello_a64"

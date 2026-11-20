@@ -157,6 +157,37 @@ fn scale(mut v: f64, mut k: i32) -> f64 {
     v
 }
 
+/// Apple's arm64 `va_list` (Apple's "Writing ARM64 code for Apple
+/// platforms": variadic arguments are passed on the stack, each in its own
+/// 8-byte slot, and `va_list` is a plain pointer to the next one;
+/// `long double` is `double`). Reading advances the pointer.
+#[derive(Debug)]
+pub struct StackSlots(pub *const u8);
+
+impl StackSlots {
+    fn next(&mut self) -> [u8; 8] {
+        // SAFETY: a `StackSlots` is made from the va_list of a call whose
+        // format names as many arguments as are read (C11 7.16.1.1); each
+        // takes one 8-byte slot.
+        let v = unsafe { (self.0 as *const [u8; 8]).read_unaligned() };
+        // SAFETY: still inside the caller's argument area (as above).
+        self.0 = unsafe { self.0.add(8) };
+        v
+    }
+}
+
+impl Args for StackSlots {
+    fn int(&mut self) -> u64 {
+        u64::from_le_bytes(self.next())
+    }
+    fn double(&mut self) -> f64 {
+        f64::from_le_bytes(self.next())
+    }
+    fn long_double(&mut self) -> f64 {
+        self.double()
+    }
+}
+
 /// Arguments from slices: integers and doubles in their own order (tests,
 /// and callers that built them).
 #[derive(Debug)]

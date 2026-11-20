@@ -6,8 +6,8 @@
 //! (`platform_syscall`). Arguments are in `x0` to `x7`. A BSD call reports
 //! failure by setting the carry flag (`C` in `NZCV`) and putting the errno
 //! in `x0`; it returns its result in `x0` (the calls with a second result,
-//! such as `fork` and `pipe`, also use `x1`; none of those is implemented
-//! yet, so `x1` is left alone). Mach traps return a
+//! `fork`, `pipe` and `vfork`, return it in `x1`, [`TWO_RESULTS`]). Mach
+//! traps return a
 //! `kern_return_t` in `x0` and leave the flags alone. These are ABI facts
 //! (call names and numbers, CLEAN_ROOM.md); the spec sheets confirm the
 //! details call by call.
@@ -67,11 +67,19 @@ pub fn to_frame(x: &[u64; 31], sp: u64) -> SyscallRegs {
     }
 }
 
-/// Write a handled frame back: `x0` from `rax`, and for BSD calls the
-/// carry flag.
+/// BSD calls with a second result, which arm64 returns in `x1` (x86-64 in
+/// `rdx`): `fork`, `pipe`, `vfork` (the pipe sheet: "arm64 ... second
+/// result in x1").
+pub const TWO_RESULTS: [u64; 3] = [2, 42, 66];
+
+/// Write a handled frame back: `x0` from `rax`; for BSD calls the carry
+/// flag, and `x1` from `rdx` for a successful call with a second result.
 pub fn from_frame(frame: &SyscallRegs, x16: u64, x: &mut [u64; 31], nzcv: &mut u32) {
-    let (class, _) = decode(x16);
+    let (class, number) = decode(x16);
     x[0] = frame.rax;
+    if class == Class::Bsd && frame.rflags & RFLAGS_CF == 0 && TWO_RESULTS.contains(&number) {
+        x[1] = frame.rdx;
+    }
     if class == Class::Bsd {
         if frame.rflags & RFLAGS_CF != 0 {
             *nzcv |= NZCV_C;
@@ -169,6 +177,21 @@ mod tests {
         x[0] = 3;
         dispatch_with(&mut k, &mut x, 0, &mut nzcv);
         assert_eq!(k.exited, Some(3));
+    }
+
+    #[test]
+    fn pipe_returns_its_second_descriptor_in_x1() {
+        let mut x = [0u64; 31];
+        x[1] = 99;
+        let mut nzcv = 0;
+        from_frame(&SyscallRegs { rax: 3, rdx: 4, ..Default::default() }, 42, &mut x, &mut nzcv);
+        assert_eq!((x[0], x[1]), (3, 4));
+        // A failed pipe and other calls leave x1 alone.
+        x[1] = 99;
+        from_frame(&SyscallRegs { rax: 24, rdx: 4, rflags: RFLAGS_CF, ..Default::default() }, 42, &mut x, &mut nzcv);
+        assert_eq!((x[0], x[1], nzcv & NZCV_C), (24, 99, NZCV_C));
+        from_frame(&SyscallRegs { rax: 1, rdx: 7, ..Default::default() }, 4, &mut x, &mut nzcv);
+        assert_eq!(x[1], 99);
     }
 
     #[test]

@@ -1,0 +1,4 @@
+_fstat
+_fstatat
+_lstat
+_stat

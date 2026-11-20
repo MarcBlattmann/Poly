@@ -165,6 +165,7 @@ mod libsystem;
 mod linuxchrome;
 mod macho;
 mod macho_a64;
+mod macho_a64_cli;
 mod macimports;
 mod mesa;
 mod native;
@@ -1703,6 +1704,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // static, universal, dynamically linked, malloc-heavy under the JIT and
     // the interpreter (macho_a64.rs, ADR 0257).
     ("macho-a64", macho_a64::boot_test),
+    // arm64 programs linked against the SDK with Poly's libSystem: the C
+    // test program, Lua and the SQLite shell (macho_a64_cli.rs, ADR 0257).
+    ("macho-a64-cli", macho_a64_cli::boot_test),
     // An SDK-linked C program with Poly's own libSystem.B.dylib (libsystem.rs,
     // ADR 0258).
     ("libsystem", libsystem::boot_test),
@@ -1869,6 +1873,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "macho",
             "macho-mach",
             "macho-a64",
+            "macho-a64-cli",
             "libsystem",
             "busybox",
             "rootdisk",
