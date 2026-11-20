@@ -277,7 +277,7 @@
 {"symbol":"pselect_nocancel","number":395,"src":["xnu-syscalls-master"]},
 {"symbol":"psynch_cvbroad","number":303,"status":"claimed","claimed_by":"spec-macos-1","src":["xnu-syscalls-master"]},
 {"symbol":"psynch_cvclrprepost","number":312,"src":["xnu-syscalls-master"]},
-{"symbol":"psynch_cvsignal","number":304,"status":"claimed","claimed_by":"spec-macos-1","src":["xnu-syscalls-master"]},
+{"symbol":"psynch_cvsignal","number":304,"status":"green","tests_visible":2,"tests_held_out":1,"src":["xnu-syscalls-master"]},
 {"symbol":"psynch_cvwait","number":305,"status":"claimed","claimed_by":"spec-macos-1","src":["xnu-syscalls-master"]},
 {"symbol":"psynch_mutexdrop","number":302,"status":"claimed","claimed_by":"spec-macos-1","src":["xnu-syscalls-master"]},
 {"symbol":"psynch_mutexwait","number":301,"status":"claimed","claimed_by":"spec-macos-1","src":["xnu-syscalls-master"]},
