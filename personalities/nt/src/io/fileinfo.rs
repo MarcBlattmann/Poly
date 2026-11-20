@@ -135,6 +135,7 @@ impl IoState {
             Target::Pipe(_) => Some((pipe_device(), None)),
             Target::Null => Some((wide(super::NULL_DEVICE), Some(Vec::new()))),
             Target::Volume(v) => Some((self.volume_device_path(*v), Some(Vec::new()))),
+            Target::Audio(_) => Some((wide(poly_audio::nt::DEVICE_NAME), Some(Vec::new()))),
             Target::Console(_) | Target::Host(_) | Target::Socket(_) => None,
         }
     }
@@ -174,7 +175,8 @@ impl IoState {
             | Target::NamedPipe(_)
             | Target::PipeRoot
             | Target::PipeDevice
-            | Target::Null => info::Facts { links: 1, attributes: FILE_ATTRIBUTE_NORMAL, ..Default::default() },
+            | Target::Null
+            | Target::Audio(_) => info::Facts { links: 1, attributes: FILE_ATTRIBUTE_NORMAL, ..Default::default() },
         };
         let handle = HandleFacts { access: granted, position: rec.position, mode: info::mode_bits(rec.options) };
         let fixed = |bytes: Vec<u8>| {
@@ -604,6 +606,8 @@ impl IoState {
                 Target::Console(_) => poly_console::ioctl::FILE_DEVICE_CONSOLE,
                 // GetFileType's FILE_TYPE_CHAR.
                 Target::Null => FILE_DEVICE_NULL,
+                // A sound stream (ADR 0244): GetFileType's FILE_TYPE_CHAR.
+                Target::Audio(_) => poly_audio::nt::FILE_DEVICE_SOUND,
                 // A socket (ADR 0095): GetFileType's FILE_TYPE_PIPE.
                 Target::Socket(_) => FILE_DEVICE_NAMED_PIPE,
                 Target::Host(open) => match open.kind() {

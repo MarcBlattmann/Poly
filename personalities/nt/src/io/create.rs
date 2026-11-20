@@ -111,6 +111,7 @@ impl CreateHook<'_> {
                 Some(Device::Afd) => return self.open_endpoint(om, r.remaining),
                 Some(Device::NamedPipe) => return self.open_named_pipe(om, r),
                 Some(Device::Null) => return self.open_null(om, r.remaining),
+                Some(Device::Audio) => return self.open_audio(om, r.remaining),
                 None => return Err(STATUS_OBJECT_PATH_NOT_FOUND),
             },
             ObjectType::File => {
@@ -215,6 +216,24 @@ impl CreateHook<'_> {
         let cookie = self.io.cookie();
         let object = new_file_object(om, cookie, self.thread)?;
         self.io.files.insert(cookie, self.record(object, Target::Null, FileType::CharDevice));
+        self.made = Some(cookie);
+        Ok(object)
+    }
+
+    /// `\Device\PolyAudio` (ADR 0244): a handle for one stream, which its
+    /// `OPEN` request makes.
+    fn open_audio(&mut self, om: &mut ObjectManager, remaining: &[u16]) -> Result<ObjectId, NtStatus> {
+        if self.params.options & FILE_DIRECTORY_FILE != 0 {
+            return Err(STATUS_NOT_A_DIRECTORY);
+        }
+        if !remaining.is_empty() {
+            return Err(STATUS_OBJECT_NAME_NOT_FOUND);
+        }
+        self.information = FILE_OPENED;
+        let cookie = self.io.cookie();
+        let object = new_file_object(om, cookie, self.thread)?;
+        let target = Target::Audio(crate::audio::AudioEnd::default());
+        self.io.files.insert(cookie, self.record(object, target, FileType::CharDevice));
         self.made = Some(cookie);
         Ok(object)
     }
