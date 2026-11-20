@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSFileManager.fileExistsAtPath%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSFileManager.fileExistsAtPath%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSFileManager.fileExistsAtPath:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSFileManager fileExistsAtPath:] says whether the path names an existing file or directory
+  (symbolic links are followed): YES for '/', for '.', './', files and directories made by the test,
+  relative paths from the current directory and absolute ones; NO for a missing path, for the empty
+  string, for '~' (no tilde expansion) and for a dangling symbolic link. fileExistsAtPath:isDirectory:
+  also sets the flag (YES for a directory and for a link to one, NO for a regular file). Names with
+  spaces and non-ASCII text are found as written, composed or decomposed alike; on the oracle's APFS
+  volume the directory listing returns such a name decomposed (e + U+0301 for é, as ls does) whichever
+  form created it.
+returns:
+  exists: "YES"
+  missing: "NO"
+errors: {}
+side_effects: "a stat of the path"
+threading: "safe from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

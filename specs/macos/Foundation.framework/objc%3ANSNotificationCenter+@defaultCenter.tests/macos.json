@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsnotificationcenter_defaultcenter_nsnotification",
+      "source_sha256": "e92b5aa50c59cd88ccf5a4d0729d2c9025f47e2d4da0f6918f4af8db72fd9528",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5760f5f4ef61811228a815a426b4df593b866605b310a82d8ec41fac7082e167",
+          "exit_code": 0,
+          "stdout": "ok k->hits == 1 && k->last == mine\nok k->hits == 3 && k->last != first && k->last != mine\nok ns_is(k->last.name, \"PolyKeep\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "52d02377182cc2a5943b03001aedf7b28ce4f29daa03a2cb0a16c735e6dd3862",
+          "exit_code": 0,
+          "stdout": "ok k->hits == 1 && k->last == mine\nok k->hits == 3 && k->last != first && k->last != mine\nok ns_is(k->last.name, \"PolyKeep\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsnotificationcenter_defaultcenter_threads_and_objects",
+      "source_sha256": "4912624fc7323c2f8d9f342df1064b3f482e23cbbfcb00640ec64927a639b7c8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8d1d9f61c7b0171f444ee85dba74c7b6824b91276bd4e2fa71bb4ade485651b2",
+          "exit_code": 0,
+          "stdout": "ok done && from_thread == nc\nok ns_is(n.name, \"PolyNote\") && n.object == obj && ns_is(n.userInfo[@\"k\"], \"v\")\nok bare.object == nil && bare.userInfo == nil\nok n != twin && [n isEqual:twin]\nok ![n isEqual:bare]\nok [n.description containsString:@\"PolyNote\"]\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1df0a9c80e9892fab99c689532dbc9ec350fcfd5d8fe67448b49f16200a3a2e0",
+          "exit_code": 0,
+          "stdout": "ok done && from_thread == nc\nok ns_is(n.name, \"PolyNote\") && n.object == obj && ns_is(n.userInfo[@\"k\"], \"v\")\nok bare.object == nil && bare.userInfo == nil\nok n != twin && [n isEqual:twin]\nok ![n isEqual:bare]\nok [n.description containsString:@\"PolyNote\"]\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

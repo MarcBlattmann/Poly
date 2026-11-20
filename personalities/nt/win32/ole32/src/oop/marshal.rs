@@ -337,6 +337,7 @@ pub unsafe extern "system" fn CoMarshalInterface(
     }
     // SAFETY: temporary reference from `query`.
     unsafe { release_unknown(itf) };
+    crate::globalopts::note_rpc_used();
 
     // Non-built-in interfaces must have a registered proxy/stub now (sheet: `no_proxy_stub`).
     if iid != IID_IUNKNOWN && iid != IID_ICLASS_FACTORY {

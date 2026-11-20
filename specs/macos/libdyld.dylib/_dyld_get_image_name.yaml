@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdyld.dylib/_dyld_get_image_name.yaml. Observed with C programs that call libSystem
+# (tests/macos/include/poly_mlibc.h, marked `poly-mac: libsystem`, ADR 0182); results per
+# architecture in _dyld_get_image_name.tests/macos.json.
+id: macos/api/libdyld.dylib/_dyld_get_image_name
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-5
+  date: 2026-11-20
+summary: >
+  _dyld_get_image_name(i) returns the path of image i, or NULL when i is out of range (also (uint32_t)-1). Image 0
+  is the program under the absolute path it was started with (the same string as _NSGetExecutablePath); image 1 is
+  "/usr/lib/libSystem.B.dylib"; the rest of a libSystem-only program's images are named by their install
+  names under /usr/lib (not by files that exist on disk: they come from the dyld shared cache): libSystem's dependencies in
+  alphabetical order: libcache, libcommonCrypto, libcompiler_rt, libcopyfile, libcorecrypto, libdispatch, libdyld, libkeymgr,
+  libmacho, libquarantine, libremovefile, libsystem_asl, _blocks, _c, _collections, _configuration, _containermanager,
+  _coreservices, _darwin, _darwindirectory, _dnssd, _eligibility, _featureflags, _info, _m, _malloc, _networkextension, _notify,
+  _sandbox, _sanitizers, _secinit, then _kernel, _platform, _pthread, then _symptoms, _trace, _trial, libunwind (all as
+  /usr/lib/system/<name>.dylib; indexes 2..39 on arm64). The same string is returned on every call. An image loaded with dlopen
+  through a symbolic link (/usr/lib/libz.dylib) is listed under its real name (/usr/lib/libz.1.dylib), not the
+  link's. Same on both architectures (checked: libSystem at 1, libcache at 2 and the order dyld, c, malloc and kernel,
+  platform, pthread, unwind).
+returns:
+  "name": "NUL-terminated path, NULL if out of range"
+errors:
+  "none": "no error result"
+side_effects: "none"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

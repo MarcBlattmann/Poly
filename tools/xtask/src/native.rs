@@ -52,6 +52,12 @@ pub const PROGRAMS: [&str; 9] = [
     "poly-installer",
 ];
 
+/// Programs `userland/native/` builds that are not native programs: no
+/// ABI note, installed at `(name, path in the image)`. The arm64
+/// translator's runtime runs in XNU processes the kernel starts for arm64
+/// Mach-O programs (ADR 0257).
+pub const RUNTIMES: [(&str, &str); 1] = [("poly-a64", "usr/libexec/poly-a64")];
+
 /// What `/bin/native-hello` prints last when every check passed.
 pub const HELLO_OUTPUT: &str = "native-hello: done, 0 failed";
 
@@ -104,7 +110,8 @@ pub type Programs = Vec<(String, Vec<u8>)>;
 fn build_now() -> Result<Programs> {
     let dir = target_dir().join("x86_64-unknown-poly").join("release");
     // CI's boot jobs take the build job's programs (prebuilt.rs).
-    let outputs: Vec<PathBuf> = PROGRAMS.iter().map(|name| dir.join(name)).collect();
+    let outputs: Vec<PathBuf> =
+        PROGRAMS.iter().chain(RUNTIMES.iter().map(|(name, _)| name)).map(|name| dir.join(name)).collect();
     if !crate::prebuilt::skip("the native programs", &outputs)? {
         let mut cmd = native_cargo();
         cmd.args(["build", "--release", "--target-dir"]).arg(target_dir());
@@ -119,6 +126,24 @@ fn build_now() -> Result<Programs> {
             Ok((name.to_string(), elf))
         })
         .collect()
+}
+
+/// Build the native programs and return the runtime called `name` (one of
+/// [`RUNTIMES`]), checked to be an x86-64 ELF executable without Poly's
+/// ABI note.
+pub fn runtime(name: &str) -> Result<Vec<u8>> {
+    build()?;
+    let path = target_dir().join("x86_64-unknown-poly").join("release").join(name);
+    let elf = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    match poly_binfmt::detect(&elf[..elf.len().min(4096)]) {
+        Ok(poly_binfmt::Format::Elf { .. }) => Ok(elf),
+        other => Err(format!("{name}: not a plain x86-64 ELF executable ({other:?})")),
+    }
+}
+
+/// The runtimes of [`RUNTIMES`] as files of an image: (path, mode, ELF).
+pub fn runtime_files() -> Result<Vec<(String, u16, Vec<u8>)>> {
+    RUNTIMES.iter().map(|(name, at)| Ok((at.to_string(), 0o755, runtime(name)?))).collect()
 }
 
 /// Build the native programs and return the one called `name`.
@@ -154,7 +179,8 @@ fn check(name: &str, elf: &[u8]) -> Result {
 pub fn run_image() -> Result<PathBuf> {
     let built = build()?;
     let programs: Vec<(&str, &[u8])> = built.iter().map(|(n, e)| (n.as_str(), e.as_slice())).collect();
-    initramfs::write(&root(), "poly-initramfs.cpio", &initramfs::programs_image(&programs))
+    let tree = initramfs::Tree { files: runtime_files()?, ..Default::default() };
+    initramfs::write(&root(), "poly-initramfs.cpio", &initramfs::programs_image_with(&programs, &tree))
 }
 
 /// One boot running `/bin/<program> <args>` as the first process.

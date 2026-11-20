@@ -91,6 +91,8 @@ fn embed_win32() {
         "oleacc.dll",
         "uiautomationcore.dll",
         "mfplat.dll",
+        "mmdevapi.dll",
+        "audioses.dll",
         "powrprof.dll",
         "uxtheme.dll",
         // ADR 0155, step 12.

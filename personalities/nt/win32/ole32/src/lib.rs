@@ -2209,6 +2209,7 @@ pub unsafe extern "system" fn GetErrorInfo(reserved: u32, out: *mut *mut c_void)
 }
 
 mod delayed;
+mod globalopts;
 mod oop;
 mod stream;
 

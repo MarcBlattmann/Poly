@@ -1,0 +1,41 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/LockFileEx.yaml
+id: windows/api/kernel32.dll/LockFileEx
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave the same output except where a sheet says what a 32-bit caller sees."
+  observed_by: spec-win-updater-services
+  date: 2026-11-20
+sources: >
+  Observations of our own 64-bit test programs on the machine above (each test ran at least twice with identical output). Microsoft Learn pages of the functions (kernel32 / fileapi.h, winbase.h, processthreadsapi.h, wow64apiset.h, memoryapi.h, synchapi.h, combaseapi.h, objbase.h, userenv.h) for names, parameters and the error values in winerror.h. What the documentation does not say (error codes, edge cases, the effect of access rights) is taken from the observations only. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Locks a byte range of an open file for the handle's file object. Locks are exclusive (LOCKFILE_EXCLUSIVE_LOCK 2) or shared (0); LOCKFILE_FAIL_IMMEDIATELY (1) turns a wait into an error. The range is given by the offset in the OVERLAPPED record and the 64-bit length.
+interface:
+  signature: "BOOL LockFileEx(HANDLE hFile, DWORD dwFlags, DWORD dwReserved, DWORD nNumberOfBytesToLockLow, DWORD nNumberOfBytesToLockHigh, LPOVERLAPPED lpOverlapped)"
+installer: "Google's updater 157 and 159 (32-bit) import this function; their run on Poly reaches it while they install and start their two services and register their update service and scheduled task. What they pass is not known beyond the import. Chrome's setup.exe and notification helper import it as well."
+rules:
+  exclusive: "an exclusive lock on 0..16 through handle A: TRUE; the same range, an overlapping range and a shared lock on a part of it through handle B (fail immediately): ERROR_LOCK_VIOLATION 33; an adjacent range: TRUE; the same range once more through handle A (or through a duplicate of A's handle): ERROR_LOCK_VIOLATION 33"
+  io: "reading the exclusively locked range through handle B: ERROR_LOCK_VIOLATION 33 and no bytes; through A (the owner): succeeds; an unlocked range through B: succeeds; writing into the locked range through B: ERROR_LOCK_VIOLATION 33; through A: succeeds"
+  shared: "two shared locks on the same range through A and B succeed; an exclusive lock over shared locks: ERROR_LOCK_VIOLATION 33; reading a shared-locked range works (through B); writing into it fails through both handles with ERROR_LOCK_VIOLATION 33 (also through the owner)"
+  range: "a length of 0 succeeds (and UnlockFileEx of length 0 succeeds); a range past the end of the file succeeds and conflicts with an equal lock from another handle (33)"
+  flags: "a flags value with the unknown bit 4 set is accepted; without LOCKFILE_FAIL_IMMEDIATELY on a free range: TRUE"
+  waiting: "without LOCKFILE_FAIL_IMMEDIATELY the call waits until the conflicting lock is released: with a second thread that unlocked 300 ms later it returned TRUE"
+  lifetime: "closing a handle releases its locks (a lock through B right after A closed: TRUE); locks of another process: the same range fails with ERROR_LOCK_VIOLATION 33 while the process lives and succeeds after the process ended; a range next to it is free; a duplicated handle shares the file object, so a lock taken through the original is released by UnlockFileEx through the duplicate"
+  reserved: "dwReserved other than 0: ERROR_INVALID_PARAMETER 87"
+  null_overlapped: "a NULL OVERLAPPED pointer raises an access violation (the function reads the offset from it); not exercised by the tests"
+errors:
+  lock_violation: "ERROR_LOCK_VIOLATION 33"
+  invalid_parameter: "ERROR_INVALID_PARAMETER 87"
+side_effects: "the lock, held until UnlockFileEx or until the handle is closed"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, run on the oracle with the elevated token in the interactive session. Scenarios that could end the process (a NULL pointer where the function reads or writes through it) run in a child process of the same image (`--child ...`) and the parent prints the exit code. Observations are results, error codes, booleans and counts; never addresses, process or thread ids, times or the name of the machine. Files the tests make live next to the test program and are deleted by the test.
+not_covered: >
+  asynchronous (overlapped) handles and the completion of a waiting lock through an event or a completion port, locks on network files and the order in which several waiting requests are served.

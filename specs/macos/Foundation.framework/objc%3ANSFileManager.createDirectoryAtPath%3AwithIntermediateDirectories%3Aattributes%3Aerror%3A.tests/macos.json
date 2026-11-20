@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsfilemanager_createdirectory_attributes",
+      "source_sha256": "c569495a50b62bc92b9f133bf15dc9f5aab1d091378bc57f1b911d981772384a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "106832a06a0f59914439001394bdca32469ddf9741ec77099b71756f04a998bb",
+          "exit_code": 0,
+          "stdout": "ok [fm createDirectoryAtPath:@\"p1\" withIntermediateDirectories:NO attributes:@{NSFilePosixPermissions: @0700} error:nil]\nok [a1[NSFilePosixPermissions] intValue] == 0700\nok ns_is(a1[NSFileType], \"NSFileTypeDirectory\")\nok [fm createDirectoryAtPath:@\"p2\" withIntermediateDirectories:NO attributes:nil error:nil]\nok [[fm attributesOfItemAtPath:@\"p2\" error:nil][NSFilePosixPermissions] intValue] == 0755\nok [[fm contentsOfDirectoryAtPath:@\"p2\" error:nil] count] == 0\nok [fm removeItemAtPath:@\"p2\" error:nil] && ![fm fileExistsAtPath:@\"p2\"]\nok [fm createDirectoryAtPath:@\"p3\" withIntermediateDirectories:NO attributes:@{NSFilePosixPermissions: @0750} error:nil]\nok [[fm attributesOfItemAtPath:@\"p3\" error:nil][NSFilePosixPermissions] intValue] == 0750\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "dba8357d0bcf256c413e812bd9af70c9ad77dbef05207c7a7cd5020880b31bef",
+          "exit_code": 0,
+          "stdout": "ok [fm createDirectoryAtPath:@\"p1\" withIntermediateDirectories:NO attributes:@{NSFilePosixPermissions: @0700} error:nil]\nok [a1[NSFilePosixPermissions] intValue] == 0700\nok ns_is(a1[NSFileType], \"NSFileTypeDirectory\")\nok [fm createDirectoryAtPath:@\"p2\" withIntermediateDirectories:NO attributes:nil error:nil]\nok [[fm attributesOfItemAtPath:@\"p2\" error:nil][NSFilePosixPermissions] intValue] == 0755\nok [[fm contentsOfDirectoryAtPath:@\"p2\" error:nil] count] == 0\nok [fm removeItemAtPath:@\"p2\" error:nil] && ![fm fileExistsAtPath:@\"p2\"]\nok [fm createDirectoryAtPath:@\"p3\" withIntermediateDirectories:NO attributes:@{NSFilePosixPermissions: @0750} error:nil]\nok [[fm attributesOfItemAtPath:@\"p3\" error:nil][NSFilePosixPermissions] intValue] == 0750\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsfilemanager_createdirectory_intermediate",
+      "source_sha256": "02a48acb1ea57a77901557adcf6d22700942667212f1424a470da5cd59af93b9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f50deb5e662cb99c6c6126cdfa43572a5ce92b3ae45fbd7a9c45b75bc6fabf3c",
+          "exit_code": 0,
+          "stdout": "ok [fm createDirectoryAtPath:@\"d1\" withIntermediateDirectories:NO attributes:nil error:&err] && err == nil\nok ![fm createDirectoryAtPath:@\"d1\" withIntermediateDirectories:NO attributes:nil error:&err]\nok err != nil && ns_is(err.domain, \"NSCocoaErrorDomain\") && err.code == 516\nok [fm createDirectoryAtPath:@\"d1\" withIntermediateDirectories:YES attributes:nil error:&err] && err == nil\nok ![fm createDirectoryAtPath:@\"a/b/c\" withIntermediateDirectories:NO attributes:nil error:&err]\nok err != nil && ns_is(err.domain, \"NSCocoaErrorDomain\") && err.code == 4\nok ![fm fileExistsAtPath:@\"a\"]\nok [fm createDirectoryAtPath:@\"a/b/c\" withIntermediateDirectories:YES attributes:nil error:&err]\nok [fm fileExistsAtPath:@\"a/b\" isDirectory:&isDir] && isDir && [fm fileExistsAtPath:@\"a/b/c\" isDirectory:&isDir] && isDir\nok [fm createDirectoryAtPath:@\"n1\" withIntermediateDirectories:NO attributes:nil error:NULL]\nok ![fm createDirectoryAtPath:@\"file\" withIntermediateDirectories:YES attributes:nil error:&err]\nok err != nil && err.code == 516\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8eb753b786c24518f23ebb79aec960aae78109bee67636524bc677422410b2de",
+          "exit_code": 0,
+          "stdout": "ok [fm createDirectoryAtPath:@\"d1\" withIntermediateDirectories:NO attributes:nil error:&err] && err == nil\nok ![fm createDirectoryAtPath:@\"d1\" withIntermediateDirectories:NO attributes:nil error:&err]\nok err != nil && ns_is(err.domain, \"NSCocoaErrorDomain\") && err.code == 516\nok [fm createDirectoryAtPath:@\"d1\" withIntermediateDirectories:YES attributes:nil error:&err] && err == nil\nok ![fm createDirectoryAtPath:@\"a/b/c\" withIntermediateDirectories:NO attributes:nil error:&err]\nok err != nil && ns_is(err.domain, \"NSCocoaErrorDomain\") && err.code == 4\nok ![fm fileExistsAtPath:@\"a\"]\nok [fm createDirectoryAtPath:@\"a/b/c\" withIntermediateDirectories:YES attributes:nil error:&err]\nok [fm fileExistsAtPath:@\"a/b\" isDirectory:&isDir] && isDir && [fm fileExistsAtPath:@\"a/b/c\" isDirectory:&isDir] && isDir\nok [fm createDirectoryAtPath:@\"n1\" withIntermediateDirectories:NO attributes:nil error:NULL]\nok ![fm createDirectoryAtPath:@\"file\" withIntermediateDirectories:YES attributes:nil error:&err]\nok err != nil && err.code == 516\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

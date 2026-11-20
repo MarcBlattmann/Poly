@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSString.@UTF8String.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSString.@UTF8String.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSString.@UTF8String"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSString UTF8String] (property, read-only) returns a NUL-terminated UTF-8 C string of the text,
+  owned by the string or by the current autorelease pool (not by the caller, never to be freed): ASCII
+  as is, é two bytes, U+20AC three, a character above U+FFFF (a surrogate pair in the string) one
+  four-byte sequence, the empty string a pointer to a single NUL byte (not NULL). A string with a lone
+  or reversed surrogate cannot be written as UTF-8 and gives NULL while its length stays the same; a
+  string with U+0000 in it gives the text up to the first NUL (the C string ends there). The pointer
+  stays readable at least until the surrounding autorelease pool drains, also after the string was
+  changed (an NSMutableString's earlier pointer kept its old bytes); two calls on one string give
+  equal text but not always the same pointer. The same for CFSTR constants, strings made at run time,
+  formats and mutable strings (toll-free bridged strings, i.e. CFStrings, answer it too).
+returns:
+  success: "the UTF-8 bytes with a terminating NUL"
+  unrepresentable: "NULL (lone surrogate)"
+errors:
+  nil_receiver: "messaging nil gives NULL"
+side_effects: "may allocate a buffer in the current autorelease pool"
+threading: "objects are immutable or the class says otherwise; immutable values may be read from any thread"
+ordering: []
+timing:
+  typical: "microseconds, linear in the length"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

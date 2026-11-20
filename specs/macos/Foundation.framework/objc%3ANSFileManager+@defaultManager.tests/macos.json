@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsfilemanager_defaultmanager_files",
+      "source_sha256": "9a6c2121d76eddc689363064de962ab07ce775b19f7e62e889d01ff857c3ed9c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7db3e6675c0d5ffd325b00e515f19f1126ab0eef491c7b1d49559b1de88be75d",
+          "exit_code": 0,
+          "stdout": "ok [fm createFileAtPath:@\"a.txt\" contents:content attributes:nil]\nok [fm fileExistsAtPath:@\"a.txt\"]\nok [at[NSFileSize] unsignedLongLongValue] == 5\nok ns_is(at[NSFileType], \"NSFileTypeRegular\")\nok [[fm contentsOfDirectoryAtPath:@\".\" error:nil] isEqualToArray:@[@\"a.txt\"]]\nok [fm copyItemAtPath:@\"a.txt\" toPath:@\"b.txt\" error:&err] && err == nil\nok [[NSData dataWithContentsOfFile:@\"b.txt\"] isEqualToData:content]\nok [fm removeItemAtPath:@\"a.txt\" error:nil] && ![fm fileExistsAtPath:@\"a.txt\"]\nok ![fm removeItemAtPath:@\"a.txt\" error:&err]\nok err != nil && ns_is(err.domain, \"NSCocoaErrorDomain\") && err.code == 4\nok ![fm copyItemAtPath:@\"b.txt\" toPath:@\"b.txt\" error:&err]\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b475e68ec4b6f7a31fd8fccff215affc0d72d7984f3b378e1338a9ffbd6d7639",
+          "exit_code": 0,
+          "stdout": "ok [fm createFileAtPath:@\"a.txt\" contents:content attributes:nil]\nok [fm fileExistsAtPath:@\"a.txt\"]\nok [at[NSFileSize] unsignedLongLongValue] == 5\nok ns_is(at[NSFileType], \"NSFileTypeRegular\")\nok [[fm contentsOfDirectoryAtPath:@\".\" error:nil] isEqualToArray:@[@\"a.txt\"]]\nok [fm copyItemAtPath:@\"a.txt\" toPath:@\"b.txt\" error:&err] && err == nil\nok [[NSData dataWithContentsOfFile:@\"b.txt\"] isEqualToData:content]\nok [fm removeItemAtPath:@\"a.txt\" error:nil] && ![fm fileExistsAtPath:@\"a.txt\"]\nok ![fm removeItemAtPath:@\"a.txt\" error:&err]\nok err != nil && ns_is(err.domain, \"NSCocoaErrorDomain\") && err.code == 4\nok ![fm copyItemAtPath:@\"b.txt\" toPath:@\"b.txt\" error:&err]\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsfilemanager_defaultmanager_threads",
+      "source_sha256": "54c1d4a93c7e3f27263ca1d0876540ae322579386f254c89180f29b52f0f977a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b0d8f6175256f977d90f1b2771002b93f35915e02ad3298abece5df47166ef8f",
+          "exit_code": 0,
+          "stdout": "ok done && from_thread == fm && saw_file\nok [fm fileExistsAtPath:@\"worker-made\"]\nok ns_is([list componentsJoinedByString:@\",\"], \"f0,f1,f2,f3,f4,main-made,worker-made\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "dde1e7a34b3cd658f8acc34d1e006c8c37f62e67885c4816f56dff4b7f52de16",
+          "exit_code": 0,
+          "stdout": "ok done && from_thread == fm && saw_file\nok [fm fileExistsAtPath:@\"worker-made\"]\nok ns_is([list componentsJoinedByString:@\",\"], \"f0,f1,f2,f3,f4,main-made,worker-made\")\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

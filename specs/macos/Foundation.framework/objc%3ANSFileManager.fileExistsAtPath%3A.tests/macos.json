@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsfilemanager_fileexistsatpath_cases",
+      "source_sha256": "1326ebfa914e7d7a536b20bffc0ad5568bbf2f93ca39041d50e444918c0989f5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b42c00e4d36494bd71ba2c5cbe959edca49c79152ac994c1c104b45f152564c4",
+          "exit_code": 0,
+          "stdout": "ok [fm fileExistsAtPath:@\"/\"]\nok [fm fileExistsAtPath:@\"/\" isDirectory:&isDir] && isDir\nok ![fm fileExistsAtPath:@\"/nonexistent-poly-path\"]\nok [fm fileExistsAtPath:@\".\"] && [fm fileExistsAtPath:@\"./\"]\nok ![fm fileExistsAtPath:@\"\"]\nok ![fm fileExistsAtPath:@\"~\"]\nok [fm fileExistsAtPath:@\"f\" isDirectory:&isDir] && !isDir\nok [fm fileExistsAtPath:@\"d\" isDirectory:&isDir] && isDir\nok [fm createSymbolicLinkAtPath:@\"ln\" withDestinationPath:@\"d\" error:nil]\nok [fm fileExistsAtPath:@\"ln\" isDirectory:&isDir] && isDir\nok ![fm fileExistsAtPath:@\"dangling\"]\nok [fm fileExistsAtPath:[[fm currentDirectoryPath] stringByAppendingPathComponent:@\"f\"]]\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4ba572609c3d9c51d7d7f8a98342d63348745583a2a995821e00b3ca8b2e5a63",
+          "exit_code": 0,
+          "stdout": "ok [fm fileExistsAtPath:@\"/\"]\nok [fm fileExistsAtPath:@\"/\" isDirectory:&isDir] && isDir\nok ![fm fileExistsAtPath:@\"/nonexistent-poly-path\"]\nok [fm fileExistsAtPath:@\".\"] && [fm fileExistsAtPath:@\"./\"]\nok ![fm fileExistsAtPath:@\"\"]\nok ![fm fileExistsAtPath:@\"~\"]\nok [fm fileExistsAtPath:@\"f\" isDirectory:&isDir] && !isDir\nok [fm fileExistsAtPath:@\"d\" isDirectory:&isDir] && isDir\nok [fm createSymbolicLinkAtPath:@\"ln\" withDestinationPath:@\"d\" error:nil]\nok [fm fileExistsAtPath:@\"ln\" isDirectory:&isDir] && isDir\nok ![fm fileExistsAtPath:@\"dangling\"]\nok [fm fileExistsAtPath:[[fm currentDirectoryPath] stringByAppendingPathComponent:@\"f\"]]\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsfilemanager_fileexistsatpath_nonascii",
+      "source_sha256": "6ba5bbed4faf1ed0fbc4f060ea80449d511aeb1add725f8b89d50b5cb9cb7ef1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b9d8e7b0f8a0a0e357ef377fde41b829d6cf94cec63ff8f7ad100c35f1d3fa80",
+          "exit_code": 0,
+          "stdout": "ok [fm createFileAtPath:name contents:[NSData dataWithBytes:\"x\" length:1] attributes:nil]\nok [fm fileExistsAtPath:name]\nok list.count == 1 && ns_is(list[0], \"cafe\\xcc\\x81 \\xe2\\x82\\xac.txt\")\nok [fm fileExistsAtPath:@\"cafe\\u0301 \\u20ac.txt\"]\nok [fm fileExistsAtPath:[NSString stringWithUTF8String:\"caf\\xc3\\xa9 \\xe2\\x82\\xac.txt\"]]\nok ![fm fileExistsAtPath:@\"café\"]\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b96a9f14dc6bf495a071e39ae75b159f5cc9bb5827dd0560e110b1b7434516fc",
+          "exit_code": 0,
+          "stdout": "ok [fm createFileAtPath:name contents:[NSData dataWithBytes:\"x\" length:1] attributes:nil]\nok [fm fileExistsAtPath:name]\nok list.count == 1 && ns_is(list[0], \"cafe\\xcc\\x81 \\xe2\\x82\\xac.txt\")\nok [fm fileExistsAtPath:@\"cafe\\u0301 \\u20ac.txt\"]\nok [fm fileExistsAtPath:[NSString stringWithUTF8String:\"caf\\xc3\\xa9 \\xe2\\x82\\xac.txt\"]]\nok ![fm fileExistsAtPath:@\"café\"]\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

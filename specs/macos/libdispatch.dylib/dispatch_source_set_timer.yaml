@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_source_set_timer.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_source_set_timer.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_source_set_timer
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_source_set_timer(source, start, interval, leeway) arms a timer source (type TIMER, handle 0, mask 0): the first fire is no earlier than start (100 ms: at 100 ms or later), then every interval (30 ms: the fifth call was at least 120 ms after the first); the event handler runs on the source's queue and
+  dispatch_source_get_data counts the fires since the handler last ran (at least one per call; the sum over the calls was at least the number of calls). An interval of DISPATCH_TIME_FOREVER makes a one-shot (fired once, nothing after 250 ms); the same source can be re-armed (start DISPATCH_TIME_NOW fires again; a start one second in the past
+  fires at once). A wall-clock start (dispatch_walltime) works. A suspended timer calls no handler; after resume it fires with the missed fires counted (data at least 1). After dispatch_source_cancel in the handler no further calls. A new source starts suspended: dispatch_resume it. Only lower bounds are specified.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "schedules the timer"
+threading: "see the summary"
+ordering: ["a suspended source does not run its handler; fires missed meanwhile are counted into the next call's data"]
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

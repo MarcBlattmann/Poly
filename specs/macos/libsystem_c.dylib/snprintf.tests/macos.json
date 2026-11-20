@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:44:28",
+  "tests": [
+    {
+      "name": "snprintf_float",
+      "source_sha256": "9f9063b1979492a0ea1277444b57adf1bb7453d06656e5215c7bbfab2f901265",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9b0f9b3f4076afbff18bdbbfe1ec6a4b95fb5ad467c0c572db4608cd5301b316",
+          "exit_code": 0,
+          "stdout": "ok text of \"%f\", 1.5\nok return of \"%f\", 1.5\nok text of \"%f\", -0.0\nok return of \"%f\", -0.0\nok text of \"%e\", 12345.678\nok return of \"%e\", 12345.678\nok text of \"%g\", 0.0001\nok return of \"%g\", 0.0001\nok text of \"%g\", 0.00001\nok return of \"%g\", 0.00001\nok text of \"%g\", 123456789.0\nok return of \"%g\", 123456789.0\nok text of \"%g\", 100.0\nok return of \"%g\", 100.0\nok text of \"%G\", 1e-10\nok return of \"%G\", 1e-10\nok text of \"%.20f\", 0.1\nok return of \"%.20f\", 0.1\nok text of \"%.0f\", 0.5\nok return of \"%.0f\", 0.5\nok text of \"%.0f\", 1.5\nok return of \"%.0f\", 1.5\nok text of \"%.0f\", 2.5\nok return of \"%.0f\", 2.5\nok text of \"%#.0f\", 2.0\nok return of \"%#.0f\", 2.0\nok text of \"%08.3f\", 3.14159\nok return of \"%08.3f\", 3.14159\nok text of \"%-8.3f|\", 3.14159\nok return of \"%-8.3f|\", 3.14159\nok text of \"%+g\", 3.14159\nok return of \"%+g\", 3.14159\nok text of \"%f\", inf\nok return of \"%f\", inf\nok text of \"%f\", -inf\nok return of \"%f\", -inf\nok text of \"%f\", nan\nok return of \"%f\", nan\nok text of \"%e\", inf\nok return of \"%e\", inf\nok text of \"%F\", inf\nok return of \"%F\", inf\nok text of \"%E\", nan\nok return of \"%E\", nan\nok text of \"%G\", nan\nok return of \"%G\", nan\nok text of \"%10f|\", inf\nok return of \"%10f|\", inf\nok text of \"%010f|\", inf\nok return of \"%010f|\", inf\nok text of \"%+f\", inf\nok return of \"%+f\", inf\nok text of \"%a\", 1.0\nok return of \"%a\", 1.0\nok text of \"%a\", 0.5\nok return of \"%a\", 0.5\nok text of \"%A\", 255.0\nok return of \"%A\", 255.0\nok text of \"%.2a\", 1.0\nok return of \"%.2a\", 1.0\nok text of \"%a\", 0.0\nok return of \"%a\", 0.0\nok text of \"%Lf\", (long double)1.5\nok return of \"%Lf\", (long double)1.5\nok text of \"%.0f\", 1e22\nok return of \"%.0f\", 1e22\nok text of \"%.2g\", 1.5\nok return of \"%.2g\", 1.5\nok text of \"%.1g\", 150.0\nok return of \"%.1g\", 150.0\nok text of \"%g\", 1.0\nok return of \"%g\", 1.0\nok text of \"%.4e\", -1.5\nok return of \"%.4e\", -1.5\nsummary 74 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b4f250ef99713f23b08fac320b85eb17679688c7f5e6a139bcf648a524e58ca5",
+          "exit_code": 0,
+          "stdout": "ok text of \"%f\", 1.5\nok return of \"%f\", 1.5\nok text of \"%f\", -0.0\nok return of \"%f\", -0.0\nok text of \"%e\", 12345.678\nok return of \"%e\", 12345.678\nok text of \"%g\", 0.0001\nok return of \"%g\", 0.0001\nok text of \"%g\", 0.00001\nok return of \"%g\", 0.00001\nok text of \"%g\", 123456789.0\nok return of \"%g\", 123456789.0\nok text of \"%g\", 100.0\nok return of \"%g\", 100.0\nok text of \"%G\", 1e-10\nok return of \"%G\", 1e-10\nok text of \"%.20f\", 0.1\nok return of \"%.20f\", 0.1\nok text of \"%.0f\", 0.5\nok return of \"%.0f\", 0.5\nok text of \"%.0f\", 1.5\nok return of \"%.0f\", 1.5\nok text of \"%.0f\", 2.5\nok return of \"%.0f\", 2.5\nok text of \"%#.0f\", 2.0\nok return of \"%#.0f\", 2.0\nok text of \"%08.3f\", 3.14159\nok return of \"%08.3f\", 3.14159\nok text of \"%-8.3f|\", 3.14159\nok return of \"%-8.3f|\", 3.14159\nok text of \"%+g\", 3.14159\nok return of \"%+g\", 3.14159\nok text of \"%f\", inf\nok return of \"%f\", inf\nok text of \"%f\", -inf\nok return of \"%f\", -inf\nok text of \"%f\", nan\nok return of \"%f\", nan\nok text of \"%e\", inf\nok return of \"%e\", inf\nok text of \"%F\", inf\nok return of \"%F\", inf\nok text of \"%E\", nan\nok return of \"%E\", nan\nok text of \"%G\", nan\nok return of \"%G\", nan\nok text of \"%10f|\", inf\nok return of \"%10f|\", inf\nok text of \"%010f|\", inf\nok return of \"%010f|\", inf\nok text of \"%+f\", inf\nok return of \"%+f\", inf\nok text of \"%a\", 1.0\nok return of \"%a\", 1.0\nok text of \"%a\", 0.5\nok return of \"%a\", 0.5\nok text of \"%A\", 255.0\nok return of \"%A\", 255.0\nok text of \"%.2a\", 1.0\nok return of \"%.2a\", 1.0\nok text of \"%a\", 0.0\nok return of \"%a\", 0.0\nok text of \"%Lf\", (long double)1.5\nok return of \"%Lf\", (long double)1.5\nok text of \"%.0f\", 1e22\nok return of \"%.0f\", 1e22\nok text of \"%.2g\", 1.5\nok return of \"%.2g\", 1.5\nok text of \"%.1g\", 150.0\nok return of \"%.1g\", 150.0\nok text of \"%g\", 1.0\nok return of \"%g\", 1.0\nok text of \"%.4e\", -1.5\nok return of \"%.4e\", -1.5\nsummary 74 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "snprintf_integers",
+      "source_sha256": "93a26c1e176ff59be01cfdff4f395cc1c5d507aed5c26e76918f9a2c3494b317",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "abc3d6cefe903d14832bc2e914f5fbfb9b6d2863ffa0c6db6202c9c41e3163b0",
+          "exit_code": 0,
+          "stdout": "ok text of \"%d\", 5\nok return of \"%d\", 5\nok text of \"%i\", -5\nok return of \"%i\", -5\nok text of \"%u\", -1\nok return of \"%u\", -1\nok text of \"%x\", -1\nok return of \"%x\", -1\nok text of \"%o\", 64\nok return of \"%o\", 64\nok text of \"%#x\", 255\nok return of \"%#x\", 255\nok text of \"%#X\", 255\nok return of \"%#X\", 255\nok text of \"%#x\", 0\nok return of \"%#x\", 0\nok text of \"%#o\", 0\nok return of \"%#o\", 0\nok text of \"%#o\", 8\nok return of \"%#o\", 8\nok text of \"%5.3d|\", 7\nok return of \"%5.3d|\", 7\nok text of \"%-5d|\", 7\nok return of \"%-5d|\", 7\nok text of \"%+d\", 7\nok return of \"%+d\", 7\nok text of \"% d\", 7\nok return of \"% d\", 7\nok text of \"%05d\", -7\nok return of \"%05d\", -7\nok text of \"%.0d\", 0\nok return of \"%.0d\", 0\nok text of \"%.0d|\", 5\nok return of \"%.0d|\", 5\nok text of \"%.3x\", 5\nok return of \"%.3x\", 5\nok text of \"%#.3x\", 5\nok return of \"%#.3x\", 5\nok text of \"%*d\", -5, 7\nok return of \"%*d\", -5, 7\nok text of \"%*d|\", 5, 7\nok return of \"%*d|\", 5, 7\nok text of \"%.*d\", -1, 7\nok return of \"%.*d\", -1, 7\nok text of \"%hhd\", 300\nok return of \"%hhd\", 300\nok text of \"%hd\", 70000\nok return of \"%hd\", 70000\nok text of \"%zu\", (size_t)5\nok return of \"%zu\", (size_t)5\nok text of \"%jd\", (intmax_t)-1\nok return of \"%jd\", (intmax_t)-1\nok text of \"%td\", (ptrdiff_t)3\nok return of \"%td\", (ptrdiff_t)3\nok text of \"%ld\", -5L\nok return of \"%ld\", -5L\nok text of \"%lld\", 9223372036854775807LL\nok return of \"%lld\", 9223372036854775807LL\nok text of \"%lld\", (-9223372036854775807LL - 1)\nok return of \"%lld\", (-9223372036854775807LL - 1)\nok text of \"%llu\", ~0ULL\nok return of \"%llu\", ~0ULL\nok text of \"%llx\", ~0ULL\nok return of \"%llx\", ~0ULL\nok text of \"%'d\", 1234567\nok return of \"%'d\", 1234567\nok text of \"%D\", 5L\nok return of \"%D\", 5L\nok text of \"%O\", 8L\nok return of \"%O\", 8L\nok text of \"%U\", 7L\nok return of \"%U\", 7L\nok text of \"%D\", (-9223372036854775807L - 1)\nok return of \"%D\", (-9223372036854775807L - 1)\nok text of \"%U\", ~0UL\nok return of \"%U\", ~0UL\nok text of \"%d %d\", 5, 6\nok return of \"%d %d\", 5, 6\nok text of \"%2$d %1$d\", 1, 2\nok return of \"%2$d %1$d\", 1, 2\nok text of \"%1$s %1$s\", \"rep\"\nok return of \"%1$s %1$s\", \"rep\"\nsummary 82 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "afcbd04ca035732fdd14e2f6ee4f3e600e4af02db84cca22caffeb2f71b5cfd6",
+          "exit_code": 0,
+          "stdout": "ok text of \"%d\", 5\nok return of \"%d\", 5\nok text of \"%i\", -5\nok return of \"%i\", -5\nok text of \"%u\", -1\nok return of \"%u\", -1\nok text of \"%x\", -1\nok return of \"%x\", -1\nok text of \"%o\", 64\nok return of \"%o\", 64\nok text of \"%#x\", 255\nok return of \"%#x\", 255\nok text of \"%#X\", 255\nok return of \"%#X\", 255\nok text of \"%#x\", 0\nok return of \"%#x\", 0\nok text of \"%#o\", 0\nok return of \"%#o\", 0\nok text of \"%#o\", 8\nok return of \"%#o\", 8\nok text of \"%5.3d|\", 7\nok return of \"%5.3d|\", 7\nok text of \"%-5d|\", 7\nok return of \"%-5d|\", 7\nok text of \"%+d\", 7\nok return of \"%+d\", 7\nok text of \"% d\", 7\nok return of \"% d\", 7\nok text of \"%05d\", -7\nok return of \"%05d\", -7\nok text of \"%.0d\", 0\nok return of \"%.0d\", 0\nok text of \"%.0d|\", 5\nok return of \"%.0d|\", 5\nok text of \"%.3x\", 5\nok return of \"%.3x\", 5\nok text of \"%#.3x\", 5\nok return of \"%#.3x\", 5\nok text of \"%*d\", -5, 7\nok return of \"%*d\", -5, 7\nok text of \"%*d|\", 5, 7\nok return of \"%*d|\", 5, 7\nok text of \"%.*d\", -1, 7\nok return of \"%.*d\", -1, 7\nok text of \"%hhd\", 300\nok return of \"%hhd\", 300\nok text of \"%hd\", 70000\nok return of \"%hd\", 70000\nok text of \"%zu\", (size_t)5\nok return of \"%zu\", (size_t)5\nok text of \"%jd\", (intmax_t)-1\nok return of \"%jd\", (intmax_t)-1\nok text of \"%td\", (ptrdiff_t)3\nok return of \"%td\", (ptrdiff_t)3\nok text of \"%ld\", -5L\nok return of \"%ld\", -5L\nok text of \"%lld\", 9223372036854775807LL\nok return of \"%lld\", 9223372036854775807LL\nok text of \"%lld\", (-9223372036854775807LL - 1)\nok return of \"%lld\", (-9223372036854775807LL - 1)\nok text of \"%llu\", ~0ULL\nok return of \"%llu\", ~0ULL\nok text of \"%llx\", ~0ULL\nok return of \"%llx\", ~0ULL\nok text of \"%'d\", 1234567\nok return of \"%'d\", 1234567\nok text of \"%D\", 5L\nok return of \"%D\", 5L\nok text of \"%O\", 8L\nok return of \"%O\", 8L\nok text of \"%U\", 7L\nok return of \"%U\", 7L\nok text of \"%D\", (-9223372036854775807L - 1)\nok return of \"%D\", (-9223372036854775807L - 1)\nok text of \"%U\", ~0UL\nok return of \"%U\", ~0UL\nok text of \"%d %d\", 5, 6\nok return of \"%d %d\", 5, 6\nok text of \"%2$d %1$d\", 1, 2\nok return of \"%2$d %1$d\", 1, 2\nok text of \"%1$s %1$s\", \"rep\"\nok return of \"%1$s %1$s\", \"rep\"\nsummary 82 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "snprintf_strings",
+      "source_sha256": "19ca5763c868203d3c0b9605ec17208da3cc9ad0c5024516bffee1988c48ed70",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "80bfc92043e54c32c3b7d8600b1535ae4ac36cb4fb200e5f1e5ccd23934e3dfc",
+          "exit_code": 0,
+          "stdout": "ok text of \"%s\", \"abc\"\nok return of \"%s\", \"abc\"\nok text of \"%s\", \"\"\nok return of \"%s\", \"\"\nok text of \"%-6s|\", \"abc\"\nok return of \"%-6s|\", \"abc\"\nok text of \"%6s|\", \"abc\"\nok return of \"%6s|\", \"abc\"\nok text of \"%.1s\", \"abc\"\nok return of \"%.1s\", \"abc\"\nok text of \"%.0s\", \"abc\"\nok return of \"%.0s\", \"abc\"\nok text of \"%.*s\", 2, \"abcdef\"\nok return of \"%.*s\", 2, \"abcdef\"\nok text of \"%.100s\", \"ab\"\nok return of \"%.100s\", \"ab\"\nok text of \"%06s|\", \"abc\"\nok return of \"%06s|\", \"abc\"\nok text of \"%s\", (char *)0\nok return of \"%s\", (char *)0\nok text of \"%.2s\", (char *)0\nok return of \"%.2s\", (char *)0\nok text of \"%10s|\", (char *)0\nok return of \"%10s|\", (char *)0\nok text of \"%s\", \"\\xc3\\xa9\"\nok return of \"%s\", \"\\xc3\\xa9\"\nok text of \"%.1s\", \"\\xc3\\xa9\"\nok return of \"%.1s\", \"\\xc3\\xa9\"\nok text of \"%5c|\", 'a'\nok return of \"%5c|\", 'a'\nok text of \"%C\", 65\nok return of \"%C\", 65\nok text of \"%lc\", 66\nok return of \"%lc\", 66\nok text of \"%S\", L\"wide\"\nok return of \"%S\", L\"wide\"\nok text of \"%ls\", L\"wide\"\nok return of \"%ls\", L\"wide\"\nok text of \"%.2ls\", L\"wide\"\nok return of \"%.2ls\", L\"wide\"\nok text of \"%lc\", (wint_t)0xe9\nok return of \"%lc\", (wint_t)0xe9\nok text of \"%p\", (void *)0\nok return of \"%p\", (void *)0\nok text of \"%p\", (void *)0x10\nok return of \"%p\", (void *)0x10\nok text of \"%#p\", (void *)0x10\nok return of \"%#p\", (void *)0x10\nok text of \"%p\", (void *)0xdeadbe\nok return of \"%p\", (void *)0xdeadbe\nok text of \"%s:%s\", \"a\", \"b\"\nok return of \"%s:%s\", \"a\", \"b\"\nok text of \"%s%s%s\", \"a\", \"\", \"c\"\nok return of \"%s%s%s\", \"a\", \"\", \"c\"\nok %lc of 0x100: -1\nok %lc of 0x100: EILSEQ (92)\nok %ls with 0x100: -1\nok %lc of 0x7fffffff: -1 EILSEQ\nok %lc of 0: counts one character\nok the NUL is stored\nsummary 60 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9710389be091c0b7cd689055b9150c057c8566e09f7e3955343b98d6d2a4cd8e",
+          "exit_code": 0,
+          "stdout": "ok text of \"%s\", \"abc\"\nok return of \"%s\", \"abc\"\nok text of \"%s\", \"\"\nok return of \"%s\", \"\"\nok text of \"%-6s|\", \"abc\"\nok return of \"%-6s|\", \"abc\"\nok text of \"%6s|\", \"abc\"\nok return of \"%6s|\", \"abc\"\nok text of \"%.1s\", \"abc\"\nok return of \"%.1s\", \"abc\"\nok text of \"%.0s\", \"abc\"\nok return of \"%.0s\", \"abc\"\nok text of \"%.*s\", 2, \"abcdef\"\nok return of \"%.*s\", 2, \"abcdef\"\nok text of \"%.100s\", \"ab\"\nok return of \"%.100s\", \"ab\"\nok text of \"%06s|\", \"abc\"\nok return of \"%06s|\", \"abc\"\nok text of \"%s\", (char *)0\nok return of \"%s\", (char *)0\nok text of \"%.2s\", (char *)0\nok return of \"%.2s\", (char *)0\nok text of \"%10s|\", (char *)0\nok return of \"%10s|\", (char *)0\nok text of \"%s\", \"\\xc3\\xa9\"\nok return of \"%s\", \"\\xc3\\xa9\"\nok text of \"%.1s\", \"\\xc3\\xa9\"\nok return of \"%.1s\", \"\\xc3\\xa9\"\nok text of \"%5c|\", 'a'\nok return of \"%5c|\", 'a'\nok text of \"%C\", 65\nok return of \"%C\", 65\nok text of \"%lc\", 66\nok return of \"%lc\", 66\nok text of \"%S\", L\"wide\"\nok return of \"%S\", L\"wide\"\nok text of \"%ls\", L\"wide\"\nok return of \"%ls\", L\"wide\"\nok text of \"%.2ls\", L\"wide\"\nok return of \"%.2ls\", L\"wide\"\nok text of \"%lc\", (wint_t)0xe9\nok return of \"%lc\", (wint_t)0xe9\nok text of \"%p\", (void *)0\nok return of \"%p\", (void *)0\nok text of \"%p\", (void *)0x10\nok return of \"%p\", (void *)0x10\nok text of \"%#p\", (void *)0x10\nok return of \"%#p\", (void *)0x10\nok text of \"%p\", (void *)0xdeadbe\nok return of \"%p\", (void *)0xdeadbe\nok text of \"%s:%s\", \"a\", \"b\"\nok return of \"%s:%s\", \"a\", \"b\"\nok text of \"%s%s%s\", \"a\", \"\", \"c\"\nok return of \"%s%s%s\", \"a\", \"\", \"c\"\nok %lc of 0x100: -1\nok %lc of 0x100: EILSEQ (92)\nok %ls with 0x100: -1\nok %lc of 0x7fffffff: -1 EILSEQ\nok %lc of 0: counts one character\nok the NUL is stored\nsummary 60 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

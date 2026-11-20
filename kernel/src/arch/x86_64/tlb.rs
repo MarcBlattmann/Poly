@@ -1,9 +1,12 @@
 //! TLB shootdowns: making other CPUs drop translations that changed.
 //!
-//! The protocol is `poly_smp::tlb::Shootdowns` (host-tested): one request
-//! at a time, a pending flag per target, an IPI on [`TLB_VECTOR`], and
-//! waiting until every target has cleared its flag. The kernel's parts are
-//! here: sending the IPIs, and what a target does with a request
+//! The protocol is `poly_smp::tlb::Mailboxes` (host-tested, ADR 0254): a
+//! mailbox per CPU, any number of requests in flight, an IPI on
+//! [`TLB_VECTOR`]. [`post`] sends without waiting and gives a ticket;
+//! [`shoot`] posts and waits for it; [`post_quiet`] posts without an IPI.
+//! A target empties its mailbox when the IPI arrives, in every wait loop, at
+//! every context switch and at every timer tick. The kernel's
+//! parts are here: sending the IPIs, and what a target does with a request
 //! ([`service`]):
 //!
 //! - for a user address space (named by its PML4's physical address): if
@@ -32,10 +35,13 @@ use super::irq::TLB_VECTOR;
 use super::percpu;
 use poly_paging::ADDR_MASK;
 use poly_smp::CpuSet;
-use poly_smp::tlb::Shootdowns;
+use poly_smp::tlb::Mailboxes;
 pub use poly_smp::tlb::{Flush, Request};
 
-static SHOOTDOWNS: Shootdowns<{ percpu::MAX_CPUS }> = Shootdowns::new();
+/// A request posted to other CPUs, until they have carried it out.
+pub type Ticket = poly_smp::tlb::Ticket<{ percpu::MAX_CPUS }>;
+
+static MAILBOXES: Mailboxes<{ percpu::MAX_CPUS }> = Mailboxes::new();
 
 /// CR3 bit 63 with CR4.PCIDE: keep the PCID's translations on the load.
 const CR3_NO_FLUSH: u64 = 1 << 63;
@@ -43,7 +49,8 @@ const CR3_NO_FLUSH: u64 = 1 << 63;
 /// Carry out a shootdown waiting for this CPU, if there is one: from the
 /// IPI's handler and from every wait loop that runs with interrupts off.
 pub fn service() {
-    SHOOTDOWNS.service(percpu::cpu_index(), apply);
+    // A mailbox that overflowed: everything, global translations included.
+    MAILBOXES.service(percpu::cpu_index(), apply, || invalidate_kernel(Flush::All));
 }
 
 fn apply(req: &Request) {
@@ -91,16 +98,49 @@ fn invalidate_kernel(flush: Flush) {
 /// wait until they have. The caller has already invalidated whatever this
 /// CPU needs to.
 pub fn shoot(targets: CpuSet, req: Request) {
+    if let Some(t) = post(targets, req) {
+        wait(&t);
+    }
+}
+
+/// Post `req` to the CPUs in `targets` (this one excepted) and interrupt
+/// them, without waiting: the ticket to [`wait`] for or ask about
+/// ([`complete`]); `None` if there was nobody to tell.
+pub fn post(targets: CpuSet, req: Request) -> Option<Ticket> {
     let _irq = InterruptsOff::new();
-    let me = percpu::cpu_index();
-    let notify = |set: CpuSet| {
-        for c in set.iter() {
-            if let Some(area) = percpu::cpu(c) {
-                super::apic::send_ipi(area.apic_id(), TLB_VECTOR);
-            }
+    MAILBOXES.post(percpu::cpu_index(), targets, req, interrupt)
+}
+
+/// [`post`] without interrupting anyone: the targets carry `req` out at
+/// their next timer tick or context switch (at most a tick from now), with
+/// whatever else came meanwhile, or sooner if somebody [`wait`]s for it.
+pub fn post_quiet(targets: CpuSet, req: Request) -> Option<Ticket> {
+    let _irq = InterruptsOff::new();
+    MAILBOXES.post_quiet(percpu::cpu_index(), targets, req)
+}
+
+/// Send the shootdown IPI to the CPUs in `set`.
+fn interrupt(set: CpuSet) {
+    for c in set.iter() {
+        if let Some(area) = percpu::cpu(c) {
+            super::apic::send_ipi(area.apic_id(), TLB_VECTOR);
         }
-    };
-    SHOOTDOWNS.shoot(me, targets, req, notify, service);
+    }
+}
+
+/// Whether every target of `t` has carried its request out.
+pub fn complete(t: &Ticket) -> bool {
+    MAILBOXES.complete(t)
+}
+
+/// Return once every target of `t` has carried its request out, serving
+/// this CPU's own mailbox meanwhile (with interrupts off: it may hold a
+/// spinlock another target spins on, and that one serves its mailbox too).
+pub fn wait(t: &Ticket) {
+    let _irq = InterruptsOff::new();
+    // A quiet request's targets are interrupted now that someone waits.
+    MAILBOXES.hurry(t, interrupt);
+    MAILBOXES.wait(t, service);
 }
 
 /// Invalidate kernel mappings in `flush` on every CPU (after a kernel
@@ -114,5 +154,5 @@ pub fn flush_kernel(flush: Flush) {
 
 /// Shootdowns sent by any CPU, and requests carried out by targets.
 pub fn stats() -> (u64, u64) {
-    SHOOTDOWNS.stats()
+    MAILBOXES.stats()
 }
