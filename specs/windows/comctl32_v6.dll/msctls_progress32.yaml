@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/comctl32_v6.dll/msctls_progress32.yaml
+id: windows/api/comctl32_v6.dll/msctls_progress32
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station: windows and messages work, nothing is visible, no input) as the local account \"server\"; every test program carries a manifest that asks for Microsoft.Windows.Common-Controls 6.0.0.0 (an RT_MANIFEST resource), so it gets the side-by-side comctl32 version 6; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-comctl6-init
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, every one carrying a manifest (an RT_MANIFEST resource) that asks for Microsoft.Windows.Common-Controls 6.0.0.0 (publicKeyToken 6595b64144ccf1df, processorArchitecture *): the programs run with the side-by-side comctl32 version 6, the way Google's updater.exe, Chrome and most current installers do. The same programs built for 32-bit x86 (i686) and run on the same machine (WOW64) printed the same observation files line for line except for one value, named below. Microsoft Learn: "InitCommonControlsEx function (commctrl.h)", "INITCOMMONCONTROLSEX structure", "Common Control Versions", "Enabling Visual Styles", "DllGetVersion function", "DLLVERSIONINFO structure", "Progress Bar Control Reference", "Button Control Reference", "Edit Control Reference", "Subclassing Controls", "SetWindowTheme function (uxtheme.h)", "GetWindowTheme function"; commctrl.h, winuser.h, shlwapi.h, uxtheme.h, winerror.h for constants and layouts. docs/windows/updater-b7 (the coordinator's finding): the updater's UI thread calls InitCommonControlsEx({8, 0x4020}); Poly returned FALSE and the progress-bar window could not be created. No Wine or ReactOS source was read and no Microsoft binary was decompiled or disassembled.
+summary: >
+  The progress bar window class of version 6, created as the updater creates it (a WS_CHILD window), with the messages of the first version and the version 6 additions PBM_SETSTATE, PBM_GETSTATE, PBM_SETMARQUEE, the colour messages and PBS_MARQUEE.
+interface:
+  signature: "window class \"msctls_progress32\"; PBM_SETRANGE 0x401, PBM_SETPOS 0x402, PBM_DELTAPOS 0x403, PBM_SETSTEP 0x404, PBM_STEPIT 0x405, PBM_SETRANGE32 0x406, PBM_GETRANGE 0x407, PBM_GETPOS 0x408, PBM_SETBARCOLOR 0x409, PBM_SETMARQUEE 0x40A, PBM_GETSTEP 0x40D, PBM_GETBKCOLOR 0x40E, PBM_GETBARCOLOR 0x40F, PBM_SETSTATE 0x410, PBM_GETSTATE 0x411, PBM_SETBKCOLOR 0x2001 (CCM_SETBKCOLOR); PBS_SMOOTH 1, PBS_VERTICAL 4, PBS_MARQUEE 8, PBS_SMOOTHREVERSE 0x10; PBST_NORMAL 1, PBST_ERROR 2, PBST_PAUSED 3"
+chrome: "Google's 32-bit updater.exe (159.0.8140.0) calls InitCommonControlsEx({dwSize 8, dwICC 0x4020 = ICC_STANDARD_CLASSES | ICC_PROGRESS_CLASS}) on its UI thread, creates a dialog (class #32770) with a Static and four Button children, then CreateWindowExW(0, \"msctls_progress32\", ..., WS_CHILD, 53, 190, 653, ...). When the first call returns FALSE it logs \"Failed to initialize the native UI: 80004005\" and installs without a window."
+rules:
+  create: "CreateWindowExW(0, \"msctls_progress32\", \"\", WS_CHILD, ...) gives a window whose class name is msctls_progress32, whose style is exactly WS_CHILD (plus the bits asked for: PBS_SMOOTH, PBS_VERTICAL, PBS_MARQUEE, PBS_SMOOTHREVERSE, PBS_MARQUEE | PBS_SMOOTH, WS_VISIBLE, WS_BORDER are all kept as given), whose extended style is WS_EX_STATICEDGE (0x20000), whose parent is the parent given, whose client area is two pixels smaller than the window each way (a 100 x 40 window has a 98 x 38 client area), with no text and no font"
+  defaults: "range 0 to 100, position 0, step 10, state PBST_NORMAL (1), bar and background colours CLR_DEFAULT (0xFF000000)"
+  range_pos: "PBM_SETRANGE32(low, high) and PBM_SETRANGE(MAKELPARAM(low, high)) return the old range as (old high << 16) | old low (100 << 16 for a new bar); PBM_GETRANGE(TRUE) is the low end and PBM_GETRANGE(FALSE) the high end; PBM_SETPOS returns the old position and clamps the new one to the range; a new range moves the position into it (the range 10..300 made the position 10, so the next PBM_SETPOS returned 10; a range 0..10 after position 16 made it 10); PBM_DELTAPOS returns the old position; PBM_SETSTEP returns the old step; PBM_STEPIT returns the old position and adds the step; messages that mean nothing (WM_USER + 30, WM_USER + 18) return 0"
+  state: "PBM_SETSTATE(PBST_ERROR) on a new bar returns 1 (the old state) and PBM_GETSTATE is 2; PBST_PAUSED returns 2 and gives 3; PBST_NORMAL returns 3 and gives 1; the same state again returns itself; a value that is not 1, 2 or 3 (0, 4, 5, 99, 0x10000) is refused: the result is 0 and the state stays. The state changes neither the range nor the position"
+  colours: "PBM_SETBARCOLOR and PBM_SETBKCOLOR return the previous colour (0xFF000000 at first) and the colour set is returned by PBM_GETBARCOLOR and PBM_GETBKCOLOR (0x00ff00, 0x0000ff, 0x123456); PBM_SETBARCOLOR(CLR_DEFAULT) returns the previous colour and the bar colour is CLR_DEFAULT again; the two colours are independent"
+  marquee: "PBM_SETMARQUEE(1, 30) and (0, 0) return 1 on every bar, with PBS_MARQUEE or without, and do not change the window style; a bar created with PBS_MARQUEE (alone or with PBS_SMOOTH) keeps its style, ignores PBM_SETPOS (the result 0 and the position stays 0), still answers PBM_SETRANGE32 and keeps state normal; a plain bar accepts PBM_SETPOS as always"
+errors:
+  none: "no error codes: results as above"
+side_effects: "none"
+threading: "the window belongs to its thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per message"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing comctl32.dll (when the test uses it), user32.dll and kernel32.dll by name (the subclass tests bind comctl32's functions by the ordinals the updater uses, 410 to 413); uxtheme.dll is loaded at run time with LoadLibraryW. Each test carries the manifest resource of version 6.0.0.0 of the common controls (written as data in the test's source with global_asm!, the way the resource tests carry menus and icons), so the program runs with the side-by-side comctl32 6.x; a Poly that decides the version from the manifest of the process passes them, one that treats every process as version 5.82 does not. Windows are created in session 0 (nothing is visible); controls are children of a plain window the test makes. Observations are results, window styles, class names and relations; no line holds a handle, an address, a path or a time. The 32-bit builds (not part of the pipeline, which builds 64-bit programs) gave the same lines.
+not_covered: >
+  Painting (the oracle session is not interactive: no WM_PAINT, nothing is drawn, visual styles are not active: IsThemeActive is FALSE), mouse and keyboard input, the controls' look and size metrics, DPI, a program with no manifest (version 5.82: see the sheets of comctl32.dll), a manifest of another version, ComCtl32 version 6 loaded by a DLL rather than by the program, and a NULL pointer for InitCommonControlsEx (not tried).

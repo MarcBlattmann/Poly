@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_insert_right_errors",
+      "source_sha256": "04cab7772e2cd6808acc13aabf6f2ca8c3a8a79311513d8f48f8d652225b1867",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "70c0decc8ccf14dde1e0ff6516fff8ad50042aa5a1dfc4492e7228eed637cd52",
+          "exit_code": 0,
+          "stdout": "ok a port that is not in the task: KERN_INVALID_NAME\nok MACH_PORT_NULL as the port: KERN_INVALID_NAME\nok MACH_PORT_DEAD as the port: KERN_INVALID_NAME\nok message type 0: KERN_INVALID_RIGHT\nok message type 99: KERN_INVALID_RIGHT\nok COPY_RECEIVE: KERN_INVALID_RIGHT\nok COPY_SEND of a name with no send right: KERN_INVALID_RIGHT\nok COPY_SEND of a dead name: KERN_INVALID_CAPABILITY (20)\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fd46bc33e062221f2a96e7b098395c2c546aa64d249dabce89037be7c81c8f6a",
+          "exit_code": 0,
+          "stdout": "ok a port that is not in the task: KERN_INVALID_NAME\nok MACH_PORT_NULL as the port: KERN_INVALID_NAME\nok MACH_PORT_DEAD as the port: KERN_INVALID_NAME\nok message type 0: KERN_INVALID_RIGHT\nok message type 99: KERN_INVALID_RIGHT\nok COPY_RECEIVE: KERN_INVALID_RIGHT\nok COPY_SEND of a name with no send right: KERN_INVALID_RIGHT\nok COPY_SEND of a dead name: KERN_INVALID_CAPABILITY (20)\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_insert_right_move_receive",
+      "source_sha256": "cccac5e2f6c9bedbcf7d9343fa6de9f6a74b773dcfdae6a45a8cbebc854a007c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1b3b9f791fc200ed1f189ecc4847a9c9a33d0bed76fbb3f01ef58d424571ac21",
+          "exit_code": 0,
+          "stdout": "ok MOVE_RECEIVE of a receive-only port to a free name succeeds\nok the new name is the receive right, the old name is invalid\nok the queue limit moved with it\nvalue context after the move (0x1234 before) 0\nok onto its own name: succeeds, nothing changes\nok a port with a send right in the task: KERN_RIGHT_EXISTS (21)\nok and the port is destroyed: its name is a dead name now\nok the target name stays free\nok onto another port's name: KERN_NAME_EXISTS (13)\nvalue the moved port's old name after that 3735879695\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e8ff4e43f0ac7dac11e3fc04bd2fb7881cf129e7ab9b40bac8461330f0253611",
+          "exit_code": 0,
+          "stdout": "ok MOVE_RECEIVE of a receive-only port to a free name succeeds\nok the new name is the receive right, the old name is invalid\nok the queue limit moved with it\nvalue context after the move (0x1234 before) 0\nok onto its own name: succeeds, nothing changes\nok a port with a send right in the task: KERN_RIGHT_EXISTS (21)\nok and the port is destroyed: its name is a dead name now\nok the target name stays free\nok onto another port's name: KERN_NAME_EXISTS (13)\nvalue the moved port's old name after that 3735879695\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_insert_right_send_once",
+      "source_sha256": "8599bae43b95ec350c00762ef75ab660bbb081e724be214f7fab975aefc76aa5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "aa9377bbc5802c85f86016e287520af37f85f6c9f720827cb4a908c58b34cfb5",
+          "exit_code": 0,
+          "stdout": "ok MAKE_SEND_ONCE under a free name succeeds\nok the name is a send-once right\nok the port is still only a receive right\nok a second one under another name\nok under the receive right's own name: KERN_NAME_EXISTS (13)\nok MOVE_SEND_ONCE to another name succeeds\nok the new name has it, the old name is gone\nok MOVE_SEND_ONCE of a receive right's name: KERN_INVALID_RIGHT\nok and the free name stays free\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "405fe0b6b2c1c6fee90b7f540b55dfe2b7f6fbbf638a5ef7b4922ee2eeaa1703",
+          "exit_code": 0,
+          "stdout": "ok MAKE_SEND_ONCE under a free name succeeds\nok the name is a send-once right\nok the port is still only a receive right\nok a second one under another name\nok under the receive right's own name: KERN_NAME_EXISTS (13)\nok MOVE_SEND_ONCE to another name succeeds\nok the new name has it, the old name is gone\nok MOVE_SEND_ONCE of a receive right's name: KERN_INVALID_RIGHT\nok and the free name stays free\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

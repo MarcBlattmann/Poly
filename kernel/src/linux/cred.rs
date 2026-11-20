@@ -32,7 +32,14 @@ pub fn vfs_cred(ids: &FsIds) -> Cred {
 /// capabilities; root for kernel threads and threads of processes without
 /// Linux state.
 pub fn current_vfs_cred() -> Cred {
-    current_creds().map_or_else(Cred::root, |c| vfs_cred(&c.fs_ids()))
+    if let Some(c) = current_creds() {
+        return vfs_cred(&c.fs_ids());
+    }
+    // An XNU process that runs as a user (ADR 0246).
+    if let Some((uid, gid)) = user::current_process().and_then(|p| p.xnu.as_ref().and_then(|x| *x.ids.lock())) {
+        return Cred::user(uid, gid);
+    }
+    Cred::root()
 }
 
 /// The running thread's Linux credentials, if it is a Linux thread (its

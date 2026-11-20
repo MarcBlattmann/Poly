@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontcreatepathforglyph_empty_and_transform",
+      "source_sha256": "364363294e791b794f5b34183d70d7323bfa400504df2fcdcd0754c2274adfd4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a81a1f111aa517e6d8b326bbdf8b7208e9fd06079da3669c8b74aaa85600a21e",
+          "exit_code": 0,
+          "stdout": "ok CTFontCreatePathForGlyph(f, 1, NULL) == NULL\nok CTFontCreatePathForGlyph(f, 40, NULL) == NULL\nok CTFontCreatePathForGlyph(f, 12, NULL) == NULL\nok n.origin.x is 5\nok n.size.width is 40\nok n.size.height is 70\nok s.origin.x is 20\nok s.size.width is 80\nok s.size.height is 70\nok small.origin.x is 1\nok small.size.width is 4\nok small.size.height is 7\nok same.size.width is 40\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3272417020513e0633df4340affa13aa3bde7529297e213f348e22792a75dc32",
+          "exit_code": 0,
+          "stdout": "ok CTFontCreatePathForGlyph(f, 1, NULL) == NULL\nok CTFontCreatePathForGlyph(f, 40, NULL) == NULL\nok CTFontCreatePathForGlyph(f, 12, NULL) == NULL\nok n.origin.x is 5\nok n.size.width is 40\nok n.size.height is 70\nok s.origin.x is 20\nok s.size.width is 80\nok s.size.height is 70\nok small.origin.x is 1\nok small.size.width is 4\nok small.size.height is 7\nok same.size.width is 40\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontcreatepathforglyph_triangle_and_composites",
+      "source_sha256": "121d1701ad862ca239f94749356ad7000b1cb4a6d582d1cbda6d7375ca9e38d1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d9d1d25455691373c7599dd948defa4fc9e291f678fd5b08a04fb07dbc15df43",
+          "exit_code": 0,
+          "stdout": "ok p.n == 4 && p.kind[0] == kCGPathElementMoveToPoint && p.kind[3] == kCGPathElementCloseSubpath\nok p.x[0] is 0\nok p.y[0] is 0\nok p.x[1] is 35\nok p.y[1] is 70\nok p.x[2] is 70\nok p.y[2] is 0\nok p.n == 8 && p.kind[4] == kCGPathElementMoveToPoint\nok p.x[4] is 70\nok p.y[4] is 0\nok p.x[5] is 105\nok p.y[5] is 70\nok p.x[6] is 140\nok p.y[6] is 0\nok p.n == 10 && p.kind[5] == kCGPathElementMoveToPoint\nok p.x[0] is 5\nok p.y[0] is 0\nok p.x[2] is 45\nok p.y[2] is 50\nok p.x[5] is 15\nok p.y[5] is 52\nok p.x[7] is 25\nok p.y[7] is 62\nok b.size.height is 62\nsummary 24 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a4d336ae3d93104f468d59c0220f155ee0749070959f9a7f9733d4850965870e",
+          "exit_code": 0,
+          "stdout": "ok p.n == 4 && p.kind[0] == kCGPathElementMoveToPoint && p.kind[3] == kCGPathElementCloseSubpath\nok p.x[0] is 0\nok p.y[0] is 0\nok p.x[1] is 35\nok p.y[1] is 70\nok p.x[2] is 70\nok p.y[2] is 0\nok p.n == 8 && p.kind[4] == kCGPathElementMoveToPoint\nok p.x[4] is 70\nok p.y[4] is 0\nok p.x[5] is 105\nok p.y[5] is 70\nok p.x[6] is 140\nok p.y[6] is 0\nok p.n == 10 && p.kind[5] == kCGPathElementMoveToPoint\nok p.x[0] is 5\nok p.y[0] is 0\nok p.x[2] is 45\nok p.y[2] is 50\nok p.x[5] is 15\nok p.y[5] is 52\nok p.x[7] is 25\nok p.y[7] is 62\nok b.size.height is 62\nsummary 24 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

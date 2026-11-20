@@ -320,7 +320,7 @@ pub fn writeback_pass() {
             continue;
         }
         let changed = m.cached.take_changed();
-        if (changed || m.cached.page_counts().1 > 0)
+        if (changed || m.cached.has_dirty())
             && let Err(e) = m.cached.sync()
         {
             kprintln!("fs: writeback to {} ({}) failed: {}", m.path, m.disk.name(), e.name());

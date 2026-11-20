@@ -682,7 +682,8 @@ paths), with an empty environment.
 **Tests of libSystem's own functions** (entries `macos/api/libsystem_c.dylib/...`,
 `libsystem_pthread`, `libsystem_malloc`, `libdyld`) are the exception: such a
 test says `poly-mac: libsystem` in a comment among its first 30 lines, includes
-`poly_mlibc.h` (`tests/macos/include`; the exception port and thread state tests include `poly_mexc.h`, which includes it) instead and calls the function under test
+`poly_mlibc.h` (`tests/macos/include`; the bootstrap, `mach_port_*`, XPC and spawn-attribute tests include
+`poly_mapi.h`, the exception port and thread state tests `poly_mexc.h`, same rules) instead and calls the function under test
 through libSystem. It still reports with raw `write` calls only (`check`,
 `check_str`, `value`, `finish`, the same output format), so a broken function
 cannot hide behind its own output. `mac build` lets exactly these tests import
@@ -749,6 +750,20 @@ autorelease pool; `ns_is` compares strings through CoreFoundation, so a test of 
 rest on that method. Tests that need a real bundle, arguments or an environment start a copy of themselves
 inside `T.app` with `cf_enter_app` / `cf_enter_app_ex(plist, extra_argument, envp)`. The defaults tests use
 suites named `test.poly.nsspec.<name>` only and remove them with `removePersistentDomainForName:`.
+
+**Tests about CoreText** (`specs/macos/CoreText.framework/<symbol>.tests/`): a test whose header comment
+has the line `poly-mac: coretext` is linked with `-framework CoreText -framework CoreGraphics -framework
+CoreFoundation` and may import their own symbols (`CT...`, `kCT...`, `CG...`, `kCG...`, `CF...`). It includes
+`poly_mct.h` (on top of `poly_mcf.h`), which embeds two small TrueType fonts, "PolyTest Regular" and
+"PolyTest Bold" (made by `tests/macos/fonts/mkfont.py` from the public table formats: box glyphs on whole
+units so that drawn pixels are exactly black or white; their design is in the header), so results do not
+depend on Apple's fonts. A test that needs real fonts adds `poly-mac: fonts DejaVuSans.ttf ...`: `mac run`
+copies those files from `$POLY_FONT_DIR` or the `dejavu-*` directory of `target/fonts` (`cargo xtask fonts
+fetch`; worktrees use the main checkout's) into the test's scratch directory, where the test opens them
+by their relative name. Tests that touch Apple's own fonts (the default font, the system UI font, fallback
+for a character) have `sys_` in their names and say SYSTEM-DEPENDENT: their recorded names are Apple's
+choices, which Poly need not copy. Drawing tests render into an 8-bit gray `CGBitmapContext` and print the
+pixels row by row.
 
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.

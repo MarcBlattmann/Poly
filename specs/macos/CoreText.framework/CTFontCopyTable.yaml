@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreText.framework/CTFontCopyTable.yaml. Observed with C test programs linked against CoreText
+# (tests/macos/include/poly_mct.h, ADR 0182); results per architecture in CTFontCopyTable.tests/macos.json.
+id: "macos/api/CoreText.framework/CTFontCopyTable"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the CoreText, CoreGraphics and CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes, and the two architectures gave the same results. Tests are C programs that link CoreText (the line `poly-mac: coretext`, tests/macos/include/poly_mct.h). The results do not depend on Apple's fonts: tests use the PolyTest TrueType fonts embedded in poly_mct.h (made by tests/macos/fonts/mkfont.py) and DejaVu Sans 2.37 files the runner copies into the scratch directory (`poly-mac: fonts`); the few tests about Apple's own fonts are named sys_ and described as SYSTEM-DEPENDENT; results and output go through raw system calls"
+  observed_by: spec-macos-coretext
+  date: 2026-11-20
+summary: >
+  CTFontCopyTable(font, tag, options) returns the bytes of one sfnt table as new CFData, or NULL when
+  the font has no such table. PolyTest has 11 tables listed by CTFontCopyAvailableTables as an array
+  of numbers holding the four tag characters (big endian) in the file's sorted order: OS/2 (96 bytes,
+  version 4), cmap, glyf, head (54 bytes, unitsPerEm 1000 at offset 18), hhea (36, ascender 800,
+  descender -200, line gap 100), hmtx, kern (30), loca, maxp (32, numGlyphs 12 at offset 4), name,
+  post; GSUB, GPOS and CFF give NULL. Every listed tag can be copied and gives non-empty data; the
+  bold font has the same tags. The bytes are the file's: DejaVu Sans has GSUB, GPOS and GDEF, its head
+  has unitsPerEm 2048 and the magic number 0x5F0F3CF5 at offset 12, maxp numGlyphs 6253. Tags are
+  four-character codes as numbers (kCTFontTableHead = 'head'). The fonts the tests bring: PolyTest
+  Regular and Bold (units per em 1000; the glyphs are boxes: A box 100..500 x 0..700, B 100..400 x
+  0..500, V a triangle, W two V, a, g, e-acute and the accent mark U+0301 composites, .notdef a box,
+  U+1F600 a box through a format 12 cmap; hhea 800/-200/line gap 100, OS/2 typo 700/-300/50, win
+  900/250, capHeight 700, xHeight 500, a kern pair A,V -100 and V,A -80), and DejaVu Sans 2.37.
+returns:
+  present: "new CFData with the table's bytes"
+  absent: "NULL"
+errors:
+  null_font: "NULL or invalid arguments not listed here are not supported (the process may crash)"
+side_effects: "allocates the data"
+threading: "CoreText objects are immutable once made and may be used from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

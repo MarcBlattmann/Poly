@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "xpc_release_dictionary_values",
+      "source_sha256": "fc13a343394bb9585394102d63907d08449baad682891aa354d1b8acd76b963c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ff7f6380726b55ad79926dd577a5263ae7bd318c8b519161438bcdbae9c95a86",
+          "exit_code": 0,
+          "stdout": "ok ten stored and released strings read back\nok a value stored under two keys stays under the other\nok a replaced key shows the new value\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a2919866ef248dba82a434acbcf1af7ee6c4ac8d56c40857d1f24678442480ce",
+          "exit_code": 0,
+          "stdout": "ok ten stored and released strings read back\nok a value stored under two keys stays under the other\nok a replaced key shows the new value\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "xpc_release_nested",
+      "source_sha256": "ce26e1639e94ea021283f4afaf228c4215cadf715f41c932c675298feb856339",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6c493c8690b7cc9011da958a9f1fb2b0f9c06de4f914601e5dea19794abe0ba8",
+          "exit_code": 0,
+          "stdout": "ok the inner dictionary, still held by the test, is usable after the outer one was released\nok removed from one holder it stays in the other\nok the second holder keeps it after the test's own reference is gone\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6dc0bca485f7b11e1f46a1f88a375f578c8acd0076fab91d2d700a4523681026",
+          "exit_code": 0,
+          "stdout": "ok the inner dictionary, still held by the test, is usable after the outer one was released\nok removed from one holder it stays in the other\nok the second holder keeps it after the test's own reference is gone\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:07:13",
+  "tests": [
+    {
+      "name": "ctfontcreatewithname_registered",
+      "source_sha256": "7ad7c52a9a52d5927e1612a4d2f71bebed804d4521d9c3546c0f62daaf5ce0e1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d1120a81b61f6db753256e70b98f6b1c04d5c9dc18f8b836a1d0e6c399c51d51",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok f != NULL && CFGetTypeID(f) == CTFontGetTypeID()\nok pt_is(f, \"PolyTest-Regular\")\nok CTFontGetSize(f) is 20\nok CTFontGetAscent(f) is 16\nok CTFontGetXHeight(f) is 10\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest Bold\"), 20, NULL), \"PolyTest-Bold\")\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest\"), 20, NULL), \"PolyTest-Regular\")\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 10.5, NULL)) is 10.5\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 10.5, NULL)) is 8.4\nok CFEqual(f, g)\nok !CFEqual(f, CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 21, NULL))\nok !CFEqual(f, CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL))\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ee11b7e5f65e4f29435d468adfd157bd97b8327932b6e0b52d93babf03f49816",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok f != NULL && CFGetTypeID(f) == CTFontGetTypeID()\nok pt_is(f, \"PolyTest-Regular\")\nok CTFontGetSize(f) is 20\nok CTFontGetAscent(f) is 16\nok CTFontGetXHeight(f) is 10\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest Bold\"), 20, NULL), \"PolyTest-Bold\")\nok pt_is(CTFontCreateWithName(CFSTR(\"PolyTest\"), 20, NULL), \"PolyTest-Regular\")\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 10.5, NULL)) is 10.5\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 10.5, NULL)) is 8.4\nok CFEqual(f, g)\nok !CFEqual(f, CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 21, NULL))\nok !CFEqual(f, CTFontCreateWithName(CFSTR(\"PolyTest-Bold\"), 20, NULL))\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ctfontcreatewithname_sizes",
+      "source_sha256": "80b57ff9b35b9771bedbac55a31da1dbb2a68d544d15d6bb10fc518562a9fecc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "40e18e8ce3be8adfab5f696498af642cdd4732557c811b18157c5405485c0ed6",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 0, NULL)) is 12\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), -5, NULL)) is 12\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 0.5, NULL)) is 0.5\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 1000, NULL)) is 1000\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 4096, NULL)) is 4096\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 1000, NULL)) is 800\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 0, NULL)) is 9.6\nok CTFontGetSize(odd) > 12.344 && CTFontGetSize(odd) < 12.346\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e84e93c13546bb0678ecf09941b34dbb4ca3afa4aa5c00d6bc99272d96c807fc",
+          "exit_code": 0,
+          "stdout": "ok pt_register()\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 0, NULL)) is 12\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), -5, NULL)) is 12\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 0.5, NULL)) is 0.5\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 1000, NULL)) is 1000\nok CTFontGetSize(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 4096, NULL)) is 4096\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 1000, NULL)) is 800\nok CTFontGetAscent(CTFontCreateWithName(CFSTR(\"PolyTest-Regular\"), 0, NULL)) is 9.6\nok CTFontGetSize(odd) > 12.344 && CTFontGetSize(odd) < 12.346\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

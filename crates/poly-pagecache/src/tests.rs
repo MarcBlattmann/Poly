@@ -262,7 +262,9 @@ fn read_ahead_stops_at_cached_pages_and_at_the_end() {
 fn writes_stay_in_the_cache_until_writeback() {
     let (cache, probe, fs) = setup(1000);
     let ino = fs.create(fs.root(), b"f", &REG).unwrap();
+    assert!(!fs.has_dirty());
     assert_eq!(fs.write(ino, 0, b"hello").unwrap(), 5);
+    assert!(fs.has_dirty());
     // The size is there at once, the data only in the cache.
     assert_eq!(fs.getattr(ino).unwrap().size, 5);
     assert_eq!(probe.contents(ino), [0; 5]);
@@ -273,6 +275,7 @@ fn writes_stay_in_the_cache_until_writeback() {
     assert_eq!(fs.writeback(None).unwrap(), 1);
     assert_eq!(probe.contents(ino), b"hello");
     assert_eq!(fs.page_counts(), (1, 0));
+    assert!(!fs.has_dirty(), "written back: nothing dirty, though the page stays cached");
     assert_eq!(fs.writeback(None).unwrap(), 0, "nothing dirty left");
     assert_eq!(cache.stats().written, 1);
 }

@@ -64,7 +64,7 @@ flowchart TB
 <p>
   <a href="docs/progress/README.md"><img alt="roadmap: 116 of 189 milestones" src="docs/progress/badge-roadmap.svg"></a>
   <a href="docs/progress/README.md"><img alt="Linux API coverage: 97.2%" src="docs/progress/badge-linux.svg"></a>
-  <a href="docs/progress/README.md"><img alt="Windows API coverage: 1.7%" src="docs/progress/badge-windows.svg"></a>
+  <a href="docs/progress/README.md"><img alt="Windows API coverage: 1.8%" src="docs/progress/badge-windows.svg"></a>
   <a href="docs/progress/README.md"><img alt="macOS API coverage: 0.0%" src="docs/progress/badge-macos.svg"></a>
 </p>
 
