@@ -1,4 +1,4 @@
-//! Poly's own `libobjc.A.dylib` (ADR 0259): build, link, verify, and the
+//! Poly's own `libobjc.A.dylib` (ADR 0261): build, link, verify, and the
 //! boot test that runs an Objective-C program with it.
 //!
 //! As libSystem (ADR 0258, `libsystem.rs`): `personalities/xnu/libobjc` is

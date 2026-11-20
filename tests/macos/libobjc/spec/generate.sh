@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the x86-64 programs of the boot test group `objc-spec`
-# (tools/xtask/src/libobjc.rs, ADR 0259): every visible test of
+# (tools/xtask/src/libobjc.rs, ADR 0261): every visible test of
 # specs/macos/libobjc.A.dylib, compiled as `cargo xtask pipeline mac build`
 # compiles them (Objective-C, ARC where the test says so, linked the ordinary
 # way against the SDK's libobjc and libSystem), and the runner that starts

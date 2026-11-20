@@ -97,7 +97,7 @@
 //!                       the content-hash cache), verify them, optionally copy them into <dir>/usr/lib
 //!                       (libsystem.rs, ADR 0258)
 //!   libobjc [--out <dir>] build Poly's libobjc.A.dylib (or take it from the content-hash cache),
-//!                       verify it, optionally copy it into <dir>/usr/lib (libobjc.rs, ADR 0259)
+//!                       verify it, optionally copy it into <dir>/usr/lib (libobjc.rs, ADR 0261)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -1707,9 +1707,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // ADR 0258).
     ("libsystem", libsystem::boot_test),
     // An Objective-C program with Poly's own libobjc.A.dylib (libobjc.rs,
-    // ADR 0259).
+    // ADR 0261).
     ("objc", libobjc::boot_test),
-    // The libobjc visible spec tests on Poly in one boot (libobjc.rs, ADR 0259).
+    // The libobjc visible spec tests on Poly in one boot (libobjc.rs, ADR 0261).
     ("objc-spec", libobjc::spec_boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
@@ -2356,7 +2356,7 @@ fn lint_units(plan: &quicklint::Plan) -> Result {
     if plan.libsystem {
         libsystem::lint()?;
     }
-    // Poly's libobjc, for its Darwin target (ADR 0259).
+    // Poly's libobjc, for its Darwin target (ADR 0261).
     if plan.libobjc {
         libobjc::lint()?;
     }

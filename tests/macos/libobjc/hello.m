@@ -1,4 +1,4 @@
-/* An Objective-C program for Poly's own libobjc.A.dylib (ADR 0259), written
+/* An Objective-C program for Poly's own libobjc.A.dylib (ADR 0261), written
  * for Poly: a class with instance variables and properties, +load and
  * +initialize, a category, a subclass with a super send, ARC (strong and
  * weak references, dealloc), autorelease pools, run-time additions (a

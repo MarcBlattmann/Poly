@@ -1,4 +1,4 @@
-# 0259: Poly's own Objective-C runtime, `libobjc.A.dylib`
+# 0261: Poly's own Objective-C runtime, `libobjc.A.dylib`
 
 **Status:** Accepted. Track `impl-macos-objc`, Roadmap Phase 9 "Objective-C runtime (`libobjc`)
 and Swift runtime" (the Objective-C half, v0). Builds on ADR 0237 (Poly's dyld), ADR 0246 (the BSD

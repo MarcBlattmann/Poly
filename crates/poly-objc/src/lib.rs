@@ -1,4 +1,4 @@
-//! Poly's Objective-C runtime, the logic (ADR 0259): what `libobjc.A.dylib`
+//! Poly's Objective-C runtime, the logic (ADR 0261): what `libobjc.A.dylib`
 //! (`personalities/xnu/libobjc`) does with the metadata of the program's
 //! images and with its objects, host-tested.
 //!
@@ -18,7 +18,7 @@
 //! Sources: the spec sheets of `specs/macos/libobjc.A.dylib` and their
 //! visible tests, `<objc/runtime.h>` and `<objc/message.h>` of the macOS
 //! SDK, and the output of clang and the linkers for our own Objective-C
-//! sources (black boxes; ADR 0259). No source of Apple's runtime (objc4) or
+//! sources (black boxes; ADR 0261). No source of Apple's runtime (objc4) or
 //! of any other Objective-C runtime was read, and no Apple binary was
 //! disassembled.
 

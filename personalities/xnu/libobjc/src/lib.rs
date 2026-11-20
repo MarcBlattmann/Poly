@@ -1,4 +1,4 @@
-//! Poly's own `libobjc.A.dylib` (ADR 0259): the Objective-C runtime that
+//! Poly's own `libobjc.A.dylib` (ADR 0261): the Objective-C runtime that
 //! programs compiled against the macOS SDK load in place of Apple's. It is
 //! built for `x86_64-apple-darwin` and linked against Poly's libSystem
 //! (ADR 0258) by `cargo xtask libobjc`; the export list is in `exports/`.
@@ -20,7 +20,7 @@
 //!
 //! Inputs: the spec sheets `specs/macos/libobjc.A.dylib`, the SDK headers
 //! `<objc/runtime.h>` and `<objc/message.h>`, the export names of the SDK's
-//! `libobjc.tbd`, and the compiler's output for our own sources (ADR 0259).
+//! `libobjc.tbd`, and the compiler's output for our own sources (ADR 0261).
 //! No part of Apple's runtime was read or disassembled.
 
 #![no_std]

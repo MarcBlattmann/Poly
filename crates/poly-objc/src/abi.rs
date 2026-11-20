@@ -3,7 +3,7 @@
 //!
 //! Learned from the output of clang and the linkers on our own sources
 //! (black boxes: `clang -S` of an `@implementation`, `otool` and `nm` of
-//! the linked result; ADR 0259): no runtime source was read. Every record
+//! the linked result; ADR 0261): no runtime source was read. Every record
 //! is reached from the image's `__objc_*` list sections:
 //!
 //! - **Class object** (`_OBJC_CLASS_$_Name`, `_OBJC_METACLASS_$_Name`):
