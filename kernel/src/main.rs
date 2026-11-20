@@ -30,6 +30,7 @@ mod mouse;
 mod native;
 mod net;
 mod nt;
+mod oom;
 mod pci;
 mod power;
 mod process;
@@ -164,6 +165,8 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     display::init(&boot);
     profile::init(&boot);
     fs::init(&boot, initrd);
+    // The out-of-memory policy (ADR 0250), once the page cache is there.
+    oom::init(&boot);
     // /dev/dri on the virtio GPU the display found (ADR 0108).
     drm::init(&boot);
     tty::init(&boot);

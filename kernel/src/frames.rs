@@ -8,12 +8,79 @@
 //!
 //! The kernel heap takes its pages from here while holding its own lock, so
 //! nothing may allocate from the heap while holding [`FRAMES`].
+//!
+//! User pages and page cache pages come through [`allocate_user_frame`] (or
+//! [`take_user_frame`] under the lock), which leaves [`reserve`] frames to the
+//! kernel: the heap, page tables and DMA buffers may use them, user memory may
+//! not, so a program that keeps allocating can never make a kernel allocation
+//! fail (ADR 0250, `poly_mem::pressure`).
 
 use crate::arch;
 use crate::sync::SpinLock;
+use core::sync::atomic::{AtomicU64, Ordering};
 use poly_mem::{BuddyAllocator, FreeError, MAX_ORDER, MemoryMap, PAGE_SIZE, RangeError, Region, RegionKind, align_up};
 
 pub static FRAMES: SpinLock<Option<BuddyAllocator<'static>>> = SpinLock::new(None);
+
+/// Frames user memory and the page cache leave free for the kernel (ADR 0250).
+static RESERVE: AtomicU64 = AtomicU64::new(0);
+/// User or page cache frames refused since boot.
+static REFUSED: AtomicU64 = AtomicU64::new(0);
+
+/// Frames user memory and the page cache leave free for the kernel.
+pub fn reserve() -> u64 {
+    RESERVE.load(Ordering::Relaxed)
+}
+
+/// Below this many free frames the page cache gives back clean pages.
+pub fn low_watermark() -> u64 {
+    poly_mem::pressure::low_watermark(reserve())
+}
+
+/// User or page cache frames refused since boot (the out-of-memory policy and `/proc/meminfo`'s
+/// readers watch it).
+pub fn refused() -> u64 {
+    REFUSED.load(Ordering::Relaxed)
+}
+
+/// How far user memory of the running thread may go: down to the reserve, or, for the desktop's
+/// own programs (native ones, the first process), down to half of it, so the desktop still gets
+/// memory when a program has taken all it may (ADR 0250). Call without [`FRAMES`] held.
+pub fn user_floor() -> u64 {
+    if crate::user::current_process().is_some_and(|p| crate::oom::is_protected(&p)) { reserve() / 2 } else { reserve() }
+}
+
+/// One frame for user memory or the page cache from `alloc` (whose lock the caller holds), if
+/// more than `floor` ([`user_floor`]) is free. Not zeroed. Call [`after_user_allocation`] once
+/// the lock is dropped.
+pub fn take_user_frame(alloc: &mut BuddyAllocator<'_>, floor: u64) -> Option<u64> {
+    if !poly_mem::pressure::user_may_take(alloc.free_frames(), floor) {
+        return None;
+    }
+    alloc.allocate(0)
+}
+
+/// After user or page cache frames were asked for (`got`: whether they were had), with
+/// [`FRAMES`] unlocked: below the low watermark the page cache is asked to give pages back; a
+/// refusal wakes the out-of-memory policy.
+pub fn after_user_allocation(got: bool) {
+    let free = FRAMES.lock().as_ref().map_or(0, |f| f.free_frames());
+    if free <= low_watermark() {
+        crate::fs::cache::kick();
+    }
+    if !got {
+        REFUSED.fetch_add(1, Ordering::Relaxed);
+        crate::oom::wake();
+    }
+}
+
+/// One frame for user memory or the page cache, not zeroed, if more than the reserve is free.
+pub fn allocate_user_frame() -> Option<u64> {
+    let floor = user_floor();
+    let phys = FRAMES.lock().as_mut().and_then(|f| take_user_frame(f, floor));
+    after_user_allocation(phys.is_some());
+    phys
+}
 
 /// Where the allocator's metadata lives, for the boot log.
 #[derive(Clone, Copy, Debug)]
@@ -66,6 +133,7 @@ pub fn init(memory: &MemoryMap, held: Option<Region>) -> (MemoryMap, Metadata) {
         // Nothing has been allocated yet, and the range was usable RAM.
         alloc.allocate_range(h.start, h.end).expect("held range is free RAM");
     }
+    RESERVE.store(poly_mem::pressure::reserve_frames(alloc.total_frames()), Ordering::Relaxed);
     *frames = Some(alloc);
     (map, Metadata { phys, bytes })
 }

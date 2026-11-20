@@ -41,6 +41,21 @@ mod tests {
         /// A program that imports from our `kernel32.dll` runs end to end
         /// (ADR 0079): see [`super`].
         fn nt_kernel32_program_runs_through_forwarders_to_kernelbase() -> TestResult {
+            run("--poly")
+        }
+    }
+
+    kernel_test! {
+        /// Out of memory (ADR 0250): `k32test.exe --oom` commits until the system's commit limit
+        /// refuses it, frees and commits again, and four processes do it at once.
+        fn nt_commit_until_refused_then_again() -> TestResult {
+            run("--oom")
+        }
+    }
+
+    /// Install and run `k32test.exe` with argument `arg`; it must pass.
+    fn run(arg: &str) -> crate::ktest::TestResult {
+        {
             if crate::fs::vfs().root_context().is_err() {
                 return Err("no VFS for the kernel32 test");
             }
@@ -66,7 +81,8 @@ mod tests {
             let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| "no memory map")?);
             let pid = crate::process::alloc_pid();
             let process = Arc::new(Process::new_nt(pid, FORMAT, false));
-            let launch = super::super::Launch { image_path: String::from(APP_EXE), args: Vec::from([String::from("--poly")]) };
+            let launch =
+                super::super::Launch { image_path: String::from(APP_EXE), args: Vec::from([String::from(arg)]) };
             let start = super::super::start_with(&process, &memory, exe, pid, &launch)
                 .map_err(|_| "the kernel rejected k32test.exe")?;
             let tid =

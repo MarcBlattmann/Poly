@@ -690,6 +690,14 @@ pub fn page_fault_in(addr: u64, access: memory::Access, kernel: bool) -> Result<
         result = crate::linux::uffd::fault(&memory, uffd, addr, write, tid, kernel, &stop)
             .and_then(|()| memory.fault(addr, access));
     }
+    // No frame for the desktop's own programs: they wait while the out-of-memory policy frees
+    // memory (ADR 0250), rather than end.
+    if let Err(FaultError::OutOfMemory) = result
+        && let Some(p) = current_process()
+    {
+        result =
+            crate::oom::wait_for_memory(&p, || memory.fault(addr, access), |e| matches!(e, FaultError::OutOfMemory));
+    }
     match result {
         Ok(()) => {
             // getrusage(2): a minor fault, and perhaps a new peak of the
