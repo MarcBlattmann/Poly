@@ -456,6 +456,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-objc"
+version = "0.0.1"
+dependencies = [
+ "poly-dyld",
+ "poly-macho",
+]
+
+[[package]]
 name = "poly-overlayfs"
 version = "0.0.1"
 dependencies = [
