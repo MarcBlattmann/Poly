@@ -238,7 +238,11 @@ on Poly's desktop, and that weston on Poly's DRM/KMS gets as far as input.
 - [ ] Login plumbing in the Debian base: the system D-Bus, a logind (elogind or systemd-logind), cgroup v2, PAM sessions and polkit (KWin and Mutter start on DRM from a logind session)
 - [ ] A minimal KDE Plasma session starts on Poly (with PipeWire, the XDG desktop portals and a NetworkManager stand-in where it needs them)
 - [ ] A minimal GNOME session starts on Poly (with `systemd --user` or its replacement, and the same services)
-- [ ] Session choice: Poly's own login screen lists the users and the installed sessions (Poly is the default, GNOME, KDE Plasma); switching is a log-out, never a reinstall; desktops are added and removed from Settings
+- [ ] Session choice: Poly's own login screen lists the users and the installed sessions (Poly is the default, GNOME, KDE Plasma); desktops are added and removed from Settings
+- [x] ⚖️ Decided (owner, 2026-11-20): the desktop is quickly swappable later, never by reinstalling: the chosen desktops stay installed side by side
+- [ ] Quick switch: Settings → Desktop → Switch now logs out and straight back into the other desktop within seconds, without asking for the password again; each desktop keeps its own settings, while keyboard, language, time zone and scale follow the user
+- [ ] Session restore across a switch: the apps that were open come back where they support it (Poly's list of open apps, the desktops' own restore, `RegisterApplicationRestart` for Windows apps)
+- [ ] Live switch for Poly's own apps: Windows (and later macOS) apps keep running through a switch and their windows move to the new desktop, like a remote-desktop reconnect (Linux apps cannot be carried over; they restart through session restore)
 - [ ] Windows (and later macOS) apps under a foreign desktop: a bridge shows each window as a Wayland window of GNOME's or Plasma's compositor, with input, focus, popups and its frame
 - [ ] Poly's features under a foreign desktop: launcher entries for Windows apps, Poly's installer opens `.deb`/`.rpm`/AppImage/`.exe`/`.msi` from the foreign file manager, notifications and tray icons through D-Bus
 - [ ] Real user accounts: the user made at install logs in, the desktop and apps run as that user (not root), and the Windows side's profile follows the name

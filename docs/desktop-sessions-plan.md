@@ -27,6 +27,10 @@ freedesktop.org's login1 D-Bus API). No compositor, Mesa, systemd or kernel sour
 - **The first stop was the same for every desktop:**
   `socket(AF_NETLINK, SOCK_RAW, NETLINK_KOBJECT_UEVENT) = -1 EPROTONOSUPPORT`. weston needs it for
   input, KWin needs it to accept the GPU, and systemd-logind won't start without it.
+- **Swapping later is cheap** (§7): the desktops stay installed side by side, and *Switch now* is a
+  log-out and straight back in, within seconds. Windows (and later macOS) apps can even keep running
+  and move to the new desktop, because Poly owns their windows. Linux apps can't, so they restart
+  through session restore.
 
 ## 2. What Poly already has
 
@@ -227,10 +231,11 @@ local apt repository. Recommended:
   (root-owned, read before anyone logs in), as AccountsService does on other distributions.
 - **The sessions themselves** are the `.desktop` files in `/usr/share/wayland-sessions/` (§4.1). Poly's
   own is always there; a desktop's appears when its packages are installed.
-- **Switching:** pick another session on the login screen (log out first). Settings → Desktop installs
-  a desktop that isn't there (with the same apt progress as the installer) or removes one. Removing the
-  desktop that is someone's last choice falls back to Poly's. Poly's own settings (`shell.conf`) stay
-  untouched, whichever desktop is used.
+- **Switching:** Settings → Desktop → *Switch now* (a quick log-out and straight back in, §7), or pick
+  another session on the login screen. Settings → Desktop installs a desktop that isn't there (with
+  the same apt progress as the installer) or removes one. Removing the desktop that is someone's last
+  choice falls back to Poly's. Poly's own settings (`shell.conf`) stay untouched, whichever desktop is
+  used.
 
 ### 6.4 Installer batches
 
@@ -247,7 +252,95 @@ I1 and I2 are worth doing early: they improve Poly's own desktop today. I3 with 
 sets (Firefox, Chrome) needs none of the foreign-desktop work, and gives Settings → Default apps. The
 GNOME and Plasma choices show up in the installer only once B3/B4 have made those sessions run.
 
-## 7. Risks
+## 7. Quick switching
+
+The owner's requirement (2026-11-20): the desktop can be **swapped quickly later, never by
+reinstalling.**
+
+### 7.1 Side by side, a switch in seconds
+
+- **Every chosen desktop stays installed side by side** in the one base root. They are packages, and
+  they don't conflict: Poly's session is always there, and GNOME's and Plasma's sessions appear when
+  their packages are installed (§6.3). Nothing is removed when the user switches.
+- **Settings → Desktop → *Switch now*** (the same switch is on the login screen and in each desktop's
+  log-out menu, as a "Poly desktop" entry under GNOME and Plasma):
+  1. The running session asks its apps to save and close, as a normal log-out does (§7.2 says what
+     comes back).
+  2. Before ending, it gives the login screen a **one-time switch ticket**: root-owned, single use,
+     valid for about 30 seconds, naming the user and the target session. The user isn't asked for the
+     password again.
+  3. The login screen starts the target session for the same user straight away and stores it as their
+     last choice. The screen hand-over is the B1/B5 path (DRM master and the input grabs move to the
+     new compositor).
+- **Time:**
+
+  | Session | Start time | Status |
+  |---|---|---|
+  | Poly's desktop | about 2 s from its start to the first frame | measured in these runs ("desktop up after 2 s") |
+  | GNOME / Plasma on llvmpipe | target: under 10 s | not measured yet (B3/B4 measure it) |
+
+  Most of the time is the foreign desktop's own start-up; keeping its services warm is not worth it at
+  first.
+- **Each desktop keeps its own settings.** They already live apart:
+
+  | Desktop | Its settings |
+  |---|---|
+  | Poly | `~/.config/poly/shell.conf` |
+  | GNOME | dconf (`~/.config/dconf/user`) |
+  | Plasma | `~/.config/k*rc` and `plasma*` |
+
+  Three things need care:
+  - **Settings both read:** `~/.config/gtk-3.0/settings.ini`, `~/.config/mimeapps.list` and fontconfig.
+    The desktop-specific `<desktop>-mimeapps.list` that the XDG MIME spec defines keeps each desktop's
+    default apps apart.
+  - **Session environment:** Poly's session launcher sets each session's environment
+    (`XDG_CURRENT_DESKTOP`, the Qt and GTK theme variables), so nothing leaks from one session into the
+    next.
+  - **What should follow the user:** keyboard layout, language, time zone and display scale are one
+    Poly setting. They are written into GNOME's and Plasma's own settings when such a session starts (a
+    one-way sync from Poly's settings), so a switch never shows a different keyboard.
+
+  Autostart entries use `OnlyShowIn`/`NotShowIn` (XDG autostart spec), so Poly's helpers don't start
+  inside GNOME or Plasma, and the other way round.
+
+### 7.2 Session restore
+
+| App kind | What comes back after a switch |
+|---|---|
+| Linux apps under Poly's desktop | Poly records the launcher IDs of the apps that were open when the session ends and starts them again in the new session (in GNOME and Plasma through their autostart, once). Browsers restore their own tabs ("continue where you left off") |
+| Linux apps under Plasma | Plasma restores apps that support its session management. Poly's list covers the rest |
+| Linux apps under GNOME | GNOME restores little by itself, so Poly's list does it |
+| Windows apps | Started again from their launcher entries. Apps that ask Windows to restart them (`RegisterApplicationRestart`, a documented API) get their saved command line back, as on Windows after an update. With the live switch (§7.3) they don't stop at all |
+
+Unsaved work is the app's business, as at any log-out. An app that refuses to close keeps the switch
+waiting, and the user can cancel the switch or end the app.
+
+### 7.3 Live switching with windows carried over: feasibility
+
+| App kind | Can its windows move to the new desktop without restarting? | Verdict |
+|---|---|---|
+| **Windows apps (NT personality)** | **Yes.** Their windows live in Poly's win32k, not in the compositor. The compositor only sees them through the desktop link (`/dev/win32k`), and the frames are NT sections. If the processes outlive the session and the link is handed from poly-compositor to the bridge in the new session (B6), the windows reappear there. Needed: win32k keeps windows when the link drops (no painting until a new opener), a new opener gets the full list of existing windows and their state, and the apps see the change as a display change (scale, size). That is like Windows' own remote-desktop disconnect and reconnect, which apps already handle | **Feasible, M on top of B6.** Needs a spec agent for what Windows sends on a session reconnect (`WM_WTSSESSION_CHANGE`, display and DPI changes) |
+| **macOS apps (XNU)** | Same as Windows apps: Poly's window server owns their windows (ADR 0107), so the same hand-over applies | Feasible once Phase 10's window server exists; the design is the same as for Windows apps |
+| **Linux Wayland apps** | **No, in general.** A Wayland client's objects (surfaces, buffers, roles) exist only in the one compositor it is connected to. When that compositor goes away, nearly all toolkits end the app (GTK, Chromium/Electron, SDL). Qt 6 can reconnect to a compositor that restarts, but moving to a *different* compositor with different protocols is untested. A proxy that keeps clients connected and replays their state into a new compositor would have to model every protocol and every compositor's differences | **Not feasible as a product feature.** Linux apps close and come back through session restore (§7.2) |
+| **Linux X11 apps** | Xwayland ends with its compositor, so they end with it | Not feasible; session restore instead |
+
+**Verdict.** The quick switch (§7.1) and session restore (§7.2) cover everything and are cheap. Carrying
+windows over live is realistic for Poly's own Windows and macOS apps, because Poly owns their windows.
+It is worth doing after the bridge (B6), and it makes "Switch now" keep every Windows app running.
+Linux apps can't be carried over and restart instead. A related, cheap preview is trying GNOME
+*nested* inside Poly's desktop: Mutter nested works today (§3), with no log-out at all. It is fine as
+"Try GNOME" in Settings, but it is not a switch.
+
+### 7.4 Switching batches
+
+| Batch | What | Size | Spec | What the user sees |
+|---|---|---|---|---|
+| **S1 Switch now** | The switch ticket, Settings → Desktop → *Switch now* and the entries in the foreign desktops' log-out menus, the per-session environment, `OnlyShowIn` autostarts, the one-way sync of keyboard, language, time zone and scale | S–M (after B5) | no | Poly → Plasma → GNOME → Poly in seconds, each with its own look and settings |
+| **S2 Session restore** | The open-app list kept at log-out and replayed in the next session; `RegisterApplicationRestart` for Windows apps | S–M | yes (`RegisterApplicationRestart` behaviour) | The apps that were open come back |
+| **S3 Live carry-over for Windows apps** | win32k keeps windows without a link, re-announces them to a new opener, sends the reconnect and display-change messages; the hand-over from poly-compositor to the bridge | M (after B6) | yes (session reconnect messages) | Windows apps stay open and move to the new desktop |
+| **S4 Live carry-over for macOS apps** | The same for the XNU window server | S–M (after Phase 10) | — | Mac apps stay open too |
+
+## 8. Risks
 
 - **GNOME and systemd.** Recent GNOME sessions are started by `systemd --user`. Running a user
   manager without systemd as PID 1 is unproven on Poly, and is the biggest unknown here.
