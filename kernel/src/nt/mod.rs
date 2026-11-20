@@ -176,7 +176,7 @@ pub static MSVCP140: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/msvcp140.
 /// `C:\Windows\System32` by [`layout`]; empty without `xtask`.
 pub static SERVICES_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/services.exe"));
 /// Poly's `explorer.exe`, the stand-in of the session's shell (ADR 0222), installed in
-/// `C:\Windows` by [`layout`] and started for the elevated logon; empty without `xtask`.
+/// `C:\Windows` by [`layout`] and started for the standard and elevated logons; empty without `xtask`.
 pub static EXPLORER_EXE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/explorer.exe"));
 /// Poly's `cmd.exe`, the command processor (ADR 0240), installed in `C:\Windows\System32` by
 /// [`layout`]; empty without `xtask`.
@@ -828,8 +828,9 @@ fn make_state(slot: &mut Option<NtState>) {
     if let Ok(tid) = thread::spawn_named("nt-boot-services", boot_services, 0) {
         let _ = thread::detach(tid);
     }
-    // The elevated logon's session has a shell holding the filtered token (ADR 0222).
-    if state.sys.logon == poly_personality_nt::security::Logon::Elevated
+    // An interactive logon's session (standard or elevated) has a shell holding the filtered
+    // token (ADR 0222, 0235); the admin logon of the older recordings has none.
+    if state.sys.logon != poly_personality_nt::security::Logon::Admin
         && let Ok(tid) = thread::spawn_named("nt-shell", shell_main, 0)
     {
         let _ = thread::detach(tid);
@@ -1520,6 +1521,7 @@ fn start_params(
                         &mut s.sys,
                         pid,
                         Some(&h.caller),
+                        h.token.is_some(),
                         proc.object.map(|o| (o, h.process_security.as_deref())),
                         proc.threads.first().map(|t| (t.object, h.thread_security.as_deref())),
                     );
