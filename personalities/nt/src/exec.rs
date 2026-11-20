@@ -154,6 +154,44 @@ pub struct ThreadStart {
     pub stack_limit: u64,
     /// A thread of a 32-bit process (see [`ProcessStart::wow64`]).
     pub wow64: bool,
+    /// What `LdrInitializeThunk` gets in RDX: the executable's base, with bit 0 set when the
+    /// loader is not to tell the DLLs about the thread (`THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH`).
+    /// A thread made in a process whose first thread has not run yet starts the process's loader
+    /// with it (`ntdll`'s `start.rs`).
+    pub exe_base: u64,
+}
+
+/// The stack reserve and initial commit of a new thread, from what `NtCreateThreadEx` was given
+/// (`StackSize` = `commit`, `MaximumStackSize` = `reserve`, 0 = not given) and the image's
+/// defaults (specs/windows/ntdll.dll/NtCreateThreadEx.yaml, `stack_sizes`;
+/// kernel32.dll/CreateRemoteThread.yaml, `stack`):
+///
+/// - the reserve is the image's unless `reserve` is at least 64 KiB and larger than `commit`;
+///   then it is `reserve` rounded up to 64 KiB (the allocation granularity);
+/// - the commit is `commit`, or the image's when 0;
+/// - a commit as large as the reserve or larger makes the reserve the commit rounded up to
+///   1 MiB, all of it committed (Learn, "Thread Stack Size": "If the specified commit size is
+///   larger than the default reserve size, the reserve size is the specified commit size rounded
+///   up to the nearest multiple of 1 MB").
+///
+/// A size that cannot be rounded (all ones) is `STATUS_INVALID_PARAMETER`.
+pub fn stack_sizes(
+    default_reserve: u64,
+    default_commit: u64,
+    commit: u64,
+    reserve: u64,
+) -> Result<(u64, u64), NtStatus> {
+    const MIB: u64 = 0x10_0000;
+    let round = |v: u64, to: u64| v.checked_add(to - 1).map(|x| x & !(to - 1)).ok_or(STATUS_INVALID_PARAMETER);
+    let commit = round(if commit == 0 { default_commit } else { commit }, PAGE_SIZE)?;
+    let asked = reserve;
+    let reserve = round(asked, ALLOCATION_GRANULARITY)?;
+    let mut reserve = if asked >= ALLOCATION_GRANULARITY && asked > commit { reserve } else { default_reserve };
+    if commit >= reserve {
+        reserve = round(commit, MIB)?;
+        return Ok((reserve, reserve));
+    }
+    Ok((reserve, commit))
 }
 
 /// A thread's stack, laid out in the process's address space.
@@ -168,15 +206,28 @@ struct ThreadStack {
 
 /// Reserve a stack of `reserve` bytes with `commit` committed at its top and
 /// a guard page below that, top down, in `proc`'s address space.
-fn make_stack(proc: &mut NtProcess, b: &mut dyn Backend, reserve: u64, commit: u64) -> Result<ThreadStack, NtStatus> {
+fn make_stack(
+    proc: &mut NtProcess,
+    b: &mut dyn Backend,
+    reserve: u64,
+    commit: u64,
+    top_down: bool,
+) -> Result<ThreadStack, NtStatus> {
     let reserve = page_up(reserve.max(ALLOCATION_GRANULARITY)).ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
-    let commit = page_up(commit.max(PAGE_SIZE)).ok_or(STATUS_INVALID_IMAGE_FORMAT)?.min(reserve - 2 * PAGE_SIZE);
+    let commit = page_up(commit.max(PAGE_SIZE)).ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
+    // A commit of the whole reserve leaves no guard page: the stack cannot grow, and need not
+    // (Learn, "Thread Stack Size": a commit above the reserve makes the reserve as large).
+    let whole = commit >= reserve;
+    let commit = if whole { reserve } else { commit.min(reserve - 2 * PAGE_SIZE) };
     let rw = PAGE_READWRITE;
-    let (alloc, size) = proc.vm.allocate(b, 0, reserve, 0, MEM_RESERVE, rw)?;
+    let (alloc, size) =
+        proc.vm.allocate(b, 0, reserve, 0, MEM_RESERVE | if top_down { MEM_TOP_DOWN } else { 0 }, rw)?;
     let top = alloc + size;
     let limit = top - commit;
     proc.vm.allocate(b, limit, commit, 0, MEM_COMMIT, rw)?;
-    proc.vm.allocate(b, limit - PAGE_SIZE, PAGE_SIZE, 0, MEM_COMMIT, rw | PAGE_GUARD)?;
+    if !whole {
+        proc.vm.allocate(b, limit - PAGE_SIZE, PAGE_SIZE, 0, MEM_COMMIT, rw | PAGE_GUARD)?;
+    }
     // Every thread's stack grows through its guard page, not only the
     // first thread's (ADR 0091).
     proc.vm.set_stack(alloc);
@@ -368,7 +419,7 @@ pub fn start_process_listed(
         b.write(peb + PEB_SLOT_2D8, &slot.to_le_bytes())?;
     }
 
-    let stack = make_stack(proc, b, reserve, commit)?;
+    let stack = make_stack(proc, b, reserve, commit, false)?;
     let client = crate::kernel::ClientId { process: proc.pid, thread };
     write_teb(b, &l, teb, peb, &stack, client)?;
     let start_routine = image_base + entry_rva;
@@ -381,6 +432,7 @@ pub fn start_process_listed(
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
     sys.objects.set_thread_object(thread, Some(thread_object))?;
+    sys.thread_records.insert(thread, crate::system::ThreadRecord { process: proc.pid, exit: None, hidden: false });
     proc.threads.push(NtThread {
         thread,
         object: thread_object,
@@ -491,11 +543,15 @@ pub fn create_thread(
     req: &crate::kernel::ThreadCreate,
     thread: ThreadRef,
 ) -> Result<ThreadStart, NtStatus> {
+    let (reserve, commit) =
+        stack_sizes(proc.default_stack_reserve, proc.default_stack_commit, req.stack_commit, req.stack_reserve)?;
     let anywhere_top = MEM_RESERVE | MEM_COMMIT | MEM_TOP_DOWN;
     let (teb, _) = proc.vm.allocate(b, 0, TEB_SIZE, 0, anywhere_top, PAGE_READWRITE)?;
-    let reserve = if req.stack_reserve != 0 { req.stack_reserve } else { proc.default_stack_reserve };
-    let commit = if req.stack_commit != 0 { req.stack_commit } else { proc.default_stack_commit };
-    let stack = match make_stack(proc, b, reserve, commit) {
+    // A thread another process makes here (`CreateRemoteThread`) takes its stack from the top,
+    // as its TEB: in a process whose loader has not run yet, a stack low down would move the
+    // DLLs the loader places in the first free space (`kernelbase.dll`, and Chrome's DLLs), and
+    // the creator passes addresses it found in its own process.
+    let stack = match make_stack(proc, b, reserve, commit, req.process.is_some()) {
         Ok(s) => s,
         Err(e) => {
             proc.vm.free(b, teb, 0, MEM_RELEASE).ok();
@@ -508,8 +564,9 @@ pub fn create_thread(
     let client = crate::kernel::ClientId { process: proc.pid, thread };
     let l = proc.layout();
     write_teb(b, &l, teb, peb_of(proc), &stack, client)?;
+    let exe_base = proc.image_base | u64::from(req.skip_attach);
     let rsp = if proc.wow64 {
-        crate::wow64::start_esp(b, stack.top, [req.start_routine, req.argument, proc.image_base])?
+        crate::wow64::start_esp(b, stack.top, [req.start_routine, req.argument, exe_base])?
     } else {
         start_rsp(b, &stack)?
     };
@@ -517,6 +574,8 @@ pub fn create_thread(
     let tobj = NewObject::Opaque { kind: ObjectType::Thread, cookie: thread.0, signaled: Some(false), parse: false };
     let thread_object = sys.objects.new_object(tobj, thread)?;
     sys.objects.set_thread_object(thread, Some(thread_object))?;
+    sys.thread_records
+        .insert(thread, crate::system::ThreadRecord { process: proc.pid, exit: None, hidden: req.hide_from_debugger });
     proc.threads.push(NtThread {
         thread,
         object: thread_object,
@@ -535,6 +594,7 @@ pub fn create_thread(
         stack_base: stack.top,
         stack_limit: stack.limit,
         wow64: proc.wow64,
+        exe_base,
     })
 }
 
@@ -559,6 +619,9 @@ pub fn thread_exit(
     };
     let t = proc.threads.remove(pos);
     proc.exited.insert(thread, status);
+    if let Some(r) = sys.thread_records.get_mut(&thread) {
+        r.exit = Some(status);
+    }
     // Its windows, queue and timers go (ADR 0128).
     sys.win32k.thread_exited(&mut sys.objects, proc.pid.0, thread.0 as u32);
     // Tell the dispatcher the thread is gone (abandon its mutants, drop its
@@ -594,6 +657,10 @@ pub fn process_exit(sys: &mut NtSystem, proc: &mut NtProcess, b: &mut dyn Backen
         }
     }
     for t in core::mem::take(&mut proc.threads) {
+        // A thread that never ran (its process ended first) ends with the process's status.
+        if let Some(r) = sys.thread_records.get_mut(&t.thread) {
+            r.exit.get_or_insert(proc.exit_status.unwrap_or(STATUS_SUCCESS));
+        }
         sys.objects.forget_thread_token(t.thread);
         sys.winsta.thread_exited(&mut sys.objects, t.thread);
         let _ = sys.objects.set_thread_object(t.thread, None);

@@ -6,14 +6,22 @@
 //! start routine, RSI = its argument, RDX = the executable's base, and RSP
 //! pointing at a zero return address (as if called, 8 bytes below a 16-byte
 //! boundary), so a stack walk ends there. The first thread's start routine
-//! is the executable's entry point and its argument the PEB.
+//! is the executable's entry point and its argument the PEB. Bit 0 of RDX
+//! set: the loader does not tell the DLLs about the thread
+//! (`THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH`).
+//!
+//! Whichever thread runs first initialises the process: normally its first
+//! thread, but a thread another process made in a process created suspended
+//! (`CreateRemoteThread`) may come first; the first thread then starts as a
+//! later one and runs the entry point. A later thread waits until the
+//! initialisation is done.
 
 use crate::exports::{LOADER_LOCK, LOADER_LOCK_DEBUG};
 use crate::sys::SysPlatform;
 use crate::{heap, lock, params, run_callouts, syscalls, with_loader, with_slot};
 #[cfg(target_arch = "x86_64")]
 use core::arch::global_asm;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use poly_ldr::{Config, LoadOp, Loader};
 use poly_ntobj::NtStatus;
 
@@ -45,25 +53,55 @@ LdrInitializeThunk:
     init = sym ntdll_thread_init,
 );
 
-/// Whether the process has been initialised (the first thread did it).
+/// Whether a thread has begun to initialise the process.
 static STARTED: AtomicBool = AtomicBool::new(false);
+/// Whether the process's initialisation is done (later threads wait for it).
+static READY: AtomicBool = AtomicBool::new(false);
+
+/// The TEBs of the live threads made with `THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH`: they get no
+/// `DLL_THREAD_DETACH` either. Few at a time; when full, a thread is detached as usual.
+static SKIPPED: [AtomicU64; 32] = [const { AtomicU64::new(0) }; 32];
+
+fn mark_skipped(teb: u64) {
+    for slot in &SKIPPED {
+        if slot.compare_exchange(0, teb, Ordering::AcqRel, Ordering::Relaxed).is_ok() {
+            return;
+        }
+    }
+}
+
+/// Whether `teb`'s thread skips the loader's notifications (it is forgotten).
+fn take_skipped(teb: u64) -> bool {
+    SKIPPED.iter().any(|slot| slot.compare_exchange(teb, 0, Ordering::AcqRel, Ordering::Relaxed).is_ok())
+}
 
 /// Where `LdrInitializeThunk` goes: initialise the process (first thread)
 /// or the thread, then run the thread's routine.
 pub(crate) unsafe extern "C" fn ntdll_thread_init(routine: usize, argument: usize, exe_base: usize) -> ! {
-    let (routine, argument, exe_base) = (routine as u64, argument as u64, exe_base as u64);
+    let (routine, argument) = (routine as u64, argument as u64);
+    let (exe_base, skip_attach) = (exe_base as u64 & !1, exe_base & 1 != 0);
     let teb = lock::teb();
     if STARTED.swap(true, Ordering::AcqRel) {
-        // A later thread: its TLS, then DLL_THREAD_ATTACH, under the
-        // loader lock.
+        // A later thread: once the process is initialised, its TLS, then
+        // DLL_THREAD_ATTACH, under the loader lock.
+        while !READY.load(Ordering::Acquire) {
+            // SAFETY: a service without arguments.
+            unsafe { syscalls::NtYieldExecution() };
+        }
         LOADER_LOCK.enter(&SysPlatform);
         let callouts = with_loader(|l, p| l.thread_attach(p, teb)).unwrap_or_default();
-        let _ = run_callouts(&callouts);
+        if skip_attach {
+            mark_skipped(teb);
+        } else {
+            let _ = run_callouts(&callouts);
+        }
         LOADER_LOCK.leave(&SysPlatform);
     } else if let Err(status) = process_init(teb, exe_base) {
         crate::report_load_failure("process start", status);
         // SAFETY: the process cannot start: end it with the status.
         unsafe { syscalls::NtTerminateProcess(syscalls::CURRENT_PROCESS, status) };
+    } else {
+        READY.store(true, Ordering::Release);
     }
     // A user APC queued to this thread before it ran (a DLL's `DllMain` may queue one to its own
     // thread) is delivered now: Windows starts every thread with `NtContinue(..., TestAlert = TRUE)`
@@ -171,9 +209,12 @@ pub unsafe extern "system" fn RtlUserThreadStart(routine: u64, argument: u64) ->
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn RtlExitUserThread(status: NtStatus) -> ! {
     let teb = lock::teb();
+    let skipped = take_skipped(teb);
     LOADER_LOCK.enter(&SysPlatform);
     let callouts = with_loader(|l, _| l.thread_detach());
-    let _ = run_callouts(&callouts);
+    if !skipped {
+        let _ = run_callouts(&callouts);
+    }
     with_loader(|l, p| l.thread_exit(p, teb));
     LOADER_LOCK.leave(&SysPlatform);
     // SAFETY: ends the current thread.

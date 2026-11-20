@@ -584,6 +584,20 @@ pub extern "system" fn GetThreadId(thread: Handle) -> u32 {
     if st.is_success() { crate::base::id_in(&b, crate::base::TBI_UNIQUE_THREAD) } else { fail_status(st, 0) }
 }
 
+/// `GetProcessIdOfThread`: the id of the process the thread runs in (another process's for a
+/// thread `CreateRemoteThread` made: specs/windows/kernel32.dll/CreateRemoteThread.yaml,
+/// `runs_in_target`). `THREAD_BASIC_INFORMATION.ClientId.UniqueProcess` sits just before the
+/// thread id.
+#[unsafe(no_mangle)]
+pub extern "system" fn GetProcessIdOfThread(thread: Handle) -> u32 {
+    let mut b = [0u8; 48];
+    let mut ret = 0u32;
+    // SAFETY: valid pointers; THREAD_BASIC_INFORMATION is 48 bytes.
+    let st = unsafe { nt::NtQueryInformationThread(thread, 0x1001, b.as_mut_ptr(), 48, &mut ret) };
+    let at = crate::base::TBI_UNIQUE_THREAD - core::mem::size_of::<usize>();
+    if st.is_success() { crate::base::id_in(&b, at) } else { fail_status(st, 0) }
+}
+
 /// `QueueUserAPC`: the routine runs on `thread` in an alertable wait.
 #[unsafe(no_mangle)]
 pub extern "system" fn QueueUserAPC(routine: usize, thread: Handle, data: usize) -> u32 {
