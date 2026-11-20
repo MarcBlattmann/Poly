@@ -125,6 +125,11 @@ pub(crate) fn lock() {
     STATE.with(|s| s.locked = true);
 }
 
+/// Whether the process's security is fixed (set, or a local server was tried).
+pub(crate) fn is_locked() -> bool {
+    STATE.with(|s| s.locked)
+}
+
 /// This process's user SID (bytes).
 fn own_sid() -> Vec<u8> {
     static OWN: Locked<Vec<u8>> = Locked::new(Vec::new());

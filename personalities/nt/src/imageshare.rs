@@ -11,8 +11,12 @@
 //!
 //! - An image read from a file is named by the file's [`FileIdentity`]
 //!   (device, inode, size and modification time: a new file, or a changed
-//!   one, is a new identity). Only an image laid out at its preferred base
-//!   shares pages: a view the kernel relocated has bytes of its own.
+//!   one, is a new identity) and the base its bytes are relocated for: 0 for
+//!   the image as laid out at its preferred base, else the base of a view
+//!   the kernel relocated. The same file relocated to the same base is the
+//!   same bytes, so those views share too: in Chrome's processes
+//!   `chrome_elf.dll` takes the usual DLL base first and the 310 MB
+//!   `chrome.dll` is relocated, to the same address in each of them.
 //! - The [`Registry`] maps an identity to the one object every section of
 //!   it shares (the kernel's table of its pages); it holds it weakly, so the
 //!   object goes with the last section that uses it.
@@ -37,6 +41,8 @@ pub struct FileIdentity {
     pub size: u64,
     pub mtime_sec: i64,
     pub mtime_nsec: u32,
+    /// The base the bytes are relocated for: 0 for the image as laid out at its preferred base.
+    pub base: u64,
 }
 
 /// How many insertions [`SharedPages`] and [`Registry`] allow between two
@@ -132,7 +138,7 @@ mod tests {
     use super::*;
 
     fn id(ino: u64) -> FileIdentity {
-        FileIdentity { dev: 1, ino, size: 0x1000, mtime_sec: 5, mtime_nsec: 0 }
+        FileIdentity { dev: 1, ino, size: 0x1000, mtime_sec: 5, mtime_nsec: 0, base: 0 }
     }
 
     #[test]

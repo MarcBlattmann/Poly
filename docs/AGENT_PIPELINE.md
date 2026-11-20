@@ -371,6 +371,15 @@ cargo xtask pipeline win show <results.json>        # the observations in a resu
 cargo xtask pipeline win diff --reference <windows results.json> [--build-kernel] [--target <file.json>]
 ```
 
+**A 32-bit test** (ADR 0259) has the line `// poly-arch: x86` (anywhere in the
+file). `win build` builds it for `i686-pc-windows-msvc` (its own package under
+`target/pipeline/windows/build32`, linked as a legacy image with `/safeseh:no`, with
+Poly's own `poly-msvc32` helper routines); it runs under WOW64 on Windows and in
+compatibility mode on Poly (ADR 0186). The declarations use
+`import_name_type = "undecorated"` in `#[link]` (x86 `stdcall` names are decorated
+otherwise). The manifest says `"arch": "x86"`. Use it for what only a 32-bit process
+shows (the registry views, `Wow6432Node`, `IsWow64Process`); every other test stays x64.
+
 A test that imports `dwrite.dll` is booted with the DejaVu fonts in
 `C:\Windows\Fonts` (ADR 0170): `win poly` puts the files of `$POLY_FONT_DIR` or
 `target/fonts/dejavu-*` (`cargo xtask fonts fetch`) in its initramfs. A test

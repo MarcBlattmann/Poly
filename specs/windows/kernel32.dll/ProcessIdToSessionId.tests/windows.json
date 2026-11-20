@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "sid_self",
+      "exe_sha256": "d7fba2e65f032254e6593a27c0757f7c68047e33a28706da90c99cc5651895c7",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhpcyBwcm9jZXNzOiAxLCBzZXNzaW9uIGVxdWFscyB0aGUgc2Vzc2lvbiBvZiB0aGlzIHByb2Nlc3MncyB0b2tlbjogMQphIHJ1bm5pbmcgY2hpbGQgcHJvY2VzczogMSwgc2Vzc2lvbiBlcXVhbHMgdGhlIHNlc3Npb24gb2YgdGhpcyBwcm9jZXNzJ3MgdG9rZW46IDEKdGhlIGNoaWxkIGVuZGVkIHdpdGggMAp0aGUgY2hpbGQgYWZ0ZXIgaXQgZW5kZWQ6IDAgKGVycm9yIDg3KSwgb3V0cHV0IHVudG91Y2hlZApwcm9jZXNzIGlkIDA6IDAgKGVycm9yIDg3KSwgb3V0cHV0IHVudG91Y2hlZAphbiBpZCBubyBwcm9jZXNzIGhhczogMCAoZXJyb3IgODcpLCBvdXRwdXQgdW50b3VjaGVkCmlkIDB4RkZGRkZGRkY6IDAgKGVycm9yIDg3KSwgb3V0cHV0IHVudG91Y2hlZApOVUxMIG91dHB1dCBwb2ludGVyOiB0aGUgY2hpbGQgcmVwb3J0cyA4NwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "this process: 1, session equals the session of this process's token: 1\na running child process: 1, session equals the session of this process's token: 1\nthe child ended with 0\nthe child after it ended: 0 (error 87), output untouched\nprocess id 0: 0 (error 87), output untouched\nan id no process has: 0 (error 87), output untouched\nid 0xFFFFFFFF: 0 (error 87), output untouched\nNULL output pointer: the child reports 87\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 73
+    }
+  ]
+}

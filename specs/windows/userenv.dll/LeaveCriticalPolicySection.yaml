@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/userenv.dll/LeaveCriticalPolicySection.yaml
+id: windows/api/userenv.dll/LeaveCriticalPolicySection
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave the same output except where a sheet says what a 32-bit caller sees."
+  observed_by: spec-win-updater-services
+  date: 2026-11-20
+sources: >
+  Observations of our own 64-bit test programs on the machine above (each test ran at least twice with identical output). Microsoft Learn pages of the functions (kernel32 / fileapi.h, winbase.h, processthreadsapi.h, wow64apiset.h, memoryapi.h, synchapi.h, combaseapi.h, objbase.h, userenv.h) for names, parameters and the error values in winerror.h. What the documentation does not say (error codes, edge cases, the effect of access rights) is taken from the observations only. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Gives back a handle from EnterCriticalPolicySection. The handle is valid once: a second leave of it fails with ERROR_INVALID_HANDLE.
+interface:
+  signature: "BOOL LeaveCriticalPolicySection(HANDLE hSection)"
+installer: "Google's updater 157 and 159 (32-bit) import this function; their run on Poly reaches it while they install and start their two services and register their update service and scheduled task. What they pass is not known beyond the import."
+rules:
+  leave: "TRUE for the handle of a section entered with EnterCriticalPolicySection, in any order when two were entered (the second first, or in the order of entering); also from another thread than the one that entered"
+  twice: "a second call with the same handle: FALSE with ERROR_INVALID_HANDLE 6 (also after the thread that entered called it again)"
+  bad_handles: "NULL: ERROR_INVALID_PARAMETER 87; INVALID_HANDLE_VALUE (-1, which is also the process pseudo handle), a value that is not open (0x7FFF0) and the handle of an event: ERROR_INVALID_HANDLE 6"
+  closed: "CloseHandle on a section handle does nothing useful (the value is not a kernel handle: GetHandleInformation and DuplicateHandle fail with ERROR_INVALID_HANDLE 6), and a section handle that the caller 'closed' can still be left: TRUE (observed, not documented)"
+  both_kinds: "a user and a machine section held together can be left in either order"
+  thread: "a section entered by a thread that has since ended can be left by another thread: TRUE"
+  bad_values: "a value far above the real handle value fails with ERROR_INVALID_HANDLE 6; 1000 values that were never section handles all fail and the process's handle count does not change"
+  user_section: "leaving the handle of the user section works like the machine section, and when entering it returned NULL, leaving that NULL fails with 87"
+errors:
+  invalid_handle: "ERROR_INVALID_HANDLE 6"
+  invalid_parameter: "ERROR_INVALID_PARAMETER 87"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, run on the oracle with the elevated token in the interactive session. Scenarios that could end the process (a NULL pointer where the function reads or writes through it) run in a child process of the same image (`--child ...`) and the parent prints the exit code. Observations are results, error codes, booleans and counts; never addresses, process or thread ids, times or the name of the machine. Files the tests make live next to the test program and are deleted by the test. The recorded run is the elevated interactive one.
+not_covered: >
+  the effect on policy processing, and leaving a handle that belongs to another process.
