@@ -24,33 +24,44 @@
 //!   variable shifts, `CLZ`/`CLS`/`RBIT`/`REV*`.
 //! - Branches: `B`, `BL`, `B.cond`, `CBZ`/`CBNZ`, `TBZ`/`TBNZ`, `BR`,
 //!   `BLR`, `RET`.
-//! - System: `SVC`, `BRK`, hints (all no-ops, including `BTI` and the
-//!   `PACIASP` family: pointer authentication is not implemented, so the
-//!   hint forms act as `NOP`, which the architecture allows), `MRS`/`MSR`
-//!   for `NZCV`, `FPCR`, `FPSR`, `TPIDR_EL0` and read-only counters,
-//!   barriers, `DC ZVA` and cache maintenance.
+//! - System: `SVC`, `BRK`, hints (all no-ops except `XPACLRI`),
+//!   `MRS`/`MSR` for `NZCV`, `FPCR`, `FPSR`, `TPIDR_EL0` and read-only
+//!   counters, barriers, `DC ZVA` and cache maintenance, `CFINV`, `AXFLAG`,
+//!   `XAFLAG`, `RMIF`, `SETF8`/`SETF16`, `CRC32*`.
+//! - Pointer authentication as an arm64 (not arm64e) process sees it on
+//!   macOS: the keys are disabled, so `PAC*`, `AUT*` and the authenticating
+//!   branches and loads leave pointers alone; `XPAC*` strip with a 47-bit
+//!   address space; `PACGA` gives an implementation-defined code.
 //! - Loads and stores: every size and addressing mode, sign-extending
-//!   loads, literal loads, pairs, `PRFM`, exclusives, acquire/release,
-//!   the LSE atomics (`LDADD` family, `SWP`, `CAS`, `CASP`), and the SIMD
-//!   register forms (`B`/`H`/`S`/`D`/`Q`), plus `LD1`..`LD4`/`ST1`..`ST4`.
+//!   loads, literal loads, pairs, `PRFM`, exclusives, acquire/release
+//!   (`LDAPUR`/`STLUR` too), the LSE atomics (`LDADD` family, `SWP`, `CAS`,
+//!   `CASP`) with FEAT_LSE2's alignment rule, and the SIMD register forms,
+//!   plus `LD1`..`LD4`/`ST1`..`ST4`.
 //! - Scalar floating point on single and double precision: moves,
 //!   arithmetic, fused multiply-add, compare, conditional select, `FCVT`,
 //!   integer and fixed-point conversions, `FRINT*`, `FMOV` immediate.
-//! - Advanced SIMD integer basics: `MOVI`/`MVNI`, `DUP`, `INS`, `UMOV`/
-//!   `SMOV`, add/subtract, logical and bit select, compares, min/max,
-//!   multiply, pairwise add, across-lane reductions, `EXT`, `TBL`/`TBX`,
-//!   `ZIP`/`UZP`/`TRN`, `XTN`, shifts by immediate, `CNT`, `NOT`, `REV*`.
+//! - Advanced SIMD: integer arithmetic, logic, compares, min/max (also
+//!   pairwise), halving, saturating and rounding forms, long, wide and
+//!   narrow forms, by-element forms, dot products, shifts by immediate and
+//!   register (rounding, saturating, narrowing), permutes, table lookups,
+//!   reductions; floating point arithmetic, fused multiply-add, compares,
+//!   pairwise and across-lane forms, conversions (also fixed point),
+//!   `FRECPE`/`FRSQRTE`/`FRECPS`/`FRSQRTS`, `FCVTL`/`FCVTN`; SHA3's `EOR3`,
+//!   `BCAX`, `RAX1`, `XAR`.
+//!
+//! Where the architecture leaves a choice (CONSTRAINED UNPREDICTABLE
+//! encodings, "should be" fields, store-exclusive after an ordinary store),
+//! poly-a64 does what Apple silicon does, measured with `a64diff native`.
 //!
 //! # What is not covered
 //!
 //! Everything else decodes to [`Inst::Unsupported`] and executes as
-//! [`Outcome::Unsupported`]: SVE and SME, crypto (AES, SHA, PMULL),
-//! CRC32, pointer-authentication register forms, memory tagging, half
-//! precision arithmetic, vector floating-point arithmetic, vector
-//! by-element forms, long/wide/narrow integer arithmetic (`UADDL`,
-//! `UMULL`, `SQXTN`, ...) and saturating arithmetic. Floating point is
-//! round-to-nearest-even with `IOC`/`DZC` flags only; see [`fp`] for the
-//! details. Only EL0 is modelled.
+//! [`Outcome::Unsupported`]: SVE and SME, AES, SHA1/SHA2/SHA512, SM3/SM4, memory
+//! tagging, half-precision arithmetic (scalar and vector), complex numbers
+//! (`FCMLA`, `FCADD`), `FMLAL`/`FMLSL`, `FCVTXN` and the half-precision
+//! conversions of `FCVTL`/`FCVTN`. Floating point is round-to-nearest-even
+//! with `IOC`/`DZC` flags (and `QC` for saturation) only; see [`fp`] for
+//! the details. Only EL0 is modelled.
 //!
 //! Clean room (CLEAN_ROOM.md): written from the Arm Architecture Reference
 //! Manual for A-profile (DDI 0487) and checked by assembling test words
@@ -66,10 +77,12 @@ extern crate std;
 pub mod cpu;
 pub mod decode;
 mod decode_simd;
+mod decode_simd2;
 mod exec_fp;
 mod exec_int;
 mod exec_mem;
 mod exec_simd;
+mod exec_simd2;
 pub mod fp;
 pub mod inst;
 

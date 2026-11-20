@@ -290,6 +290,46 @@ impl Cpu {
                 let r = shift_value(self.rw(rn, w), op, amount, w);
                 self.set_rw(rd, w, r);
             }
+            Inst::Crc32 { c, size, rd, rn, rm } => {
+                let acc = self.xr(rn) as u32;
+                let val = self.xr(rm);
+                self.set_xr(rd, u64::from(crc32_update(acc, val, 1 << size, c)));
+            }
+            // Keys disabled: PAC* and AUT* leave the register alone.
+            Inst::Pac { .. } => {}
+            Inst::Xpac { data, rd } => {
+                let v = self.strip_pac(self.xr(rd), data);
+                self.set_xr(rd, v);
+            }
+            Inst::Pacga { rd, rn, rm } => {
+                let h = pacga_code(self.xr(rn), self.xsp(rm));
+                self.set_xr(rd, u64::from(h) << 32);
+            }
+            Inst::Rmif { rn, shift, mask } => {
+                let t = (self.xr(rn).rotate_right(u32::from(shift)) & 0xF) as u32;
+                let m = u32::from(mask) << 28;
+                self.nzcv = (self.nzcv & !m) | ((t << 28) & m);
+            }
+            Inst::Setf { rn, sixteen } => {
+                let v = self.xr(rn);
+                let msb = if sixteen { 15 } else { 7 };
+                let n = (v >> msb) & 1;
+                let z = u64::from(v & ((1u64 << (msb + 1)) - 1) == 0);
+                let ov = ((v >> (msb + 1)) ^ (v >> msb)) & 1;
+                self.nzcv = (self.nzcv & NZCV_C) | ((n as u32) << 31) | ((z as u32) << 30) | ((ov as u32) << 28);
+            }
+            Inst::FlagOp { op } => {
+                let n = self.nzcv & NZCV_N != 0;
+                let z = self.nzcv & NZCV_Z != 0;
+                let c = self.nzcv & NZCV_C != 0;
+                let v = self.nzcv & NZCV_V != 0;
+                let (n, z, c, v) = match op {
+                    FlagOp::Cfinv => (n, z, !c, v),
+                    FlagOp::Axflag => (false, z | v, c & !v, false),
+                    FlagOp::Xaflag => (!c & !z, z & c, c | z, !c & z),
+                };
+                self.nzcv = (u32::from(n) << 31) | (u32::from(z) << 30) | (u32::from(c) << 29) | (u32::from(v) << 28);
+            }
             Inst::Bit1 { w, op, rd, rn } => {
                 let a = self.rw(rn, w);
                 let r = match op {
@@ -362,6 +402,15 @@ impl Cpu {
                 (((self.xr(rt) >> bit) & 1 != 0) == nz).then(|| pc.wrapping_add(offset as u64))
             }
             Inst::BranchReg { rn } | Inst::Ret { rn } => Some(self.xr(rn)),
+            // With the keys disabled, authentication returns the pointer
+            // unchanged.
+            Inst::BranchAuth { link, rn, .. } => {
+                let t = self.xr(rn);
+                if link {
+                    self.x[30] = pc.wrapping_add(4);
+                }
+                Some(t)
+            }
             Inst::BranchLinkReg { rn } => {
                 let t = self.xr(rn);
                 self.x[30] = pc.wrapping_add(4);
@@ -370,4 +419,30 @@ impl Cpu {
             _ => None,
         }
     }
+}
+
+/// One `CRC32*` step: the CRC of the low `bytes` bytes of `val`, least
+/// significant first, continued from `acc`, with the bit-reflected
+/// polynomial (CRC-32 0x04C11DB7, or CRC-32C 0x1EDC6F41 when `c`). No
+/// inversion before or after, as the Arm ARM's `CRC32` pseudocode does.
+pub fn crc32_update(acc: u32, val: u64, bytes: u32, c: bool) -> u32 {
+    let poly: u32 = if c { 0x82F6_3B78 } else { 0xEDB8_8320 };
+    let mut crc = acc;
+    for i in 0..bytes {
+        crc ^= (val >> (8 * i)) as u32 & 0xFF;
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (poly & (crc & 1).wrapping_neg());
+        }
+    }
+    crc
+}
+
+/// `PACGA`'s code. The algorithm is IMPLEMENTATION DEFINED and keyed with a
+/// key the program cannot read; this one is a fixed keyed mix, so equal
+/// inputs give equal codes within a process, which is all programs rely on.
+fn pacga_code(x: u64, modifier: u64) -> u32 {
+    let mut h = x ^ 0x9E37_79B9_7F4A_7C15 ^ modifier.rotate_left(17);
+    h = (h ^ (h >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    h = (h ^ (h >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    (h ^ (h >> 31)) as u32
 }

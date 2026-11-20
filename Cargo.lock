@@ -6,6 +6,7 @@ version = 4
 name = "a64diff"
 version = "0.0.1"
 dependencies = [
+ "libc",
  "poly-a64",
 ]
 
