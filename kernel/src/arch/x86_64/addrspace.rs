@@ -684,6 +684,32 @@ impl AddressSpace {
         Ok(())
     }
 
+    /// Give the mapped page `virt` the rights `prot` after a fault the region allows (a write to
+    /// a page first mapped for reading, or an access through a stale TLB entry). When the page
+    /// only gains rights ([`PageFlags::only_adds_rights`]), only this CPU's TLB is flushed: another
+    /// CPU's entry for the page allows less, so an access through it faults and that CPU flushes
+    /// its own entry the same way. Anything else is [`protect`](Self::protect), with a shootdown.
+    pub fn grant(&self, virt: u64, prot: Prot) -> Result<(), MapError> {
+        check_range(virt, PAGE_SIZE)?;
+        let flags = prot.flags().ok_or(MapError::NoAccess)?;
+        {
+            let mut tables = self.tables.lock();
+            let old = tables.translate(virt).map_err(|_| MapError::NotMapped)?.flags;
+            let new = flags | (old & (OWNED | PageFlags::DIRTY | PageFlags::ACCESSED));
+            if old.only_adds_rights(new) {
+                tables.update_flags(virt, new).expect("translated above");
+                let _irq = cpu::InterruptsOff::new();
+                if self.is_active() {
+                    let mut flush = Flush::None;
+                    flush.add_page(virt);
+                    tlb::invalidate_current(flush);
+                }
+                return Ok(());
+            }
+        }
+        self.protect(virt, PAGE_SIZE, prot)
+    }
+
     /// Where the user address `virt` leads, if it is mapped.
     pub fn translate(&self, virt: u64) -> Option<Mapping> {
         if !(USER_START..USER_END).contains(&virt) {

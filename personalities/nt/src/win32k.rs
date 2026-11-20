@@ -121,6 +121,16 @@ impl Win32k {
                         self.wm.mutate().link_pointer(i.client.left + x, i.client.top - i.menu_bar + y, &mut fx);
                     }
                 }
+                // The pointer left the Windows surfaces: the windows under it learn that it
+                // left them (WM_MOUSELEAVE.yaml; a tooltip that waits for it goes away).
+                FromCompositor::Leave { surface, x, y } => {
+                    let at = self
+                        .surfaces
+                        .hwnd_of(surface)
+                        .and_then(|h| self.wm.info(h))
+                        .map(|i| (i.client.left + x, i.client.top - i.menu_bar + y));
+                    self.wm.mutate().link_leave(at, &mut fx);
+                }
                 FromCompositor::Button { button, pressed, .. } => {
                     self.wm.mutate().link_button(button, pressed, &mut fx);
                     // The compositor's drag ends with the button: the window leaves its sizing and

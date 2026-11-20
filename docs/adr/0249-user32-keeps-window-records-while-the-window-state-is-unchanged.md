@@ -59,3 +59,60 @@ and `NtUnmapViewOfSection`) are TLB shootdowns. While Chrome switches tabs a sho
 1.3 ms on average for the CPUs that run the same process to acknowledge (30 µs when the machine is
 quiet), and shootdowns are serialised system-wide. That is the next step for these calls (sending
 without waiting, freeing frames once acknowledged), not part of this decision.
+
+## Addendum: the thread's key state is kept too (track `chrome-scroll-during-load`)
+
+QA round 3, item 7: in Chrome for Windows, scrolling while a page is still loading was lost.
+
+**What Poly does with the wheel.** A temporary trace followed every notch:
+- compositor → `FromCompositor::Axis` → win32k → `WM_MOUSEWHEEL` queued for the window under the
+  cursor. That is Chrome's content child, or the frame before the child exists.
+- Turns that are not yet retrieved are summed, as `SendInput.yaml` (`wheel`, `ordering`) records.
+- Chrome's browser UI thread retrieved every one. When the page was showing, the page scrolled,
+  also while it was still loading (BBC, Wikipedia).
+
+**Why the scroll was lost.** The QA steps were: type a URL, Enter, scroll at once. In the runs
+that lost the scroll, the UI thread was still working through the typed keys.
+- Every unfiltered peek returned the next `WM_KEYDOWN`/`WM_KEYUP` of the URL, 150–380 ms apart.
+- The input queue is in order, so Enter and then the wheel waited behind the keys: 4.5, 5, 6 and
+  8.5 s in four runs (17 notches summed into one message in one of them).
+- When the wheel came out, the new page had not committed yet. It went to the old page (the New Tab
+  page, which does not scroll, or that page's content window), and the new page started at the
+  top.
+
+**What slowed the UI thread.**
+- Mostly waiting for the NT state's lock. While renderers start, their `NtAllocateVirtualMemory`
+  and the TLB shootdowns above hold the lock.
+- Each `PolyUserCall` then waits about 1 ms. Chrome makes hundreds of these calls for every key
+  message it handles.
+- The largest group was `KeyboardState`: `GetKeyState` and `GetKeyboardState` asked the kernel for
+  the thread's whole key state every time. That was 785 calls (765 ms inside them) while one URL
+  was typed and in the 6 s after Enter.
+
+**Decision.** user32 keeps the `KeyboardState` reply too, per thread, under the same rule as
+`Window` and `Desktop` (`wincache.rs`, now keyed by what was asked).
+- A thread's key state is part of the window manager: its own state after `SetKeyboardState`,
+  else the session's synchronous state.
+- It changes only through `&mut Wm`, when a thread retrieves an input message or sets the state,
+  so the generation goes up before any change.
+- `Wm` has no interior mutability.
+
+**Measured.** Same scenario, same window (typing a URL plus the 6 s after Enter):
+
+| Browser UI thread | Uncached | Cached |
+|---|---|---|
+| `KeyboardState` calls reaching the kernel | 785 | 67 |
+| Time inside them | 765 ms | 54 ms |
+
+This removes the largest share of the lock waits per key message. It does not remove the
+backlog on a loaded machine:
+- Other user calls still wait for the lock: `Window` and `Desktop` replies miss whenever any
+  thread changed the window manager, Chrome's own peeks included.
+- The host paused this guest 20–24 % of the time while about ten agents shared the PC (`--gaps`).
+- Wheel turns sent before a navigation commits go to the page being shown; that is Chrome's own
+  routing.
+
+Open:
+- A key-state generation of its own (so peeks and posts do not drop the kept state).
+- The lock's hold times during process start.
+- The page-load time (QA round 3, item 4).

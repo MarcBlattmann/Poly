@@ -29,6 +29,7 @@ rules:
   mouse: "VK_LBUTTON and VK_RBUTTON follow real button input the same way (down before the WM_*BUTTONDOWN is retrieved, up before the WM_*BUTTONUP is); SM_SWAPBUTTON is 0 on the oracle"
   sides: "the generic VK_SHIFT/VK_CONTROL and the side codes: left shift (SendInput VK_LSHIFT or VK_SHIFT with scan 0x2A) sets VK_SHIFT and VK_LSHIFT; VK_RSHIFT or VK_SHIFT with scan 0x36 sets VK_SHIFT and VK_RSHIFT; VK_LCONTROL / VK_CONTROL with scan 0x1D set VK_CONTROL and VK_LCONTROL; VK_RCONTROL with scan 0x1D and KEYEVENTF_EXTENDEDKEY sets VK_CONTROL and VK_RCONTROL. The window gets WM_KEYDOWN with the generic code (0x10, 0x11) in every case, lParam carrying the scan code and, for the right Ctrl, the extended bit (0x011D0001)"
   other_codes: "0, 0xFF and 0x141: 0"
+  immediate_while_waiting: "Changes as soon as the event is inserted, before any thread reads it: a key-down waiting in the queue reads as down (negative result) while GetKeyState still says up; a key-up waiting reads as up. See GetInputState."
 errors:
   none: "no error cases observed"
 side_effects: "none beyond the rules above"

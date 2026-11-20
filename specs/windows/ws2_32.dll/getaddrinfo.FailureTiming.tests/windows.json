@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7da3bb96eb5b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T13:48:18Z",
+  "tests": [
+    {
+      "name": "dns_nx_repeat",
+      "exe_sha256": "6c5f42266268eb485d3182d1af7235fa16b2ccace278a1fca856d507a72cfd29",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgbG9va3VwOiBjb2RlIDExMDAxIGxhc3QgZXJyb3IgMTEwMDEgZW50cmllcyAwOyB1bmRlciA1MDAgbXM6IHRydWUKYWZ0ZXIgMSBzOiBjb2RlIDExMDAxIGxhc3QgZXJyb3IgMTEwMDEgZW50cmllcyAwOyB1bmRlciAxMDAgbXM6IHRydWUKYWZ0ZXIgMyBzOiBjb2RlIDExMDAxIGxhc3QgZXJyb3IgMTEwMDEgZW50cmllcyAwOyB1bmRlciAxMDAgbXM6IHRydWUKYWZ0ZXIgMTAgczogY29kZSAxMTAwMSBsYXN0IGVycm9yIDExMDAxIGVudHJpZXMgMDsgdW5kZXIgMTAwIG1zOiB0cnVlCmFmdGVyIDMwIHM6IGNvZGUgMTEwMDEgbGFzdCBlcnJvciAxMTAwMSBlbnRyaWVzIDA7IHVuZGVyIDEwMCBtczogdHJ1ZQphbm90aGVyIGZhbWlseSBvZiB0aGUgc2FtZSBuYW1lIGF0IHRoZSBlbmQ6IGNvZGUgMTEwMDEgbGFzdCBlcnJvciAxMTAwMSBlbnRyaWVzIDA7IHVuZGVyIDEwMCBtczogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first lookup: code 11001 last error 11001 entries 0; under 500 ms: true\nafter 1 s: code 11001 last error 11001 entries 0; under 100 ms: true\nafter 3 s: code 11001 last error 11001 entries 0; under 100 ms: true\nafter 10 s: code 11001 last error 11001 entries 0; under 100 ms: true\nafter 30 s: code 11001 last error 11001 entries 0; under 100 ms: true\nanother family of the same name at the end: code 11001 last error 11001 entries 0; under 100 ms: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 30067
+    }
+  ]
+}

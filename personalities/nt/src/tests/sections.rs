@@ -337,3 +337,31 @@ fn data_file_sections() {
     let empty = file(&mut f, 6, Vec::new());
     assert_eq!(create(&mut f, "", 0, PAGE_READONLY, SEC_COMMIT, empty).0, STATUS_MAPPED_FILE_SIZE_ZERO);
 }
+
+/// ADR 0262: what a process's own memory calls may do under its lock alone is private memory;
+/// a range that touches a view or a placeholder is not, and goes the system's way (and works).
+#[test]
+fn only_private_ranges_are_the_own_memory_paths() {
+    let mut f = Fake::new();
+    let rw = PAGE_READWRITE;
+    let (_, h) = create(&mut f, "", 0x2000, rw, SEC_COMMIT, 0);
+    let (_, v, _, _) = map(&mut f, h, 0, None, 0, rw);
+    let (_, p, _) = allocate(&mut f, 0, 0x2000, MEM_RESERVE | MEM_COMMIT, rw);
+    let vm = &f.proc.vm;
+    assert!(vm.only_private(p, 0x2000) && vm.only_private(p + 0x1000, 0) && vm.only_private(p, 0));
+    assert!(!vm.only_private(v, 0) && !vm.only_private(v + 0x1000, 0x10));
+    // A range that ends in the view, or that starts before it.
+    assert!(!vm.only_private(v - 0x1000, 0x2000));
+    // Nothing there yet: private once it is made.
+    assert!(vm.only_private(0x7000_0000_0000, 0x1_0000));
+    // A commit in the view goes the system's way; protecting it stays on the process's lock (it
+    // changes only the process's own pages, no section).
+    let calls = f.own_vm_calls;
+    assert_eq!(allocate(&mut f, v, 0x1000, MEM_COMMIT, rw).0, STATUS_SUCCESS);
+    let old = f.alloc(4);
+    let (b, s) = (f.put_u64(v), f.put_u64(0x1000));
+    assert_eq!(f.call(Service::ProtectVirtualMemory, &[SELF, b, s, u64::from(PAGE_READONLY), old]), STATUS_SUCCESS);
+    assert_eq!(query(&mut f, v).protect, PAGE_READONLY);
+    assert!(f.own_vm_calls > calls);
+    assert_eq!(f.call(Service::UnmapViewOfSection, &[SELF, v]), STATUS_SUCCESS);
+}

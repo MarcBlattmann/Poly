@@ -210,16 +210,22 @@ impl Registration {
         }
     }
 
-    /// Whether the helper should wait for readability and for writability: data is always watched
-    /// (a rise is news); writability only while it can be recorded.
+    /// Whether the helper should wait for readability and for writability: data is watched whenever
+    /// `FD_READ` is selected (a rise is news), writability and waiting connections only while they
+    /// can be recorded. An event the mask leaves out is never watched for: a connected socket is
+    /// writable all the time, so watching it for a program that selected only `FD_READ` and
+    /// `FD_CLOSE` would make every look return at once. The end of the connection is
+    /// [`watches_end`](Self::watches_end)'s.
     pub fn wants(&self) -> (bool, bool) {
         if self.failed {
             return (false, false);
         }
+        let selected = |event: u32| self.mask & event != 0;
         match self.state {
-            State::Listening => (self.armed_accept, false),
+            State::Listening => (self.armed_accept && selected(FD_ACCEPT), false),
+            // The connection is watched for whatever the mask: the socket's state follows it.
             State::Connecting => (false, true),
-            State::Connected | State::Idle => (true, self.armed_write),
+            State::Connected | State::Idle => (selected(FD_READ), self.armed_write && selected(FD_WRITE)),
             State::Closed => (false, false),
         }
     }
@@ -529,6 +535,27 @@ mod tests {
         let mut c = Registration::new(FD_CONNECT, 7, false, false);
         c.connecting();
         assert_eq!(c.wants(), (false, true));
+    }
+
+    #[test]
+    fn the_helper_watches_only_what_the_mask_can_record() {
+        // Chrome's mask on a connected socket: data and the end, never writability.
+        let r = Registration::new(FD_READ | FD_CLOSE, 7, false, true);
+        assert_eq!(r.wants(), (true, false));
+        assert!(r.watches_end());
+        // Only the connect selected: once connected, nothing but the end is watched.
+        let mut c = Registration::new(FD_CONNECT, 7, false, false);
+        c.connecting();
+        c.step(&poll(false, true));
+        assert_eq!(c.take().0, FD_CONNECT);
+        assert_eq!(c.wants(), (false, false));
+        // Selecting FD_READ later watches data again; FD_WRITE that was never reported is watched
+        // once it is selected.
+        c.reselect(FD_READ | FD_WRITE, 7);
+        assert_eq!(c.wants(), (true, true));
+        // A listening socket without FD_ACCEPT is not watched for connections.
+        let l = Registration::new(FD_CLOSE, 7, true, false);
+        assert_eq!(l.wants(), (false, false));
     }
 
     #[test]

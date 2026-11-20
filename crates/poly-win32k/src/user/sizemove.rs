@@ -24,7 +24,6 @@ const WM_SIZING: u32 = 0x0214;
 const WM_MOVING: u32 = 0x0216;
 
 const WM_EXITSIZEMOVE: u32 = 0x0232;
-const WM_NCMOUSELEAVE: u32 = 0x02A2;
 const WM_LBUTTONUP: u32 = 0x0202;
 /// The flags of the `SetWindowPos` of every step: `SWP_NOACTIVATE | SWP_NOZORDER |
 /// SWP_NOOWNERZORDER` and the bit `0x80000` that the oracle's calls carry.
@@ -110,7 +109,8 @@ pub fn run<E: Env + ?Sized>(env: &E, hwnd: u64, cmd: u64, edge: u64, l: u64) {
     send(env, hwnd, WM_ENTERSIZEMOVE, 0, 0);
     let tracked = input::NC_TRACK.swap(0, core::sync::atomic::Ordering::Relaxed);
     if tracked != 0 {
-        env.call(Request::Post { hwnd: u64::from(tracked), msg: WM_NCMOUSELEAVE, w: 0, l: 0 });
+        // The tracking ends with the capture: WM_NCMOUSELEAVE.
+        env.call(Request::TrackMouse { hwnd: tracked, flags: crate::wm::pointer::TRACK_NC_END, hover: 0 });
     }
     focus::set_capture(env, hwnd);
     let mut m = CMsg::default();

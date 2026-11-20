@@ -27,10 +27,11 @@ pub mod exc;
 pub mod kernel;
 pub mod mach;
 pub mod mem;
+pub mod ports;
 pub mod sync;
 mod wait;
 
-pub use kernel::{Arch, Backing, Inherit, MachState, PageInfo, Region, ThreadStart, Wakeup, XnuKernel};
+pub use kernel::{Arch, Backing, Inherit, MachState, PageInfo, Peer, Region, ThreadStart, Wakeup, XnuKernel};
 
 use poly_abi::{Outcome, Personality, RFLAGS_CF, SyscallDispatch, SyscallRegs};
 

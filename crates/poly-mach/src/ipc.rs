@@ -23,7 +23,7 @@
 //! deallocate, a receive right's delta must be -1 or 0, and a send right made
 //! under the name of another port's receive right is `KERN_RIGHT_EXISTS`.
 
-use crate::consts::{kern::*, msg::*, port::*};
+use crate::consts::{kern::*, msg::*, notify::*, port::*};
 use crate::exc::HandlerTable;
 use crate::waitq::{ThreadId, WaitQueue};
 use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -47,6 +47,11 @@ pub enum KObject {
     Thread(ThreadId),
     Host,
     Semaphore,
+    /// A task's name port (task_name_for_pid): it names the task for
+    /// pid_for_task and nothing else.
+    TaskName(TaskId),
+    /// The bootstrap server's port (`bootstrap`).
+    Bootstrap,
 }
 
 /// Where a receiver waits.
@@ -109,15 +114,44 @@ struct Port {
     /// The space holding the receive right; `None` for kernel objects and
     /// for a receive right in transit.
     receiver: Option<TaskId>,
-    set: Option<SetId>,
+    /// The port sets it is in (a port can be in several).
+    sets: BTreeSet<SetId>,
     queue: VecDeque<Message>,
     seqno: u32,
     qlimit: usize,
+    /// mach_port_get_context / set_context; the guard of a guarded port.
+    context: u64,
+    /// A guarded receive right (mach_port_guard, MPO_CONTEXT_AS_GUARD).
+    guard: Option<Guard>,
+    /// The make-send count and the number of send-once rights made.
+    mscount: u32,
+    sorights: u32,
+    /// A no-senders request: the send-once right it is sent to.
+    ns_request: Option<NsRequest>,
+    /// A port-destroyed request: the send-once right the receive right
+    /// goes to when it would be destroyed.
+    pd_request: Option<PortId>,
     /// A semaphore's count.
     count: u32,
     /// A port whose receive right the kernel keeps to wait for a reply (an
     /// exception's): the death of a send-once right to it wakes the waiter.
     kernel_reply: bool,
+}
+
+/// A guard on a receive right.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Guard {
+    /// A strict guard reads as context 0.
+    strict: bool,
+}
+
+/// A pending no-senders request.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct NsRequest {
+    notify: PortId,
+    /// The port has had a sender since the request (or `sync` was not
+    /// met): the notification goes out when the last one is gone.
+    armed: bool,
 }
 
 #[derive(Debug)]
@@ -183,6 +217,9 @@ struct Space {
     by_port: BTreeMap<PortId, u32>,
     next_index: u32,
     task_port: PortId,
+    /// Dead-name requests: the name, and the send-once right the
+    /// notification goes to.
+    dn_requests: BTreeMap<u32, PortId>,
 }
 
 impl Space {
@@ -257,6 +294,16 @@ pub struct Ipc {
     /// Threads woken by a right that went away (a send-once right to a
     /// kernel reply port), for the caller to unblock ([`Ipc::take_woken`]).
     woken: Vec<ThreadId>,
+    /// Tasks' name ports, made on first use.
+    name_ports: BTreeMap<TaskId, PortId>,
+    /// Special ports a task set (`None`: set to `MACH_PORT_NULL`); the
+    /// others are the defaults.
+    special: BTreeMap<(TaskId, u32), Option<PortId>>,
+    /// The bootstrap server's port and its services.
+    bootstrap_port: PortId,
+    services: BTreeMap<Vec<u8>, Service>,
+    /// Tasks that broke a port guard in a MIG request, to be killed.
+    violations: BTreeSet<TaskId>,
 }
 
 impl Default for Ipc {
@@ -266,7 +313,17 @@ impl Default for Ipc {
 }
 
 mod mig;
+mod ports;
+mod tasks;
 pub use mig::{Exception, NoThreads, Target, ThreadServer};
+pub use ports::{Options, Peeked};
+pub use tasks::{Service, bootstrap_request};
+
+/// An NDR record, for tests that build requests.
+#[cfg(test)]
+pub(crate) fn mig_ndr() -> Vec<u8> {
+    mig::NDR.to_vec()
+}
 
 const HEADER: usize = 24;
 const PORT_DESCRIPTOR: usize = 12;
@@ -295,8 +352,14 @@ impl Ipc {
             exc_thread: BTreeMap::new(),
             exc_host: HandlerTable::default(),
             woken: Vec::new(),
+            name_ports: BTreeMap::new(),
+            special: BTreeMap::new(),
+            bootstrap_port: PortId(0),
+            services: BTreeMap::new(),
+            violations: BTreeSet::new(),
         };
         ipc.host_port = ipc.new_port(KObject::Host, None);
+        ipc.bootstrap_port = ipc.new_port(KObject::Bootstrap, None);
         ipc
     }
 
@@ -313,10 +376,16 @@ impl Ipc {
             Port {
                 kobject,
                 receiver,
-                set: None,
+                sets: BTreeSet::new(),
                 queue: VecDeque::new(),
                 seqno: 0,
                 qlimit: MACH_PORT_QLIMIT_DEFAULT,
+                context: 0,
+                guard: None,
+                mscount: 0,
+                sorights: 0,
+                ns_request: None,
+                pd_request: None,
                 count: 0,
                 kernel_reply: false,
             },
@@ -337,7 +406,16 @@ impl Ipc {
         // Names start at a different index in each task, so the names of
         // the self ports of a parent and its child differ.
         let next_index = 0x100 + ((task as u32).wrapping_mul(0x40) & 0xffff);
-        self.spaces.insert(task, Space { entries: BTreeMap::new(), by_port: BTreeMap::new(), next_index, task_port });
+        self.spaces.insert(
+            task,
+            Space {
+                entries: BTreeMap::new(),
+                by_port: BTreeMap::new(),
+                next_index,
+                task_port,
+                dn_requests: BTreeMap::new(),
+            },
+        );
         self.add_send(task, task_port, 1);
         let host = self.host_port;
         self.add_send(task, host, 1);
@@ -371,6 +449,7 @@ impl Ipc {
     pub fn destroy_task(&mut self, task: TaskId) -> Vec<ThreadId> {
         let mut woken = Vec::new();
         self.exc_task.remove(&task);
+        self.task_gone(task, &mut woken);
         let Some(space) = self.spaces.get(&task) else { return woken };
         let task_port = space.task_port;
         let entries: Vec<(u32, Entry)> = space.entries.iter().map(|(&n, &e)| (n, e)).collect();
@@ -450,18 +529,30 @@ impl Ipc {
         }
     }
 
+    /// Whether `task` broke a port guard in a request it sent (it must be
+    /// killed with SIGKILL); clears the mark.
+    pub fn take_violation(&mut self, task: TaskId) -> bool {
+        self.violations.remove(&task)
+    }
+
     /// The threads woken since the last call, for the caller to unblock.
+    /// Notifications that became due (no-senders) go out first.
     pub fn take_woken(&mut self) -> Vec<ThreadId> {
+        self.check_no_senders();
         core::mem::take(&mut self.woken)
     }
 
     fn remove_name(&mut self, task: TaskId, name: u32) {
-        if let Some(space) = self.spaces.get_mut(&task)
-            && let Some(e) = space.entries.remove(&name)
+        let Some(space) = self.spaces.get_mut(&task) else { return };
+        if let Some(e) = space.entries.remove(&name)
             && let Obj::Port(p) = e.obj
             && space.by_port.get(&p) == Some(&name)
         {
             space.by_port.remove(&p);
+        }
+        // A dead-name request on the name: the name is gone.
+        if let Some(to) = space.dn_requests.remove(&name) {
+            self.notify_value(to, MACH_NOTIFY_PORT_DELETED, name);
         }
     }
 
@@ -593,8 +684,12 @@ impl Ipc {
                 }
                 match delta {
                     0 => KERN_SUCCESS,
+                    -1 if self.ports.get(&p).is_some_and(|q| q.guard.is_some()) => POLY_GUARD_VIOLATION,
                     -1 => {
                         self.destroy_port(p, woken);
+                        if self.entry(task, name).is_some_and(Entry::is_empty) {
+                            self.remove_name(task, name);
+                        }
                         KERN_SUCCESS
                     }
                     _ => KERN_INVALID_VALUE,
@@ -737,7 +832,14 @@ impl Ipc {
                 self.leave_set(port);
                 Carried::Receive(port)
             }
-            MACH_MSG_TYPE_MAKE_SEND_ONCE => Carried::SendOnce(port),
+            MACH_MSG_TYPE_MAKE_SEND_ONCE => {
+                self.ports.get_mut(&port).expect("named port exists").sorights += 1;
+                Carried::SendOnce(port)
+            }
+            MACH_MSG_TYPE_MAKE_SEND => {
+                self.ports.get_mut(&port).expect("named port exists").mscount += 1;
+                Carried::Send(port)
+            }
             _ => Carried::Send(port),
         };
         let space = self.spaces.get_mut(&task).expect("resolved task");
@@ -755,6 +857,8 @@ impl Ipc {
             && let Some(q) = self.ports.get_mut(&p)
         {
             q.receiver = Some(task);
+            q.context = 0;
+            q.guard = None;
         }
         KERN_SUCCESS
     }
@@ -771,32 +875,43 @@ impl Ipc {
             let Obj::Set(s) = s.obj else { return KERN_INVALID_RIGHT };
             Some(s)
         };
-        let before = self.ports.get(&p).and_then(|q| q.set);
-        if target.is_none() && before.is_none() {
+        let in_none = self.ports.get(&p).is_none_or(|q| q.sets.is_empty());
+        if target.is_none() && in_none {
             return KERN_NOT_IN_SET;
         }
         self.leave_set(p);
         if let Some(s) = target {
             self.sets.get_mut(&s).expect("named set exists").members.insert(p);
-            self.ports.get_mut(&p).expect("named port exists").set = Some(s);
+            self.ports.get_mut(&p).expect("named port exists").sets.insert(s);
         }
         KERN_SUCCESS
     }
 
+    /// Take the port out of every set it is in.
     fn leave_set(&mut self, p: PortId) {
-        if let Some(q) = self.ports.get_mut(&p)
-            && let Some(s) = q.set.take()
-            && let Some(set) = self.sets.get_mut(&s)
-        {
-            set.members.remove(&p);
+        let Some(q) = self.ports.get_mut(&p) else { return };
+        for s in core::mem::take(&mut q.sets) {
+            if let Some(set) = self.sets.get_mut(&s) {
+                set.members.remove(&p);
+            }
         }
+    }
+
+    /// Wake a receiver of a message queued on `p`: one waiting on the port,
+    /// or on a set it is in.
+    fn wake_receiver(&mut self, p: PortId) -> Option<ThreadId> {
+        if let Some(t) = self.rcv_waiters.wake_one(RcvKey::Port(p), WakeReason::Ready) {
+            return Some(t);
+        }
+        let sets: Vec<SetId> = self.ports.get(&p).map(|q| q.sets.iter().copied().collect()).unwrap_or_default();
+        sets.into_iter().find_map(|s| self.rcv_waiters.wake_one(RcvKey::Set(s), WakeReason::Ready))
     }
 
     fn destroy_set(&mut self, s: SetId) {
         if let Some(set) = self.sets.remove(&s) {
             for p in set.members {
                 if let Some(q) = self.ports.get_mut(&p) {
-                    q.set = None;
+                    q.sets.remove(&s);
                 }
             }
         }
@@ -807,23 +922,48 @@ impl Ipc {
     /// The port is destroyed: rights to it become dead names everywhere,
     /// its messages are destroyed, its waiters are woken.
     fn destroy_port(&mut self, p: PortId, woken: &mut Vec<ThreadId>) {
+        // A port-destroyed request saves the port: its receive right goes
+        // to the notify port.
+        if self.port_destroyed_request(p) {
+            return;
+        }
         self.leave_set(p);
         let Some(port) = self.ports.remove(&p) else { return };
+        // Notifications for dead-name requests: (to, id, name).
+        let mut notes = Vec::new();
         for space in self.spaces.values_mut() {
+            let mut dead = Vec::new();
             if let Some(name) = space.by_port.remove(&p) {
                 let e = space.entries.get_mut(&name).expect("by_port names an entry");
                 e.receive = false;
                 if e.send > 0 {
                     *e = Entry { obj: Obj::Dead, receive: false, send: 0, send_once: 0, dead: e.send };
+                    dead.push(name);
                 } else if e.send_once == 0 {
                     space.entries.remove(&name);
+                    if let Some(to) = space.dn_requests.remove(&name) {
+                        notes.push((to, MACH_NOTIFY_PORT_DELETED, name));
+                    }
                 }
             }
-            for e in space.entries.values_mut() {
+            for (&n, e) in space.entries.iter_mut() {
                 if e.obj == Obj::Port(p) && e.send_once > 0 {
                     *e = Entry { obj: Obj::Dead, receive: false, send: 0, send_once: 0, dead: e.send_once };
+                    dead.push(n);
                 }
             }
+            for n in dead {
+                if let Some(to) = space.dn_requests.remove(&n) {
+                    // The notification carries a reference of the dead name.
+                    if let Some(e) = space.entries.get_mut(&n) {
+                        e.dead = (e.dead + 1).min(MACH_PORT_UREFS_MAX);
+                    }
+                    notes.push((to, MACH_NOTIFY_DEAD_NAME, n));
+                }
+            }
+        }
+        for (to, id, name) in notes {
+            self.notify_value(to, id, name);
         }
         for m in port.queue {
             self.destroy_message(m, woken);
@@ -874,8 +1014,14 @@ impl Ipc {
                 self.entry_mut(task, name).expect("present").send -= 1;
                 Carried::Send(p)
             }
-            MACH_MSG_TYPE_MAKE_SEND if e.receive => Carried::Send(p),
-            MACH_MSG_TYPE_MAKE_SEND_ONCE if e.receive => Carried::SendOnce(p),
+            MACH_MSG_TYPE_MAKE_SEND if e.receive => {
+                self.ports.get_mut(&p).expect("named port exists").mscount += 1;
+                Carried::Send(p)
+            }
+            MACH_MSG_TYPE_MAKE_SEND_ONCE if e.receive => {
+                self.ports.get_mut(&p).expect("named port exists").sorights += 1;
+                Carried::SendOnce(p)
+            }
             MACH_MSG_TYPE_MOVE_SEND_ONCE if e.send_once > 0 => {
                 self.entry_mut(task, name).expect("present").send_once -= 1;
                 Carried::SendOnce(p)
@@ -1055,12 +1201,7 @@ impl Ipc {
         }
         let port = self.ports.get_mut(&dest_port).expect("checked");
         port.queue.push_back(m);
-        let set = port.set;
-        let woken = self
-            .rcv_waiters
-            .wake_one(RcvKey::Port(dest_port), WakeReason::Ready)
-            .or_else(|| set.and_then(|s| self.rcv_waiters.wake_one(RcvKey::Set(s), WakeReason::Ready)));
-        Ok(woken)
+        Ok(self.wake_receiver(dest_port))
     }
 
     /// What `name` receives from: a receive right's port or a port set.

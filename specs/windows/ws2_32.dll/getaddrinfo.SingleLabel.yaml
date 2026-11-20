@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getaddrinfo.SingleLabel.yaml
+id: windows/api/ws2_32.dll/getaddrinfo.SingleLabel
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain, connected by Wi-Fi to a home router that is its only DNS server; NetBIOS over TCP/IP enabled, node type hybrid, no primary DNS suffix, a VPN adapter that has its own name-resolution policy rules for its own namespaces), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran twice with identical output, each run in a fresh scratch directory, with names that are new in every run"
+  observed_by: spec-win-dns-timing
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: getaddrinfo, GetAddrInfoW, ADDRINFOA, ADDRINFOW, freeaddrinfo, gethostbyname, "Winsock Error Codes", "Name Resolution Policy Table" (the tests of the unreachable server), the hosts file; ws2def.h, ws2tcpip.h, winsock2.h and winerror.h for constants and layouts. Chrome's calls: docs/windows/chrome-net-gaps.md and the committed network-service traces. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Chrome's network service starts with getaddrinfo("wpad") three times and then looks up every host of a page on worker threads, synchronously; on Poly page loads are slow and a slow failing lookup is a suspect (docs/windows/chrome-net-gaps.md, row 8). A single-label name that does not exist makes getaddrinfo wait about 1.2 s before it fails with 11001 unless the hints carry AI_DNS_ONLY: with that flag it fails in a few milliseconds. The wait is not kept (the repeat waits again) and is the same for GetAddrInfoW and gethostbyname; a name under .local waits the same. Chrome's wpad lookups carry AI_DNS_ONLY, so on Windows they never wait this long.
+interface:
+  signature: "getaddrinfo(name, ...) of a name without a dot (a single label such as wpad or a random polytest-<hex>) with and without AI_DNS_ONLY (0x10); GetAddrInfoW; gethostbyname"
+rules:
+  flags_zero: "Hints flags 0, a new single-label name: 11001 (return value, WSAGetLastError, GetLastError), no entries, after 1.13 to 1.29 s (test bounds: at least 300 ms and under 4000 ms). The same name again: again 1.1 to 1.3 s (the answer is not kept). The same for GetAddrInfoW (1.27 s), for gethostbyname (NULL result, 1.28 s) and for a name under .local (1.29 s). The wait is of a kind that DNS alone does not explain: the same names fail in milliseconds with AI_DNS_ONLY (probably name resolution on the local network: the oracle has NetBIOS over TCP/IP enabled and LLMNR available; that is an inference, the tests do not show the protocol)."
+  dns_only: "Hints flags AI_DNS_ONLY (0x10), the same kinds of names: 11001 after 2 to 7 ms (test bound: under 500 ms), also on the repeat, for GetAddrInfoW and for a name under .local (22 ms in a probe)."
+  wpad: "getaddrinfo(\"wpad\", NULL, {AI_DNS_ONLY, AF_UNSPEC, SOCK_STREAM}) three times: on this network the name EXISTS (a name of the connection's own domain is added: code 0, three entries: one IPv4, two IPv6; 7 ms for the first lookup, under 5 ms for the next two); with flags 0, with \"wpad.\", with GetAddrInfoW and with AF_INET the same. So the code of a wpad lookup is network dependent (0 or 11001); the test checks that it is one of the two, that all three lookups agree, that the entries are present exactly when the code is 0, and that each lookup with AI_DNS_ONLY takes under 500 ms. On a network where wpad does not exist the lookup behaves like the new single-label names above: 11001 within milliseconds with AI_DNS_ONLY, after about 1.2 s with flags 0."
+  error_places: "Return value, WSAGetLastError and GetLastError are equal (11001) for every failing single-label lookup."
+errors:
+  host_not_found: "WSAHOST_NOT_FOUND (11001)"
+side_effects: "without AI_DNS_ONLY a single-label name is also asked from the local network"
+threading: "getaddrinfo may be called from any thread; lookups of several threads run at the same time"
+ordering: []
+timing:
+  typical: "bounds in the rules"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Every name that is meant not to exist is `polytest-<16 random hex digits>` (with .invalid, .test or .local added, or as a single label), different in every call and every run, so no earlier run and no cache can answer it; no name of another party is looked up except `wpad`, `localhost` and numeric addresses. Names of the hosts-file tests are `polytest-*.invalid`; the test adds its lines to the hosts file (192.0.2.0/24 and 2001:db8::/32, the documentation ranges), removes every line with `polytest-` at the end and at the start, and nothing connects to them. Times are taken with the performance counter around the call and printed only as facts about bounds ("under 500 ms: true"), never as values; the bounds leave a wide margin to what was measured. The tests need the network of the oracle only for the lookups of names that do not exist (a DNS server that answers NXDOMAIN) and run offline otherwise. dns_nx_repeat sleeps about 30 s and needs a per-test time limit of 60 s or more (poly-oracle.ps1 -TestTimeouts dns_nx_repeat=120); dns_hosts_* write to the hosts file and need an administrator token.
+not_covered: >
+  Which protocols are used (no packet capture), a network without NetBIOS or LLMNR, search-list suffixes and devolution (the oracle has no primary suffix; the one connection suffix explains why wpad exists), the effect of the hints' family on the wait, a single-label name that exists on the local network, the time of AI_DNS_ONLY on an unreachable server (see getaddrinfo.FailureTiming).
