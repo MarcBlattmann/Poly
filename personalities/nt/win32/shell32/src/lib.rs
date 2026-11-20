@@ -708,6 +708,7 @@ mod dispatch;
 mod exec;
 mod fileop;
 mod folder;
+mod idle;
 mod item;
 mod link;
 mod taskbar;

@@ -425,8 +425,12 @@ fn execute(info: &ShellExecuteInfo) -> Executed {
     }
 }
 
-/// The process handle the caller keeps (`SEE_MASK_NOCLOSEPROCESS`), the others closed.
+/// The process handle the caller keeps (`SEE_MASK_NOCLOSEPROCESS`), the others closed; with
+/// `SEE_MASK_WAITFORINPUTIDLE`, after a GUI program's start-up (ADR 0245, [`crate::idle`]).
 fn keep(info: &ShellExecuteInfo, pi: ProcessInformation) -> usize {
+    if info.mask & crate::idle::SEE_MASK_WAITFORINPUTIDLE != 0 {
+        crate::idle::wait(pi.process);
+    }
     // SAFETY: the new process's handles, ours to close.
     unsafe {
         CloseHandle(pi.thread);

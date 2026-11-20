@@ -368,6 +368,8 @@ pub struct Wm {
     system_dpi: u32,
     /// The monitor's DPI now: the system DPI until the scale changes (ADR 0231).
     monitor_dpi: u32,
+    /// Which processes have looked at, or blocked on, an empty queue (ADR 0245).
+    input_idle: crate::idle::InputIdle,
 }
 
 impl Default for Wm {
@@ -436,6 +438,7 @@ impl Wm {
             thread_dpi: BTreeMap::new(),
             system_dpi: 96,
             monitor_dpi: 96,
+            input_idle: crate::idle::InputIdle::default(),
         };
         // Index 0 is never a window.
         wm.slots.push(None);
@@ -2073,6 +2076,7 @@ impl Wm {
     /// A process ended: its threads' state and its classes go.
     pub fn process_exited(&mut self, pid: u32, fx: &mut Effects) {
         self.clip.process_gone(pid);
+        self.input_idle.forget(pid);
         let threads: Vec<u32> = self.queues.keys().filter(|k| k.0 == pid).map(|k| k.1).collect();
         for t in threads {
             self.thread_exited(pid, t, fx);
@@ -2435,6 +2439,11 @@ impl Wm {
             }
             Request::Reply { result } => Reply::Bool { value: self.reply(ctx, result, fx) },
             Request::InSend {} => Reply::Bool { value: !self.queue(ctx.key()).receiving.is_empty() },
+            Request::InputIdle { blocking } => {
+                self.input_idle.note(ctx.pid, blocking);
+                Reply::Ok {}
+            }
+            Request::IdleState { pid } => Reply::Value { value: u64::from(self.input_idle.state(pid)) },
             Request::QueueStatus { flags, clear } => {
                 let key = ctx.key();
                 self.refresh_timers(key, ctx.now);
