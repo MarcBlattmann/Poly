@@ -561,6 +561,42 @@ fn a_toplevel_is_configured_mapped_framed_and_composed() {
 }
 
 #[test]
+fn each_format_is_copied_in_place_within_the_damage() {
+    // 0x80102030 as bytes 30 20 10 80: as it is for argb8888, made opaque for xrgb8888, red and
+    // blue swapped for the bgr ones.
+    for (format, want) in [
+        (wl_shm::Format::ARGB8888, 0x8010_2030),
+        (wl_shm::Format::XRGB8888, 0xff10_2030),
+        (wl_shm::Format::ABGR8888, 0x8030_2010),
+        (wl_shm::Format::XBGR8888, 0xff30_2010),
+    ] {
+        let (mut srv, shared) = server();
+        let (mut p, registry) = connect(&mut srv, &shared);
+        let g = globals(&mut p, &mut srv, registry);
+        let (surface, xdg, _, events) = toplevel(&mut p, &mut srv, &g, "f");
+        p.send(&mut srv, xdg, xdg_surface::Request::AckConfigure { serial: configure_serial(&events) });
+        let (buffer, mem) = buffer(&mut p, &mut srv, &g, 6, 5, 0, format.0);
+        p.send(&mut srv, surface, wl_surface::Request::Attach { buffer: Some(buffer), x: 0, y: 0 });
+        p.send(&mut srv, surface, wl_surface::Request::Commit);
+        for px in mem.borrow_mut().chunks_exact_mut(4) {
+            px.copy_from_slice(&0x8010_2030u32.to_le_bytes());
+        }
+        p.send(&mut srv, surface, wl_surface::Request::Attach { buffer: Some(buffer), x: 0, y: 0 });
+        p.send(&mut srv, surface, wl_surface::Request::DamageBuffer { x: 1, y: 2, width: 3, height: 2 });
+        p.send(&mut srv, surface, wl_surface::Request::Commit);
+        let content = srv.scene().windows()[0].content();
+        for y in 0..5 {
+            for x in 0..6 {
+                let inside = (1..4).contains(&x) && (2..4).contains(&y);
+                let old =
+                    if matches!(format, wl_shm::Format::ARGB8888 | wl_shm::Format::ABGR8888) { 0 } else { 0xff00_0000 };
+                assert_eq!(content.pixels[y * 6 + x], if inside { want } else { old }, "{format:?} at {x},{y}");
+            }
+        }
+    }
+}
+
+#[test]
 fn only_damaged_pixels_are_copied() {
     let (mut srv, shared) = server();
     let (mut p, registry) = connect(&mut srv, &shared);
