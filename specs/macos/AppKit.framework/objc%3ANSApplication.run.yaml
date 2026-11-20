@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/AppKit.framework/objc%3ANSApplication.run.yaml. Observed with Objective-C test programs linked against AppKit
+# (tests/macos/include/poly_mak.h, ADR 0182); results per architecture in objc%3ANSApplication.run.tests/macos.json.
+id: "macos/api/AppKit.framework/objc:NSApplication.run"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the AppKit, Foundation, CoreGraphics and QuartzCore of that release, SIP on, the owner's logged-in graphical session (the window server is needed), the display a 1512 x 982 point built-in one at scale 2, the system appearance set to dark (tests always set the appearance they need); tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: appkit`, tests/macos/include/poly_mak.h): the program is not in an application bundle, so its activation policy is Prohibited, it is never the active application and no window is ever key or main; its windows are invisible (alpha 0, mouse clicks pass through) and are closed or ordered out before the test ends, and a watchdog ends a test after 12 seconds; pixels are drawn into bitmaps the test makes (tagged sRGB) so that colours do not depend on the display; values that depend on this macOS release or this Mac (sizes of system controls, system colours and fonts, the display) are printed with the name prefix sys_ and are described as SYSTEM-DEPENDENT; NSTextAlignment's numbers differ between the two architectures in the SDK (tests compare with the named constants), and the pixels of system controls differ by one step between them (each architecture is recorded on its own); results and output go through raw system calls"
+  observed_by: spec-macos-appkit-basics
+  date: 2026-11-20
+summary: >
+  -[NSApplication run] starts the application and runs its event loop until stop: takes effect.
+  isRunning is YES from applicationWillFinishLaunching: on and NO again after run returns. The
+  delegate gets applicationWillFinishLaunching: first and applicationDidFinishLaunching: after it
+  (with application update callbacks in between, which are not required: a typical log is will,
+  willupdate, didupdate, did), then the loop goes on; no activation callback comes (the Prohibited
+  application is never active). While run is running the main run loop works: a one-shot timer set
+  before run fires once, a repeating timer about once per interval (0.05 s over 0.5 s: 5 to 12 times);
+  the run lasts about as long as the timer that stops it. run can be called again after it returned:
+  the launch callbacks are not repeated (will and did once in total), isRunning is YES inside the
+  second run and NO after it, and the second run returns after its own stop. A run that nothing stops
+  never returns (the tests stop it from a timer that also posts an event, see stop:).
+returns:
+  success: "none (void); it returns after stop: and one more event"
+errors: {}
+side_effects: "none beyond what the summary says"
+threading: "AppKit objects are used on the main thread only; the tests use them there (a watchdog thread only ends the process)"
+ordering:
+  - "applicationWillFinishLaunching:"
+  - "applicationDidFinishLaunching:"
+  - "the event loop until stopped"
+timing:
+  typical: "microseconds to milliseconds; drawing, ordering and notifications settle within a run-loop turn (tests spin the loop for 0.05 to 0.3 s)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsview_setneedsdisplay_async",
+      "source_sha256": "e978adc25728fedf559ae19b5ec5a2eeac5f06010e317021437daa411ec7460a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ea439237cb3c5d7f375c4c0b9134065335bc8f5cd0ebcbf891fe550776e91489",
+          "exit_code": 0,
+          "stdout": "ok d.log.length == 0\nok [d.log isEqualToString:@\"draw(0,0,100,60);\"]\nvalue needsDisplay after draw 0\nvalue YES then NO draw(0,0,100,60);\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "94a603d803f14749182fee95e020780c8773f9ac59f1f3263fc7ccb0007881a9",
+          "exit_code": 0,
+          "stdout": "ok d.log.length == 0\nok [d.log isEqualToString:@\"draw(0,0,100,60);\"]\nvalue needsDisplay after draw 0\nvalue YES then NO draw(0,0,100,60);\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsview_setneedsdisplay_display_and_hidden",
+      "source_sha256": "fd0a3181e675904f49f25a52506e86868b1113a08fb1558d3b603f03a804ba8d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0159164563f636add9d4c3ed8865b59d293e4e63f999d3e2232bbcdd359e54d5",
+          "exit_code": 0,
+          "stdout": "ok [take() length] == 0\nok [take() isEqualToString:@\"root(0,0,100,60);\"]\nok [take() isEqualToString:@\"sub(0,0,30,30);\"]\nok [take() isEqualToString:@\"sub(-20,-20,100,60);\"]\nok [take() isEqualToString:@\"sub(1,1,5,5);\"]\nok [take() isEqualToString:@\"root(25,25,10,10);\"]\nok [take() length] == 0\nvalue after unhide sub(-20,-20,100,60);\nvalue ordered out and marked root(0,0,100,60);\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9d9cd67ff55abc3a4f9f8774b9c995a6e23b57295be6bd0eaae8245f2cec0b72",
+          "exit_code": 0,
+          "stdout": "ok [take() length] == 0\nok [take() isEqualToString:@\"root(0,0,100,60);\"]\nok [take() isEqualToString:@\"sub(0,0,30,30);\"]\nok [take() isEqualToString:@\"sub(-20,-20,100,60);\"]\nok [take() isEqualToString:@\"sub(1,1,5,5);\"]\nok [take() isEqualToString:@\"root(25,25,10,10);\"]\nok [take() length] == 0\nvalue after unhide sub(-20,-20,100,60);\nvalue ordered out and marked root(0,0,100,60);\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

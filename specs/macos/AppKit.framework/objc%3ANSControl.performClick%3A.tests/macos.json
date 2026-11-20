@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsbutton_performclick_disabled",
+      "source_sha256": "b31b8cbbc522e0d624e95256ec1616446d276d2366b1d9ad9f3577c32e38dae8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3cea304b99fcdb2cb1e903cc40d2aa98632b01e579899ddbe61562e9e33e484e",
+          "exit_code": 0,
+          "stdout": "ok t.a == 0 && b.state == NSControlStateValueOff\nok [b sendAction:@selector(act:) to:t]\nok t.a == 1\nok t.a == 2\nok t.b == 1 && t.a == 2\nok b.target == nil\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4741d4420054e1b7c1ae0e5af9e7a79e4832402ad2f21d212d07b31c4be1e19a",
+          "exit_code": 0,
+          "stdout": "ok t.a == 0 && b.state == NSControlStateValueOff\nok [b sendAction:@selector(act:) to:t]\nok t.a == 1\nok t.a == 2\nok t.b == 1 && t.a == 2\nok b.target == nil\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsbutton_performclick_target_action",
+      "source_sha256": "86d71d16118eecb570f8ed202c66f1e70f5d8656be4786f2cc939e6ace8b816f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0d9a499e70f13a1596cf40f13d6779b9211d6802056cf56419819ecbdd072c86",
+          "exit_code": 0,
+          "stdout": "ok [t.log isEqualToString:@\"act(state=1);\"]\nok t.lastSender == b\nok b.state == NSControlStateValueOn && !b.isHighlighted\nok [b sendAction:b.action to:b.target]\nok [t.log isEqualToString:@\"act(state=1);\"]\nok ![b sendAction:@selector(act:) to:nil]\nok t.log.length == 0\nok old == NSEventMaskLeftMouseUp && NSEventMaskLeftMouseUp == 4\nok [b sendActionOn:NSEventMaskLeftMouseUp] == NSEventMaskLeftMouseDown\nok noaction.state == NSControlStateValueOn || noaction.state == NSControlStateValueOff\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "50f3084cc7e3d476b12f11075871e0a14d3a47fa2d2b682642e9fddc9dffdce9",
+          "exit_code": 0,
+          "stdout": "ok [t.log isEqualToString:@\"act(state=1);\"]\nok t.lastSender == b\nok b.state == NSControlStateValueOn && !b.isHighlighted\nok [b sendAction:b.action to:b.target]\nok [t.log isEqualToString:@\"act(state=1);\"]\nok ![b sendAction:@selector(act:) to:nil]\nok t.log.length == 0\nok old == NSEventMaskLeftMouseUp && NSEventMaskLeftMouseUp == 4\nok [b sendActionOn:NSEventMaskLeftMouseUp] == NSEventMaskLeftMouseDown\nok noaction.state == NSControlStateValueOn || noaction.state == NSControlStateValueOff\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

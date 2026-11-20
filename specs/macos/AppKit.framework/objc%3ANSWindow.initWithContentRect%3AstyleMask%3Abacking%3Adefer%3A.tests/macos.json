@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nswindow_initwithcontentrect_defaults",
+      "source_sha256": "97431237f28fa257a43cf5093ec8081220ab354d3886432497f6239de3c40675",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "58d3783891a835025df26a564e0546cfee7d03300d0540c5b59b81c7e0653414",
+          "exit_code": 0,
+          "stdout": "ok !w.isVisible && !w.isKeyWindow && !w.isMainWindow && !w.isMiniaturized\nok w.title != nil && w.title.length == 0\nok w.alphaValue is 1\nok w.isOpaque\nok w.backingType == NSBackingStoreBuffered && NSBackingStoreBuffered == 2\nok w.level == NSNormalWindowLevel && NSNormalWindowLevel == 0\nok w.minSize.width is 0\nok w.minSize.height is 32\nok w.maxSize.width > 1e6 && w.maxSize.height > 1e6\nok w.contentView != nil && [w.contentView class] == [NSView class]\nok w.firstResponder == w\nok w.delegate == nil && w.toolbar == nil\nok w.windowNumber > 0\nok [a.windows containsObject:w]\nok w.canBecomeKeyWindow && !w.canBecomeMainWindow\nok w.contentView.window == w\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "498acadc2e81b2cdf7f9d18545d573f6a5545e341c39016c99c81c0b104f137e",
+          "exit_code": 0,
+          "stdout": "ok !w.isVisible && !w.isKeyWindow && !w.isMainWindow && !w.isMiniaturized\nok w.title != nil && w.title.length == 0\nok w.alphaValue is 1\nok w.isOpaque\nok w.backingType == NSBackingStoreBuffered && NSBackingStoreBuffered == 2\nok w.level == NSNormalWindowLevel && NSNormalWindowLevel == 0\nok w.minSize.width is 0\nok w.minSize.height is 32\nok w.maxSize.width > 1e6 && w.maxSize.height > 1e6\nok w.contentView != nil && [w.contentView class] == [NSView class]\nok w.firstResponder == w\nok w.delegate == nil && w.toolbar == nil\nok w.windowNumber > 0\nok [a.windows containsObject:w]\nok w.canBecomeKeyWindow && !w.canBecomeMainWindow\nok w.contentView.window == w\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nswindow_initwithcontentrect_frames",
+      "source_sha256": "1da4cc9bab437f18c12a56abd203f7357bee7953102405d8ed3e9071e8f82217",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a79dfae9f0a5fcfe9ee6df9fd82603368933f9d4e0319f4afacaa9d970782fd7",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(b.frame, NSMakeRect(100, 200, 300, 200))\nok NSEqualRects(b.contentView.frame, NSMakeRect(0, 0, 300, 200))\nok NSEqualRects(t.frame, NSMakeRect(100, 200, 300, 232))\nok NSEqualRects(t.contentView.frame, NSMakeRect(0, 0, 300, 200))\nok t.styleMask == NSWindowStyleMaskTitled\nok NSEqualRects(all.frame, NSMakeRect(100, 200, 300, 232))\nok all.styleMask == (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable)\nok NSEqualRects(f.frame, NSMakeRect(100, 200, 300, 200))\nok NSEqualRects(f.contentLayoutRect, NSMakeRect(0, 0, 300, 168))\nok NSEqualRects(r.frame, NSMakeRect(100, 200, 300, 200))\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9be619895dd00938d692ff99c169095d25f6282bcf443fbf7f504b80b81d308d",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(b.frame, NSMakeRect(100, 200, 300, 200))\nok NSEqualRects(b.contentView.frame, NSMakeRect(0, 0, 300, 200))\nok NSEqualRects(t.frame, NSMakeRect(100, 200, 300, 232))\nok NSEqualRects(t.contentView.frame, NSMakeRect(0, 0, 300, 200))\nok t.styleMask == NSWindowStyleMaskTitled\nok NSEqualRects(all.frame, NSMakeRect(100, 200, 300, 232))\nok all.styleMask == (NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable)\nok NSEqualRects(f.frame, NSMakeRect(100, 200, 300, 200))\nok NSEqualRects(f.contentLayoutRect, NSMakeRect(0, 0, 300, 168))\nok NSEqualRects(r.frame, NSMakeRect(100, 200, 300, 200))\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

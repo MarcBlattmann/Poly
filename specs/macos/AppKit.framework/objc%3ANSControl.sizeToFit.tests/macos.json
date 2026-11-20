@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsbutton_sizetofit_control_size",
+      "source_sha256": "bb8dd39851ff04be716b49d19dcd8d888bc1d6b93b4a980615f44e5b77038bd9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "bd7f8186c5cc25420b2ce18ac99c2a6dbdc8e2cc41a1be694c7161bf3a30572b",
+          "exit_code": 0,
+          "stdout": "ok NSControlSizeRegular == 0 && NSControlSizeSmall == 1 && NSControlSizeMini == 2 && NSControlSizeLarge == 3\nok m.height < s.height && s.height < r.height && r.height < l.height\nok m.width < s.width && s.width < r.width && r.width < l.width\nok u.width < r.width && u.height < r.height\nok b.controlSize == NSControlSizeSmall\nvalue sys_regular_w 55.00\nvalue sys_regular_h 24.00\nvalue sys_small_w 47.00\nvalue sys_small_h 20.00\nvalue sys_mini_w 39.00\nvalue sys_mini_h 16.00\nvalue sys_large_w 59.00\nvalue sys_large_h 28.00\nvalue sys_unbordered_w 35.00\nvalue sys_unbordered_h 16.00\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d0bc157e15eae026c600f30ae800badb32dafe2a4bd6c362fcc09b092744f05c",
+          "exit_code": 0,
+          "stdout": "ok NSControlSizeRegular == 0 && NSControlSizeSmall == 1 && NSControlSizeMini == 2 && NSControlSizeLarge == 3\nok m.height < s.height && s.height < r.height && r.height < l.height\nok m.width < s.width && s.width < r.width && r.width < l.width\nok u.width < r.width && u.height < r.height\nok b.controlSize == NSControlSizeSmall\nvalue sys_regular_w 55.00\nvalue sys_regular_h 24.00\nvalue sys_small_w 47.00\nvalue sys_small_h 20.00\nvalue sys_mini_w 39.00\nvalue sys_mini_h 16.00\nvalue sys_large_w 59.00\nvalue sys_large_h 28.00\nvalue sys_unbordered_w 35.00\nvalue sys_unbordered_h 16.00\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsbutton_sizetofit_titles",
+      "source_sha256": "8c4dff30100a34604027d5c6f361b9ef9dbadbf9ee1854c9a121ce95056cda83",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a32cf7dd3b389c8a42929324dafdbec6d816dcad7b5153e711d425ee3b9282a0",
+          "exit_code": 0,
+          "stdout": "ok b.frame.origin.x is 7\nok b.frame.origin.y is 9\nok NSEqualSizes(b.frame.size, b.intrinsicContentSize)\nok w2 > w1 && b.frame.size.height == h1\nok w0 < w1 && w0 > 0 && b.frame.size.height == h1\nok w2 - w1 is 52\nok w1 - w0 is 8.5\nvalue sys_ok_w 42.50\nvalue sys_ok_h 24.00\nvalue sys_hello_world_w 94.50\nvalue sys_empty_w 34.00\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e5f6e50f8f802f8ad3ba07d5a91266ec6e84dc168e07df35d3ddab4526ba428f",
+          "exit_code": 0,
+          "stdout": "ok b.frame.origin.x is 7\nok b.frame.origin.y is 9\nok NSEqualSizes(b.frame.size, b.intrinsicContentSize)\nok w2 > w1 && b.frame.size.height == h1\nok w0 < w1 && w0 > 0 && b.frame.size.height == h1\nok w2 - w1 is 52\nok w1 - w0 is 8.5\nvalue sys_ok_w 42.50\nvalue sys_ok_h 24.00\nvalue sys_hello_world_w 94.50\nvalue sys_empty_w 34.00\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

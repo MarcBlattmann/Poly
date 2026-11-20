@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsview_displayrectignoringopacity_fills",
+      "source_sha256": "447ccbc3e1b707f3d742b2e05ba36d8c2736d7313579cc9878fd1844ddc66c95",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "91bdb3894806b2bcf47963ae45db4f8a26165ab28850c082e933d87d5593a192",
+          "exit_code": 0,
+          "stdout": "ok r.pixelsWide == 10 && r.pixelsHigh == 8 && r.bitsPerPixel == 32 && r.samplesPerPixel == 4 && r.hasAlpha\nok ak_px(r, 0, 0) == 0x00000000\nok ak_px(r, 1, 5) == 0xff0000ff && ak_px(r, 3, 6) == 0xff0000ff\nok ak_px(r, 0, 5) == 0 && ak_px(r, 4, 5) == 0 && ak_px(r, 1, 4) == 0 && ak_px(r, 1, 7) == 0\nok ak_px(r, 6, 5) == 0x00008080 && ak_px(r, 8, 6) == 0x00008080\nok ak_px(r, 5, 5) == 0 && ak_px(r, 9, 5) == 0\nok ak_px(r, 1, 0) == 0x003f003f && ak_px(r, 4, 0) == 0x003f003f\nok ak_px(r, 2, 0) == 0x007f007f && ak_px(r, 1, 1) == 0x007f007f\nok ak_px(r, 2, 1) == 0x00ff00ff && ak_px(r, 3, 1) == 0x00ff00ff\nok ak_px(r, 1, 2) == 0x003f003f && ak_px(r, 2, 2) == 0x007f007f\nvalue rows.00 00000000 003f003f 007f007f 007f007f 003f003f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.01 00000000 007f007f 00ff00ff 00ff00ff 007f007f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.02 00000000 003f003f 007f007f 007f007f 003f003f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.03 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.04 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.05 00000000 ff0000ff ff0000ff ff0000ff 00000000 00000000 00008080 00008080 00008080 00000000 \nvalue rows.06 00000000 ff0000ff ff0000ff ff0000ff 00000000 00000000 00008080 00008080 00008080 00000000 \nvalue rows.07 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue hash 1607899543\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8e9424f9c9377045517877b26a0a503c7e24e07c562456e2ca4200a8f7176853",
+          "exit_code": 0,
+          "stdout": "ok r.pixelsWide == 10 && r.pixelsHigh == 8 && r.bitsPerPixel == 32 && r.samplesPerPixel == 4 && r.hasAlpha\nok ak_px(r, 0, 0) == 0x00000000\nok ak_px(r, 1, 5) == 0xff0000ff && ak_px(r, 3, 6) == 0xff0000ff\nok ak_px(r, 0, 5) == 0 && ak_px(r, 4, 5) == 0 && ak_px(r, 1, 4) == 0 && ak_px(r, 1, 7) == 0\nok ak_px(r, 6, 5) == 0x00008080 && ak_px(r, 8, 6) == 0x00008080\nok ak_px(r, 5, 5) == 0 && ak_px(r, 9, 5) == 0\nok ak_px(r, 1, 0) == 0x003f003f && ak_px(r, 4, 0) == 0x003f003f\nok ak_px(r, 2, 0) == 0x007f007f && ak_px(r, 1, 1) == 0x007f007f\nok ak_px(r, 2, 1) == 0x00ff00ff && ak_px(r, 3, 1) == 0x00ff00ff\nok ak_px(r, 1, 2) == 0x003f003f && ak_px(r, 2, 2) == 0x007f007f\nvalue rows.00 00000000 003f003f 007f007f 007f007f 003f003f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.01 00000000 007f007f 00ff00ff 00ff00ff 007f007f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.02 00000000 003f003f 007f007f 007f007f 003f003f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.03 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.04 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.05 00000000 ff0000ff ff0000ff ff0000ff 00000000 00000000 00008080 00008080 00008080 00000000 \nvalue rows.06 00000000 ff0000ff ff0000ff ff0000ff 00000000 00000000 00008080 00008080 00008080 00000000 \nvalue rows.07 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue hash 1607899543\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsview_displayrectignoringopacity_flipped",
+      "source_sha256": "bd90da10da2802701cf597eac8962673ecf07e132f40447b786b84f798bad125",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "90fcbc7094ea6d6e9b7a160a8110de820fb60dbfa6d2dcbac7129b115035762c",
+          "exit_code": 0,
+          "stdout": "ok ak_px(r, 1, 1) == 0xff0000ff && ak_px(r, 3, 2) == 0xff0000ff\nok ak_px(r, 1, 0) == 0 && ak_px(r, 1, 3) == 0\nok ak_px(r, 1, 5) == 0x003f003f && ak_px(r, 2, 6) == 0x00ff00ff && ak_px(r, 4, 7) == 0x003f003f\nok mirror\nvalue rows.00 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.01 00000000 ff0000ff ff0000ff ff0000ff 00000000 00000000 00008080 00008080 00008080 00000000 \nvalue rows.02 00000000 ff0000ff ff0000ff ff0000ff 00000000 00000000 00008080 00008080 00008080 00000000 \nvalue rows.03 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.04 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.05 00000000 003f003f 007f007f 007f007f 003f003f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.06 00000000 007f007f 00ff00ff 00ff00ff 007f007f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.07 00000000 003f003f 007f007f 007f007f 003f003f 00000000 00000000 00000000 00000000 00000000 \nvalue hash 545161879\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "237142c55bc49be9b56b8dc86471641841eb79d7a0b793f28b52988aea311867",
+          "exit_code": 0,
+          "stdout": "ok ak_px(r, 1, 1) == 0xff0000ff && ak_px(r, 3, 2) == 0xff0000ff\nok ak_px(r, 1, 0) == 0 && ak_px(r, 1, 3) == 0\nok ak_px(r, 1, 5) == 0x003f003f && ak_px(r, 2, 6) == 0x00ff00ff && ak_px(r, 4, 7) == 0x003f003f\nok mirror\nvalue rows.00 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.01 00000000 ff0000ff ff0000ff ff0000ff 00000000 00000000 00008080 00008080 00008080 00000000 \nvalue rows.02 00000000 ff0000ff ff0000ff ff0000ff 00000000 00000000 00008080 00008080 00008080 00000000 \nvalue rows.03 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.04 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 \nvalue rows.05 00000000 003f003f 007f007f 007f007f 003f003f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.06 00000000 007f007f 00ff00ff 00ff00ff 007f007f 00000000 00000000 00000000 00000000 00000000 \nvalue rows.07 00000000 003f003f 007f007f 007f007f 003f003f 00000000 00000000 00000000 00000000 00000000 \nvalue hash 545161879\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

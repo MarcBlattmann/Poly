@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nswindow_framerectforcontentrect_instance_and_panels",
+      "source_sha256": "d97203524426af1191f3d81a06ba750aca3b4d40bd0eb4da0758883567196258",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "21e292df1ef4e333e5050c9dfcc26a51140a21a6ad46350d938ac3b9e15fcfc0",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects([t frameRectForContentRect:NSMakeRect(0, 0, 300, 200)], NSMakeRect(0, 0, 300, 232))\nok NSEqualRects([t frameRectForContentRect:NSMakeRect(7, 9, 50, 60)], [NSWindow frameRectForContentRect:NSMakeRect(7, 9, 50, 60) styleMask:NSWindowStyleMaskTitled])\nok NSEqualRects([NSWindow frameRectForContentRect:c styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow], NSMakeRect(100, 200, 300, 224))\nok NSEqualRects([NSWindow frameRectForContentRect:c styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskHUDWindow], NSMakeRect(100, 200, 300, 219))\nok u.frame.size.height is 232\nok [NSWindow frameRectForContentRect:c styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskUnifiedTitleAndToolbar].size.height is 232\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b00024cce7cdaa668749e21541684c31fc0509673515ea48d27461ff472f5c3b",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects([t frameRectForContentRect:NSMakeRect(0, 0, 300, 200)], NSMakeRect(0, 0, 300, 232))\nok NSEqualRects([t frameRectForContentRect:NSMakeRect(7, 9, 50, 60)], [NSWindow frameRectForContentRect:NSMakeRect(7, 9, 50, 60) styleMask:NSWindowStyleMaskTitled])\nok NSEqualRects([NSWindow frameRectForContentRect:c styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow], NSMakeRect(100, 200, 300, 224))\nok NSEqualRects([NSWindow frameRectForContentRect:c styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskHUDWindow], NSMakeRect(100, 200, 300, 219))\nok u.frame.size.height is 232\nok [NSWindow frameRectForContentRect:c styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskUnifiedTitleAndToolbar].size.height is 232\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nswindow_framerectforcontentrect_roundtrip",
+      "source_sha256": "43654d712533f76eaed3fc6d2868b44b7d713bb2d73154e92a39757f8af5bab0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5530b39f894bf61fb056c5452ced5f22768c741b6d69c5c3911bbd8a9a8edcb0",
+          "exit_code": 0,
+          "stdout": "ok ok\nok bigger\nok w.frame.size.height - w.contentView.frame.size.height is [NSWindow frameRectForContentRect:NSMakeRect(0, 0, 1, 1) styleMask:NSWindowStyleMaskTitled].size.height - 1\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9319a577f50b4b3a563737c42b218b20bd723c0daf4e21b725e7ea126f5ff91e",
+          "exit_code": 0,
+          "stdout": "ok ok\nok bigger\nok w.frame.size.height - w.contentView.frame.size.height is [NSWindow frameRectForContentRect:NSMakeRect(0, 0, 1, 1) styleMask:NSWindowStyleMaskTitled].size.height - 1\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
