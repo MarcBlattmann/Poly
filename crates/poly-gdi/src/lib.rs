@@ -44,6 +44,7 @@ pub mod otm;
 pub mod outline;
 pub mod region;
 mod rgnshape;
+pub mod rrwide;
 pub mod shapes;
 mod sysfont;
 pub mod text;

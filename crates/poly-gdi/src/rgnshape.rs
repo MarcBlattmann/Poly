@@ -21,20 +21,20 @@ const FRAC: u32 = 60;
 /// Deepest halving (3 bits per level must stay within [`FRAC`]).
 const MAX_DEPTH: u32 = 20;
 /// `4 * (sqrt(2) - 1) / 3` in double precision (the sheet's `k`).
-const K: f64 = 0.552_284_749_830_793_6;
+pub(crate) const K: f64 = 0.552_284_749_830_793_6;
 
-type Pt = (i64, i64);
+pub(crate) type Pt = (i64, i64);
 /// A point with [`FRAC`] fraction bits.
 type Fx = (i128, i128);
 
 /// The largest whole number not above `x`.
-fn floor_f(x: f64) -> i64 {
+pub(crate) fn floor_f(x: f64) -> i64 {
     let t = x as i64;
     if (t as f64) > x { t - 1 } else { t }
 }
 
 /// The smallest whole number not below `x`.
-fn ceil_f(x: f64) -> i64 {
+pub(crate) fn ceil_f(x: f64) -> i64 {
     let t = x as i64;
     if (t as f64) < x { t + 1 } else { t }
 }
@@ -64,7 +64,7 @@ fn is_flat(q: &[Fx; 4]) -> bool {
 }
 
 /// Append the rounded end points of the flattened arc `p` (not its start).
-fn flatten(p: [Pt; 4], out: &mut Vec<Pt>) {
+pub(crate) fn flatten(p: [Pt; 4], out: &mut Vec<Pt>) {
     let mut stack: Vec<([Fx; 4], u32)> = alloc::vec![([to_fx(p[0]), to_fx(p[1]), to_fx(p[2]), to_fx(p[3])], 0)];
     while let Some((q, depth)) = stack.pop() {
         if depth >= MAX_DEPTH || is_flat(&q) {
