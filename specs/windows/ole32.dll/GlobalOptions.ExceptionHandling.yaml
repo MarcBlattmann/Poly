@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ole32.dll/GlobalOptions.ExceptionHandling.yaml
+id: windows/api/ole32.dll/GlobalOptions.ExceptionHandling
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave identical output."
+  observed_by: spec-win-com-globaloptions
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs (64-bit and 32-bit builds, a COM server and client in one image) on the machine above. Microsoft Learn: "IGlobalOptions interface (objidl.h)", "IGlobalOptions::Set", "IGlobalOptions::Query", "GLOBALOPT_PROPERTIES enumeration (objidl.h)" (COMGLB_EXCEPTION_HANDLING 1, COMGLB_APPID 2, COMGLB_RPC_THREADPOOL_SETTING 3, COMGLB_RO_SETTINGS 4, COMGLB_UNMARSHALING_POLICY 5, COMGLB_PROPERTIES_RESERVED1..3 6..8), "CoCreateInstance", "CoGetClassObject", "CLSCTX enumeration", "IClassFactory", "RaiseException", "SetUnhandledExceptionFilter", "AddVectoredExceptionHandler"; objidl.h, combaseapi.h, winerror.h for the interface and error constants (CLSID_GlobalOptions {0000034B-0000-0000-C000-000000000046}, the interface id {0000015B-0000-0000-C000-000000000046} was confirmed by creating the object with it). The numeric values of the values of each property (the GLOBALOPT_* value enumerations) are not in Learn's text: the sheet gives the numbers the oracle accepted and refused. Google's 32-bit updater: Poly's run of it stops right after it asks for this class (coordinator's report); what it sets is not known. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  What IGlobalOptions::Set(COMGLB_EXCEPTION_HANDLING, ...) changes that can be seen: what happens when code in a COM server raises an exception inside a call the server serves for another process (here a call straight on a class object's proxy). By default COM catches the exception in the server, the server keeps running and the client gets RPC_E_SERVERFAULT 0x80010105. With the value 1 (do not handle fatal exceptions) an access violation is not caught (the server process ends, the client gets RPC_S_CALL_FAILED 0x800706BE) while other exceptions are still caught; with the value 2 (do not handle any) no exception is caught: every one ends the server process and gives the client 0x800706BE.
+interface:
+  signature: "exception raised in IClassFactory::CreateInstance of a local server, called by a client in another process through the class object proxy; the server sets the option with IGlobalOptions::Set(COMGLB_EXCEPTION_HANDLING, v) before it registers its class"
+installer: "Google's updater.exe 157 (32-bit) asks COM for CLSID_GlobalOptions during its start-up and Poly's COM does not have the class (the point where a Poly run of it breaks). The updater's calls on the object are not known; this sheet therefore gives the behaviour of every documented property. Nothing was observed of what Google's programs pass to Set."
+rules:
+  default: "no Set: an access violation (a write through NULL), RaiseException with a private software code (0xE0000001), RaiseException with the access-violation code (0xC0000005) and RaiseException with the integer-divide-by-zero code (0xC0000094) inside the served call: the client's call returns RPC_E_SERVERFAULT 0x80010105 with no object; the server process is still running and serves the client's next call (S_OK); a vectored exception handler of the server saw the exception (first chance); the same for a server whose main thread is single-threaded"
+  value_1_fatal: "Set(1): an access violation (real or raised with RaiseException(0xC0000005)) ends the server process: the client's call returns RPC_S_CALL_FAILED 0x800706BE; a software exception of a private code and the divide-by-zero code are still caught as in the default (0x80010105, the server keeps running); the same in a single-threaded server (an access violation ends the process, the software exception is caught)"
+  value_2_any: "Set(2): every exception tried (access violation, private software code, divide-by-zero, in both server kinds) ends the server process and the client's call returns RPC_S_CALL_FAILED 0x800706BE"
+  after_failure: "after a call that ended the server, the client's next call through the same class object proxy returned S_OK (COM served it by a server process started again)"
+  unhandled: "with value 1 (fatal ones) or 2 the exception is not caught by COM: the server process ends with it (where its exit code could be read it was the exception code)"
+errors:
+  server_fault: "RPC_E_SERVERFAULT 0x80010105"
+  call_failed: "RPC_S_CALL_FAILED 0x800706BE (written as HRESULT 0x800706BE)"
+side_effects: "the server process ends in the unhandled cases; the tests start a new server for every scenario and remove their class registrations"
+threading: "multithreaded and single-threaded server main thread: the same results"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 4
+  held_out: 2
+building_tests: >
+  Rust tests (ADR 0075), one file each; every scenario registers a class of its own (LocalServer32, unique id) whose server is this image (`--child srv ...`), calls CreateInstance directly on the class object proxy with a request file that makes the server raise the exception inside that call, and reports the client's result, whether the first server process is still running, and the server's log (exception seen first chance). The 32-bit builds give the same output.
+not_covered: >
+  exceptions in an STA-to-MTA call inside one process, exceptions on server threads that are not serving a call, C++ exceptions (0xE06D7363), the Windows Error Reporting dialog (the tests install an unhandled-exception filter that ends the process quietly), exception codes other than the four listed, and calls other than IClassFactory methods (no type-library marshalling is involved).
