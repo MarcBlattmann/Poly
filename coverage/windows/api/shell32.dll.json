@@ -443,7 +443,7 @@
 {"symbol":"ShellExecuteExA","src":["wine-spec"]},
 {"symbol":"ShellExecuteExW","status":"green","tests_visible":1,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"ShellExecuteExW.Elevation","status":"green","tests_visible":4,"tests_held_out":2,"src":["ms-learn-uac"]},
-{"symbol":"ShellExecuteExW.WaitForInputIdle","status":"claimed","claimed_by":"spec-win-waitforinputidle","src":["ms-learn-input-idle"]},
+{"symbol":"ShellExecuteExW.WaitForInputIdle","status":"green","tests_visible":3,"tests_held_out":1,"src":["ms-learn-input-idle"]},
 {"symbol":"ShellExecuteW","status":"green","tests_visible":3,"tests_held_out":1,"src":["wine-spec"]},
 {"symbol":"ShellHookProc","src":["wine-spec"]},
 {"symbol":"ShellLink","status":"claimed","claimed_by":"impl-chrome-installer","src":["ms-learn-shell-link"]},

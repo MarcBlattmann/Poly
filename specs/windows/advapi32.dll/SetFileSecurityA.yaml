@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/SetFileSecurityA.yaml
+id: windows/api/advapi32.dll/SetFileSecurityA
+oracle:
+  os: Windows 11 Home 26H2 (build 26300.9974), x64
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory'
+  observed_by: spec-win-remote-thread-2
+  date: '2026-11-20'
+sources: 'Observations of our own test programs on the machine above (files made in the directory of the test image; descriptors written as SDDL text and read back as SDDL text through ConvertStringSecurityDescriptorToSecurityDescriptorW and ConvertSecurityDescriptorToStringSecurityDescriptorW, with the caller''s own SIDs printed as <user> and <group>). Microsoft Learn: SetFileSecurityA/W, GetFileSecurityA/W, SECURITY_INFORMATION, Security Descriptor Control, Mandatory Integrity Control, Security Descriptor String Format, Privilege Constants, Access Rights for Files, winerror.h. No Microsoft binary was decompiled or disassembled; Wine''s and ReactOS''s sources were not read.'
+summary: 'The ANSI form of SetFileSecurityW: the path is a narrow string (converted with the ANSI code page); everything else is as in SetFileSecurityW. Observed with ASCII paths only.'
+interface:
+  signature: BOOL SetFileSecurityA(LPCSTR lpFileName, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR pSecurityDescriptor)
+  result: TRUE, or FALSE with the last error set
+rules:
+  same_as_wide: DACL (also NULL and protected), owner and group, label (low, high; the system level fails with ERROR_INVALID_LABEL 1299), the audit ACE (by the elevated administrator), the information flags and the owner-or-group-missing case (ERROR_INVALID_SECURITY_DESCR 1338) all behave as SetFileSecurityW; see its sheet for the rules.
+  after_the_call: the result is read back with GetFileSecurityW; 'D:P(A;;FA;;;BA)' set with the unprotected flag reads back 'D:P(A;;FA;;;BA)'
+errors:
+  file_not_found: missing file ERROR_FILE_NOT_FOUND (2), missing directory ERROR_PATH_NOT_FOUND (3)
+  bad_arguments: 'NULL name ERROR_INVALID_NAME (123), NULL descriptor ERROR_NOACCESS (998), information 0 or 0x200: ERROR_ACCESS_DENIED (5)'
+side_effects: changes the security descriptor of the file
+threading: may be called from any thread
+ordering: []
+timing:
+  typical: well under a millisecond per call
+  guarantees: none
+building_tests: As SetFileSecurityW; two tests, both with ASCII paths in the directory of the test image.
+not_covered: Paths with non-ASCII characters (the code page conversion).
+tests:
+  visible: 1
+  held_out: 1
