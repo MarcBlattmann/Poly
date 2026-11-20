@@ -732,6 +732,24 @@ pub extern "C" fn mainCRTStartup() -> u32 {
         if !acl.is_null() {
             LocalFree(acl);
         }
+        // The special trustee name CURRENT_USER (Learn, `TRUSTEE`): the process token's user, an
+        // S-1-5-... SID in the ACE (ACL header 8, ACE header 4, mask 4, then the SID).
+        let mut one = Guarded::<32>::new();
+        BuildExplicitAccessWithNameW(one.ptr(), me.as_ptr(), 0x1F_0003, 2, 0);
+        let mut acl: *mut u8 = core::ptr::null_mut();
+        let rc = SetEntriesInAclW(1, one.ptr(), core::ptr::null(), &mut acl);
+        let ok = rc == 0
+            && !acl.is_null()
+            && u16::from_le_bytes([*acl.add(4), *acl.add(5)]) == 1
+            && *acl.add(16) == 1
+            && *acl.add(16 + 7) == 5;
+        check(b"SetEntriesInAclW resolves CURRENT_USER", ok, one.guard);
+        if !ok {
+            detail(&[rc]);
+        }
+        if !acl.is_null() {
+            LocalFree(acl);
+        }
         let failed = FAILED.load(Ordering::SeqCst);
         out(b"failed: ");
         out(&hex(failed));
