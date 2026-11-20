@@ -194,7 +194,7 @@ programs (and later the real desktop) exist. The drivers stay for good.
 - [x] Mach-O loading and our own `dyld` (shared cache optional, chained fixups) (ADR 0237)
 - [ ] Mach core: tasks, threads, ports, port rights, messages, Mach VM
 - [ ] BSD layer: XNU syscalls, `kqueue`, `posix_spawn`, signals with Darwin semantics
-- [ ] arm64 translator: block JIT to x86-64 on the shared decoder, the arm64 system call convention in the XNU personality, 16 KiB pages, `MAP_JIT` and code cache invalidation; arm64-only command-line programs run on x86 PCs (ADR 0151)
+- [x] arm64 translator: block JIT to x86-64 on the shared decoder, the arm64 system call convention in the XNU personality, 16 KiB pages, `MAP_JIT` and code cache invalidation; arm64-only command-line programs run on x86 PCs (ADR 0151, ADR 0239; ADR 0257: a translated XNU process, static and dynamically linked arm64 programs on our stand-in libSystem)
 - [ ] File system semantics: case-insensitive APFS behaviour, extended attributes, resource forks
 - [ ] `libSystem`: libc, `libpthread` (incl. workqueues), `libdispatch` (GCD), `libxpc`
 - [ ] Objective-C runtime (`libobjc`) and Swift runtime

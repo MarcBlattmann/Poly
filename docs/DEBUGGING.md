@@ -1143,6 +1143,13 @@ point; its system calls go to `nt::syscall`. The NT state lives in
   test is `kernel/src/nt/test_registry.rs` (`cargo xtask run
   poly.test=nt_registry`); its `PolyTrace 0xbadbad <step> <status>` names
   the failed step as the module documentation numbers them.
+- **Kernel arguments for the Windows test runs.** `POLY_WIN_EXTRA_ARGS="..."` adds kernel
+  arguments to every boot of `cargo xtask pipeline win poly` (and so of `polycheck`), e.g.
+  `POLY_WIN_EXTRA_ARGS=poly.nt.trace` to see each thread's system calls in the test's
+  `<test>.serial.log` in the run directory. A test that hangs prints nothing (its output comes
+  at exit), but the trace shows each thread's last completed call: a call that never returns
+  is not printed, so the thread whose trace stops is the one blocked. Tracing slows every
+  traced call down by the serial output, which changes timing.
 - **The object, memory, thread and synchronisation logic is host-tested** in
   `poly-ntobj` (the dispatcher against a randomized model) and
   `personalities/nt` against a fake kernel (`cargo test -p poly-ntobj -p
@@ -1724,7 +1731,8 @@ timeline.grab(lambda name, **args: qmp.cmd(name, **args), serial_log_text, '/tmp
 | `--lane NAME`, `--key N`, `--ms W`, `--min-bytes B` | one thread's events; another key press; the window; frames at least that big |
 | `--at MS` | a window that starts this many ms into the ring instead of at a key press (idle stretches, rings without keys) |
 
-Threads are named `role/thread` (`browser/CrBrowserMain`,
+A `PolyUserCall` is named by its request (`PolyUserCall:Window`, `PolyUserCall:Desktop`): the
+kernel records the request's first byte (its tag) as the call's argument. Threads are named `role/thread` (`browser/CrBrowserMain`,
 `gpu-process/VizCompositorThread`, `renderer/Compositor`; Linux Chromium's
 zygote children by pid). The ring holds about 14 s of a busy Chrome at 32 MiB.
 The same commands work for Linux Chromium, so the two can be compared call by

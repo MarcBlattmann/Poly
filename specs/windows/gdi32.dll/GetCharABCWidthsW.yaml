@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/gdi32.dll/GetCharABCWidthsW.yaml
+id: windows/api/gdi32.dll/GetCharABCWidthsW
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station, 96 dpi) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output and two complete recordings agreed byte for byte, each run in a fresh scratch directory; the test programs carry no manifest (the icon tests carry the manifest that asks for comctl32 version 6). The fonts the tests use are the test's own TrueType font (added with AddFontMemResourceEx) and DejaVu Sans 2.37 (the file C:\\Windows\\Fonts\\DejaVuSans.ttf, copied there for the recording and removed afterwards, added with AddFontResourceExW and FR_PRIVATE); no Microsoft font is used"
+  observed_by: spec-win-glyphs
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). The fonts are free: a TrueType font the test writes itself (units per em 1024, every outline coordinate a multiple of 64 units, so that at 16 pixels per em every point lies on a whole pixel) and DejaVu Sans 2.37 (Bitstream Vera licence, shipped with Poly); where a number would depend on hinting, the test asks for 2048 pixels per em, the font's units per em, so that one pixel is one font unit and the outline is the file's. Microsoft Learn reference pages of the functions and structures named here and the public headers wingdi.h, winuser.h, winbase.h, shlwapi.h, dbghelp.h, commctrl.h, winerror.h and the TrueType and OpenType font file format documents for table layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns the ABC widths (left bearing, ink width, right bearing) of a range of code points of the font selected into a DC, one ABC structure of three 4-byte members per code point. Qt's GDI engine uses it to place glyphs; with it stubbed the glyphs were drawn on top of each other. Observed with the test font 'PolyGlyph Sans': units per em 1024, hhea and OS/2 ascent 768, descent 256, line gap 128; glyphs (index: character, advance in units, ink): 0 .notdef (frame 64..576 x 0..768 with a hole), 1 space 384 (no ink), 2 'A' 768 (box 128..640 x 0..768), 3 'B' 512 (64..448 x 0..512), 4 'H' 768 (64..704 x 0..704), 5 'M' 768 (triangle 0,0 384,768 768,0), 6 'O' 640 (box with two quadratic curves on top), 7 'Q' 640 (like 'O' with two consecutive off-curve points), 8 'g' 640 (64..576 x -256..384), 9 'i' 256 (two contours), 10 'j' 256 (-128..128 x -256..768), 11 'k' 320 (ink 64..448: wider than the advance), 12 'x' 512, 13 and 14 parts of the composite, 15 U+00E9 704 (composite of 13 and 14), 16 U+20AC 896, 17 U+0301 advance 0 (ink -192..0), 18 'W' 1024 and DejaVu Sans.
+interface:
+  signature: "BOOL GetCharABCWidthsW(HDC hdc, UINT wFirst, UINT wLast, LPABC lpABC)"
+rules:
+  meaning: "A is the left side bearing (the distance from the origin to the left of the ink; negative when the ink starts left of the origin), B the width of the ink, C the right side bearing (advance - A - B; negative when the ink is wider than the advance). For the test font at 16 pixels: 'A' (2, 8, 2), 'B' (1, 6, 1), 'M' (0, 12, 0), 'j' (-2, 4, 2), 'k' (1, 6, -2), U+0301 (-3, 3, 0: advance 0), space (0, 1, 5: a glyph without ink has B 1 and A 0)."
+  rounding: "The values are whole pixels computed per glyph as: A = the left edge of the ink rounded to the nearest pixel (half up), B = the right edge rounded minus A (the black box of GetGlyphOutlineW), C = the advance rounded minus A minus B, so A + B + C always equals the advance GetCharWidth32W gives. At 13 pixels per em: 'A' (2,6,2), 'B' (1,5,1), 'j' (-2,4,1), 'k' (1,5,-2), U+20AC (1,10,0), space (0,1,4); at 7 pixels 'A' (1,3,1), 'B' (0,3,1); at -1024 the values are the font units: 'A' (128, 512, 128), 'j' (-128, 256, 128), 'k' (64, 384, -128), space (0, 1, 383)."
+  missing_characters: "A character the font does not have (z, U+1234, U+0000, U+FFFF) returns the .notdef values ((1,8,1) at 16 pixels); it is not an error."
+  positive_height: "A positive lfHeight (cell height) gives the same values as the matching negative one for a font whose cell is its em."
+  dejavu: "DejaVu Sans at -2048 (font units): space (0, 1, 650); 'A' (16, 1368, 17); 'g' (113, 1001, 186); U+00E9 (113, 1038, 109); U+20AC (0, 1167, 136); U+03B1 (113, 1139, 98); advances 651, 1401, 1300, 1260, 1303, 1350 (A+B+C)."
+  range: "One ABC for each code point from wFirst to wLast, in order; a range and the single calls agree ('A'..'E': (2,8,2) (1,6,1) (1,8,1) (1,8,1) (1,8,1))."
+  beyond_bmp: "A range beyond U+FFFF (0x10000..0x10001) and U+FFFF..U+10000 succeed (TRUE, no last error); the values of those code points are those of .notdef and the buffer is written; U+FFFF alone gives (1,8,1) like any missing character."
+  bitmap_fonts: "The stock bitmap fonts (OEM_FIXED_FONT, SYSTEM_FONT) succeed too (TRUE); their numbers depend on the installed fonts and are not recorded."
+errors:
+  reversed_range: "wFirst > wLast: FALSE with ERROR_INVALID_PARAMETER (87); the buffer is left untouched."
+  null_buffer: "A NULL buffer: FALSE, ERROR_INVALID_PARAMETER (87)."
+  bad_dc: "A NULL DC, a made-up handle and a deleted DC: FALSE with ERROR_INVALID_HANDLE (6)."
+side_effects: "none beyond the rules above"
+threading: "a DC, a font and a font resource belong to the process; fonts added with FR_PRIVATE or from memory are visible to the adding process only; the tests use one thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (the 757 KB whole-font copies of DejaVu Sans a few milliseconds)"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations and its own TrueType writer. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md), built through polyd. Observations print results, error codes, sizes, glyph metrics, outline records and hashes of long data (the first 8 bytes of a SHA-256); no line holds a handle, an address or a machine, user or time. "err unchanged" in a line means the call left the last error as the test had set it before (a marker), "err N" the value after a failing result; the last error after a succeeding call is not printed. A test that uses DejaVu Sans reads C:\Windows\Fonts\DejaVuSans.ttf: on Poly the DejaVu fonts are in that folder (ADR 0170, `cargo xtask fonts fetch`), on the oracle the same file (757076 bytes, SHA-256 7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954) was copied there for the recording.
+not_covered: >
+  Bitmap font values, the values of DejaVu Sans at small sizes (hinting may change the rounding of a pixel), OpenType CFF fonts, vertical fonts, mapping modes other than MM_TEXT.

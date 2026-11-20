@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfdictionarysetvalue_replace_and_add",
+      "source_sha256": "d8729927318a17492214e279647724f8db76b7911175569606fcc94561192b05",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "933dd14c93631dfff23b4f2293bfaad929f7b7540227a0ab3d0b231b29a52edb",
+          "exit_code": 0,
+          "stdout": "ok CFDictionaryGetCount(d) == 1 && cf_is(CFDictionaryGetValue(d, CFSTR(\"k\")), \"v1\")\nok CFDictionaryGetCount(d) == 1 && cf_is(CFDictionaryGetValue(d, CFSTR(\"k\")), \"v2\")\nok cf_is(CFDictionaryGetValue(d, CFSTR(\"k\")), \"v2\")\nok CFDictionaryGetCount(d) == 2\nok CFDictionaryGetCount(d) == 2 && !CFDictionaryContainsKey(d, CFSTR(\"nokey\"))\nok cf_is(CFDictionaryGetValue(d, CFSTR(\"j\")), \"w2\")\nok CFDictionaryGetCount(d) == 1 && !CFDictionaryContainsKey(d, CFSTR(\"j\"))\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4bb208f1a4bcc909db76e034f8714731ca590a1f92de8bb353787fa3374d2d46",
+          "exit_code": 0,
+          "stdout": "ok CFDictionaryGetCount(d) == 1 && cf_is(CFDictionaryGetValue(d, CFSTR(\"k\")), \"v1\")\nok CFDictionaryGetCount(d) == 1 && cf_is(CFDictionaryGetValue(d, CFSTR(\"k\")), \"v2\")\nok cf_is(CFDictionaryGetValue(d, CFSTR(\"k\")), \"v2\")\nok CFDictionaryGetCount(d) == 2\nok CFDictionaryGetCount(d) == 2 && !CFDictionaryContainsKey(d, CFSTR(\"nokey\"))\nok cf_is(CFDictionaryGetValue(d, CFSTR(\"j\")), \"w2\")\nok CFDictionaryGetCount(d) == 1 && !CFDictionaryContainsKey(d, CFSTR(\"j\"))\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

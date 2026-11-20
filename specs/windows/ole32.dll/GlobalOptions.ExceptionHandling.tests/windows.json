@@ -1,0 +1,72 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "go_exc_av",
+      "exe_sha256": "6b18f18fae72e31d9d85a81df17f5049497a34350bb759536c6d9c8db23b425b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "W2RlZmF1bHQgc2V0dGluZywgYXZdIHRoZSBjYWxsIHRoYXQgcmFpc2VkOiAweDgwMDEwMTA1LCBvYmplY3QgcG9pbnRlciAwCltkZWZhdWx0IHNldHRpbmcsIGF2XSBhIHNlY29uZCBjYWxsOiAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgYXYKICBzcnY6IGV4Y2VwdGlvbiAweGMwMDAwMDA1IHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGFsaXZlCltTZXQoMSksIGF2XSB0aGUgY2FsbCB0aGF0IHJhaXNlZDogMHg4MDA3MDZiZSwgb2JqZWN0IHBvaW50ZXIgMApbU2V0KDEpLCBhdl0gYSBzZWNvbmQgY2FsbDogMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBDb0NyZWF0ZUluc3RhbmNlKENMU0lEX0dsb2JhbE9wdGlvbnMpID0gMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBJR2xvYmFsT3B0aW9uczo6U2V0KDEsIDB4MSkgPSAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgYXYKICBzcnY6IGV4Y2VwdGlvbiAweGMwMDAwMDA1IHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGVuZGVkCltTZXQoMiksIGF2XSB0aGUgY2FsbCB0aGF0IHJhaXNlZDogMHg4MDA3MDZiZSwgb2JqZWN0IHBvaW50ZXIgMApbU2V0KDIpLCBhdl0gYSBzZWNvbmQgY2FsbDogMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBDb0NyZWF0ZUluc3RhbmNlKENMU0lEX0dsb2JhbE9wdGlvbnMpID0gMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBJR2xvYmFsT3B0aW9uczo6U2V0KDEsIDB4MikgPSAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgYXYKICBzcnY6IGV4Y2VwdGlvbiAweGMwMDAwMDA1IHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGVuZGVkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "[default setting, av] the call that raised: 0x80010105, object pointer 0\n[default setting, av] a second call: 0x00000000\n  srv: create: raising av\n  srv: exception 0xc0000005 raised in the server (first chance)\n  the server process the call went to: alive\n[Set(1), av] the call that raised: 0x800706be, object pointer 0\n[Set(1), av] a second call: 0x00000000\n  srv: server: CoCreateInstance(CLSID_GlobalOptions) = 0x00000000\n  srv: server: IGlobalOptions::Set(1, 0x1) = 0x00000000\n  srv: create: raising av\n  srv: exception 0xc0000005 raised in the server (first chance)\n  the server process the call went to: ended\n[Set(2), av] the call that raised: 0x800706be, object pointer 0\n[Set(2), av] a second call: 0x00000000\n  srv: server: CoCreateInstance(CLSID_GlobalOptions) = 0x00000000\n  srv: server: IGlobalOptions::Set(1, 0x2) = 0x00000000\n  srv: create: raising av\n  srv: exception 0xc0000005 raised in the server (first chance)\n  the server process the call went to: ended\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1113
+    },
+    {
+      "name": "go_exc_sta_av",
+      "exe_sha256": "5f98e360beb7269d25fa2825c4b3e3c859ec97468c0005f32a7941df062a8b5e",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "W2RlZmF1bHQgc2V0dGluZywgYXZdIHRoZSBjYWxsIHRoYXQgcmFpc2VkOiAweDgwMDEwMTA1LCBvYmplY3QgcG9pbnRlciAwCltkZWZhdWx0IHNldHRpbmcsIGF2XSBhIHNlY29uZCBjYWxsOiAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgYXYKICBzcnY6IGV4Y2VwdGlvbiAweGMwMDAwMDA1IHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGFsaXZlCltTZXQoMSksIGF2XSB0aGUgY2FsbCB0aGF0IHJhaXNlZDogMHg4MDA3MDZiZSwgb2JqZWN0IHBvaW50ZXIgMApbU2V0KDEpLCBhdl0gYSBzZWNvbmQgY2FsbDogMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBDb0NyZWF0ZUluc3RhbmNlKENMU0lEX0dsb2JhbE9wdGlvbnMpID0gMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBJR2xvYmFsT3B0aW9uczo6U2V0KDEsIDB4MSkgPSAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgYXYKICBzcnY6IGV4Y2VwdGlvbiAweGMwMDAwMDA1IHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGVuZGVkCltTZXQoMiksIGF2XSB0aGUgY2FsbCB0aGF0IHJhaXNlZDogMHg4MDA3MDZiZSwgb2JqZWN0IHBvaW50ZXIgMApbU2V0KDIpLCBhdl0gYSBzZWNvbmQgY2FsbDogMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBDb0NyZWF0ZUluc3RhbmNlKENMU0lEX0dsb2JhbE9wdGlvbnMpID0gMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBJR2xvYmFsT3B0aW9uczo6U2V0KDEsIDB4MikgPSAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgYXYKICBzcnY6IGV4Y2VwdGlvbiAweGMwMDAwMDA1IHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGVuZGVkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "[default setting, av] the call that raised: 0x80010105, object pointer 0\n[default setting, av] a second call: 0x00000000\n  srv: create: raising av\n  srv: exception 0xc0000005 raised in the server (first chance)\n  the server process the call went to: alive\n[Set(1), av] the call that raised: 0x800706be, object pointer 0\n[Set(1), av] a second call: 0x00000000\n  srv: server: CoCreateInstance(CLSID_GlobalOptions) = 0x00000000\n  srv: server: IGlobalOptions::Set(1, 0x1) = 0x00000000\n  srv: create: raising av\n  srv: exception 0xc0000005 raised in the server (first chance)\n  the server process the call went to: ended\n[Set(2), av] the call that raised: 0x800706be, object pointer 0\n[Set(2), av] a second call: 0x00000000\n  srv: server: CoCreateInstance(CLSID_GlobalOptions) = 0x00000000\n  srv: server: IGlobalOptions::Set(1, 0x2) = 0x00000000\n  srv: create: raising av\n  srv: exception 0xc0000005 raised in the server (first chance)\n  the server process the call went to: ended\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 3256
+    },
+    {
+      "name": "go_exc_sta_sw",
+      "exe_sha256": "9a8f697b090b5e82ad4e858d2ee88f7055a1ee40361e5552f797ddaac1622329",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "W2RlZmF1bHQgc2V0dGluZywgc3ddIHRoZSBjYWxsIHRoYXQgcmFpc2VkOiAweDgwMDEwMTA1LCBvYmplY3QgcG9pbnRlciAwCltkZWZhdWx0IHNldHRpbmcsIHN3XSBhIHNlY29uZCBjYWxsOiAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgc3cKICBzcnY6IGV4Y2VwdGlvbiAweGUwMDAwMDAxIHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGFsaXZlCltTZXQoMSksIHN3XSB0aGUgY2FsbCB0aGF0IHJhaXNlZDogMHg4MDAxMDEwNSwgb2JqZWN0IHBvaW50ZXIgMApbU2V0KDEpLCBzd10gYSBzZWNvbmQgY2FsbDogMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBDb0NyZWF0ZUluc3RhbmNlKENMU0lEX0dsb2JhbE9wdGlvbnMpID0gMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBJR2xvYmFsT3B0aW9uczo6U2V0KDEsIDB4MSkgPSAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgc3cKICBzcnY6IGV4Y2VwdGlvbiAweGUwMDAwMDAxIHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGFsaXZlCltTZXQoMiksIHN3XSB0aGUgY2FsbCB0aGF0IHJhaXNlZDogMHg4MDA3MDZiZSwgb2JqZWN0IHBvaW50ZXIgMApbU2V0KDIpLCBzd10gYSBzZWNvbmQgY2FsbDogMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBDb0NyZWF0ZUluc3RhbmNlKENMU0lEX0dsb2JhbE9wdGlvbnMpID0gMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBJR2xvYmFsT3B0aW9uczo6U2V0KDEsIDB4MikgPSAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgc3cKICBzcnY6IGV4Y2VwdGlvbiAweGUwMDAwMDAxIHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGVuZGVkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "[default setting, sw] the call that raised: 0x80010105, object pointer 0\n[default setting, sw] a second call: 0x00000000\n  srv: create: raising sw\n  srv: exception 0xe0000001 raised in the server (first chance)\n  the server process the call went to: alive\n[Set(1), sw] the call that raised: 0x80010105, object pointer 0\n[Set(1), sw] a second call: 0x00000000\n  srv: server: CoCreateInstance(CLSID_GlobalOptions) = 0x00000000\n  srv: server: IGlobalOptions::Set(1, 0x1) = 0x00000000\n  srv: create: raising sw\n  srv: exception 0xe0000001 raised in the server (first chance)\n  the server process the call went to: alive\n[Set(2), sw] the call that raised: 0x800706be, object pointer 0\n[Set(2), sw] a second call: 0x00000000\n  srv: server: CoCreateInstance(CLSID_GlobalOptions) = 0x00000000\n  srv: server: IGlobalOptions::Set(1, 0x2) = 0x00000000\n  srv: create: raising sw\n  srv: exception 0xe0000001 raised in the server (first chance)\n  the server process the call went to: ended\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2581
+    },
+    {
+      "name": "go_exc_sw",
+      "exe_sha256": "16dedaa0c81b9f73648abaa8ce25df0fff3146db3ea90638c51297a6b5a14fd8",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "W2RlZmF1bHQgc2V0dGluZywgc3ddIHRoZSBjYWxsIHRoYXQgcmFpc2VkOiAweDgwMDEwMTA1LCBvYmplY3QgcG9pbnRlciAwCltkZWZhdWx0IHNldHRpbmcsIHN3XSBhIHNlY29uZCBjYWxsOiAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgc3cKICBzcnY6IGV4Y2VwdGlvbiAweGUwMDAwMDAxIHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGFsaXZlCltTZXQoMSksIHN3XSB0aGUgY2FsbCB0aGF0IHJhaXNlZDogMHg4MDAxMDEwNSwgb2JqZWN0IHBvaW50ZXIgMApbU2V0KDEpLCBzd10gYSBzZWNvbmQgY2FsbDogMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBDb0NyZWF0ZUluc3RhbmNlKENMU0lEX0dsb2JhbE9wdGlvbnMpID0gMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBJR2xvYmFsT3B0aW9uczo6U2V0KDEsIDB4MSkgPSAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgc3cKICBzcnY6IGV4Y2VwdGlvbiAweGUwMDAwMDAxIHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGFsaXZlCltTZXQoMiksIHN3XSB0aGUgY2FsbCB0aGF0IHJhaXNlZDogMHg4MDA3MDZiZSwgb2JqZWN0IHBvaW50ZXIgMApbU2V0KDIpLCBzd10gYSBzZWNvbmQgY2FsbDogMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBDb0NyZWF0ZUluc3RhbmNlKENMU0lEX0dsb2JhbE9wdGlvbnMpID0gMHgwMDAwMDAwMAogIHNydjogc2VydmVyOiBJR2xvYmFsT3B0aW9uczo6U2V0KDEsIDB4MikgPSAweDAwMDAwMDAwCiAgc3J2OiBjcmVhdGU6IHJhaXNpbmcgc3cKICBzcnY6IGV4Y2VwdGlvbiAweGUwMDAwMDAxIHJhaXNlZCBpbiB0aGUgc2VydmVyIChmaXJzdCBjaGFuY2UpCiAgdGhlIHNlcnZlciBwcm9jZXNzIHRoZSBjYWxsIHdlbnQgdG86IGVuZGVkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "[default setting, sw] the call that raised: 0x80010105, object pointer 0\n[default setting, sw] a second call: 0x00000000\n  srv: create: raising sw\n  srv: exception 0xe0000001 raised in the server (first chance)\n  the server process the call went to: alive\n[Set(1), sw] the call that raised: 0x80010105, object pointer 0\n[Set(1), sw] a second call: 0x00000000\n  srv: server: CoCreateInstance(CLSID_GlobalOptions) = 0x00000000\n  srv: server: IGlobalOptions::Set(1, 0x1) = 0x00000000\n  srv: create: raising sw\n  srv: exception 0xe0000001 raised in the server (first chance)\n  the server process the call went to: alive\n[Set(2), sw] the call that raised: 0x800706be, object pointer 0\n[Set(2), sw] a second call: 0x00000000\n  srv: server: CoCreateInstance(CLSID_GlobalOptions) = 0x00000000\n  srv: server: IGlobalOptions::Set(1, 0x2) = 0x00000000\n  srv: create: raising sw\n  srv: exception 0xe0000001 raised in the server (first chance)\n  the server process the call went to: ended\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 2603
+    }
+  ]
+}

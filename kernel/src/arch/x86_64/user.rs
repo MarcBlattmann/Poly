@@ -18,7 +18,8 @@
 //!   vector (`AT_HWCAP`, `AT_RANDOM`).
 
 pub use super::addrspace::{
-    AddressSpace, Flush, LOWER_HALF_END, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, user_frames,
+    AddressSpace, Flush, LOWER_HALF_END, MapError, Mapping, Prot, USER_END, USER_START, UserFrame, defer_drop,
+    reap_or_wait, start_reaper, user_frames,
 };
 pub use super::syscall::{Entry, enter_user, enter_user_regs, make_next_return_fail};
 pub use super::usercopy::{Efault, cmpxchg_user_u32, copy_from_user, copy_to_user, is_user_range, strncpy_from_user};
@@ -298,6 +299,9 @@ pub fn set_user_regs(regs: &UserRegs) {
 /// load the kernel PML4. Interrupts must be off.
 pub fn switch(from: Option<&mut ThreadState>, to: Option<&ThreadState>, to_stack_top: Option<u64>) {
     debug_assert!(!cpu::interrupts_enabled());
+    // Shootdowns waiting for this CPU are carried out at every switch (ADR 0254): a CPU that
+    // leaves a space acknowledges at once instead of at its next interrupt.
+    super::tlb::service();
     if let Some(from) = from {
         // SAFETY: both MSRs exist on every x86-64 CPU; reading has no
         // side effects.

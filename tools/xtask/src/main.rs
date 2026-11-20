@@ -159,6 +159,7 @@ mod ktest;
 mod libsearch;
 mod linuxchrome;
 mod macho;
+mod macho_a64;
 mod macimports;
 mod mesa;
 mod native;
@@ -538,17 +539,33 @@ impl Devices<'_> {
 /// character device) and `devices` attached. The machine has QEMU's standard VGA; add
 /// `-display none` for no window.
 fn qemu(kernel: &Path, memory: &str, append: &str, devices: Devices<'_>, serial: &str) -> Command {
-    qemu_with(kernel, memory, QEMU_CPUS, append, devices, serial)
+    qemu_on(kernel, memory, QEMU_CPUS, None, append, devices, serial)
 }
 
 /// [`qemu`] with `cpus` virtual CPUs. The interactive boots (`desktop`, `run`,
 /// `chromium run`, `toolkits`) call this with the memory and CPUs of
 /// [`resources::Resources`] (`--memory=`, `--cpus=`, ADR 0141); the boot
-/// tests call [`qemu`], whose sizes are fixed.
+/// tests call [`qemu`], whose sizes are fixed. Programs run in these boots,
+/// so the guest sees a real CPU (`-cpu host` on a hypervisor, `max` under
+/// TCG, [`accel::program_cpu`]); the boot tests keep QEMU's default model.
 fn qemu_with(kernel: &Path, memory: &str, cpus: u32, append: &str, devices: Devices<'_>, serial: &str) -> Command {
+    qemu_on(kernel, memory, cpus, Some(accel::program_cpu(accel::get())), append, devices, serial)
+}
+
+/// QEMU for [`qemu`] and [`qemu_with`]: `cpu` is the CPU model when
+/// `POLY_QEMU_CPU` names none (None: QEMU's default).
+fn qemu_on(
+    kernel: &Path,
+    memory: &str,
+    cpus: u32,
+    cpu: Option<&str>,
+    append: &str,
+    devices: Devices<'_>,
+    serial: &str,
+) -> Command {
     let mut cmd = Command::new("qemu-system-x86_64");
     cmd.args(accel::get().qemu_args())
-        .args(accel::cpu_args(std::env::var(accel::CPU_ENV).ok().as_deref()))
+        .args(accel::cpu_args(std::env::var(accel::CPU_ENV).ok().as_deref(), cpu))
         .args(["-machine", "q35", "-m", memory, "-serial", serial, "-no-reboot"])
         .args(["-smp", &cpus.to_string()])
         .args(["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
@@ -1675,6 +1692,10 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // The Mach core's visible spec tests that run on Poly today, x86-64
     // builds, output compared with macOS's (macho.rs, ADR 0238).
     ("macho-mach", macho::mach_boot_test),
+    // arm64 Mach-O programs on x86-64 through the translator's runtime:
+    // static, universal, dynamically linked, malloc-heavy under the JIT and
+    // the interpreter (macho_a64.rs, ADR 0257).
+    ("macho-a64", macho_a64::boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
@@ -1837,6 +1858,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "dynamic",
             "macho",
             "macho-mach",
+            "macho-a64",
             "busybox",
             "rootdisk",
             "toolkits",

@@ -32,6 +32,12 @@ pub struct Stored {
     pub dacl: Option<Option<Vec<u8>>>,
     pub protected: bool,
     pub sacl: Option<Vec<u8>>,
+    /// The DACL is used exactly as stored: no inherited ACEs are added and no
+    /// `SE_DACL_AUTO_INHERITED` is shown. What `NtSetSecurityObject` stores when the
+    /// descriptor does not ask for automatic inheritance (`SetFileSecurityW`,
+    /// `SetKernelObjectSecurity`), and a new file's own descriptor when its directory passes
+    /// nothing down (specs/windows/advapi32.dll/SetFileSecurityW.yaml).
+    pub verbatim: bool,
 }
 
 /// The inheritable ACEs of `parent` for a child that is a container or not.
@@ -76,16 +82,21 @@ pub fn explicit_acl(acl_bytes: &[u8]) -> Vec<u8> {
 /// the object is a container.
 pub fn effective(default: &Parts, chain: &[Option<&Stored>], container: bool) -> Parts {
     let mut cur = default.clone();
+    // Whether the level above kept its DACL as given (`Stored::verbatim`).
+    let mut above_verbatim = false;
     for (i, st) in chain.iter().enumerate() {
         let is_container = i + 1 < chain.len() || container;
         let mut next = default.clone();
         if i > 0 || st.is_some() {
             let inherited = if i == 0 { Vec::new() } else { inherited_aces(cur.dacl.as_deref(), is_container) };
             let protected = st.is_some_and(|s| s.protected);
-            next.control =
-                sd::SE_DACL_PRESENT | sd::SE_DACL_AUTO_INHERITED | if protected { sd::SE_DACL_PROTECTED } else { 0 };
+            let verbatim = st.is_some_and(|s| s.verbatim && s.dacl.is_some());
+            next.control = sd::SE_DACL_PRESENT
+                | if verbatim { 0 } else { sd::SE_DACL_AUTO_INHERITED }
+                | if protected { sd::SE_DACL_PROTECTED } else { 0 };
             let rev = acl::ACL_REVISION;
             next.dacl = match st.and_then(|s| s.dacl.as_ref()) {
+                Some(Some(explicit)) if verbatim => Some(explicit.clone()),
                 Some(None) => {
                     next.control &= !sd::SE_DACL_AUTO_INHERITED;
                     None
@@ -98,6 +109,15 @@ pub fn effective(default: &Parts, chain: &[Option<&Stored>], container: bool) ->
                     Some(acl_of(explicit.first().copied().unwrap_or(rev), &all))
                 }
                 None if i == 0 => default.dacl.clone(),
+                // A file that was put in a directory whose DACL is kept as given and passes
+                // nothing down (the test directory, `seed_verbatim_path`) shows that DACL: it got
+                // the same default as the directory when it was put there.
+                None if inherited.is_empty() && above_verbatim => {
+                    next.control &= !sd::SE_DACL_AUTO_INHERITED;
+                    next.owner = cur.owner.clone();
+                    next.group = cur.group.clone();
+                    cur.dacl.clone()
+                }
                 None => Some(acl_of(rev, &inherited)),
             };
             if let Some(s) = st {
@@ -113,6 +133,7 @@ pub fn effective(default: &Parts, chain: &[Option<&Stored>], container: bool) ->
                 }
             }
         }
+        above_verbatim = st.is_some_and(|s| s.verbatim);
         cur = next;
     }
     cur
@@ -147,5 +168,44 @@ mod tests {
         let d = effective(&default, &[None, Some(&dir)], true);
         assert_eq!(acl::aces_in(d.dacl.as_ref().unwrap()).len(), 2);
         assert_eq!(d.control, 0x1404);
+    }
+
+    /// specs/windows/advapi32.dll/SetFileSecurityW.yaml, `dacl_replaced`: a DACL set without
+    /// automatic inheritance is shown as given, without AI and without the parent's ACEs.
+    #[test]
+    fn a_verbatim_dacl_is_shown_as_given() {
+        let default = parts("O:BAG:SYD:P(A;OICI;GA;;;SY)");
+        let dir = Stored { dacl: Some(Some(parts("D:(A;OICI;GA;;;BA)").dacl.unwrap())), ..Stored::default() };
+        let given = parts("D:(A;ID;FA;;;WD)").dacl.unwrap();
+        let file = Stored { dacl: Some(Some(given.clone())), verbatim: true, ..Stored::default() };
+        let f = effective(&default, &[None, Some(&dir), Some(&file)], false);
+        assert_eq!(f.dacl.as_deref(), Some(given.as_slice()));
+        assert_eq!(f.control, sd::SE_DACL_PRESENT);
+        let protected = Stored { protected: true, ..file };
+        assert_eq!(effective(&default, &[None, Some(&dir), Some(&protected)], false).control, 0x1004);
+    }
+
+    /// A file laid out in a directory kept verbatim that passes nothing down shows the
+    /// directory's DACL, owner and group (the test directory, `GetFileSecurityW.yaml`,
+    /// `default_security`); a directory with inheritable ACEs still passes them on.
+    #[test]
+    fn a_laid_out_file_takes_its_verbatim_directorys_dacl() {
+        let default = parts("O:BAG:SYD:P(A;OICI;GA;;;SY)");
+        let d = parts("O:WDG:WDD:(A;;FA;;;SY)(A;;FA;;;BA)");
+        let dir = Stored {
+            owner: d.owner.clone(),
+            group: d.group.clone(),
+            dacl: Some(d.dacl.clone()),
+            verbatim: true,
+            ..Stored::default()
+        };
+        let f = effective(&default, &[None, Some(&dir), None], false);
+        assert_eq!(f.dacl, d.dacl);
+        assert_eq!((f.owner, f.group), (d.owner, d.group));
+        assert_eq!(f.control & sd::SE_DACL_AUTO_INHERITED, 0);
+        let passing =
+            Stored { dacl: Some(Some(parts("D:(A;OICI;FA;;;BA)").dacl.unwrap())), verbatim: true, ..Stored::default() };
+        let g = effective(&default, &[None, Some(&passing), None], false);
+        assert_eq!(acl::aces_in(g.dacl.as_ref().unwrap())[0].flags, INHERITED);
     }
 }

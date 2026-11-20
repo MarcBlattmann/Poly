@@ -30,7 +30,9 @@ mod menutrack;
 mod msgbox;
 mod paintctl;
 mod s3;
+mod scroll;
 mod strings;
+mod wincache;
 mod winsta;
 
 use alloc::vec;
@@ -161,32 +163,41 @@ fn ms_of(ms: Option<u64>) -> u32 {
     ms.map_or(INFINITE, |m| m.min(0xFFFF_FFFE) as u32)
 }
 
+/// One request to the kernel's window manager (`PolyUserCall`), and its reply.
+fn ask_kernel(req: &Request) -> Reply {
+    let bytes = wire::encode(req);
+    let retry = matches!(
+        req,
+        Request::GetText { .. }
+            | Request::Relatives { .. }
+            | Request::ClassName { .. }
+            | Request::ClassInfo { .. }
+            | Request::Window { .. }
+            | Request::Clip { .. }
+    );
+    let mut out = vec![0u8; 4096];
+    loop {
+        let mut len = 0usize;
+        // SAFETY: the buffers are ours and sized as passed.
+        let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
+        if s == STATUS_BUFFER_TOO_SMALL && retry && len as usize > out.len() {
+            out = vec![0u8; len as usize];
+            continue;
+        }
+        if s != 0 {
+            return Reply::Error { code: ERROR_INVALID_PARAMETER };
+        }
+        return wire::decode(&out[..len as usize]).unwrap_or(Reply::Error { code: ERROR_INVALID_PARAMETER });
+    }
+}
+
 impl Env for Sys {
     fn call(&self, req: Request) -> Reply {
-        let bytes = wire::encode(&req);
-        let retry = matches!(
-            req,
-            Request::GetText { .. }
-                | Request::Relatives { .. }
-                | Request::ClassName { .. }
-                | Request::ClassInfo { .. }
-                | Request::Window { .. }
-                | Request::Clip { .. }
-        );
-        let mut out = vec![0u8; 4096];
-        loop {
-            let mut len = 0usize;
-            // SAFETY: the buffers are ours and sized as passed.
-            let s = unsafe { PolyUserCall(bytes.as_ptr(), bytes.len(), out.as_mut_ptr(), out.len(), &mut len) };
-            if s == STATUS_BUFFER_TOO_SMALL && retry && len as usize > out.len() {
-                out = vec![0u8; len as usize];
-                continue;
-            }
-            if s != 0 {
-                return Reply::Error { code: ERROR_INVALID_PARAMETER };
-            }
-            return wire::decode(&out[..len as usize]).unwrap_or(Reply::Error { code: ERROR_INVALID_PARAMETER });
+        // A window's record and the screen are kept while the window state is unchanged (ADR 0249).
+        if wincache::cacheable(&req) {
+            return wincache::reply(&req, || ask_kernel(&req));
         }
+        ask_kernel(&req)
     }
 
     fn call_proc(&self, proc_: u64, hwnd: u32, msg: u32, w: u64, l: u64) -> u64 {
@@ -1109,7 +1120,9 @@ fn make_ime_window(hwnd: H) {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn DestroyWindow(hwnd: H) -> i32 {
-    i32::from(u::destroy_window(&SYS, hwnd as u64))
+    let r = i32::from(u::destroy_window(&SYS, hwnd as u64));
+    scroll::forget_gone();
+    r
 }
 
 #[unsafe(no_mangle)]

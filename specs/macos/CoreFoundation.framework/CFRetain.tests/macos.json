@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfretain_collection_elements",
+      "source_sha256": "28ec286b6686f4ba7cd895c1746ecf317b0d8fa211c0395e039ff40784aad60d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "280a8dfc445797924693f2bf75df42c432446f68c77e56b69dd9700eb737d2ff",
+          "exit_code": 0,
+          "stdout": "ok CFGetRetainCount(d) == base + 1\nok CFGetRetainCount(d) == base + 1\nok CFGetRetainCount(d) == base\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4c725cda72a752a45ccc5ed76b7c82c3b934b78105c1c1f09221acb3c2561e57",
+          "exit_code": 0,
+          "stdout": "ok CFGetRetainCount(d) == base + 1\nok CFGetRetainCount(d) == base + 1\nok CFGetRetainCount(d) == base\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfretain_count_steps",
+      "source_sha256": "a4e940309050679c60e08abf6b35034992c0284d95ffde441f86aeed272d2ec1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c1c7d295307df413d15f71e71b374bec325b261794025151f230690d9178ae4b",
+          "exit_code": 0,
+          "stdout": "ok array count steps\nok array count steps\nok dictionary count steps\nok dictionary count steps\nok set count steps\nok set count steps\nok mutable string count steps\nok mutable string count steps\nok mutable data count steps\nok mutable data count steps\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8c72cdbfcfdd31903035a65486df9b0db63f0780bf3363265a392d742f737b0a",
+          "exit_code": 0,
+          "stdout": "ok array count steps\nok array count steps\nok dictionary count steps\nok dictionary count steps\nok set count steps\nok set count steps\nok mutable string count steps\nok mutable string count steps\nok mutable data count steps\nok mutable data count steps\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfretain_immortal_objects",
+      "source_sha256": "f590ba7ae36005628ff753cbb197f2ef510a81e61d43dc554b67e9e33d532893",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "efeb1a19b9b8fe89bbda549d831f08ada6d733cdaeac0c3acd5e289d3cab693c",
+          "exit_code": 0,
+          "stdout": "ok kCFNull\nok kCFBooleanTrue\nok kCFBooleanFalse\nok CFSTR\nok empty CFSTR\nok CFGetRetainCount(kCFNull) > 1000\nok CFGetRetainCount(CFSTR(\"constant\")) > 1000\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a026ea94e3adf1b2e46bf204ab9efd569a99bc169344ec76b70d08dfa79d4304",
+          "exit_code": 0,
+          "stdout": "ok kCFNull\nok kCFBooleanTrue\nok kCFBooleanFalse\nok CFSTR\nok empty CFSTR\nok CFGetRetainCount(kCFNull) > 1000\nok CFGetRetainCount(CFSTR(\"constant\")) > 1000\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

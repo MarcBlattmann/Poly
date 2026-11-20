@@ -15,7 +15,7 @@ Chrome on Windows (in progress), then Chrome on macOS.
 - **x86-64 first, no translator.** The `mac-x64` build is 17 thin x86_64
   Mach-O files. Chrome on x86 PCs needs the XNU personality, our `dyld` and
   the frameworks, not the arm64 translator (ADR 0151's translator stays the
-  route for arm64-only apps; ADR 0152, 0162).
+  route for arm64-only apps; ADR 0152, 0239, 0257).
 - **macOS 13 and later.** Every image asks for at least macOS 13.0 (Widevine:
   12.0). Version checks (`NSProcessInfo`, `sysctl kern.osproductversion`)
   should answer 13 or later.
@@ -33,7 +33,7 @@ Chrome on Windows (in progress), then Chrome on macOS.
 | BSD system calls, first slice (Darwin errno, carry flag, `stat64`, `O_*`) | 0159 | a C "hello" and Chrome's early start-up |
 | Our `dyld` v0 (done, ADR 0237) and a Poly-built `libSystem.B.dylib` | 0160 | dynamically linked Mach-Os, the 66 libraries as Poly dylibs |
 | Mach IPC core (ports, rights, `mach_msg`, bootstrap) | 0161 | the 85 Mach / XPC imports, Chrome's process model |
-| arm64 hello through the interpreter | 0162 | arm64-only apps (not Chrome on x86) |
+| arm64 hello through the interpreter and the JIT, static and through our `dyld` (done) | 0257 | arm64-only apps (not Chrome on x86) |
 
 After these, the areas of the map in the order Chrome's start-up meets
 them: libSystem / BSD (619 symbols) and the Objective-C and C++ runtimes

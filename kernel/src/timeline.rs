@@ -71,6 +71,9 @@ pub fn init(boot: &BootInfo) {
             crate::kprintln!("timeline: sys {} {:#x} {name}", poly_timeline::NT, 0x1000 | index);
         }
     }
+    for &(tag, name) in poly_win32k::proto::Request::TAGS {
+        crate::kprintln!("timeline: user32 {tag} {name}");
+    }
     for &(number, name) in poly_personality_linux::table::SYSCALLS.iter() {
         crate::kprintln!("timeline: sys {} {number:#x} {name}", poly_timeline::LINUX);
     }

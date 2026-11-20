@@ -69,6 +69,12 @@ pub struct ThreadRecord {
     pub exit: Option<poly_ntobj::NtStatus>,
     /// Made with `THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER` (`ThreadHideFromDebugger`).
     pub hidden: bool,
+    /// The affinity mask set for it (`ThreadAffinityMask`), kept for a thread that is not running
+    /// (created suspended, not started, ended); `None`: its process's mask.
+    pub affinity: Option<u64>,
+    /// Its ideal processor (`ThreadIdealProcessorEx`), once one was set; `None`: the one the
+    /// system picks ([`crate::threads::ideal_of`]).
+    pub ideal: Option<u8>,
 }
 
 /// The machine-wide NT state.
@@ -343,6 +349,8 @@ pub struct NtProcess {
     /// `PROCESS_CREATION_MITIGATION_POLICY_PROHIBIT_DYNAMIC_CODE_ALWAYS_ON`:
     /// memory cannot be made executable (ADR 0169).
     pub dynamic_code_blocked: bool,
+    /// Where the window-state page is mapped in it (ADR 0249), once `user32` asked; 0 before.
+    pub window_state_page: u64,
     /// Its mitigation policies (ADR 0192): the creation attributes and `SetProcessMitigationPolicy`.
     pub mitigation: poly_kernelbase::mitigation::State,
     /// Its exit status, once known: the first `NtTerminateProcess` of it
@@ -399,6 +407,7 @@ impl NtProcess {
             default_stack_commit: 0x1000,
             exit_status: None,
             dynamic_code_blocked: false,
+            window_state_page: 0,
             mitigation: poly_kernelbase::mitigation::State::new(),
             exception_dispatcher: 0,
             win32k_disabled: false,

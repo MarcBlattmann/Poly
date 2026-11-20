@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "go_create",
+      "exe_sha256": "ef030520bb177ddcb9477c236c89bfa6d3a33b94b55b998255c274ae9c609359",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cmVnaXN0cnk6IGNsYXNzIGtleSAwIElucHJvY1NlcnZlcjMyIGtleSAwIGludGVyZmFjZSBrZXkgMApiZWZvcmUgQ29Jbml0aWFsaXplRXg6IDB4ODAwNDAxZjAgcG9pbnRlciAwClNUQSBpbml0IDB4MDAwMDAwMDAKU1RBLCBJTlBST0NfU0VSVkVSLCBJR2xvYmFsT3B0aW9uczogMHgwMDAwMDAwMCBwb2ludGVyIDEKU1RBLCBDTFNDVFhfQUxMLCBJR2xvYmFsT3B0aW9uczogMHgwMDAwMDAwMCBwb2ludGVyIDEKU1RBLCBJTlBST0NfSEFORExFUiwgSUdsb2JhbE9wdGlvbnM6IDB4MDAwMDAwMDAgcG9pbnRlciAxClNUQSwgTE9DQUxfU0VSVkVSIG9ubHksIElHbG9iYWxPcHRpb25zOiAweDgwMDQwMTU0IHBvaW50ZXIgMApTVEEsIFJFTU9URV9TRVJWRVIgb25seSwgSUdsb2JhbE9wdGlvbnM6IDB4ODAwNDAxNTQgcG9pbnRlciAwClNUQSwgSU5QUk9DX1NFUlZFUiwgSVVua25vd246IDB4MDAwMDAwMDAgcG9pbnRlciAxClNUQSwgSU5QUk9DX1NFUlZFUiwgSU1hcnNoYWw6IDB4ODAwMDQwMDIgcG9pbnRlciAwClNUQSwgSU5QUk9DX1NFUlZFUiwgSURpc3BhdGNoOiAweDgwMDA0MDAyIHBvaW50ZXIgMApTVEEsIElOUFJPQ19TRVJWRVIsIElDbGFzc0ZhY3Rvcnk6IDB4ODAwMDQwMDIgcG9pbnRlciAwClNUQSwgSU5QUk9DX1NFUlZFUiwgYW4gdW5rbm93biBpbnRlcmZhY2U6IDB4ODAwMDQwMDIgcG9pbnRlciAwCmFnZ3JlZ2F0ZWQgaW50byBhbiBvdXRlciBvYmplY3QsIGFza2luZyBJVW5rbm93bjogMHg4MDA0MDExMAphZ2dyZWdhdGVkIGludG8gYW4gb3V0ZXIgb2JqZWN0LCBhc2tpbmcgSUdsb2JhbE9wdGlvbnM6IDB4ODAwNzAwNTcKdHdvIGNyZWF0aW9ucyBpbiBvbmUgYXBhcnRtZW50IGdpdmUgdGhlIHNhbWUgcG9pbnRlcjogMApBZGRSZWYgcmV0dXJucyBvbmUgbW9yZSB0aGFuIHRoZSBSZWxlYXNlIGFmdGVyIGl0OiAxClF1ZXJ5SW50ZXJmYWNlKElVbmtub3duKSA9IDB4MDAwMDAwMDAsIHNhbWUgcG9pbnRlciBhcyBJR2xvYmFsT3B0aW9ucyAxClF1ZXJ5SW50ZXJmYWNlKElHbG9iYWxPcHRpb25zKSA9IDB4MDAwMDAwMDAsIHNhbWUgcG9pbnRlciAxClF1ZXJ5SW50ZXJmYWNlKElNYXJzaGFsKSBvbiB0aGUgb2JqZWN0ID0gMHg4MDAwNDAwMgpDb0dldENsYXNzT2JqZWN0KElDbGFzc0ZhY3RvcnkpID0gMHgwMDAwMDAwMAogIENyZWF0ZUluc3RhbmNlKElHbG9iYWxPcHRpb25zKSA9IDB4MDAwMDAwMDAKICBDcmVhdGVJbnN0YW5jZSB3aXRoIGFuIG91dGVyIHBvaW50ZXIgPSAweDgwMDQwMTEwCk1UQSBpbml0IDB4MDAwMDAwMDAKTVRBLCBJTlBST0NfU0VSVkVSLCBJR2xvYmFsT3B0aW9uczogMHgwMDAwMDAwMCBwb2ludGVyIDEKTVRBLCBDTFNDVFhfQUxMLCBJR2xvYmFsT3B0aW9uczogMHgwMDAwMDAwMCBwb2ludGVyIDEKYW4gb2JqZWN0IG1hZGUgaW4gdGhlIE1UQSBpcyB1c2VkIGRpcmVjdGx5IGZyb20gdGhpcyB0aHJlYWQ6IFF1ZXJ5KDEpID0gMHgwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "registry: class key 0 InprocServer32 key 0 interface key 0\nbefore CoInitializeEx: 0x800401f0 pointer 0\nSTA init 0x00000000\nSTA, INPROC_SERVER, IGlobalOptions: 0x00000000 pointer 1\nSTA, CLSCTX_ALL, IGlobalOptions: 0x00000000 pointer 1\nSTA, INPROC_HANDLER, IGlobalOptions: 0x00000000 pointer 1\nSTA, LOCAL_SERVER only, IGlobalOptions: 0x80040154 pointer 0\nSTA, REMOTE_SERVER only, IGlobalOptions: 0x80040154 pointer 0\nSTA, INPROC_SERVER, IUnknown: 0x00000000 pointer 1\nSTA, INPROC_SERVER, IMarshal: 0x80004002 pointer 0\nSTA, INPROC_SERVER, IDispatch: 0x80004002 pointer 0\nSTA, INPROC_SERVER, IClassFactory: 0x80004002 pointer 0\nSTA, INPROC_SERVER, an unknown interface: 0x80004002 pointer 0\naggregated into an outer object, asking IUnknown: 0x80040110\naggregated into an outer object, asking IGlobalOptions: 0x80070057\ntwo creations in one apartment give the same pointer: 0\nAddRef returns one more than the Release after it: 1\nQueryInterface(IUnknown) = 0x00000000, same pointer as IGlobalOptions 1\nQueryInterface(IGlobalOptions) = 0x00000000, same pointer 1\nQueryInterface(IMarshal) on the object = 0x80004002\nCoGetClassObject(IClassFactory) = 0x00000000\n  CreateInstance(IGlobalOptions) = 0x00000000\n  CreateInstance with an outer pointer = 0x80040110\nMTA init 0x00000000\nMTA, INPROC_SERVER, IGlobalOptions: 0x00000000 pointer 1\nMTA, CLSCTX_ALL, IGlobalOptions: 0x00000000 pointer 1\nan object made in the MTA is used directly from this thread: Query(1) = 0x00000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 82
+    }
+  ]
+}

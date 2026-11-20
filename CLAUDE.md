@@ -43,9 +43,10 @@ crates that depend on what you changed, so the full lint (and CI) is the gate.
 - **Every `unsafe` block gets a `// SAFETY:` comment** explaining why it is sound.
 - **Claim before you work.** `cargo xtask coverage claim` marks an entry so no
   other agent duplicates it. Release it if you stop.
-- **Never edit, and never commit a regenerated copy of, the README progress
-  section (between `coverage:begin/end` and `roadmap:begin/end`),
-  `docs/progress/` or the ADR index table (between `adr-index:begin/end`).**
+- **Never edit, and never commit a regenerated copy of, the README badges
+  (between `badges:begin/end`), `docs/progress/` (including its README's
+  `coverage:begin/end` and `roadmap:begin/end` sections) or the ADR index table
+  (between `adr-index:begin/end`).**
   A workflow regenerates them on `main` after every merge (ADR 0213); CI fails a
   PR that changes them. The rest of `README.md` and `docs/adr/README.md` stays
   editable. `cargo xtask coverage readme` still previews them locally: look,

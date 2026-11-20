@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/dbghelp.dll/ImageNtHeader.yaml
+id: windows/api/dbghelp.dll/ImageNtHeader
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station, 96 dpi) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output and two complete recordings agreed byte for byte, each run in a fresh scratch directory; the test programs carry no manifest (the icon tests carry the manifest that asks for comctl32 version 6). The fonts the tests use are the test's own TrueType font (added with AddFontMemResourceEx) and DejaVu Sans 2.37 (the file C:\\Windows\\Fonts\\DejaVuSans.ttf, copied there for the recording and removed afterwards, added with AddFontResourceExW and FR_PRIVATE); no Microsoft font is used"
+  observed_by: spec-win-glyphs
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). The fonts are free: a TrueType font the test writes itself (units per em 1024, every outline coordinate a multiple of 64 units, so that at 16 pixels per em every point lies on a whole pixel) and DejaVu Sans 2.37 (Bitstream Vera licence, shipped with Poly); where a number would depend on hinting, the test asks for 2048 pixels per em, the font's units per em, so that one pixel is one font unit and the outline is the file's. Microsoft Learn reference pages of the functions and structures named here and the public headers wingdi.h, winuser.h, winbase.h, shlwapi.h, dbghelp.h, commctrl.h, winerror.h and the TrueType and OpenType font file format documents for table layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Returns a pointer to the NT headers of a mapped PE image: Base plus the e_lfanew field of the DOS header, after checking the "MZ" magic and the "PE\0\0" signature. Notepad++ calls it to see whether a plugin DLL is 64-bit (it reported 'Cannot load 64-bit plugin' while it was a stub). The tests load dbghelp.dll and look the function up at run time.
+interface:
+  signature: "PIMAGE_NT_HEADERS ImageNtHeader(PVOID Base)"
+rules:
+  result: "For a mapped image the result is Base + e_lfanew (this executable, ntdll.dll, kernel32.dll: all machine 0x8664, optional header magic 0x20B, size of optional header 240); the memory there starts with 0x00004550. Repeated calls give the same answer. Only the DOS header and the signature are checked: other DOS fields may hold anything (all 0xFF from offset 2 to 0x3C does not matter)."
+  offsets: "An image built in memory with the header at e_lfanew 0x2, 0x3, 0x4, 0x8, 0x20, 0x38, 0x40, 0x44, 0x80, 0xF8, 0x100, 0x7FC, 0xFF8, 0x1000, 0x1F00, 0x2000, 0x2FFC (and also 0x3000, 0x10000 and 0x00FFFFFC with a signature really mapped there): the result is Base + e_lfanew. There is no alignment check: 0x41, 0x42, 0x43, 0x7E, 0x7F, 0x81, 0x82, 0x83 work too."
+  offset_limit: "An e_lfanew of 0x0FFFFFFC works when the signature is mapped there; 0x10000000 (256 MiB) and above (0x10000004, 0x20000000, 0x7FFFFFFC, 0x80000000, 0xFFFFFF80, 0xFFFFFFFC) give NULL even with a signature mapped at that offset."
+  checks: "NULL for: the magic 'ZM' (0x4D5A) or none; a signature other than 'PE\\0\\0' ('PE\\1\\0', 'NE', shifted, byte-swapped, none); an e_lfanew with nothing mapped at it (0x3000.. beyond the allocation, 0x10000, 0x7FFFFFFC, 0x80000000, 0xFFFFFFFF); e_lfanew pointing into the DOS header (0x10) with no signature there; e_lfanew 0x40 into an inaccessible page; a DOS header cut by an inaccessible page; a Base that is not the start of an image (Base+4, Base+0x100)."
+  bad_pointers: "A NULL Base, unmapped bases (0x10, 0x1000, 0xFFFFFFFFFFFFFFF0): NULL without a crash and without a last error."
+errors:
+  failure: "NULL for everything above; the last error is not set (unchanged)."
+side_effects: "none beyond the rules above"
+threading: "no state of its own"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (the 757 KB whole-font copies of DejaVu Sans a few milliseconds)"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Run in the SSH session (session 0) by poly-oracle.ps1. dbghelp.dll is not in the pipeline's list of import libraries: the tests call LoadLibraryW("dbghelp.dll") and GetProcAddress("ImageNtHeader"). Images are built in VirtualAlloc'd memory (pages of 4 KiB; a 5 GiB reservation with two committed pages for the far offsets; pages made inaccessible with VirtualProtect). Observations print the result as NULL or as an offset from the base, never an address. No test depends on a font or on the machine.
+not_covered: >
+  ImageNtHeaderEx-style size checks, 32-bit images (PE32 headers are the same position, only the optional header differs), images with e_lfanew inside the first 0x40 bytes other than the cases above, ImageDirectoryEntryToData, data files loaded with LOAD_LIBRARY_AS_DATAFILE (their Base has the low bit set).

@@ -94,10 +94,15 @@ pub fn dispatch<D: SyscallDispatch>(x: &mut [u64; 31], sp: u64, nzcv: &mut u32) 
 
 /// Run one arm64 system call through the BSD calls of [`crate::bsd`] with
 /// the kernel's services `k` (what a translated process uses).
-pub fn dispatch_with<K: BsdKernel>(k: &mut K, x: &mut [u64; 31], sp: u64, nzcv: &mut u32) -> Outcome {
+/// Calls the BSD layer does not have get [`crate::Xnu`]'s "not
+/// implemented" answers.
+pub fn dispatch_with(k: &mut dyn BsdKernel, x: &mut [u64; 31], sp: u64, nzcv: &mut u32) -> Outcome {
     let x16 = x[16];
     let mut frame = to_frame(x, sp);
-    let out = crate::bsd::dispatch_with(k, &mut frame);
+    let out = match crate::bsd::dispatch_with(k, &mut frame) {
+        Some(o) => o,
+        None => <crate::Xnu as SyscallDispatch>::dispatch(&mut frame),
+    };
     from_frame(&frame, x16, x, nzcv);
     out
 }
@@ -146,38 +151,21 @@ mod tests {
         assert_eq!((x[0], x[1], nzcv), (7, 5, 1 << 31));
     }
 
-    #[derive(Default)]
-    struct K {
-        written: u64,
-        exited: Option<u8>,
-    }
-    impl BsdKernel for K {
-        fn write(&mut self, fd: i32, _buf: u64, len: u64) -> Result<u64, u64> {
-            if fd != 1 {
-                return Err(crate::bsd::EBADF);
-            }
-            self.written += len;
-            Ok(len)
-        }
-        fn exit(&mut self, status: u8) {
-            self.exited = Some(status);
-        }
-    }
-
     #[test]
     fn write_and_exit_through_the_bsd_layer() {
-        let mut k = K::default();
+        use crate::bsd::{errno::EBADF, nr, tests::Fake};
+        let mut k = Fake::new();
         let mut x = [0u64; 31];
         let mut nzcv = 0;
-        x[16] = crate::bsd::SYS_WRITE;
-        x[..3].copy_from_slice(&[1, 0x1_0000_0000, 12]);
+        x[16] = nr::WRITE;
+        x[..3].copy_from_slice(&[1, Fake::BUF, 12]);
         assert_eq!(dispatch_with(&mut k, &mut x, 0, &mut nzcv), Outcome::Handled);
-        assert_eq!((x[0], nzcv & NZCV_C, k.written), (12, 0, 12));
-        x[16] = crate::bsd::SYS_WRITE;
+        assert_eq!((x[0], nzcv & NZCV_C, k.out.len()), (12, 0, 12));
+        x[16] = nr::WRITE;
         x[0] = 2;
         dispatch_with(&mut k, &mut x, 0, &mut nzcv);
-        assert_eq!((x[0], nzcv & NZCV_C), (crate::bsd::EBADF, NZCV_C));
-        x[16] = crate::bsd::SYS_EXIT;
+        assert_eq!((x[0], nzcv & NZCV_C), (u64::from(EBADF), NZCV_C));
+        x[16] = nr::EXIT;
         x[0] = 3;
         dispatch_with(&mut k, &mut x, 0, &mut nzcv);
         assert_eq!(k.exited, Some(3));

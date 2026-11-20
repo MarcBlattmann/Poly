@@ -27,14 +27,18 @@ struct Services<'a> {
 }
 
 impl BsdKernel for Services<'_> {
-    fn write(&mut self, fd: i32, buf: u64, len: u64) -> Result<u64, u64> {
+    fn copy_in(&self, addr: u64, buf: &mut [u8]) -> Result<(), ()> {
+        self.mem.peek(addr, buf).map_err(|_| ())
+    }
+    fn copy_out(&mut self, _addr: u64, _buf: &[u8]) -> Result<(), ()> {
+        Err(())
+    }
+    fn write(&mut self, fd: i32, buf: &[u8], _offset: Option<u64>) -> Result<usize, u32> {
         if fd != 1 && fd != 2 {
-            return Err(bsd::EBADF);
+            return Err(bsd::errno::EBADF);
         }
-        let mut b = alloc::vec![0u8; len as usize];
-        self.mem.peek(buf, &mut b).map_err(|_| bsd::EFAULT)?;
-        self.out.extend_from_slice(&b);
-        Ok(len)
+        self.out.extend_from_slice(buf);
+        Ok(buf.len())
     }
     fn exit(&mut self, status: u8) {
         self.exit = Some(status);
@@ -128,6 +132,22 @@ fn guest_pages_are_16k_and_follow_map_jit() {
     let mut b = [0u8; 8];
     let f = poly_a64::Memory::read(&mut m, 0x1_0000_7FFC, &mut b).unwrap_err();
     assert_eq!(f.addr, 0x1_0000_8000);
+}
+
+#[test]
+fn set_mapped_keeps_the_bytes() {
+    use crate::mem::*;
+    let mut m = GuestMem::new(0x1_0000_0000, 8 * PAGE_SIZE);
+    m.poke(0x1_0000_4000, &[1, 2, 3, 4]).unwrap();
+    assert_eq!(m.set_mapped(0x1_0000_4001, PAGE_SIZE, R), Err(MapError::Unaligned));
+    m.set_mapped(0x1_0000_4000, PAGE_SIZE, R | X).unwrap();
+    assert_eq!(poly_a64::Memory::fetch(&mut m, 0x1_0000_4000), Ok(0x0403_0201));
+    assert!(poly_a64::Memory::write(&mut m, 0x1_0000_4000, &[0]).is_err());
+    // A page with translations that is marked again is reported.
+    m.mark_code(0x1_0000_4000, 4);
+    m.set_mapped(0x1_0000_4000, PAGE_SIZE, R | W).unwrap();
+    assert_eq!(m.take_written_code(), alloc::vec![0x1_0000_4000]);
+    assert_eq!(m.set_mapped(0x1_0002_0000, PAGE_SIZE, R), Err(MapError::OutOfRange));
 }
 
 /// Print how each test program ends under the interpreter (for finding
