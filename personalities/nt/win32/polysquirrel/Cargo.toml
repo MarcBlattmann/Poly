@@ -1,0 +1,21 @@
+[package]
+name = "polysquirrel"
+description = "polysquirrel.exe (ADR 0253): Poly installs a Squirrel app itself, without .NET Framework: the package from the installer's DATA resource into %LOCALAPPDATA%/<id>/app-<version>, shortcuts through the shell's ShellLink object, the per-user Uninstall key; --uninstall removes them"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "polysquirrel"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-win32-rt = { path = "../rt" }
+poly-squirrel = { path = "../../../../crates/poly-squirrel" }
+poly-zip = { path = "../../../../crates/poly-zip" }
+
+[lints]
+workspace = true

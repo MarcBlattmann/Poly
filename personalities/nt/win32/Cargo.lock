@@ -532,6 +532,10 @@ name = "poly-pe"
 version = "0.0.1"
 
 [[package]]
+name = "poly-png"
+version = "0.0.1"
+
+[[package]]
 name = "poly-rtl"
 version = "0.0.1"
 dependencies = [
@@ -552,6 +556,14 @@ dependencies = [
 [[package]]
 name = "poly-seh"
 version = "0.0.1"
+
+[[package]]
+name = "poly-squirrel"
+version = "0.0.1"
+dependencies = [
+ "poly-pe",
+ "poly-zip",
+]
 
 [[package]]
 name = "poly-taskschd"
@@ -636,10 +648,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-zip"
+version = "0.0.1"
+dependencies = [
+ "poly-png",
+]
+
+[[package]]
 name = "polyopen"
 version = "0.0.1"
 dependencies = [
  "poly-win32-rt",
+]
+
+[[package]]
+name = "polysquirrel"
+version = "0.0.1"
+dependencies = [
+ "poly-squirrel",
+ "poly-win32-rt",
+ "poly-zip",
 ]
 
 [[package]]
