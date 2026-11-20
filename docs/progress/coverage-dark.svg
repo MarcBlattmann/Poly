@@ -882,6 +882,7 @@
 </g>
 <g><title>libobjc.A: 0 / 463 done (0.0%)</title>
 <rect x="822.4" y="311.1" width="10.8" height="9.8" fill="#21262d"/>
+<rect x="822.4" y="311.1" width="1.1" height="9.8" fill="#388bfd"/>
 <rect x="821.4" y="310.1" width="12.8" height="11.8" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 </g>
 <g><title>libboringssl: 0 / 462 done (0.0%)</title>
