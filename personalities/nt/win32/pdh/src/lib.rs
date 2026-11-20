@@ -27,5 +27,4 @@ pub extern "system" fn pdh_main(_module: *mut u8, _reason: u32, _reserved: *mut 
     1
 }
 
-#[cfg(target_arch = "x86_64")]
 mod apps;

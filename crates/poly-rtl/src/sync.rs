@@ -16,8 +16,13 @@
 //! * SRW lock: 0 free; bit 0 is set while the lock is held; bits 4 and up count the shared
 //!   holders, so exclusive is `1` and `n` readers are `(n << 4) | 1`; bit 1 says that waiters
 //!   are queued (not observable by a program that does not wait). A waiting writer holds back
-//!   readers that come later; a release hands the lock directly to the first waiter, or to all
-//!   the readers at the head of the queue, so waiters are served in turn and nobody barges.
+//!   readers that come later. A release frees the lock and wakes the first waiter (or all the
+//!   readers at the head of the queue), which then takes it like any other thread (ADR 0242): a
+//!   thread that is running takes a free lock at once instead of waiting until a sleeping one
+//!   has been scheduled, so busy threads do not form a convoy. A woken waiter that finds the
+//!   lock taken again goes back to the head of the queue and is handed the lock directly at the
+//!   next release (the word is set for it before it wakes), so nobody loses twice in a row.
+//!   Acquirers spin a little before they queue.
 //! * Condition variable: 0 while nobody sleeps; 1 while somebody does. The sleepers are woken
 //!   in the order they went to sleep.
 //! * Run-once: 0 not started; `1` (bit 0) an initialisation is running (`| 4` while threads
@@ -79,11 +84,27 @@ struct Node {
     event: u64,
     /// Set by the waker before it signals the event.
     done: AtomicBool,
+    /// SRW locks: the waker set the lock word for this waiter (a hand-over), so it holds the
+    /// lock when it wakes; otherwise it was only woken and takes the lock itself.
+    handed: AtomicBool,
+    /// SRW locks: this waiter was woken before and lost the lock to a running thread, so the
+    /// next release hands the lock to it (changed under the bucket's lock).
+    fair: bool,
 }
 
 impl Node {
     fn new(addr: usize, kind: u8) -> Node {
-        Node { next: null_mut(), prev: null_mut(), addr, kind, linked: false, event: 0, done: AtomicBool::new(false) }
+        Node {
+            next: null_mut(),
+            prev: null_mut(),
+            addr,
+            kind,
+            linked: false,
+            event: 0,
+            done: AtomicBool::new(false),
+            handed: AtomicBool::new(false),
+            fair: false,
+        }
     }
 }
 
@@ -126,6 +147,22 @@ impl Bucket {
                 (**self.tail.get()).next = node;
             }
             *self.tail.get() = node;
+            (*node).linked = true;
+        }
+    }
+
+    /// Queue `node` first. The bucket's lock is held.
+    unsafe fn push_front(&self, node: *mut Node) {
+        // SAFETY: the lock is held, `node` is valid and not queued.
+        unsafe {
+            (*node).prev = null_mut();
+            (*node).next = *self.head.get();
+            if (*self.head.get()).is_null() {
+                *self.tail.get() = node;
+            } else {
+                (**self.head.get()).prev = node;
+            }
+            *self.head.get() = node;
             (*node).linked = true;
         }
     }
@@ -192,6 +229,9 @@ impl Default for Lot {
 const LOCKED: usize = 1;
 const WAITERS: usize = 2;
 const READER: usize = 16;
+/// How often an SRW acquirer looks at the word before it queues (Learn, "Slim Reader/Writer
+/// (SRW) Locks" and "Critical Section Objects": waiting threads spin briefly before they block).
+const SPINS: u32 = 256;
 /// Run-once word bits.
 const RUNNING: usize = 1;
 const DONE: usize = 2;
@@ -271,9 +311,17 @@ impl Lot {
 
     // ----- SRW locks ---------------------------------------------------------------------
 
-    /// `RtlTryAcquireSRWLockExclusive`.
+    /// `RtlTryAcquireSRWLockExclusive`: the lock is not held (waiters may be queued: a running
+    /// thread takes a lock that has just been freed).
     pub fn try_acquire_exclusive(&self, word: &AtomicUsize) -> bool {
-        word.compare_exchange(0, LOCKED, Ordering::Acquire, Ordering::Relaxed).is_ok()
+        let mut s = word.load(Ordering::Relaxed);
+        while s & LOCKED == 0 {
+            match word.compare_exchange_weak(s, s | LOCKED, Ordering::Acquire, Ordering::Relaxed) {
+                Ok(_) => return true,
+                Err(v) => s = v,
+            }
+        }
+        false
     }
 
     /// `RtlTryAcquireSRWLockShared`.
@@ -300,38 +348,13 @@ impl Lot {
         if self.try_acquire_exclusive(word) {
             return;
         }
-        let addr = word as *const AtomicUsize as usize;
-        let mut node = Node::new(addr, KIND_EXCLUSIVE);
-        let b = self.bucket(addr);
-        b.acquire(sys);
-        let mut s = word.load(Ordering::Relaxed);
-        loop {
-            if s == 0 {
-                match word.compare_exchange_weak(0, LOCKED, Ordering::Acquire, Ordering::Relaxed) {
-                    Ok(_) => {
-                        b.release();
-                        return;
-                    }
-                    Err(v) => s = v,
-                }
-            } else if s & WAITERS != 0 {
-                break;
-            } else {
-                match word.compare_exchange_weak(s, s | WAITERS, Ordering::Relaxed, Ordering::Relaxed) {
-                    Ok(_) => break,
-                    Err(v) => s = v,
-                }
+        for _ in 0..SPINS {
+            core::hint::spin_loop();
+            if word.load(Ordering::Relaxed) & LOCKED == 0 && self.try_acquire_exclusive(word) {
+                return;
             }
         }
-        let n: *mut Node = &mut node;
-        // SAFETY: `node` lives on this stack until `park` returns it unqueued.
-        unsafe {
-            self.enqueue(sys, b, n);
-            b.release();
-            // The releaser hands the lock over before it wakes us.
-            self.park(sys, n, None);
-        }
-        self.finish(sys, &node);
+        self.wait_for(sys, word, KIND_EXCLUSIVE);
     }
 
     /// `RtlAcquireSRWLockShared`.
@@ -339,120 +362,196 @@ impl Lot {
         if self.try_acquire_shared(word) {
             return;
         }
-        let addr = word as *const AtomicUsize as usize;
-        let mut node = Node::new(addr, KIND_SHARED);
-        let b = self.bucket(addr);
-        b.acquire(sys);
+        for _ in 0..SPINS {
+            core::hint::spin_loop();
+            let s = word.load(Ordering::Relaxed);
+            if s & WAITERS == 0 && (s == 0 || s >= READER) && self.try_acquire_shared(word) {
+                return;
+            }
+        }
+        self.wait_for(sys, word, KIND_SHARED);
+    }
+
+    /// Take the lock in mode `kind`, or record that somebody waits; the bucket's lock is held.
+    /// `woken`: the caller was woken by a release, so as a reader it may join or take the lock
+    /// although waiters are queued (it was queued before them). `true` when the lock was taken.
+    fn take_or_mark(word: &AtomicUsize, kind: u8, woken: bool) -> bool {
         let mut s = word.load(Ordering::Relaxed);
         loop {
-            if s & WAITERS != 0 {
-                break;
-            }
-            let (new, got) = if s == 0 {
-                (READER | LOCKED, true)
+            let take = if kind == KIND_EXCLUSIVE {
+                (s & LOCKED == 0).then_some(s | LOCKED)
+            } else if s & WAITERS != 0 && !woken {
+                None
+            } else if s & LOCKED == 0 {
+                Some(s | LOCKED | READER)
             } else if s >= READER {
-                (s + READER, true)
+                Some(s + READER)
             } else {
-                (s | WAITERS, false)
+                None
+            };
+            let new = match take {
+                Some(v) => v,
+                None if s & WAITERS != 0 => return false,
+                None => s | WAITERS,
             };
             match word.compare_exchange_weak(s, new, Ordering::Acquire, Ordering::Relaxed) {
-                Ok(_) if got => {
-                    b.release();
-                    return;
-                }
-                Ok(_) => break,
+                Ok(_) => return take.is_some(),
                 Err(v) => s = v,
             }
         }
+    }
+
+    /// Queue and sleep until the lock is ours: a release either handed it over, or woke us and
+    /// we took it. A waiter that loses the lock to a running thread queues again at the head,
+    /// marked to be handed the lock at the next release.
+    fn wait_for(&self, sys: &dyn Sys, word: &AtomicUsize, kind: u8) {
+        let addr = word as *const AtomicUsize as usize;
+        let b = self.bucket(addr);
+        let mut node = Node::new(addr, kind);
         let n: *mut Node = &mut node;
-        // SAFETY: as in `acquire_exclusive`.
-        unsafe {
-            self.enqueue(sys, b, n);
-            b.release();
-            self.park(sys, n, None);
+        let mut woken = false;
+        loop {
+            b.acquire(sys);
+            if Self::take_or_mark(word, kind, woken) {
+                b.release();
+                break;
+            }
+            // SAFETY: `node` lives on this stack until `park` returns it unqueued; the bucket's
+            // lock is held while it is queued.
+            unsafe {
+                if (*n).event == 0 {
+                    (*n).event = sys.get_event();
+                }
+                (*n).done.store(false, Ordering::Relaxed);
+                (*n).handed.store(false, Ordering::Relaxed);
+                (*n).fair = woken;
+                if woken {
+                    b.push_front(n);
+                } else {
+                    b.push(n);
+                }
+                b.release();
+                self.park(sys, n, None);
+                if (*n).handed.load(Ordering::Acquire) {
+                    break;
+                }
+            }
+            woken = true;
         }
         self.finish(sys, &node);
     }
 
-    /// Give a lock that has just become free to the first waiter, or to all the readers at the
-    /// head of the queue, and store the word that says so. The bucket's lock is held.
-    unsafe fn hand_over(&self, sys: &dyn Sys, b: &Bucket, word: &AtomicUsize, addr: usize) {
+    /// The waiters a release serves: the first one, or all the readers at the head of the
+    /// queue. `(how many, whether it is a writer, whether others stay queued)`. The lock is held.
+    unsafe fn plan(b: &Bucket, addr: usize) -> (usize, bool, bool) {
         // SAFETY: the lock is held; queued nodes are valid.
         unsafe {
             let head = b.first(addr);
             if head.is_null() {
-                word.store(0, Ordering::Release);
-                return;
+                return (0, false, false);
             }
             let exclusive = (*head).kind == KIND_EXCLUSIVE;
-            // Take the nodes to wake off the queue first, chained through `next`.
-            let (mut chain, mut last): (*mut Node, *mut Node) = (null_mut(), null_mut());
-            let mut count = 0usize;
-            loop {
-                let n = b.first(addr);
-                if n.is_null() || (count > 0 && (exclusive || (*n).kind != KIND_SHARED)) {
-                    break;
-                }
-                b.remove(n);
-                if last.is_null() {
-                    chain = n;
-                } else {
-                    (*last).next = n;
-                }
-                last = n;
-                count += 1;
-            }
-            let held = if exclusive { LOCKED } else { (count * READER) | LOCKED };
-            let more = if b.first(addr).is_null() { 0 } else { WAITERS };
-            word.store(held | more, Ordering::Release);
-            let mut n = chain;
+            let mut count = 0;
+            let mut n = head;
             while !n.is_null() {
-                let next = (*n).next;
-                self.wake(sys, n);
-                n = next;
+                if (*n).addr == addr {
+                    if count > 0 && (exclusive || (*n).kind != KIND_SHARED) {
+                        return (count, exclusive, true);
+                    }
+                    count += 1;
+                }
+                n = (*n).next;
             }
+            (count, exclusive, false)
         }
+    }
+
+    /// The last holder leaves a lock with waiters: free it and wake the waiters [`Lot::plan`]
+    /// picks or, when the first of them already lost the lock once, hand it to them. `shared`: a
+    /// reader leaves (others may still hold it). `false` when nobody waits any more (the caller
+    /// releases by the fast path).
+    fn release_queued(&self, sys: &dyn Sys, word: &AtomicUsize, shared: bool) -> bool {
+        let addr = word as *const AtomicUsize as usize;
+        let b = self.bucket(addr);
+        b.acquire(sys);
+        let done = loop {
+            let s = word.load(Ordering::Relaxed);
+            if s & WAITERS == 0 {
+                break false;
+            }
+            if shared && s >= 2 * READER {
+                // Other readers still hold it.
+                if word.compare_exchange_weak(s, s - READER, Ordering::Release, Ordering::Relaxed).is_ok() {
+                    break true;
+                }
+                continue;
+            }
+            // SAFETY: the bucket's lock is held; queued nodes are valid and their owners return
+            // only after their event is set.
+            unsafe {
+                let (count, exclusive, more) = Self::plan(b, addr);
+                let fair = count > 0 && (*b.first(addr)).fair;
+                let more = if more { WAITERS } else { 0 };
+                let new = match (fair, exclusive) {
+                    (false, _) => more,
+                    (true, true) => LOCKED | more,
+                    (true, false) => (count * READER) | LOCKED | more,
+                };
+                if word.compare_exchange(s, new, Ordering::Release, Ordering::Relaxed).is_err() {
+                    continue;
+                }
+                // Take the nodes off the queue first, chained through `next`, then wake them.
+                let (mut chain, mut last): (*mut Node, *mut Node) = (null_mut(), null_mut());
+                for _ in 0..count {
+                    let n = b.first(addr);
+                    b.remove(n);
+                    (*n).handed.store(fair, Ordering::Relaxed);
+                    if last.is_null() {
+                        chain = n;
+                    } else {
+                        (*last).next = n;
+                    }
+                    last = n;
+                }
+                let mut n = chain;
+                while !n.is_null() {
+                    let next = (*n).next;
+                    self.wake(sys, n);
+                    n = next;
+                }
+            }
+            break true;
+        };
+        b.release();
+        done
     }
 
     /// `RtlReleaseSRWLockExclusive`: releasing a lock that is not held exclusively does nothing.
     pub fn release_exclusive(&self, sys: &dyn Sys, word: &AtomicUsize) {
-        let addr = word as *const AtomicUsize as usize;
         loop {
             let s = word.load(Ordering::Relaxed);
-            if s == 0 || (s & WAITERS == 0 && s != LOCKED) {
+            if s & LOCKED == 0 || s >= READER {
                 // Free, or held shared: not an exclusive hold.
                 return;
             }
-            if s == LOCKED {
-                if word.compare_exchange_weak(LOCKED, 0, Ordering::Release, Ordering::Relaxed).is_ok() {
+            if s & WAITERS == 0 {
+                if word.compare_exchange_weak(s, 0, Ordering::Release, Ordering::Relaxed).is_ok() {
                     return;
                 }
                 continue;
             }
-            // Waiters are queued: the hand-over is made under the bucket's lock.
-            let b = self.bucket(addr);
-            b.acquire(sys);
-            let s = word.load(Ordering::Relaxed);
-            if s & WAITERS == 0 {
-                b.release();
-                continue;
+            if self.release_queued(sys, word, false) {
+                return;
             }
-            if s < READER {
-                // SAFETY: the bucket's lock is held.
-                unsafe { self.hand_over(sys, b, word, addr) };
-            }
-            b.release();
-            return;
         }
     }
 
     /// `RtlReleaseSRWLockShared`: `Err(STATUS_RESOURCE_NOT_OWNED)` for a free lock (the caller
     /// raises it); a lock held exclusively counts as held by one reader and is freed.
     pub fn release_shared(&self, sys: &dyn Sys, word: &AtomicUsize) -> Result<(), u32> {
-        let addr = word as *const AtomicUsize as usize;
         loop {
             let s = word.load(Ordering::Relaxed);
-            if s == 0 {
+            if s & LOCKED == 0 {
                 return Err(STATUS_RESOURCE_NOT_OWNED);
             }
             if s & WAITERS == 0 {
@@ -462,23 +561,9 @@ impl Lot {
                 }
                 continue;
             }
-            let b = self.bucket(addr);
-            b.acquire(sys);
-            let s = word.load(Ordering::Relaxed);
-            if s & WAITERS == 0 {
-                b.release();
-                continue;
+            if self.release_queued(sys, word, true) {
+                return Ok(());
             }
-            if s >= 2 * READER {
-                // Other readers still hold it.
-                word.store(s - READER, Ordering::Release);
-            } else {
-                // The last holder (or an exclusive one, counted as a reader) is gone.
-                // SAFETY: the bucket's lock is held.
-                unsafe { self.hand_over(sys, b, word, addr) };
-            }
-            b.release();
-            return Ok(());
         }
     }
 
@@ -536,7 +621,7 @@ impl Lot {
         shared: bool,
     ) -> Result<bool, u32> {
         let state = lock.load(Ordering::Relaxed);
-        if shared && state == 0 {
+        if shared && state & LOCKED == 0 {
             // Nothing to give up: refused before the thread is queued.
             return Err(STATUS_RESOURCE_NOT_OWNED);
         }
@@ -1332,6 +1417,128 @@ mod tests {
         lot.wake_address(&*host, cell.as_ptr().cast(), false);
         t.join().unwrap();
         assert_eq!(v.load(Ordering::SeqCst), 101);
+    }
+
+    /// A host whose wakes can be held back, so that a test acts between a release and the run
+    /// of the waiter it woke.
+    #[derive(Default)]
+    struct Gated {
+        host: Host,
+        hold: AtomicBool,
+        pending: Mutex<Vec<u64>>,
+    }
+
+    impl Gated {
+        fn open(&self) {
+            self.hold.store(false, Ordering::SeqCst);
+            for e in self.pending.lock().unwrap().drain(..) {
+                self.host.set(e);
+            }
+        }
+    }
+
+    impl Sys for Gated {
+        fn get_event(&self) -> u64 {
+            self.host.get_event()
+        }
+        fn put_event(&self, event: u64) {
+            self.host.put_event(event)
+        }
+        fn wait(&self, event: u64, timeout: Option<i64>) -> bool {
+            self.host.wait(event, timeout)
+        }
+        fn set(&self, event: u64) {
+            if self.hold.load(Ordering::SeqCst) {
+                self.pending.lock().unwrap().push(event);
+            } else {
+                self.host.set(event);
+            }
+        }
+        fn yield_now(&self) {
+            self.host.yield_now()
+        }
+    }
+
+    /// ADR 0242: a release frees the lock and wakes the waiter; a running thread may take it
+    /// first (no convoy behind a sleeper), and the waiter that lost is handed the lock at the
+    /// next release, so it does not lose twice.
+    #[test]
+    fn a_running_thread_takes_a_released_lock_and_the_loser_is_served_next() {
+        let lot = Arc::new(Lot::new());
+        let host = Arc::new(Gated::default());
+        let w = Arc::new(AtomicUsize::new(0));
+        let got = Arc::new(AtomicU64::new(0));
+        lot.acquire_exclusive(&*host, &w);
+        let t = {
+            let (lot, host, w, got) = (lot.clone(), host.clone(), w.clone(), got.clone());
+            std::thread::spawn(move || {
+                lot.acquire_exclusive(&*host, &w);
+                got.store(1, Ordering::SeqCst);
+                lot.release_exclusive(&*host, &w);
+            })
+        };
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(w.load(Ordering::Relaxed), LOCKED | WAITERS);
+        // The release frees the word; the waiter's wake is held back.
+        host.hold.store(true, Ordering::SeqCst);
+        lot.release_exclusive(&*host, &w);
+        assert_eq!(w.load(Ordering::Relaxed), 0, "free, not handed over");
+        assert!(lot.try_acquire_exclusive(&w), "a running thread takes it");
+        // The waiter wakes, finds it taken and queues again.
+        host.open();
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(got.load(Ordering::SeqCst), 0);
+        assert_eq!(w.load(Ordering::Relaxed), LOCKED | WAITERS);
+        // This time the release hands the lock to it: nobody running can take it.
+        host.hold.store(true, Ordering::SeqCst);
+        lot.release_exclusive(&*host, &w);
+        assert_eq!(w.load(Ordering::Relaxed), LOCKED, "held for the waiter");
+        assert!(!lot.try_acquire_exclusive(&w));
+        assert!(!lot.try_acquire_shared(&w));
+        host.open();
+        t.join().unwrap();
+        assert_eq!(got.load(Ordering::SeqCst), 1);
+        assert_eq!(w.load(Ordering::Relaxed), 0);
+    }
+
+    /// A woken writer that loses keeps its place before readers that came later: they still
+    /// cannot take the lock while it waits (writer priority).
+    #[test]
+    fn a_woken_writer_that_loses_still_holds_back_later_readers() {
+        let lot = Arc::new(Lot::new());
+        let host = Arc::new(Gated::default());
+        let w = Arc::new(AtomicUsize::new(0));
+        let order = Arc::new(Mutex::new(Vec::new()));
+        lot.acquire_exclusive(&*host, &w);
+        let writer = {
+            let (lot, host, w, order) = (lot.clone(), host.clone(), w.clone(), order.clone());
+            std::thread::spawn(move || {
+                lot.acquire_exclusive(&*host, &w);
+                order.lock().unwrap().push("writer");
+                lot.release_exclusive(&*host, &w);
+            })
+        };
+        std::thread::sleep(Duration::from_millis(100));
+        host.hold.store(true, Ordering::SeqCst);
+        lot.release_exclusive(&*host, &w);
+        assert!(lot.try_acquire_exclusive(&w));
+        host.open();
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(!lot.try_acquire_shared(&w), "the writer waits again");
+        let reader = {
+            let (lot, host, w, order) = (lot.clone(), host.clone(), w.clone(), order.clone());
+            std::thread::spawn(move || {
+                lot.acquire_shared(&*host, &w);
+                order.lock().unwrap().push("reader");
+                lot.release_shared(&*host, &w).unwrap();
+            })
+        };
+        std::thread::sleep(Duration::from_millis(100));
+        lot.release_exclusive(&*host, &w);
+        writer.join().unwrap();
+        reader.join().unwrap();
+        assert_eq!(*order.lock().unwrap(), ["writer", "reader"]);
+        assert_eq!(w.load(Ordering::Relaxed), 0);
     }
 
     #[test]

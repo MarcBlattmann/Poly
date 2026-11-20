@@ -90,3 +90,20 @@ programs ran, and `WM_DPICHANGED` was never sent.
   one thread to another's window are not converted (a `WM_MOVE` that thread A causes for thread
   B's window is in A's units); a swap chain of an unaware window (a layer, ADR 0224) stays in
   physical pixels; `CW_USEDEFAULT` sizes at 200 % are not the oracle's; several monitors.
+
+## Addendum (2026-11-19): default window size and other processes' classes
+
+The integrator's held-out run of `GetWindowRect` found two gaps.
+
+10. **`CW_USEDEFAULT` in the caller's units, from the work area.** An overlapped window with a
+    default position and size is 3/4 of the screen's width and 3/4 of the work area's height less
+    21, both as the calling thread reads them (`wm::default_height`): 768x555 on the 1024x768
+    session (where the work area is the screen, which is why the old formula used the screen),
+    960x543 for an unaware thread and 1920x1107 for an aware one at 200 %. The cascade step and the
+    size with an explicit position are taken in the caller's units too.
+11. **A search finds another process's window by its class.** `FindWindowW`/`FindWindowExW` looked
+    the class name up only among the caller's own and the system classes, so a process could not
+    find a window whose class only the other process registered (a test that starts a copy of
+    itself waited in vain for the copy's window). A class the caller cannot see is now looked up
+    among every process's classes (Learn, "FindWindowW"); a name that no process registered still
+    finds nothing (`FindWindowExW.yaml` `match_class`).

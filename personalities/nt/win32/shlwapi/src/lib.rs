@@ -20,6 +20,7 @@ use poly_kernelbase::shlwapi as logic;
 
 mod assoc;
 mod path;
+mod regkey;
 
 poly_win32_rt::process_heap_allocator!();
 
@@ -194,5 +195,4 @@ pub extern "system" fn shlwapi_main(_module: *mut u8, _reason: u32, _reserved: *
     1
 }
 
-#[cfg(target_arch = "x86_64")]
 mod apps;

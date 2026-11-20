@@ -22,6 +22,12 @@
 //!    drawn: the four colours of `colours.html` fill its quadrants.
 //! 5. bash's process substitution, which Chrome's launch script uses
 //!    (`exec > >(exec cat)`), works: a pipe's `/dev/fd` link opens the pipe.
+//! 6. Chrome's GPU process finds `libEGL.so.1` and does not end at start-up again and again.
+//! 7. "Make default browser": `xdg-settings set default-web-browser google-chrome.desktop` as
+//!    user `poly` works (no `$BROWSER` in the desktop's environment) and reads back.
+//! 8. The download opened again with Chrome's window up: `xdg-open` starts no X server
+//!    (`XDG_CURRENT_DESKTOP=X-Generic`: xdg-utils asks `xprop` nothing) and hands the file over
+//!    within 30 s, and the installer's window is in front of Chrome's page.
 
 use crate::chromium::{self, PolyFiles};
 use crate::installer::{STEP_WAIT, WINDOW_WAIT, expect, main_button};
@@ -223,13 +229,69 @@ fn scenario(m: &mut Machine) -> Result {
             QUADRANTS.iter().map(|c| find_colour(&img, *c, 3, (px, py, pw, ph)).map_or(0, |f| f.1)).collect();
         if found.iter().all(|&n| n >= need) {
             eprintln!("==> Chrome drew the test page: {found:?} pixels of its four colours");
-            return Ok(());
+            break;
         }
         if std::time::Instant::now() > deadline {
             return Err(format!("the test page was not drawn: {found:?} pixels of its colours, {need} wanted each"));
         }
         std::thread::sleep(Duration::from_secs(3));
     }
+    polish(m, &path, (px, py, pw, ph))
+}
+
+/// The rough edges of the owner's walk (linux-chrome-polish): Chrome's GPU process, its default
+/// browser setting, and a download opened again with Chrome's window up.
+fn polish(m: &mut Machine, path: &str, page: (i32, i32, i32, i32)) -> Result {
+    // 6. The GPU process finds libEGL and does not end at start-up again and again.
+    let text = m.text();
+    let no_egl = text.matches("libEGL.so.1: cannot open shared object file").count();
+    let exits = text.matches("Exiting GPU process due to errors during initialization").count();
+    eprintln!("==> Chrome's GPU process: {exits} exit(s) at start-up, libEGL missing {no_egl} time(s)");
+    expect(&format!("Chrome's GPU process finds libEGL ({no_egl} misses)"), no_egl == 0)?;
+    expect(&format!("Chrome's GPU process does not keep ending ({exits} exits)"), exits <= 1)?;
+
+    // 7. "Make default browser": xdg-settings as user poly (no $BROWSER in the way).
+    let out = m.run(
+        "/usr/local/bin/poly-as-user xdg-settings set default-web-browser google-chrome.desktop; echo set-$?; \
+         echo is-$(/usr/local/bin/poly-as-user xdg-settings get default-web-browser)",
+    )?;
+    expect(
+        &format!("Chrome becomes the default browser ({out:?})"),
+        out.contains("set-0") && out.contains("is-google-chrome.desktop"),
+    )?;
+
+    // 8. A download opened again with Chrome's window up: no X server started for it (xdg-open
+    // asked xprop about the desktop, which started Xwayland: about 110 s), and the installer's
+    // window comes up in front of Chrome's.
+    let from = m.text_len();
+    let started = std::time::Instant::now();
+    m.send_line(&format!("/usr/local/bin/poly-as-user xdg-open {path} > /tmp/xdg-open-2.log 2>&1 &"))?;
+    m.seen(from, &format!("poly-compositor: asked to open the installer for {path}"), WINDOW_WAIT)?;
+    let asked = started.elapsed().as_secs();
+    let rest = m.seen(from, &format!("window \"Install {PACKAGE}\""), WINDOW_WAIT)?;
+    eprintln!("==> the installer was asked for {asked} s after xdg-open");
+    let after = m.text().get(from..).unwrap_or_default().to_string();
+    expect("xdg-open starts no X server", !after.contains("poly-compositor: started Xwayland"))?;
+    expect(&format!("xdg-open hands the download over quickly ({asked} s)"), asked < 30)?;
+    let inst = window_place(&rest).ok_or_else(|| format!("unreadable window line {rest:?}"))?;
+    std::thread::sleep(Duration::from_secs(3));
+    let img = m.shot("installer-over-chrome")?;
+    // Where the installer's window and Chrome's page overlap, the page's colours are hidden.
+    let (x0, y0) = (inst.0.max(page.0), inst.1.max(page.1));
+    let x1 = (inst.0 + inst.2).min(page.0 + page.2);
+    let y1 = (inst.1 + inst.3).min(page.1 + page.3);
+    if x1 > x0 && y1 > y0 {
+        let area = (x0, y0, x1 - x0, y1 - y0);
+        let shown: usize = QUADRANTS.iter().map(|c| find_colour(&img, *c, 3, area).map_or(0, |f| f.1)).sum();
+        let total = (area.2 as usize) * (area.3 as usize);
+        expect(
+            &format!("the installer's window is in front of Chrome's ({shown} of {total} pixels show the page)"),
+            shown * 50 < total,
+        )?;
+    } else {
+        eprintln!("==> the installer's window does not overlap Chrome's page: nothing to compare");
+    }
+    Ok(())
 }
 
 /// The boot test.

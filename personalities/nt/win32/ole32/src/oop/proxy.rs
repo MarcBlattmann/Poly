@@ -4,17 +4,28 @@
 //! `IUnknown` (the identity), `IClassFactory` (when the object has it) and `IMarshal` (answered by
 //! the proxy itself, as Windows' proxy manager does; its methods are not implemented in B2a).
 //! `AddRef` and `Release` count locally; the last `Release` gives the object back. Other
-//! interfaces need marshalling through a type library (B2b) and are `E_NOINTERFACE` today.
+//! interfaces are interface proxies of their proxy/stub classes (B2b).
+//!
+//! Security (B2c): the block also answers `IClientSecurity`; every interface of it has its own
+//! blanket (sheet `CoSetProxyBlanket`, rule `per_interface_scope`), which sets the impersonation
+//! level its calls carry. `CoCopyProxy` makes a copy block: its own interface pointer and blanket,
+//! a reference on the original, and the original's identity for every other interface.
 
 use super::*;
 use crate::{IID_IMARSHAL, IID_IUNKNOWN, add_ref_unknown, release_unknown};
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 use poly_com::git::Owner;
 use poly_com::hresult::{CLASS_E_NOAGGREGATION, E_NOINTERFACE, E_NOTIMPL, E_POINTER, S_OK};
-use poly_com::wire::{ObjRef, Op, Request};
+use poly_com::security::{Blanket, E_ACCESSDENIED};
+use poly_com::wire::{Caller, ObjRef, Op, Request};
+
+/// `IID_IClientSecurity` (`objidl.h`): {0000013D-0000-0000-C000-000000000046}.
+pub(crate) const IID_ICLIENT_SECURITY: Guid =
+    Guid { data1: 0x13D, data2: 0, data3: 0, data4: [0xC0, 0, 0, 0, 0, 0, 0, 0x46] };
 
 /// Where the object is.
 enum Target {
@@ -29,6 +40,7 @@ struct Proxy {
     unk: *const UnkVtbl,
     fac: *const FacVtbl,
     mar: *const MarVtbl,
+    cs: *const CsVtbl,
     refs: AtomicU32,
     /// Whether the object has `IClassFactory`: 0 not asked yet, 1 yes, 2 no.
     factory: AtomicU32,
@@ -36,6 +48,14 @@ struct Proxy {
     /// Interface proxies made by proxy/stub classes (B2b): (interface id, interface pointer,
     /// its `IRpcProxyBuffer`). Their references count on this block.
     ifaces: Locked<Vec<(Guid, usize, usize)>>,
+    /// The blanket of each interface asked about or set (B2c); the others have the default.
+    blankets: Locked<Vec<(Guid, Arc<Locked<Blanket>>)>>,
+    /// The server's account, the default principal of the blankets.
+    principal: Option<String>,
+    /// For a copy (`CoCopyProxy`): the block it was copied from (holding a reference) and its
+    /// interface; 0 for an original.
+    parent: usize,
+    copied: Guid,
 }
 
 const PTR: usize = core::mem::size_of::<usize>();
@@ -81,6 +101,48 @@ unsafe impl Sync for UnkVtbl {}
 unsafe impl Sync for FacVtbl {}
 // SAFETY: as above.
 unsafe impl Sync for MarVtbl {}
+// SAFETY: as above.
+unsafe impl Sync for CsVtbl {}
+
+/// `IClientSecurity` (`objidl.h`).
+#[repr(C)]
+struct CsVtbl {
+    qi: Qi,
+    add_ref: Ref,
+    release: Ref,
+    query_blanket: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        *mut u32,
+        *mut u32,
+        *mut *mut u16,
+        *mut u32,
+        *mut u32,
+        *mut *mut c_void,
+        *mut u32,
+    ) -> Hresult,
+    set_blanket: unsafe extern "system" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        u32,
+        *const u16,
+        u32,
+        u32,
+        *mut c_void,
+        u32,
+    ) -> Hresult,
+    copy_proxy: unsafe extern "system" fn(*mut c_void, *mut c_void, *mut *mut c_void) -> Hresult,
+}
+
+static CS: CsVtbl = CsVtbl {
+    qi: cs_qi,
+    add_ref: cs_add_ref,
+    release: cs_release,
+    query_blanket: cs_query_blanket,
+    set_blanket: cs_set_blanket,
+    copy_proxy: cs_copy_proxy,
+};
 
 static UNK: UnkVtbl = UnkVtbl { qi: unk_qi, add_ref: unk_add_ref, release: unk_release };
 static FAC: FacVtbl =
@@ -102,6 +164,8 @@ static MAR: MarVtbl = MarVtbl {
 enum Key {
     Local(Owner, usize),
     Remote(String, u64),
+    /// A copy: never found by a lookup, listed to find its interfaces.
+    Copy(usize),
 }
 
 static PROXIES: Locked<Vec<(Key, usize)>> = Locked::new(Vec::new());
@@ -135,16 +199,29 @@ fn existing(key: &Key, more_remote: bool) -> Option<*mut c_void> {
     })
 }
 
-fn make(target: Target) -> *mut c_void {
-    let p = Box::into_raw(Box::new(Proxy {
+fn block(target: Target, factory: u32, parent: usize, copied: Guid) -> *mut Proxy {
+    let principal = match &target {
+        Target::Remote { endpoint, .. } => super::security::principal_of(endpoint),
+        Target::Local { .. } => super::security::principal_of(""),
+    };
+    Box::into_raw(Box::new(Proxy {
         unk: &UNK,
         fac: &FAC,
         mar: &MAR,
+        cs: &CS,
         refs: AtomicU32::new(1),
-        factory: AtomicU32::new(0),
+        factory: AtomicU32::new(factory),
         target,
         ifaces: Locked::new(Vec::new()),
-    }));
+        blankets: Locked::new(Vec::new()),
+        principal,
+        parent,
+        copied,
+    }))
+}
+
+fn make(target: Target) -> *mut c_void {
+    let p = block(target, 0, 0, IID_IUNKNOWN);
     // SAFETY: just made.
     let key = key_of(unsafe { &*p });
     PROXIES.with(|t| t.push((key, p as usize)));
@@ -174,7 +251,10 @@ pub(crate) fn remote(r: ObjRef) -> *mut c_void {
 pub(crate) fn is_proxy(p: *mut c_void) -> bool {
     // SAFETY: a COM interface pointer: its first word is its vtable.
     let v = unsafe { *(p as *const usize) };
-    v == (&raw const UNK) as usize || v == (&raw const FAC) as usize || v == (&raw const MAR) as usize
+    v == (&raw const UNK) as usize
+        || v == (&raw const FAC) as usize
+        || v == (&raw const MAR) as usize
+        || v == (&raw const CS) as usize
 }
 
 /// Marshalling target of one of our proxies.
@@ -218,6 +298,8 @@ unsafe fn base_of(p: *mut c_void) -> *mut Proxy {
         PTR
     } else if v == (&raw const MAR) as usize {
         2 * PTR
+    } else if v == (&raw const CS) as usize {
+        3 * PTR
     } else {
         0
     };
@@ -226,12 +308,40 @@ unsafe fn base_of(p: *mut c_void) -> *mut Proxy {
 
 /// Call the remote object; the reply, or the failure as an `HRESULT`.
 fn call(p: &Proxy, op: Op) -> Result<poly_com::wire::Reply, Hresult> {
+    let level = blanket_of(p, &IID_IUNKNOWN).with(|b| b.token_level());
+    call_as(p, op, Caller { level, activation: false })
+}
+
+/// Call the remote object as `caller`.
+fn call_as(p: &Proxy, op: Op, caller: Caller) -> Result<poly_com::wire::Reply, Hresult> {
     match &p.target {
         Target::Remote { endpoint, oid, .. } => {
-            pipe::transact(endpoint, &Request::Call { oid: *oid, op }).map_err(pipe::Failure::hr)
+            pipe::transact(endpoint, &Request::Call { oid: *oid, op, caller }).map_err(pipe::Failure::hr)
         }
         Target::Local { .. } => Err(E_NOTIMPL),
     }
+}
+
+/// The blanket of interface `iid` of the block (the default until one is set).
+fn blanket_of(p: &Proxy, iid: &Guid) -> Arc<Locked<Blanket>> {
+    p.blankets.with(|v| {
+        if let Some(e) = v.iter().find(|e| e.0 == *iid) {
+            return e.1.clone();
+        }
+        let b = Arc::new(Locked::new(Blanket::local_default(p.principal.clone())));
+        v.push((*iid, b.clone()));
+        b
+    })
+}
+
+/// How a call through interface `iid` goes: refused (`E_ACCESSDENIED`, an anonymous blanket), or
+/// as which caller.
+fn caller_for(p: &Proxy, iid: &Guid, activation: bool) -> Result<Caller, Hresult> {
+    let (refuse, level) = blanket_of(p, iid).with(|b| (b.refuse, b.token_level()));
+    if refuse {
+        return Err(E_ACCESSDENIED);
+    }
+    Ok(Caller { level: if activation { 2 } else { level }, activation })
 }
 
 /// Whether the object of the proxy `px` (its `IUnknown`) can still be called: false when its
@@ -241,6 +351,7 @@ pub(crate) fn ping(px: *mut c_void) -> bool {
     let p = unsafe { &*base_of(px) };
     match call(p, Op::QueryInterface(IID_ICLASS_FACTORY)) {
         Ok(r) if r.hr == RPC_E_DISCONNECTED => false,
+        Ok(r) if r.hr == E_ACCESSDENIED => true,
         Ok(r) => {
             p.factory.store(if r.hr == S_OK { 1 } else { 2 }, Ordering::Release);
             true
@@ -269,7 +380,11 @@ fn has_factory(p: &Proxy) -> bool {
                 hr == S_OK
             })
         }
-        Target::Remote { .. } => matches!(call(p, Op::QueryInterface(IID_ICLASS_FACTORY)), Ok(r) if r.hr == S_OK),
+        Target::Remote { .. } => match call(p, Op::QueryInterface(IID_ICLASS_FACTORY)) {
+            // Not learnt: the query that follows reports the refusal.
+            Ok(r) if r.hr == E_ACCESSDENIED => return false,
+            r => matches!(r, Ok(r) if r.hr == S_OK),
+        },
     };
     p.factory.store(if yes { 1 } else { 2 }, Ordering::Release);
     yes
@@ -286,12 +401,18 @@ unsafe fn qi(p: *mut Proxy, iid: *const Guid, out: *mut *mut c_void) -> Hresult 
             return E_POINTER;
         }
         let iid = *iid;
+        // A copy is one interface pointer; everything else is the original's.
+        if (*p).parent != 0 && iid != (*p).copied && iid != IID_ICLIENT_SECURITY {
+            return qi((*p).parent as *mut Proxy, &iid, out);
+        }
         let slot = if iid == IID_IUNKNOWN {
             0
         } else if iid == IID_IMARSHAL {
             2
         } else if iid == IID_ICLASS_FACTORY && has_factory(&*p) {
             1
+        } else if iid == IID_ICLIENT_SECURITY {
+            3
         } else {
             return iface_proxy(p, &iid, out);
         };
@@ -336,7 +457,11 @@ unsafe fn iface_proxy(p: *mut Proxy, iid: &Guid, out: *mut *mut c_void) -> Hresu
         },
     };
     if hr < 0 {
-        return if hr == RPC_E_DISCONNECTED || hr == RPC_S_SERVER_UNAVAILABLE { hr } else { E_NOINTERFACE };
+        return if hr == RPC_E_DISCONNECTED || hr == RPC_S_SERVER_UNAVAILABLE || hr == E_ACCESSDENIED {
+            hr
+        } else {
+            E_NOINTERFACE
+        };
     }
     let Ok(f) = super::channel::ps_factory(iid) else { return E_NOINTERFACE };
     let mut buf: *mut c_void = core::ptr::null_mut();
@@ -372,7 +497,7 @@ unsafe fn iface_proxy(p: *mut Proxy, iid: &Guid, out: *mut *mut c_void) -> Hresu
             super::channel::Target::Remote { endpoint: endpoint.clone(), oid: *oid }
         }
     };
-    let chan = super::channel::new_channel(*iid, target);
+    let chan = super::channel::new_channel(*iid, target, Some(blanket_of(proxy, iid)));
     // SAFETY: IRpcProxyBuffer::Connect (slot 3); the channel keeps its own reference.
     unsafe {
         let v = *(buf as *const *const usize);
@@ -450,14 +575,26 @@ unsafe fn release(p: *mut Proxy) -> u32 {
             }
             Target::Remote { remote_refs, .. } => {
                 let n = remote_refs.load(Ordering::Acquire);
-                let _ = call(&b, Op::Release(n));
+                if n != 0 {
+                    let _ = call_as(&b, Op::Release(n), Caller::DIRECT);
+                }
             }
+        }
+        if b.parent != 0 {
+            // SAFETY: the copy's reference on its original.
+            unsafe { release(b.parent as *mut Proxy) };
         }
     }
     0
 }
 
-unsafe fn create(p: *mut Proxy, outer: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+unsafe fn create(
+    p: *mut Proxy,
+    outer: *mut c_void,
+    iid: *const Guid,
+    out: *mut *mut c_void,
+    activation: bool,
+) -> Hresult {
     if out.is_null() {
         return E_POINTER;
     }
@@ -503,7 +640,9 @@ unsafe fn create(p: *mut Proxy, outer: *mut c_void, iid: *const Guid, out: *mut 
         }
         // The server is asked for IUnknown; the interface comes from a query (recorded runs: the
         // servers log `create IUnknown` whatever the client asked for).
-        Target::Remote { .. } => match call(proxy, Op::CreateInstance(IID_IUNKNOWN)) {
+        Target::Remote { .. } => match caller_for(proxy, &IID_ICLASS_FACTORY, activation)
+            .and_then(|c| call_as(proxy, Op::CreateInstance(IID_IUNKNOWN), c))
+        {
             Ok(r) => match r.obj {
                 Some(o) if r.hr >= 0 => remote(o),
                 _ => return r.hr,
@@ -540,10 +679,14 @@ unsafe fn lock(p: *mut Proxy, l: i32) -> Hresult {
             })
         }
         // The sheet saw S_OK also through the proxy of a factory its server had revoked.
-        Target::Remote { .. } => match call(proxy, Op::LockServer(l != 0)) {
-            Ok(r) if r.hr != RPC_E_DISCONNECTED => r.hr,
-            _ => S_OK,
-        },
+        Target::Remote { .. } => {
+            match caller_for(proxy, &IID_ICLASS_FACTORY, false).and_then(|c| call_as(proxy, Op::LockServer(l != 0), c))
+            {
+                Err(E_ACCESSDENIED) => E_ACCESSDENIED,
+                Ok(r) if r.hr != RPC_E_DISCONNECTED => r.hr,
+                _ => S_OK,
+            }
+        }
     }
 }
 
@@ -578,7 +721,7 @@ unsafe extern "system" fn fac_create(
     out: *mut *mut c_void,
 ) -> Hresult {
     // SAFETY: as above.
-    unsafe { create((this as usize - PTR) as *mut Proxy, outer, iid, out) }
+    unsafe { create((this as usize - PTR) as *mut Proxy, outer, iid, out, false) }
 }
 unsafe extern "system" fn fac_lock(this: *mut c_void, l: i32) -> Hresult {
     // SAFETY: as above.
@@ -595,4 +738,278 @@ unsafe extern "system" fn mar_add_ref(this: *mut c_void) -> u32 {
 unsafe extern "system" fn mar_release(this: *mut c_void) -> u32 {
     // SAFETY: as above.
     unsafe { release((this as usize - 2 * PTR) as *mut Proxy) }
+}
+
+/// `IClassFactory::CreateInstance` on the factory `f` for an activation (`CoCreateInstance`): the
+/// server sees the activation process as the caller (sheet `I_RpcOpenClientProcess`) and may
+/// impersonate (sheet `CoImpersonateClient`). `None` when `f` is not a proxy of another process.
+pub(crate) fn create_for_activation(f: *mut c_void, outer: *mut c_void, iid: &Guid) -> Option<(Hresult, *mut c_void)> {
+    if !is_remote(f) {
+        return None;
+    }
+    let mut out: *mut c_void = core::ptr::null_mut();
+    // SAFETY: one of our proxies' interfaces; the caller's IID.
+    let hr = unsafe { create(base_of(f), outer, iid, &mut out, true) };
+    Some((hr, out))
+}
+
+// ----- security (B2c) -------------------------------------------------------------------------
+
+/// The block and interface of any interface pointer of our proxies (their own interfaces and the
+/// interface proxies made for them).
+fn owner_of(p: *mut c_void) -> Option<(*mut Proxy, Guid)> {
+    if p.is_null() {
+        return None;
+    }
+    if is_proxy(p) {
+        // SAFETY: one of our proxies' interfaces.
+        let base = unsafe { base_of(p) };
+        let iid = match (p as usize - base as usize) / PTR {
+            0 => IID_IUNKNOWN,
+            1 => IID_ICLASS_FACTORY,
+            2 => IID_IMARSHAL,
+            _ => IID_ICLIENT_SECURITY,
+        };
+        return Some((base, iid));
+    }
+    PROXIES.with(|t| {
+        t.iter().find_map(|&(_, b)| {
+            // SAFETY: a live block (the table holds live blocks).
+            let block = unsafe { &*(b as *const Proxy) };
+            block.ifaces.with(|v| v.iter().find(|e| e.1 == p as usize).map(|e| (b as *mut Proxy, e.0)))
+        })
+    })
+}
+
+/// `IClientSecurity::QueryBlanket` / `CoQueryProxyBlanket` for interface `iid` of block `p`.
+unsafe fn query_blanket(
+    p: *mut Proxy,
+    iid: &Guid,
+    authn: *mut u32,
+    authz: *mut u32,
+    princ: *mut *mut u16,
+    level: *mut u32,
+    imp: *mut u32,
+    info: *mut *mut c_void,
+    caps: *mut u32,
+) -> Hresult {
+    // SAFETY: a live block.
+    let b = blanket_of(unsafe { &*p }, iid).with(|b| b.clone());
+    // SAFETY: the caller's optional out parameters.
+    unsafe {
+        for (out, v) in [(authn, b.authn), (authz, b.authz), (level, b.level), (imp, b.imp), (caps, b.caps)] {
+            if !out.is_null() {
+                *out = v;
+            }
+        }
+        if !info.is_null() {
+            *info = core::ptr::null_mut();
+        }
+        if !princ.is_null() {
+            *princ = match &b.principal {
+                Some(name) => {
+                    let w = wide(name);
+                    let m = crate::CoTaskMemAlloc(w.len() * 2).cast::<u16>();
+                    if !m.is_null() {
+                        core::ptr::copy_nonoverlapping(w.as_ptr(), m, w.len());
+                    }
+                    m
+                }
+                None => core::ptr::null_mut(),
+            };
+        }
+    }
+    S_OK
+}
+
+/// `IClientSecurity::SetBlanket` / `CoSetProxyBlanket` for interface `iid` of block `p`; a failure
+/// leaves the blanket as it was.
+#[allow(clippy::too_many_arguments)]
+unsafe fn set_blanket(
+    p: *mut Proxy,
+    iid: &Guid,
+    authn: u32,
+    authz: u32,
+    princ: *const u16,
+    level: u32,
+    imp: u32,
+    caps: u32,
+) -> Hresult {
+    let name = (!princ.is_null()).then(|| {
+        // SAFETY: the caller's NUL-terminated principal name.
+        let n = unsafe { (0..).take_while(|&i| *princ.add(i) != 0).count() };
+        // SAFETY: as above.
+        String::from_utf16_lossy(unsafe { core::slice::from_raw_parts(princ, n) })
+    });
+    let known = name.as_deref().is_some_and(super::security::names_account);
+    // SAFETY: a live block.
+    let cell = blanket_of(unsafe { &*p }, iid);
+    cell.with(|b| match b.set(authn, authz, name.as_deref().map(|n| (n, known)), level, imp, caps) {
+        Ok(new) => {
+            *b = new;
+            S_OK
+        }
+        Err(hr) => hr,
+    })
+}
+
+/// `CoCopyProxy` / `IClientSecurity::CopyProxy`: a new pointer for the interface of `p`, with the
+/// default blanket and a reference of its own on the proxy (sheet `CoCopyProxy`).
+unsafe fn copy(base: *mut Proxy, iid: Guid, out: *mut *mut c_void) -> Hresult {
+    // A copy of a copy copies the original.
+    // SAFETY: a live block.
+    let base = unsafe { if (*base).parent != 0 { (*base).parent as *mut Proxy } else { base } };
+    // SAFETY: as above.
+    let b = unsafe { &*base };
+    let target = match &b.target {
+        Target::Local { owner, object } => {
+            // SAFETY: the original's object; the copy holds its own reference.
+            unsafe { add_ref_unknown(*object as *mut c_void) };
+            Target::Local { owner: *owner, object: *object }
+        }
+        Target::Remote { endpoint, oid, .. } => {
+            Target::Remote { endpoint: endpoint.clone(), oid: *oid, remote_refs: AtomicU32::new(0) }
+        }
+    };
+    // SAFETY: the copy's reference on the original.
+    unsafe { add_ref(base) };
+    let c = block(target, b.factory.load(Ordering::Acquire), base as usize, iid);
+    PROXIES.with(|t| t.push((Key::Copy(c as usize), c as usize)));
+    // SAFETY: the new copy; its first reference is given back once the interface is out.
+    unsafe {
+        let hr = qi(c, &iid, out);
+        release(c);
+        hr
+    }
+}
+
+unsafe extern "system" fn cs_qi(this: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    // SAFETY: our IClientSecurity three pointers into the block.
+    unsafe { qi((this as usize - 3 * PTR) as *mut Proxy, iid, out) }
+}
+unsafe extern "system" fn cs_add_ref(this: *mut c_void) -> u32 {
+    // SAFETY: as above.
+    unsafe { add_ref((this as usize - 3 * PTR) as *mut Proxy) }
+}
+unsafe extern "system" fn cs_release(this: *mut c_void) -> u32 {
+    // SAFETY: as above.
+    unsafe { release((this as usize - 3 * PTR) as *mut Proxy) }
+}
+
+/// The interface of `proxy` if it belongs to the block of `this` (an `IClientSecurity`), else
+/// `E_NOINTERFACE` (sheet `IClientSecurity`, rule `foreign_proxy_rejected`).
+fn own_interface(this: *mut c_void, proxy: *mut c_void) -> Result<(*mut Proxy, Guid), Hresult> {
+    let me = (this as usize - 3 * PTR) as *mut Proxy;
+    match owner_of(proxy) {
+        Some((b, iid)) if b == me => Ok((b, iid)),
+        _ => Err(E_NOINTERFACE),
+    }
+}
+
+unsafe extern "system" fn cs_query_blanket(
+    this: *mut c_void,
+    proxy: *mut c_void,
+    authn: *mut u32,
+    authz: *mut u32,
+    princ: *mut *mut u16,
+    level: *mut u32,
+    imp: *mut u32,
+    info: *mut *mut c_void,
+    caps: *mut u32,
+) -> Hresult {
+    match own_interface(this, proxy) {
+        // SAFETY: a live block; the caller's out parameters.
+        Ok((b, iid)) => unsafe { query_blanket(b, &iid, authn, authz, princ, level, imp, info, caps) },
+        Err(hr) => hr,
+    }
+}
+
+unsafe extern "system" fn cs_set_blanket(
+    this: *mut c_void,
+    proxy: *mut c_void,
+    authn: u32,
+    authz: u32,
+    princ: *const u16,
+    level: u32,
+    imp: u32,
+    _info: *mut c_void,
+    caps: u32,
+) -> Hresult {
+    match own_interface(this, proxy) {
+        // SAFETY: a live block; the caller's principal name.
+        Ok((b, iid)) => unsafe { set_blanket(b, &iid, authn, authz, princ, level, imp, caps) },
+        Err(hr) => hr,
+    }
+}
+
+unsafe extern "system" fn cs_copy_proxy(this: *mut c_void, proxy: *mut c_void, out: *mut *mut c_void) -> Hresult {
+    if out.is_null() {
+        return E_POINTER;
+    }
+    match own_interface(this, proxy) {
+        // SAFETY: a live block; the caller's out parameter.
+        Ok((b, iid)) => unsafe { copy(b, iid, out) },
+        Err(hr) => hr,
+    }
+}
+
+/// `CoQueryProxyBlanket` (sheet `CoQueryProxyBlanket`): every output optional; `E_INVALIDARG` for
+/// NULL, `E_NOINTERFACE` for an object that is not a proxy.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoQueryProxyBlanket(
+    proxy: *mut c_void,
+    authn: *mut u32,
+    authz: *mut u32,
+    princ: *mut *mut u16,
+    level: *mut u32,
+    imp: *mut u32,
+    info: *mut *mut c_void,
+    caps: *mut u32,
+) -> Hresult {
+    if proxy.is_null() {
+        return poly_com::hresult::E_INVALIDARG;
+    }
+    match owner_of(proxy) {
+        // SAFETY: a live block; the caller's out parameters.
+        Some((b, iid)) => unsafe { query_blanket(b, &iid, authn, authz, princ, level, imp, info, caps) },
+        None => E_NOINTERFACE,
+    }
+}
+
+/// `CoSetProxyBlanket` (sheet `CoSetProxyBlanket`): the blanket of that interface proxy.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoSetProxyBlanket(
+    proxy: *mut c_void,
+    authn: u32,
+    authz: u32,
+    princ: *const u16,
+    level: u32,
+    imp: u32,
+    _info: *mut c_void,
+    caps: u32,
+) -> Hresult {
+    if proxy.is_null() {
+        return poly_com::hresult::E_INVALIDARG;
+    }
+    match owner_of(proxy) {
+        // SAFETY: a live block; the caller's principal name.
+        Some((b, iid)) => unsafe { set_blanket(b, &iid, authn, authz, princ, level, imp, caps) },
+        None => E_NOINTERFACE,
+    }
+}
+
+/// `CoCopyProxy` (sheet `CoCopyProxy`).
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn CoCopyProxy(proxy: *mut c_void, out: *mut *mut c_void) -> Hresult {
+    if proxy.is_null() {
+        return poly_com::hresult::E_INVALIDARG;
+    }
+    if out.is_null() {
+        return E_POINTER;
+    }
+    match owner_of(proxy) {
+        // SAFETY: a live block; the caller's out parameter.
+        Some((b, iid)) => unsafe { copy(b, iid, out) },
+        None => E_NOINTERFACE,
+    }
 }

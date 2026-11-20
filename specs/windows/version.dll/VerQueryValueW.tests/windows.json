@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "ver_q_sys",
-      "exe_sha256": "f72ef8ea7565b805e41bf6ec2154869d4c23ffc6329355d80166adb00350a9fe",
+      "exe_sha256": "1a390145c6a353d7d55d4296d523ce5a4b1816021375e0ea6cdeff57c08580be",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

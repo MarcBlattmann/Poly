@@ -21,7 +21,12 @@
 //!   the wait goes on for [`EXIT_GRACE_MS`], which a program with no window
 //!   to show, like a notification sender, would otherwise spin through
 //!   [`TIMEOUT_MS`] for); the app being cancelled; or [`TIMEOUT_MS`] passing
-//!   ([`Launches::expire`]).
+//!   ([`Launches::expire`]). A process the desktop did not start itself
+//!   (Files starts the apps it opens files with) has no exit status for it:
+//!   once none of a launch's processes is alive any more
+//!   ([`Launches::set_alive_lookup`]) it counts as one that ended well
+//!   (ADR 0234: a second `chrome.exe` that handed a file to the running
+//!   Chrome kept the busy pointer for the whole timeout).
 //!
 //! The pointer is busy while any launch is [`pending`](Launches::busy), so
 //! several launches at once keep it busy until the last is done.
@@ -113,6 +118,7 @@ pub struct Launches {
     list: Vec<Launch>,
     next: LaunchId,
     parent_of: fn(u32) -> Option<u32>,
+    alive: fn(u32) -> bool,
     events: Vec<Event>,
     timeout_ms: u64,
 }
@@ -125,13 +131,26 @@ impl Default for Launches {
 
 impl Launches {
     pub fn new() -> Launches {
-        Launches { list: Vec::new(), next: 1, parent_of: |_| None, events: Vec::new(), timeout_ms: TIMEOUT_MS }
+        Launches {
+            list: Vec::new(),
+            next: 1,
+            parent_of: |_| None,
+            alive: |_| true,
+            events: Vec::new(),
+            timeout_ms: TIMEOUT_MS,
+        }
     }
 
     /// How to find a process's parent (without it only the launched
     /// process itself is recognised).
     pub fn set_parent_lookup(&mut self, f: fn(u32) -> Option<u32>) {
         self.parent_of = f;
+    }
+
+    /// How to tell whether a process still exists (without it every process is taken to live
+    /// until its exit is reported).
+    pub fn set_alive_lookup(&mut self, f: fn(u32) -> bool) {
+        self.alive = f;
     }
 
     /// A shorter or longer wait than [`TIMEOUT_MS`].
@@ -225,6 +244,13 @@ impl Launches {
     /// End the launches that waited [`TIMEOUT_MS`] (or the timeout set), or
     /// [`EXIT_GRACE_MS`] after their process ended well.
     pub fn expire(&mut self, now: u64) {
+        // Launches whose processes are all gone, unreported: as if they ended well.
+        let alive = self.alive;
+        for l in self.list.iter_mut().filter(|l| l.quiet_since.is_none() && !l.pids.is_empty()) {
+            if !l.pids.iter().any(|&p| alive(p)) {
+                l.quiet_since = Some(now);
+            }
+        }
         let timeout = self.timeout_ms;
         let late: Vec<(LaunchId, Ended)> = self
             .list
@@ -527,6 +553,26 @@ mod tests {
         assert!(l.busy());
         l.expire(2_000);
         assert!(!l.busy());
+    }
+
+    /// A process another program started (Files) and that is gone, unreported: it ended well, and
+    /// the grace period runs from when that was seen (ADR 0234).
+    #[test]
+    fn a_launch_whose_processes_are_gone_ends_after_the_grace_period() {
+        let mut l = launches();
+        l.set_alive_lookup(|pid| pid != 300);
+        let a = l.begin("chrome.exe", "ta", 0);
+        let b = l.begin("Still running", "tb", 0);
+        let c = l.begin("No process told yet", "tc", 0);
+        l.add_pid(a, 300);
+        l.add_pid(b, 400);
+        l.expire(100);
+        assert_eq!(l.pending(), 3);
+        l.expire(100 + EXIT_GRACE_MS);
+        assert_eq!(l.pending(), 2, "the gone one ended");
+        let Some(Event::Finished { how, name, .. }) = l.take_events().pop() else { panic!("finished") };
+        assert_eq!((name.as_str(), how), ("chrome.exe", Ended::Exited { status: 0 }));
+        let _ = c;
     }
 
     #[test]

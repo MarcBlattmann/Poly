@@ -37,6 +37,7 @@ pub mod hstring;
 pub mod inproc;
 pub mod marshal;
 pub mod propvariant;
+pub mod security;
 pub mod spy;
 pub mod typelib;
 pub mod wire;

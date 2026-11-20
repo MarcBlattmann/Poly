@@ -641,8 +641,15 @@ impl FilesApp {
                 !self.status.starts_with("Opened ")
             }
             _ => {
-                shown(self);
+                // Text no app claims opens in the terminal's editor: that window is the one
+                // wanted, in front, not Files' over it (ADR 0234).
                 self.open_path(path);
+                if self.status.starts_with("Opened ") {
+                    return false;
+                }
+                let status = core::mem::take(&mut self.status);
+                shown(self);
+                self.status = status;
                 true
             }
         }
@@ -656,7 +663,13 @@ impl FilesApp {
             Ok(Open::Folder(p)) => {
                 self.go(&p);
             }
-            Ok(Open::Launch(argv)) | Ok(Open::With(argv)) => self.run(&argv),
+            Ok(Open::Launch(argv)) => self.run(&argv),
+            // An app of the system opens the file as the desktop's user, as the launcher starts
+            // it (ADR 0218).
+            Ok(Open::With(argv)) => {
+                let wrapper = poly_rt::env::var(poly_shell::apps::APP_USER_VAR);
+                self.run(&poly_shell::apps::opener_argv(wrapper, &argv))
+            }
             Ok(Open::NoApp { mime }) if mime.starts_with("text/") || mime == "application/x-shellscript" => {
                 // Text without an app for it: the terminal's editor.
                 let argv: Vec<String> =

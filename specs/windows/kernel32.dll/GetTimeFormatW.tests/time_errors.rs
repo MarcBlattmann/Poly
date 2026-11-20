@@ -315,6 +315,7 @@ fn test(t: &mut Test) {
         let n = unsafe { GetTimeFormatW(0x409, 0, core::ptr::null(), core::ptr::null(), out.as_mut_ptr(), 64) };
         let w = ulen(&out);
         let tail = w >= 2 && (out[w - 2] == b'A' as u16 || out[w - 2] == b'P' as u16) && out[w - 1] == b'M' as u16;
-        say!(t, "NULL time en-US: n={n} len_matches={} ends_AM_or_PM={tail}", n as usize == w + 1);
+        // "h:mm:ss tt" is 10 or 11 units long depending on the hour of the day, so the length itself is never printed
+        say!(t, "NULL time en-US: len_matches={} len_10_or_11={} ends_AM_or_PM={tail}", n as usize == w + 1, w == 10 || w == 11);
     }
 }

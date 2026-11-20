@@ -67,6 +67,8 @@ pub const SYSTEM_MODULES: &[&str] = &[
     "wintrust.dll",
     "cfgmgr32.dll",
     "dbghelp.dll",
+    // Google's 32-bit updater imports AlphaBlend.
+    "msimg32.dll",
 ];
 
 /// Every module of the set, in the cache under these names.
@@ -74,7 +76,7 @@ pub fn modules() -> impl Iterator<Item = &'static str> {
     CORE_MODULES.iter().chain(SYSTEM_MODULES).copied()
 }
 /// The test programs (`tests/windows/wow64/<name>.rs`).
-pub const PROGRAMS: &[&str] = &["hello32", "gui32", "sys32", "safeseh32", "ansi32"];
+pub const PROGRAMS: &[&str] = &["hello32", "gui32", "sys32", "safeseh32", "ansi32", "msgloop32"];
 /// Cached versions kept.
 const CACHE_KEEP: usize = 6;
 /// Exports the kernel and every 32-bit program need from the i686 `ntdll`.
@@ -235,6 +237,7 @@ fn cache_key(root: &Path) -> Result<u64> {
             "tests/windows/wow64/sys32.rs",
             "tests/windows/wow64/safeseh32.rs",
             "tests/windows/wow64/ansi32.rs",
+            "tests/windows/wow64/msgloop32.rs",
             "personalities/nt/win32/Cargo.toml",
             "personalities/nt/win32/Cargo.lock",
             "personalities/nt/src/services.rs",
@@ -379,10 +382,14 @@ fn parse<'a>(name: &str, bytes: &'a [u8]) -> Result<poly_pe::Pe<'a>> {
     Ok(pe)
 }
 
-/// The names `pe` exports.
+/// The names `pe` exports, and its ordinals as `#<ordinal>`.
 fn export_names(name: &str, pe: &poly_pe::Pe<'_>) -> Result<std::collections::BTreeSet<String>> {
     let exports = pe.exports().map_err(|e| format!("{name} exports: {e:?}"))?.ok_or(format!("{name}: no exports"))?;
-    Ok(exports.names().filter_map(|r| r.ok()).map(|(n, _)| String::from_utf8_lossy(n).into_owned()).collect())
+    let mut out: std::collections::BTreeSet<String> =
+        exports.names().filter_map(|r| r.ok()).map(|(n, _)| String::from_utf8_lossy(n).into_owned()).collect();
+    // Imports by ordinal read `#<ordinal>` ([`imports`]).
+    out.extend(exports.functions().filter_map(|r| r.ok()).map(|e| format!("#{}", e.ordinal)));
+    Ok(out)
 }
 
 /// What `pe` imports, by DLL (lower case).

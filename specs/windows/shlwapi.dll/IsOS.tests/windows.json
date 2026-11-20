@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "isos_other",
-      "exe_sha256": "3a98ef8750a4a30593e16701cdc338c3358a2e3db26975b5e94a68c3855dc2d9",
+      "exe_sha256": "873b8ba5cd0100913ccaa4d21b8f99ac06710068d1eb402958c2614049d0c547",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

@@ -2,13 +2,13 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "3146d79e98a5",
+  "bundle": "64fb6abf4cbc",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-17T10:36:20Z",
+  "started": "2026-11-19T22:41:23Z",
   "tests": [
     {
       "name": "createex_context",
@@ -22,7 +22,7 @@
       "output": "registered a factory in this process: 0x00000000\n  CoCreateInstance(LOCAL) = 0x00000000, our factory made it 1, a server was started 0, proxy 0\n  CoCreateInstance(ALL) = 0x00000000, our factory made it 1, a server was started 0, proxy 0\n  CoCreateInstance(INPROC) = 0x00000000, our factory made it 1, a server was started 0, proxy 0\nrevoke = 0x00000000\nafter the revoke: CoCreateInstance(LOCAL) = 0x00000000, our factory made it 0, servers started 1, proxy 1\nInprocServer32 (missing DLL) + LocalServer32: CoCreateInstance(INPROC) = 0x8007007e, servers started so far 0\nInprocServer32 (missing DLL) + LocalServer32: CoCreateInstance(LOCAL) = 0x00000000, servers started so far 1\nInprocServer32 (missing DLL) + LocalServer32: CoCreateInstance(INPROC|LOCAL) = 0x8007007e, servers started so far 1\nInprocServer32 (missing DLL) + LocalServer32: CoCreateInstance(ALL) = 0x80040154, servers started so far 1\nan AppID value with no AppID key: CoCreateInstance(LOCAL) = 0x00000000, servers started 1\nan AppID key without values: CoCreateInstance(LOCAL) = 0x00000000, servers started 1\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 434
+      "ms": 419
     },
     {
       "name": "createex_hives",
@@ -36,11 +36,11 @@
       "output": "HKCU\\Software\\Classes registration written: 0\n  the elevated administrator asks for the HKCU class: CoCreateInstance(LOCAL) = 0x00000000, servers started 1\nthe same class in HKLM (server m) and HKCU (server u): CoCreateInstance(LOCAL) = 0x00000000, m started 0, u started 1\na class in the 32-bit view only: CoCreateInstance(LOCAL) from a 64-bit process = 0x00000000, servers started 1\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 5186
+      "ms": 5183
     },
     {
       "name": "createex_localservice",
-      "exe_sha256": "80e0ff514cffbf1ba9a46b12e9fd32695fb07874bf37efd32c8c229738c8f05f",
+      "exe_sha256": "429b68a7179fa11428cf46d81d90e8cd00d85fac74ee70ba5a00c2589ee4121f",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -50,7 +50,7 @@
       "output": "CreateService: handle 1 (error 0)\n  the service starts out stopped: 1\nCoCreateInstance(LOCAL) of a LocalService class = 0x00000000, proxy 1\n  the service is running 1\n  log: service main argc=2\n  log: service arg0=PolyWsComSvc1\n  log: service arg1=--com-service\na second creation = 0x00000000, service processes started 1\nSTOP control: the service stopped 1, its log shows the end 1\na creation after the stop = 0x00000000, service processes started 2, running 1\nservice removed: stopped 1, deleted 1\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 203
+      "ms": 198
     },
     {
       "name": "createex_localservice_args",
@@ -64,7 +64,7 @@
       "output": "no ServiceParameters: CoCreateInstance(LOCAL) = 0x00000000, the service is running 1, a plain server was started 0\n  log: service main argc=1\n  log: service arg0=PolyWsComSvc2\n  service removed: stopped 1, deleted 1\nServiceParameters with three words: CoCreateInstance(LOCAL) = 0x00000000, the service is running 1, a plain server was started 0\n  log: service main argc=4\n  log: service arg0=PolyWsComSvc3\n  log: service arg1=--one\n  log: service arg2=--two=2\n  log: service arg3=three\n  service removed: stopped 1, deleted 1\na LocalService and a LocalServer32 for the same class: CoCreateInstance(LOCAL) = 0x00000000, the service is running 1, a plain server was started 0\n  log: service main argc=2\n  log: service arg0=PolyWsComSvc4\n  log: service arg1=--com-service\n  service removed: stopped 1, deleted 1\na LocalService that names no service: CoCreateInstance(LOCAL) = 0x80070424, the service is running 0, a plain server was started 0\n  service removed: stopped 1, deleted 1\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 8429
+      "ms": 8268
     }
   ]
 }

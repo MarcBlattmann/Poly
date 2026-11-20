@@ -340,6 +340,70 @@ fn viewports_crop_and_scale() {
     assert_eq!(picture(&fb, &key), ["gw......", "........", "........", "........"]);
 }
 
+/// Buffer rectangles lead back to the surface rectangles that show them (the
+/// damage of a client behind a viewport redrawn where it shows).
+#[test]
+fn buffer_rectangles_map_back_to_where_they_show() {
+    // A 2x output the fractional-scale way: a 2000x1200 buffer of scale 1 shown 1000x600.
+    let hidpi = View { destination: Some((1000, 600)), ..View::default() };
+    assert_eq!(hidpi.logical_rect(Rect::new(20, 40, 60, 80), 2000, 1200, 1), Rect::new(10, 20, 30, 40));
+    // Odd edges round outwards.
+    assert_eq!(hidpi.logical_rect(Rect::new(21, 41, 1, 1), 2000, 1200, 1), Rect::new(10, 20, 1, 1));
+    // Everything, and more than everything: the whole surface.
+    assert_eq!(hidpi.logical_rect(Rect::new(0, 0, 2000, 1200), 2000, 1200, 1), Rect::new(0, 0, 1000, 600));
+    assert_eq!(hidpi.logical_rect(Rect::new(-9, -9, 9999, 9999), 2000, 1200, 1), Rect::new(0, 0, 1000, 600));
+    assert!(hidpi.logical_rect(Rect::new(5, 5, 0, 3), 2000, 1200, 1).is_empty());
+    // Scaled by 1.5 (not whole pixels): a pixel more on every side, clipped.
+    let frac = View { destination: Some((4, 2)), ..View::default() };
+    assert_eq!(frac.logical_rect(Rect::new(2, 0, 1, 1), 6, 3, 1), Rect::new(0, 0, 3, 2));
+    // A source crop: the buffer's middle shown over the whole destination.
+    let crop = View { source: Some((256, 0, 512, 256)), destination: Some((4, 2)), ..View::default() };
+    assert_eq!(crop.logical_rect(Rect::new(1, 0, 1, 1), 4, 2, 1), Rect::new(0, 0, 2, 2));
+    // Outside the source: nothing shows it.
+    assert!(crop.logical_rect(Rect::new(3, 0, 1, 1), 4, 2, 1).is_empty());
+    // Buffer scale 2 with a transform, no viewport: the inverse of buffer_rect, pixel by pixel.
+    for transform in 0..8 {
+        let view = View { transform, ..View::default() };
+        let (tw, th) = if transform & 1 != 0 { (4, 6) } else { (6, 4) };
+        for v in 0..th / 2 {
+            for u in 0..tw / 2 {
+                let b = view.buffer_rect(Rect::new(u, v, 1, 1), 6, 4, 2);
+                assert_eq!(view.logical_rect(b, 6, 4, 2), Rect::new(u, v, 1, 1), "{transform}");
+                for (x, y) in [(b.x, b.y), (b.x + b.width - 1, b.y + b.height - 1)] {
+                    let (su, sv) = surface_point(transform, x, y, tw, th);
+                    assert_eq!(buffer_point(transform, su, sv, tw, th), (x, y), "{transform}");
+                }
+            }
+        }
+    }
+}
+
+/// A client behind a viewport that damages a few buffer pixels damages the
+/// screen there, not its whole window.
+#[test]
+fn damage_behind_a_viewport_stays_small() {
+    let mut scene = Scene::new(1000, 700, 1);
+    let w = scene.add_window(1, false);
+    scene.set_content(
+        w,
+        Content {
+            width: 400,
+            height: 300,
+            scale: 1,
+            pixels: alloc::vec![0xff00_0000; 400 * 300],
+            view: View { destination: Some((200, 150)), ..View::default() },
+            smooth: false,
+            opaque: true,
+        },
+    );
+    scene.set_position(w, 100, 50);
+    let mut fb = MemoryFramebuffer::new(1000, 700);
+    scene.render(&mut fb);
+    assert!(!scene.has_damage());
+    scene.damage_content(w, Rect::new(40, 20, 8, 6));
+    assert_eq!(scene.damage(), [Rect::new(120, 60, 4, 3)]);
+}
+
 /// Surface rectangles (`wl_surface.damage`) lead to the buffer pixels
 /// behind them through the viewport, the buffer scale and the transform.
 #[test]
@@ -431,6 +495,26 @@ fn cursor_images_and_hidden_cursors() {
     scene.render(&mut fb);
     assert_eq!(fb.pixel(4, 4), Some(BG));
     assert_eq!(scene.cursor_rect(5, 5), Rect::default());
+}
+
+/// A named look is drawn at the scale with its hot spot at the pointer, and leaves nothing
+/// behind when the pointer moves on (ADR 0234).
+#[test]
+fn named_cursors_are_drawn_scaled_around_their_hot_spot() {
+    let mut scene = Scene::new(40, 40, 2);
+    scene.set_cursor(Some((10, 10)));
+    scene.set_cursor_look(CursorLook::Named(NamedCursor::ResizeEW));
+    // Hot spot (9, 4): the picture's top left is at logical (1, 6), physical (2, 12).
+    assert_eq!(scene.cursor_rect(10, 10), Rect::new(1, 6, 19, 9));
+    let mut fb = MemoryFramebuffer::new(40, 40);
+    scene.render(&mut fb);
+    // The left tip (cell 0,4) is black, two physical pixels wide; the cell after it white.
+    assert_eq!((fb.pixel(2, 20), fb.pixel(3, 21)), (Some(0x000000), Some(0x000000)));
+    assert_eq!(fb.pixel(4, 20), Some(0xffffff));
+    assert_eq!(fb.pixel(2, 12), Some(BG), "clear cells show what is below");
+    scene.set_cursor(Some((15, 15)));
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(2, 20), Some(BG));
 }
 
 /// The picture behind a window: what is under it, without it, kept up to
@@ -758,4 +842,62 @@ fn a_smooth_buffer_at_two_hundred_percent_is_bilinear() {
     }
     // Not blocks: two output pixels of one buffer pixel differ where the picture changes.
     assert_ne!(fb.pixel(6 + 4, 4 + 4), fb.pixel(6 + 5, 4 + 4));
+}
+
+/// ADR 0232: where a window whose content is known to be opaque covers the damage, nothing below
+/// it is drawn. Shown here with a content that claims to be opaque but is not: its transparent
+/// pixels then show what the framebuffer held, not the background or the window below.
+#[test]
+fn an_opaque_window_hides_what_is_below_it() {
+    let mut scene = Scene::new(20, 10, 1);
+    window(&mut scene, 0, 0, 20, 10, 1, 0xffff_0000, false);
+    let top = window(&mut scene, 2, 2, 6, 6, 1, 0x0000_0000, false);
+    let mut fb = MemoryFramebuffer::new(20, 10);
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(4, 4), Some(0xff0000), "not opaque: the window below shows through");
+    // Paint a mark under the top window, then damage only inside it.
+    for y in 2..8 {
+        fb.row_mut(y)[2..8].fill(0x00_1234);
+    }
+    scene.set_opaque(top, true);
+    scene.damage_physical(Rect::new(3, 3, 2, 2));
+    scene.render(&mut fb);
+    let p = fb.pixel(3, 3).unwrap() & 0xff_ffff;
+    assert_eq!(p, 0x00_1234, "below was not drawn");
+    // Damage reaching past it draws below as usual.
+    scene.damage_physical(Rect::new(0, 0, 20, 10));
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(3, 3).unwrap() & 0xff_ffff, 0xff0000);
+}
+
+/// A client drawing for a 2x output through a viewport (a buffer of scale 1 twice its
+/// destination, Chromium on Wayland) is drawn pixel for pixel, and, opaque, hides what is below.
+#[test]
+fn a_viewport_at_the_outputs_scale_is_drawn_pixel_for_pixel() {
+    let s = Scale::from_int(2);
+    let hidpi = View { destination: Some((3, 2)), ..View::default() };
+    let mut c =
+        Content { width: 6, height: 4, scale: 1, pixels: alloc::vec![0; 24], view: hidpi, smooth: false, opaque: true };
+    assert!(super::render::pixel_for_pixel(&c, Rect::new(0, 0, 6, 4), s));
+    // Not when the destination is not the buffer in output pixels, a source crops, or it turns.
+    assert!(!super::render::pixel_for_pixel(&c, Rect::new(0, 0, 4, 2), s));
+    c.view.transform = 1;
+    assert!(!super::render::pixel_for_pixel(&c, Rect::new(0, 0, 6, 4), s));
+    c.view = View { source: Some((0, 0, 256 * 3, 256 * 2)), destination: Some((3, 2)), ..View::default() };
+    assert!(!super::render::pixel_for_pixel(&c, Rect::new(0, 0, 6, 4), s));
+
+    // Drawn: every buffer pixel at its own output pixel; the red window below is not drawn under it.
+    let mut scene = Scene::new(8, 6, 2);
+    window(&mut scene, 0, 0, 4, 3, 1, 0xffff_0000, false);
+    let top = scene.add_window(2, false);
+    let mut pixels = alloc::vec![0xff00_ff00; 24];
+    pixels[0] = 0xff00_00ff;
+    pixels[23] = 0xffff_ffff;
+    scene.set_content(top, Content { width: 6, height: 4, scale: 1, pixels, view: hidpi, smooth: false, opaque: true });
+    let mut fb = MemoryFramebuffer::new(8, 6);
+    scene.render(&mut fb);
+    assert_eq!(fb.pixel(0, 0).map(|p| p & 0xff_ffff), Some(0x00_00ff));
+    assert_eq!(fb.pixel(1, 0).map(|p| p & 0xff_ffff), Some(0x00_ff00));
+    assert_eq!(fb.pixel(5, 3).map(|p| p & 0xff_ffff), Some(0xff_ffff));
+    assert_eq!(fb.pixel(6, 0).map(|p| p & 0xff_ffff), Some(0xff_0000), "the window below shows beside it");
 }

@@ -11,6 +11,7 @@ use crate::fonttab::{self, FontTable};
 use crate::outline::{FaceStyle, FontFiles, Outline, Src as FontSrc, Typeface};
 pub use crate::region::Rect;
 use crate::region::{COMPLEXREGION, NULLREGION, RGN_AND, RGN_COPY, Region, SIMPLEREGION};
+use crate::shapes::{self, MM_ANISOTROPIC, MM_ISOTROPIC, MM_TEXT};
 use crate::xform::{GM_ADVANCED, GM_COMPATIBLE, Xform};
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
@@ -311,6 +312,14 @@ struct DcState {
     xform: Xform,
     /// `SetStretchBltMode` (`BLACKONWHITE` at first).
     stretch_mode: i32,
+    /// `SetMapMode` (`MM_TEXT` at first) and the extents it or `SetWindowExtEx` /
+    /// `SetViewportExtEx` set: page to device is `(p - window_org) * viewport_ext / window_ext +
+    /// viewport_org` (Learn, "Window and Viewport Extents").
+    map_mode: i32,
+    window_ext: (i32, i32),
+    viewport_ext: (i32, i32),
+    /// `SetBrushOrgEx`: where hatch patterns start, in device coordinates.
+    brush_org: (i32, i32),
 }
 
 impl DcState {
@@ -322,9 +331,78 @@ impl DcState {
         )
     }
 
+    /// Whether the extents scale (a mapping mode other than `MM_TEXT` with unequal extents).
+    fn scaled(&self) -> bool {
+        self.window_ext != self.viewport_ext
+    }
+
+    /// A page point in device coordinates, without the base origin (what `LPtoDP` reports).
+    fn page_to_device(&self, px: f32, py: f32) -> (i32, i32) {
+        let axis = |p: f32, wo: i32, we: i32, ve: i32, vo: i32| -> i32 {
+            let v = (f64::from(p) - f64::from(wo)) * f64::from(ve) / f64::from(we);
+            let r = if v >= 0.0 { (v + 0.5) as i64 } else { -((-v + 0.5) as i64) };
+            (r + i64::from(vo)) as i32
+        };
+        (
+            axis(px, self.window_org.0, self.window_ext.0, self.viewport_ext.0, self.viewport_org.0),
+            axis(py, self.window_org.1, self.window_ext.1, self.viewport_ext.1, self.viewport_org.1),
+        )
+    }
+
+    /// A logical point as `LPtoDP` gives it: the world transformation, the window origin, the
+    /// extents' scale and the viewport origin.
+    fn lp_to_dp(&self, x: i32, y: i32) -> (i32, i32) {
+        if !self.scaled() {
+            let (x, y) = if self.xform.is_identity() { (x, y) } else { self.xform.apply(x, y) };
+            return (
+                x.wrapping_sub(self.window_org.0).wrapping_add(self.viewport_org.0),
+                y.wrapping_sub(self.window_org.1).wrapping_add(self.viewport_org.1),
+            );
+        }
+        let (px, py) =
+            if self.xform.is_identity() { (x as f32, y as f32) } else { self.xform.apply_f(x as f32, y as f32) };
+        self.page_to_device(px, py)
+    }
+
+    /// `DPtoLP`: the inverse of [`DcState::lp_to_dp`].
+    fn dp_to_lp(&self, x: i32, y: i32) -> (i32, i32) {
+        let axis = |d: i32, vo: i32, ve: i32, we: i32, wo: i32| -> f64 {
+            (f64::from(d) - f64::from(vo)) * f64::from(we) / f64::from(ve) + f64::from(wo)
+        };
+        let px = axis(x, self.viewport_org.0, self.viewport_ext.0, self.window_ext.0, self.window_org.0);
+        let py = axis(y, self.viewport_org.1, self.viewport_ext.1, self.window_ext.1, self.window_org.1);
+        let (px, py) = match self.xform.inverse() {
+            Some(inv) if !self.xform.is_identity() => {
+                let (a, b) = inv.apply_f(px as f32, py as f32);
+                (f64::from(a), f64::from(b))
+            }
+            _ => (px, py),
+        };
+        let round = |v: f64| if v >= 0.0 { (v + 0.5) as i64 as i32 } else { -((-v + 0.5) as i64) as i32 };
+        (round(px), round(py))
+    }
+
+    /// The device size of a logical length along x and y (absolute values; the extents' scale and
+    /// the world transformation's, rotation and shear left out).
+    fn device_lengths(&self, w: i64, h: i64) -> (i64, i64) {
+        let sx =
+            (f64::from(self.viewport_ext.0) / f64::from(self.window_ext.0)).abs() * f64::from(self.xform.m11).abs();
+        let sy =
+            (f64::from(self.viewport_ext.1) / f64::from(self.window_ext.1)).abs() * f64::from(self.xform.m22).abs();
+        let scale = |v: i64, s: f64| {
+            let r = v as f64 * s;
+            if r >= 9.0e18 { i64::MAX / 4 } else { (r + 0.5) as i64 }
+        };
+        (scale(w, sx), scale(h, sy))
+    }
+
     /// A logical (world) point in device coordinates: the world
     /// transformation, then the window and viewport origins.
     fn map(&self, x: i32, y: i32) -> (i32, i32) {
+        if self.scaled() {
+            let (x, y) = self.lp_to_dp(x, y);
+            return (x.wrapping_add(self.base_org.0), y.wrapping_add(self.base_org.1));
+        }
         let (dx, dy) = self.to_device();
         let (x, y) = if self.xform.is_identity() { (x, y) } else { self.xform.apply(x, y) };
         (x.wrapping_add(dx), y.wrapping_add(dy))
@@ -333,6 +411,16 @@ impl DcState {
     /// A logical rectangle in device coordinates (the box around its
     /// corners when the world transformation turns it).
     fn map_rect(&self, r: Rect) -> Rect {
+        if self.scaled() {
+            let (l, t, rr, b) = if self.xform.is_identity() {
+                (r.left, r.top, r.right, r.bottom)
+            } else {
+                self.xform.apply_rect(r.left, r.top, r.right, r.bottom)
+            };
+            let (x0, y0) = self.page_to_device(l as f32, t as f32);
+            let (x1, y1) = self.page_to_device(rr as f32, b as f32);
+            return Rect::new(x0, y0, x1, y1).normalized().offset(self.base_org.0, self.base_org.1);
+        }
         let (dx, dy) = self.to_device();
         if self.xform.is_identity() {
             return r.offset(dx, dy);
@@ -343,6 +431,12 @@ impl DcState {
 
     /// A device rectangle in logical coordinates (`GetClipBox`).
     fn unmap_rect(&self, r: Rect) -> Rect {
+        if self.scaled() {
+            let r = r.offset(self.base_org.0.wrapping_neg(), self.base_org.1.wrapping_neg());
+            let (x0, y0) = self.dp_to_lp(r.left, r.top);
+            let (x1, y1) = self.dp_to_lp(r.right, r.bottom);
+            return Rect::new(x0, y0, x1, y1).normalized();
+        }
         let (dx, dy) = self.to_device();
         let r = r.offset(dx.wrapping_neg(), dy.wrapping_neg());
         match self.xform.inverse() {
@@ -352,6 +446,15 @@ impl DcState {
             }
             _ => r,
         }
+    }
+
+    /// Whether logical to device mapping mirrors x / y (the extents' signs and the world
+    /// transformation's together).
+    fn mirrors(&self) -> (bool, bool) {
+        let (fx, fy) = self.flips();
+        let ex = (self.viewport_ext.0 < 0) != (self.window_ext.0 < 0);
+        let ey = (self.viewport_ext.1 < 0) != (self.window_ext.1 < 0);
+        (fx != ex, fy != ey)
     }
 
     /// Whether the world transformation mirrors x / y.
@@ -837,6 +940,10 @@ impl Gdi {
             graphics_mode: GM_COMPATIBLE,
             xform: Xform::IDENTITY,
             stretch_mode: BLACKONWHITE,
+            map_mode: MM_TEXT,
+            window_ext: (1, 1),
+            viewport_ext: (1, 1),
+            brush_org: (0, 0),
         }
     }
 
@@ -2040,6 +2147,352 @@ impl Gdi {
         let s = self.state(dc)?;
         let o = if viewport { &mut s.viewport_org } else { &mut s.window_org };
         Some(core::mem::replace(o, (x, y)))
+    }
+
+    /// The error a call taking a DC reports for a handle that is not one: none for a DC that was
+    /// deleted (`OffsetWindowOrgEx.yaml` `deleted_dc`), `ERROR_INVALID_HANDLE` otherwise.
+    fn not_a_dc_error(&self, dc: u64) -> u32 {
+        if matches!(self.obj(dc), Some(Obj::DeadDc)) { 0 } else { ERROR_INVALID_HANDLE }
+    }
+
+    /// `GetViewportOrgEx` (`viewport`) / `GetWindowOrgEx`.
+    pub fn origin(&self, dc: u64, viewport: bool) -> Option<(i32, i32)> {
+        let s = &self.dc(dc)?.state;
+        Some(if viewport { s.viewport_org } else { s.window_org })
+    }
+
+    /// `OffsetViewportOrgEx` (`viewport`) / `OffsetWindowOrgEx`: the origin moves by (`dx`, `dy`),
+    /// wrapping as 32-bit integers (`OffsetWindowOrgEx.yaml` `wrap`); the old origin, or the error
+    /// to report.
+    pub fn offset_origin(&mut self, dc: u64, viewport: bool, dx: i32, dy: i32) -> Result<(i32, i32), u32> {
+        let error = self.not_a_dc_error(dc);
+        let s = self.state(dc).ok_or(error)?;
+        let o = if viewport { &mut s.viewport_org } else { &mut s.window_org };
+        let old = *o;
+        *o = (old.0.wrapping_add(dx), old.1.wrapping_add(dy));
+        Ok(old)
+    }
+
+    /// `GetMapMode`: 0 for a bad DC.
+    pub fn map_mode(&self, dc: u64) -> i32 {
+        self.dc(dc).map_or(0, |d| d.state.map_mode)
+    }
+
+    /// `SetMapMode`: the old mode, or the error (`ERROR_INVALID_PARAMETER` for a mode out of
+    /// range). `MM_TEXT` resets the extents to 1:1, the fixed modes and `MM_ISOTROPIC` set theirs
+    /// (`shapes::fixed_extents`), `MM_ANISOTROPIC` keeps the current ones.
+    pub fn set_map_mode(&mut self, dc: u64, mode: i32) -> Result<i32, u32> {
+        let error = self.not_a_dc_error(dc);
+        let s = self.state(dc).ok_or(error)?;
+        if !(MM_TEXT..=MM_ANISOTROPIC).contains(&mode) {
+            return Err(ERROR_INVALID_PARAMETER);
+        }
+        let old = core::mem::replace(&mut s.map_mode, mode);
+        if mode == MM_TEXT {
+            s.window_ext = (1, 1);
+            s.viewport_ext = (1, 1);
+        } else if let Some((w, v)) = shapes::fixed_extents(mode) {
+            s.window_ext = w;
+            s.viewport_ext = v;
+        }
+        Ok(old)
+    }
+
+    /// `GetViewportExtEx` (`viewport`) / `GetWindowExtEx`.
+    pub fn extent(&self, dc: u64, viewport: bool) -> Option<(i32, i32)> {
+        let s = &self.dc(dc)?.state;
+        Some(if viewport { s.viewport_ext } else { s.window_ext })
+    }
+
+    /// `SetViewportExtEx` (`viewport`) / `SetWindowExtEx`: the old extent. Only `MM_ISOTROPIC`
+    /// and `MM_ANISOTROPIC` take a new one (Learn: the other modes ignore the call); a zero
+    /// extent fails; `MM_ISOTROPIC` then evens out the viewport extent.
+    pub fn set_extent(&mut self, dc: u64, viewport: bool, x: i32, y: i32) -> Result<(i32, i32), u32> {
+        let error = self.not_a_dc_error(dc);
+        let s = self.state(dc).ok_or(error)?;
+        let old = if viewport { s.viewport_ext } else { s.window_ext };
+        if s.map_mode != MM_ISOTROPIC && s.map_mode != MM_ANISOTROPIC {
+            return Ok(old);
+        }
+        if x == 0 || y == 0 {
+            return Err(ERROR_INVALID_PARAMETER);
+        }
+        if viewport {
+            s.viewport_ext = (x, y);
+        } else {
+            s.window_ext = (x, y);
+        }
+        if s.map_mode == MM_ISOTROPIC {
+            s.viewport_ext = shapes::isotropic(s.window_ext, s.viewport_ext);
+        }
+        Ok(old)
+    }
+
+    /// `LPtoDP` (`to_device`) / `DPtoLP` of `points` in place; false for a bad DC.
+    pub fn convert_points(&self, dc: u64, to_device: bool, points: &mut [(i32, i32)]) -> bool {
+        let Some(d) = self.dc(dc) else { return false };
+        for p in points.iter_mut() {
+            *p = if to_device { d.state.lp_to_dp(p.0, p.1) } else { d.state.dp_to_lp(p.0, p.1) };
+        }
+        true
+    }
+
+    /// `SetBrushOrgEx`: the old brush origin.
+    pub fn set_brush_org(&mut self, dc: u64, x: i32, y: i32) -> Option<(i32, i32)> {
+        let s = self.state(dc)?;
+        Some(core::mem::replace(&mut s.brush_org, (x, y)))
+    }
+
+    /// `GetBrushOrgEx`.
+    pub fn brush_org(&self, dc: u64) -> Option<(i32, i32)> {
+        Some(self.dc(dc)?.state.brush_org)
+    }
+
+    /// Paint `area` (device coordinates) of the DC's bitmap with `color` under the DC's binary
+    /// raster operation, within the clip; `hatch`: only the pattern's pixels get `color`, the
+    /// others the background colour when the background mode is opaque (Learn, "Hatch styles",
+    /// `SetBkMode`), the pattern starting at the brush origin.
+    fn paint_area(&mut self, dc: u64, area: &Region, color: Rgb, hatch: Option<u32>, state: &DcState) {
+        let code = shapes::rop2_code(state.rop2);
+        let bk = (state.bk_mode == OPAQUE).then(|| Rgb::from_colorref(state.bk));
+        let org = state.brush_org;
+        self.with_target(dc, |b, _, clip, _| {
+            let fore = b.from_rgb(color);
+            let back = bk.map(|c| b.from_rgb(c));
+            let mask = b.raw_mask();
+            for piece in clip.rects() {
+                for r in area.rects() {
+                    let r = r.intersect(piece);
+                    if r.is_empty() {
+                        continue;
+                    }
+                    for y in r.top..r.bottom {
+                        for x in r.left..r.right {
+                            let p = match hatch {
+                                None => fore,
+                                Some(style) => {
+                                    if shapes::hatch_bit(style, x.wrapping_sub(org.0), y.wrapping_sub(org.1)) {
+                                        fore
+                                    } else if let Some(bk) = back {
+                                        bk
+                                    } else {
+                                        continue;
+                                    }
+                                }
+                            };
+                            let d = b.raw(x, y);
+                            b.set_raw(x, y, rop3(code, p, 0, d) & mask);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /// Paint `area` with brush `brush` (a handle): its colour and, for a hatched brush, its
+    /// pattern; nothing for a null brush.
+    fn paint_brush_area(&mut self, dc: u64, area: &Region, brush: u32, state: &DcState) {
+        let Some(color) = self.handle_brush_color(brush, state) else { return };
+        let hatch = match self.obj(u64::from(brush)) {
+            Some(Obj::Brush { style: BS_HATCHED, hatch, .. }) => Some(*hatch as u32),
+            _ => None,
+        };
+        self.paint_area(dc, area, color, hatch, state);
+    }
+
+    /// A region of logical coordinates in device coordinates.
+    fn device_region(&self, dc: u64, rgn: &Region) -> Region {
+        let rects: Vec<Rect> = rgn.rects().iter().map(|r| self.device_rect(dc, *r)).collect();
+        Region::from_rects(&rects)
+    }
+
+    /// `FrameRgn` (`FrameRgn.yaml`): a border `w` x `h` logical units wide inside region `rgn`,
+    /// painted with `brush`; (result, error to set).
+    pub fn frame_rgn(&mut self, dc: u64, rgn: u64, brush: u64, w: i32, h: i32) -> (bool, u32) {
+        let Some(d) = self.dc(dc) else { return (false, ERROR_INVALID_HANDLE) };
+        let state = d.state.clone();
+        // `zero_width`, and `large`: -2^31 fails, ±(2^31 - 1) paints like 1.
+        if w == 0 || h == 0 || w == i32::MIN || h == i32::MIN {
+            return (false, 0);
+        }
+        let Some(region) = self.region(rgn).cloned() else { return (false, 0) };
+        match self.obj(brush) {
+            Some(Obj::Brush { .. }) => {}
+            // `pen_as_brush`.
+            Some(Obj::Pen { .. }) => return (true, 0),
+            _ => return (false, 0),
+        }
+        let size = |v: i32| if v.unsigned_abs() == i32::MAX as u32 { 1 } else { i64::from(v).abs() };
+        let (dw, dh) = state.device_lengths(size(w), size(h));
+        let device = self.device_region(dc, &region);
+        let painted = shapes::frame(&device, dw.max(1), dh.max(1));
+        if brush as u32 == state.brush {
+            self.mark_used(dc, true, false);
+        }
+        self.paint_brush_area(dc, &painted, brush as u32, &state);
+        (true, 0)
+    }
+
+    /// `AlphaBlend` / `GdiAlphaBlend` (`specs/windows/msimg32.dll/AlphaBlend.yaml`): the source
+    /// rectangle of `src` blended onto the destination rectangle of `dst` (logical units of each
+    /// DC), stretched by picking source pixels; (result, error to set).
+    #[allow(clippy::too_many_arguments)]
+    pub fn alpha_blend(
+        &mut self,
+        dst: u64,
+        dest: (i32, i32, i32, i32),
+        src: u64,
+        source: (i32, i32, i32, i32),
+        blend: u32,
+    ) -> (bool, u32) {
+        use crate::alphablend::{AC_SRC_ALPHA, BlendFunction, blend_constant, blend_premultiplied, source_index};
+        let Some(d) = self.dc(dst) else { return (false, ERROR_INVALID_HANDLE) };
+        let dstate = d.state.clone();
+        if src == 0 {
+            return (false, 0);
+        }
+        let Some(s) = self.dc(src) else { return (false, ERROR_INVALID_PARAMETER) };
+        let sstate = s.state.clone();
+        let f = BlendFunction::from_u32(blend);
+        if !f.valid() {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        let (x, y, w, h) = dest;
+        let (sx, sy, sw, sh) = source;
+        if w < 0 || h < 0 || sw < 0 || sh < 0 {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        if w == 0 || h == 0 || sw == 0 || sh == 0 {
+            return (true, 0);
+        }
+        // The source's pixels, as (colour bytes b, g, r; alpha byte or 255 without one).
+        let Some(sbmp) = self.target(s) else { return (false, ERROR_INVALID_PARAMETER) };
+        if f.format == AC_SRC_ALPHA && sbmp.bpp != 32 {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        // A mirrored axis turns a rectangle's excluded right or bottom edge into its left or top
+        // one: the pixels covered move by one (`dc_state`, the y-up destination of the tests).
+        let device = |st: &DcState, r: Rect| {
+            let n = st.map_rect(r).normalized();
+            let (mx, my) = st.mirrors();
+            n.offset(i32::from(mx), i32::from(my))
+        };
+        let srect = device(&sstate, Rect::new(sx, sy, sx.wrapping_add(sw), sy.wrapping_add(sh)));
+        if srect.left < 0 || srect.top < 0 || srect.right > sbmp.width || srect.bottom > sbmp.height || srect.is_empty()
+        {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        let drect = device(&dstate, Rect::new(x, y, x.wrapping_add(w), y.wrapping_add(h)));
+        if src == dst && !drect.intersect(&srect).is_empty() {
+            return (false, ERROR_INVALID_PARAMETER);
+        }
+        let (dw, dh) = (drect.right - drect.left, drect.bottom - drect.top);
+        let (sw, sh) = (srect.right - srect.left, srect.bottom - srect.top);
+        if dw <= 0 || dh <= 0 {
+            return (true, 0);
+        }
+        // Destinations far larger than the source, as the visible tests recorded them: when the
+        // stretch's products overflow 32 bits nothing is drawn; beyond 65535 pixels the source
+        // reads as transparent black.
+        let over = |d: i32, s: i32| i64::from(d) * i64::from(s) > i64::from(i32::MAX);
+        if over(dw, sw) || over(dh, sh) {
+            return (true, 0);
+        }
+        let blank = dw > 0xFFFF || dh > 0xFFFF;
+        let pixel = |b: &Bitmap, px: i32, py: i32| -> ([u8; 3], u8) {
+            let v = b.raw(px, py);
+            if b.bpp == 32 {
+                let q = v.to_le_bytes();
+                ([q[0], q[1], q[2]], q[3])
+            } else {
+                let c = b.to_rgb(v);
+                ([c.b, c.g, c.r], 255)
+            }
+        };
+        // The source rectangle's pixels (it lies inside the source bitmap), read before the
+        // destination is written: the two may be the same bitmap.
+        let copy: Vec<(([u8; 3], u8), u32)> = (srect.top..srect.bottom)
+            .flat_map(|ry| (srect.left..srect.right).map(move |rx| (rx, ry)))
+            .map(|(rx, ry)| (pixel(sbmp, rx, ry), sbmp.raw(rx, ry)))
+            .collect();
+        let source16 = sbmp.bpp == 16;
+        let a = f.constant;
+        let premultiplied = f.format == AC_SRC_ALPHA;
+        self.with_target(dst, |b, _, clip, _| {
+            let area = clip.intersect_rect(drect);
+            for piece in area.rects() {
+                for py in piece.top..piece.bottom {
+                    let row = source_index((py - drect.top) as u32, sh as u32, dh as u32) as usize;
+                    for px in piece.left..piece.right {
+                        let col = source_index((px - drect.left) as u32, sw as u32, dw as u32) as usize;
+                        let ((s, sa), sraw) = if blank { (([0; 3], 0), 0) } else { copy[row * sw as usize + col] };
+                        if source16 && b.bpp == 16 && !premultiplied {
+                            // 5-5-5 onto 5-5-5: both widened to eight bits, blended, and the
+                            // result rounded back to five (from a deeper source it is cut).
+                            let d = b.raw(px, py);
+                            let wide = |v: u32, at: u32| {
+                                let f = (v >> at) & 31;
+                                ((f << 3) | (f >> 2)) as u8
+                            };
+                            let mix = |at: u32| {
+                                let v = u32::from(blend_constant(wide(sraw, at), wide(d, at), a));
+                                ((v * 31 + 127) / 255) << at
+                            };
+                            b.set_raw(px, py, mix(10) | mix(5) | mix(0));
+                            continue;
+                        }
+                        let (dcol, da) = pixel(b, px, py);
+                        let (out, oa) = if premultiplied {
+                            blend_premultiplied(s, sa, dcol, da, a)
+                        } else {
+                            (
+                                [
+                                    blend_constant(s[0], dcol[0], a),
+                                    blend_constant(s[1], dcol[1], a),
+                                    blend_constant(s[2], dcol[2], a),
+                                ],
+                                blend_constant(sa, da, a),
+                            )
+                        };
+                        let v = if b.bpp == 32 {
+                            u32::from_le_bytes([out[0], out[1], out[2], oa])
+                        } else {
+                            b.from_rgb(Rgb { r: out[2], g: out[1], b: out[0] })
+                        };
+                        b.set_raw(px, py, v);
+                    }
+                }
+            }
+        });
+        (true, 0)
+    }
+
+    /// `RoundRect` (`RoundRect.yaml`): the box `l, t, r, b` with corners `w` x `h`, filled with
+    /// the DC's brush and outlined with its pen (the brush first); false for a bad DC.
+    #[allow(clippy::too_many_arguments)]
+    pub fn round_rect(&mut self, dc: u64, l: i32, t: i32, r: i32, b: i32, w: i32, h: i32) -> bool {
+        let Some(d) = self.dc(dc) else { return false };
+        let state = d.state.clone();
+        let pen_color = self.pen_color(state.pen, &state);
+        let (pen_style, pen_width) = match self.obj(u64::from(state.pen)) {
+            Some(Obj::Pen { style, width, .. }) => (*style, *width),
+            _ => (0, 1),
+        };
+        self.mark_used(dc, true, true);
+        let bx = self.device_rect(dc, Rect::new(l, t, r, b).normalized());
+        let clamp = |v: i64| v.clamp(0, i64::from(i32::MAX)) as i32;
+        let (cw, ch) = state.device_lengths(i64::from(w.unsigned_abs()), i64::from(h.unsigned_abs()));
+        let pen = pen_color.map(|_| {
+            let (n, _) = state.device_lengths(i64::from(pen_width.unsigned_abs()), 0);
+            // PS_INSIDEFRAME (6), the style in the low four bits (PS_STYLE_MASK).
+            (clamp(n).max(1), pen_style & 0xF == 6)
+        });
+        let (fill, outline) = shapes::round_rect(bx.left, bx.top, bx.right, bx.bottom, clamp(cw), clamp(ch), pen);
+        self.paint_brush_area(dc, &fill, state.brush, &state);
+        if let Some(c) = pen_color {
+            self.paint_area(dc, &outline, c, None, &state);
+        }
+        true
     }
 
     /// Describe a window DC (user32's `GetDC`/`GetWindowDC`): device 0,0

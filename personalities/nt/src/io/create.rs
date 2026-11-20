@@ -59,6 +59,9 @@ pub struct CreateParams {
     pub attributes: u32,
     /// `AllocationSize` (only a hint: ignored).
     pub allocation: u64,
+    /// The `SECURITY_QUALITY_OF_SERVICE` the caller gave: how the server of a named pipe this
+    /// opens may impersonate the caller.
+    pub qos: Option<crate::abi::Qos>,
 }
 
 /// The parse procedure of volume devices, the pipe device and directory
@@ -108,6 +111,7 @@ impl CreateHook<'_> {
                 Some(Device::Afd) => return self.open_endpoint(om, r.remaining),
                 Some(Device::NamedPipe) => return self.open_named_pipe(om, r),
                 Some(Device::Null) => return self.open_null(om, r.remaining),
+                Some(Device::Audio) => return self.open_audio(om, r.remaining),
                 None => return Err(STATUS_OBJECT_PATH_NOT_FOUND),
             },
             ObjectType::File => {
@@ -216,6 +220,24 @@ impl CreateHook<'_> {
         Ok(object)
     }
 
+    /// `\Device\PolyAudio` (ADR 0244): a handle for one stream, which its
+    /// `OPEN` request makes.
+    fn open_audio(&mut self, om: &mut ObjectManager, remaining: &[u16]) -> Result<ObjectId, NtStatus> {
+        if self.params.options & FILE_DIRECTORY_FILE != 0 {
+            return Err(STATUS_NOT_A_DIRECTORY);
+        }
+        if !remaining.is_empty() {
+            return Err(STATUS_OBJECT_NAME_NOT_FOUND);
+        }
+        self.information = FILE_OPENED;
+        let cookie = self.io.cookie();
+        let object = new_file_object(om, cookie, self.thread)?;
+        let target = Target::Audio(crate::audio::AudioEnd::default());
+        self.io.files.insert(cookie, self.record(object, target, FileType::CharDevice));
+        self.made = Some(cookie);
+        Ok(object)
+    }
+
     /// `\Device\NamedPipe\<name>`: a server end made by
     /// `NtCreateNamedPipeFile`, or a client's open of a pipe a server made
     /// (ADR 0169, [`super::npfs`]); the device itself opens as the pipe
@@ -250,7 +272,11 @@ impl CreateHook<'_> {
                 let (id, info) = self.io.np_server_create(&key, remaining, &c, pid)?;
                 (id, true, info)
             }
-            None => (self.io.np_client_connect(&key, self.params.access, pid)?, false, FILE_OPENED),
+            None => {
+                // The client's identity, for `ImpersonateNamedPipeClient`.
+                let token = r.caller.as_ref().and_then(|c| super::npfs::ClientSecurity::of(om, c, self.params.qos));
+                (self.io.np_client_connect(&key, self.params.access, pid, token)?, false, FILE_OPENED)
+            }
         };
         let object = match new_file_object(om, cookie, self.thread) {
             Ok(o) => o,

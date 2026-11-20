@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "hive_load",
-      "exe_sha256": "d27d640bd47f0f7cef9059edea8b5432ffd20ff37a39f55cc7ac15b50f3d0627",
+      "exe_sha256": "1467fd8691a6d34479b06ac9d092d0a0ffd72391327c0fbcda4b9eecde588bdc",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -28,7 +28,7 @@
       "name": "hive_std_load",
       "session": "interactive",
       "token": "standard",
-      "exe_sha256": "1c80b616c38da37d02d0db6b4957c0b4b79e6edd191af4d0278d73c3a7035370",
+      "exe_sha256": "b5e7052bb7e47641bafdf6d52a3ae2930590ce505d2c0ebf5d8604dafcf09055",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

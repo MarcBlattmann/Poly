@@ -1,5 +1,5 @@
 [
-{"symbol":"AlphaBlend","status":"stub","forward":"gdi32.GdiAlphaBlend","src":["wine-spec"]},
+{"symbol":"AlphaBlend","status":"claimed","claimed_by":"spec-win-updater-gap","forward":"gdi32.GdiAlphaBlend","src":["wine-spec"]},
 {"symbol":"DllInitialize","status":"stub","src":["wine-spec"]},
 {"symbol":"GradientFill","status":"stub","forward":"gdi32.GdiGradientFill","src":["wine-spec"]},
 {"symbol":"TransparentBlt","status":"stub","forward":"gdi32.GdiTransparentBlt","src":["wine-spec"]},

@@ -605,7 +605,6 @@ pub extern "C" fn _dsign(x: f64) -> i32 {
 
 mod math_p;
 
-#[cfg(target_arch = "x86_64")]
 mod apps;
 
 mod c99;

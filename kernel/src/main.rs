@@ -54,6 +54,7 @@ mod vdso;
 mod virtio_blk;
 mod virtio_gpu;
 mod virtio_input;
+mod xnu;
 
 use alloc::boxed::Box;
 use core::panic::PanicInfo;
@@ -164,7 +165,7 @@ extern "C" fn kernel_entry(start_info: u64) -> ! {
     profile::init(&boot);
     fs::init(&boot, initrd);
     // /dev/dri on the virtio GPU the display found (ADR 0108).
-    drm::init();
+    drm::init(&boot);
     tty::init(&boot);
     net::init(&boot);
     sound::init(&boot);

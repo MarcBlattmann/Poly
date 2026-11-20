@@ -2,17 +2,17 @@
   "format": "poly-winrun/1",
   "system": {
     "name": "windows",
-    "version": "10.0.26200.0",
-    "build": "26200.9974",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
     "arch": "AMD64"
   },
-  "bundle": "ba4dd99e3069",
+  "bundle": "75bb2bbc6532",
   "runner": "poly-oracle.ps1 2",
-  "started": "2026-11-15T00:07:52Z",
+  "started": "2026-11-19T21:45:04Z",
   "tests": [
     {
       "name": "getpeername_basic",
-      "exe_sha256": "067685cc13668d49547a9dc5be904990942ec48e325250165fcf9a40b4c6c748",
+      "exe_sha256": "77cafdff54138710865d01bb965befb5231d4ee3e012c99435b8e7ae98ff2654",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -22,11 +22,11 @@
       "output": "fresh TCP socket: -1/WSAENOTCONN length now 16 bytes written 0\nlistener: -1/WSAENOTCONN length now 16 bytes written 0\nlength 8: -1/WSAEFAULT length now 8 bytes written 0\n  family 2 port is the listener's 1 address [127, 0, 0, 1]\nclient after the peer closed: 0 length now 16 bytes written 16\nconnect to a closed port -1/WSAECONNREFUSED\nafter FD_CONNECT: 0 length now 16 bytes written 16\n  port is the one connected to 1 address [127, 0, 0, 1]\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 2269
+      "ms": 2281
     },
     {
       "name": "getpeername_basic_b",
-      "exe_sha256": "03222793b2ea9840fc9c979a3df2e6afb665896c5baa48e2fd4f1722e39bb496",
+      "exe_sha256": "c37eaee020751eb21ff11a1e3405893f7ce22bd83ea32ebdb397c78cc0e983c0",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,
@@ -36,7 +36,7 @@
       "output": "fresh UDP socket: -1/WSAENOTCONN length now 16 bytes written 0\nconnected client, length 16: 0 length now 16 bytes written 16\nlength 0: -1/WSAEFAULT length now 0 bytes written 0\naccepted socket's peer port is the client's local port 1\nclient after its own SD_BOTH: 0 length now 16 bytes written 16\nsocket after the refused connect: -1/WSAENOTCONN length now 16 bytes written 0\nUDP connect 0\nUDP connect to 0.0.0.0:0 0\nsummary 0 passed, 0 failed\n",
       "error": null,
       "stable": true,
-      "ms": 2255
+      "ms": 2272
     }
   ]
 }

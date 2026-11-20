@@ -37,7 +37,8 @@ pub const SYSTEM_DLLS: &[SystemDll] = &[
             ("UuidToStringA", Fail::Value(120)),
             ("UuidToStringW", Fail::Value(120)),
         ],
-        forwards: &[],
+        // B2c: the call context lives in ole32 (ADR 0220).
+        forwards: &[("I_RpcOpenClientProcess", "ole32.I_RpcOpenClientProcess")],
     },
     SystemDll {
         file: "mpr.dll",
@@ -151,17 +152,6 @@ pub const SYSTEM_DLLS: &[SystemDll] = &[
             ("Direct3DShaderValidatorCreate9", Fail::Value(0)),
             ("PSGPError", Fail::Value(0)),
             ("PSGPSampleTexture", Fail::Value(0)),
-        ],
-        forwards: &[],
-    },
-    SystemDll {
-        file: "msimg32.dll",
-        exports: &[
-            ("AlphaBlend", Fail::Win32),
-            ("DllInitialize", Fail::Win32),
-            ("GradientFill", Fail::Win32),
-            ("TransparentBlt", Fail::Win32),
-            ("vSetDdrawflag", Fail::Win32),
         ],
         forwards: &[],
     },

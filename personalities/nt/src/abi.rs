@@ -199,6 +199,39 @@ pub fn read_attributes<K: NtKernel>(k: &mut K, addr: u64) -> Result<Attributes, 
     Ok(Attributes { root: (root != 0).then_some(Handle(root)), name, attributes, security })
 }
 
+/// A `SECURITY_QUALITY_OF_SERVICE` (`winnt.h`: `Length`, `ImpersonationLevel`,
+/// `ContextTrackingMode`, `EffectiveOnly`): how a server may impersonate the caller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Qos {
+    pub level: u32,
+    /// `SECURITY_DYNAMIC_TRACKING`: the caller's token at the time the server asks, not when the
+    /// caller opened the object.
+    pub dynamic: bool,
+    /// Only the enabled privileges are seen.
+    pub effective_only: bool,
+}
+
+/// The `SECURITY_QUALITY_OF_SERVICE` an `OBJECT_ATTRIBUTES` at `addr` points to (`None`: the
+/// caller gave none). Levels above `SecurityDelegation` are `STATUS_INVALID_PARAMETER`.
+pub fn read_qos<K: NtKernel>(k: &mut K, addr: u64) -> Result<Option<Qos>, NtStatus> {
+    if addr == 0 {
+        return Ok(None);
+    }
+    let mut b = [0u8; OBJECT_ATTRIBUTES_SIZE];
+    read(k, addr, &mut b)?;
+    let qos = u64::from_le_bytes(b[40..48].try_into().expect("8 bytes"));
+    if qos == 0 {
+        return Ok(None);
+    }
+    let mut q = [0u8; 10];
+    read(k, qos, &mut q)?;
+    let level = u32::from_le_bytes(q[4..8].try_into().expect("4 bytes"));
+    if level > poly_security::token::SECURITY_DELEGATION {
+        return Err(STATUS_INVALID_PARAMETER);
+    }
+    Ok(Some(Qos { level, dynamic: q[8] != 0, effective_only: q[9] != 0 }))
+}
+
 /// Capture the security descriptor at `addr` (absolute or self-relative)
 /// as self-relative bytes (ADR 0171): revision 1 required
 /// (`STATUS_UNKNOWN_REVISION`), SIDs and ACLs as far as their headers say.
@@ -218,13 +251,19 @@ pub fn read_security_descriptor<K: NtKernel>(k: &mut K, addr: u64) -> Result<Vec
             ptrs[i] = if off == 0 { 0 } else { addr + u64::from(off) };
         }
     } else {
-        let mut rest = [0u8; sd::SECURITY_DESCRIPTOR_MIN_LENGTH - sd::RELATIVE_HEADER];
-        read(k, addr + sd::RELATIVE_HEADER as u64, &mut rest)?;
-        let mut full = [0u8; sd::SECURITY_DESCRIPTOR_MIN_LENGTH];
+        // The caller's own layout: pointers of its width at 8, 16, 24, 32 (x64) or 4, 8, 12, 16
+        // (a 32-bit process, 20 bytes in all; ADR 0186 addendum `wow64-gui-overrun`).
+        let ptr = k.with_state(|_, p, _| p.layout().ptr) as usize;
+        let length = sd::abs_length(ptr);
+        let mut full = [0u8; 40];
         full[..sd::RELATIVE_HEADER].copy_from_slice(&h);
-        full[sd::RELATIVE_HEADER..].copy_from_slice(&rest);
-        for (i, at) in [sd::ABS_OWNER, sd::ABS_GROUP, sd::ABS_SACL, sd::ABS_DACL].into_iter().enumerate() {
-            ptrs[i] = u64::from_le_bytes(full[at..at + 8].try_into().expect("8 bytes"));
+        if length > sd::RELATIVE_HEADER {
+            read(k, addr + sd::RELATIVE_HEADER as u64, &mut full[sd::RELATIVE_HEADER..length])?;
+        }
+        for (i, at) in sd::abs_offsets(ptr).into_iter().enumerate() {
+            let mut v = [0u8; 8];
+            v[..ptr].copy_from_slice(&full[at..at + ptr]);
+            ptrs[i] = u64::from_le_bytes(v);
         }
     }
     let sid_at = |k: &mut K, p: u64| -> Result<Option<Vec<u8>>, NtStatus> {

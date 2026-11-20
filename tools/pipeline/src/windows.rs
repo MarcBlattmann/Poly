@@ -51,7 +51,7 @@ pub const TARGET: &str = "x86_64-pc-windows-msvc";
 /// `mswsock` (Winsock), `winhttp` (the proxy settings), `crypt32` (certificate
 /// stores, protected memory), `secur32` (`GetUserNameExW`), `dhcpcsvc`; and the
 /// Direct3D 11 / DXGI / DirectComposition DLLs of Chrome's stage 5 (spec-chrome-win-s5):
-/// `d3d11`, `dxgi`, `dcomp`, `dxcore`.
+/// `d3d11`, `dxgi`, `dcomp`, `dxcore`; and `msimg32` (`AlphaBlend`, spec-win-updater-gap).
 pub const ALLOWED_DLLS: &[&str] = &[
     "ntdll.dll",
     "kernel32.dll",
@@ -64,6 +64,7 @@ pub const ALLOWED_DLLS: &[&str] = &[
     "advapi32.dll",
     "userenv.dll",
     "version.dll",
+    "msimg32.dll",
     "shlwapi.dll",
     "shell32.dll",
     "comctl32.dll",
@@ -278,7 +279,7 @@ impl Manifest {
 }
 
 /// What a test executable must be: an x64 PE32+ console executable that
-/// imports by name only, only from `allowed` ([`ALLOWED_DLLS`]; C++ tests
+/// imports (by name or by ordinal) only from `allowed` ([`ALLOWED_DLLS`]; C++ tests
 /// also `msvcrt.dll`, [`wincxx::ALLOWED_DLLS`]), with no delay-load
 /// imports. Returns its imports.
 pub fn check_image_with(bytes: &[u8], allowed: &[&str]) -> Result<BTreeMap<String, Vec<String>>> {
@@ -308,9 +309,10 @@ pub fn check_image_with(bytes: &[u8], allowed: &[&str]) -> Result<BTreeMap<Strin
         for e in d.entries().map_err(|e| format!("{e:?}"))? {
             match e.map_err(|e| format!("{dll}: {e:?}"))?.symbol {
                 poly_pe::ImportSymbol::Name { name, .. } => names.push(String::from_utf8_lossy(name).into_owned()),
-                poly_pe::ImportSymbol::Ordinal(n) => {
-                    return Err(format!("imports ordinal {n} from {dll}; import by name only"));
-                }
+                // An import by ordinal (`raw-dylib` with `link_ordinal`) is kept as `#<ordinal>`:
+                // programs whose subject is an ordinal-only export (comctl32's 410..413, which
+                // Google's updater imports) must bind the way their users do.
+                poly_pe::ImportSymbol::Ordinal(n) => names.push(format!("#{n}")),
             }
         }
         names.sort();
@@ -1485,6 +1487,9 @@ mod tests {
         // The common dialogs' tests import comdlg32 (spec-win-apps-2).
         let dialogs = image(&[("COMDLG32.dll", &["GetOpenFileNameW"])], 3);
         assert_eq!(check_image(&dialogs).unwrap()["comdlg32.dll"], ["GetOpenFileNameW"]);
+        // AlphaBlend's tests import msimg32 (spec-win-updater-gap).
+        let blend = image(&[("MSIMG32.dll", &["AlphaBlend"])], 3);
+        assert_eq!(check_image(&blend).unwrap()["msimg32.dll"], ["AlphaBlend"]);
         // The C runtime entries' tests import ucrtbase (spec-win-apps-4).
         let crt = image(&[("ucrtbase.dll", &["_get_stream_buffer_pointers"])], 3);
         assert_eq!(check_image(&crt).unwrap()["ucrtbase.dll"], ["_get_stream_buffer_pointers"]);

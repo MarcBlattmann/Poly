@@ -287,10 +287,72 @@ pub fn shell_tree() -> Vec<(String, Vec<u8>)> {
         .collect()
 }
 
-/// `cargo xtask fonts fetch`: DejaVu and the shell's fonts.
+/// `cargo xtask fonts fetch`: DejaVu, the shell's fonts and the CJK font.
 pub fn fetch() -> Result<PathBuf> {
     fetch_shell()?;
+    fetch_cjk()?;
     fetch_dejavu()
+}
+
+// ---- the CJK font (ADR 0234) ---------------------------------------------
+
+/// Chinese, Japanese and Korean: Droid Sans Fallback (Apache 2.0, TrueType), from Debian's
+/// `fonts-droid-fallback` package as `tools/xtask/chromium.lock` pins it (the Chromium disk installs
+/// the same package). DejaVu has no CJK glyphs: example.com's Chinese line was empty boxes.
+pub const CJK_PACKAGE: &str = "fonts-droid-fallback";
+/// The font file in the package, and where it goes on Poly's disks.
+pub const CJK_FILE: &str = "DroidSansFallbackFull.ttf";
+pub const CJK_STORE_DIR: &str = "usr/share/fonts/truetype/droid";
+/// The package's copyright file (Apache-2), installed beside the font with the licence's text.
+const CJK_COPYRIGHT: &str = "usr/share/doc/fonts-droid-fallback/copyright";
+/// The licence's full text: Debian's `base-files` (also in the lock) carries it.
+const APACHE_PACKAGE: &str = "base-files";
+const APACHE_TEXT: &str = "usr/share/common-licenses/Apache-2.0";
+
+/// The locked package `name`'s file in the Chromium package cache, downloaded and checked when it
+/// is not there.
+fn locked_deb(name: &str) -> Result<Vec<u8>> {
+    let locked = crate::chromium::lock()?;
+    let p = locked.iter().find(|p| p.name == name).ok_or_else(|| format!("{name} is not in the lock"))?;
+    if crate::chromium::missing(core::slice::from_ref(p), &[p.set.as_str()]).is_empty() {
+        let file = crate::chromium::debs_dir().join(p.file_name());
+        return std::fs::read(&file).map_err(|e| format!("{}: {e}", file.display()));
+    }
+    Err(format!("{name} is not fetched"))
+}
+
+/// A regular file of a `.deb`.
+fn deb_file(deb: &[u8], path: &str) -> Result<Vec<u8>> {
+    crate::chromium::deb_entries(deb)?
+        .into_iter()
+        .find_map(|e| match e.kind {
+            crate::chromium::TarKind::File(data) if e.path == path => Some(data),
+            _ => None,
+        })
+        .ok_or_else(|| format!("no {path} in the package"))
+}
+
+/// The CJK font: `(font, copyright, licence)`, if its package (and `base-files`) is in the cache.
+pub fn cjk_cached() -> Option<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+    let deb = locked_deb(CJK_PACKAGE).ok()?;
+    let font = deb_file(&deb, &format!("{CJK_STORE_DIR}/{CJK_FILE}")).ok()?;
+    let copyright = deb_file(&deb, CJK_COPYRIGHT).ok()?;
+    let licence = deb_file(&locked_deb(APACHE_PACKAGE).ok()?, APACHE_TEXT).ok()?;
+    Some((font, copyright, licence))
+}
+
+/// Download the CJK font's package and `base-files` as the lock pins them, when missing.
+pub fn fetch_cjk() -> Result {
+    if cjk_cached().is_some() {
+        return Ok(());
+    }
+    let locked = crate::chromium::lock()?;
+    let dir = crate::chromium::debs_dir();
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    for p in locked.iter().filter(|p| p.name == CJK_PACKAGE || p.name == APACHE_PACKAGE) {
+        crate::chromium::fetch_one(p)?;
+    }
+    cjk_cached().map(|_| ()).ok_or_else(|| format!("{CJK_PACKAGE}: no {CJK_FILE} after the download"))
 }
 
 /// The DejaVu fonts: fetched when they are not in the cache yet.
@@ -380,6 +442,18 @@ pub fn add_to_root(tree: &mut crate::rootdisk::RootTree) -> Result<bool> {
     let license = std::fs::read(dir.join(LICENSE)).map_err(|e| format!("{LICENSE}: {e}"))?;
     tree.file(&format!("{STORE_DIR}/{LICENSE}"), 0o644, &license);
     Ok(true)
+}
+
+/// The CJK font on a root disk, with its copyright and the Apache licence beside it, and linked into
+/// `C:\Windows\Fonts` (ADR 0234). Only where it is wanted (the menu's Chrome disk): the spec tests'
+/// disks keep the font set their sheets were recorded with. False when it is not fetched.
+pub fn add_cjk_to_root(tree: &mut crate::rootdisk::RootTree) -> bool {
+    let Some((font, copyright, licence)) = cjk_cached() else { return false };
+    tree.file(&format!("{CJK_STORE_DIR}/{CJK_FILE}"), 0o644, &font);
+    tree.file(&format!("{CJK_STORE_DIR}/copyright"), 0o644, &copyright);
+    tree.file(&format!("{CJK_STORE_DIR}/LICENSE-Apache-2.0"), 0o644, &licence);
+    tree.symlink(&format!("{WINDOWS_FONTS_DIR}/{CJK_FILE}"), &format!("../../../../../{CJK_STORE_DIR}/{CJK_FILE}"));
+    true
 }
 
 /// The bundled fonts as a font set, under their paths on Poly.

@@ -15,6 +15,7 @@ pub const GUI_EXE: &str = "C:\\Program Files (x86)\\PolyHello32\\gui32.exe";
 pub const SYS_EXE: &str = "C:\\Program Files (x86)\\PolyHello32\\sys32.exe";
 pub const SAFESEH_EXE: &str = "C:\\Program Files (x86)\\PolyHello32\\safeseh32.exe";
 pub const ANSI_EXE: &str = "C:\\Program Files (x86)\\PolyHello32\\ansi32.exe";
+pub const MSGLOOP_EXE: &str = "C:\\Program Files (x86)\\PolyHello32\\msgloop32.exe";
 
 mod tests {
     use super::*;
@@ -263,6 +264,46 @@ mod tests {
             if code != 0 {
                 crate::kprintln!("nt: ansi32.exe ended with {code:#x}, not 0 (2 + n: check n failed)");
                 return Err("ansi32.exe did not pass every check");
+            }
+            if !thread::wait_until(10, || Arc::strong_count(&memory) == 1) {
+                return Err("the 32-bit process kept its memory after it exited");
+            }
+            Ok(())
+        }
+    }
+
+    kernel_test! {
+        /// What the i686 `user32` writes into a 32-bit program's structures (the
+        /// `wow64-gui-overrun` hunt): `msgloop32.exe` (`tests/windows/wow64/msgloop32.rs`) runs a
+        /// message loop on a second thread into a 28-byte `MSG` while another thread's message
+        /// destroys its window, and fills `WINDOWPLACEMENT`, `MONITORINFO`, `PAINTSTRUCT` and
+        /// others; a guard word behind each must stay. It ends with the number of failed checks.
+        fn nt_wow64_user32_writes_no_more_than_the_32_bit_structures() -> TestResult {
+            if crate::fs::vfs().root_context().is_err() {
+                return Err("no VFS for the WOW64 test");
+            }
+            let prog = super::super::MSGLOOP32;
+            if super::super::NTDLL32.is_empty() || super::super::USER32_32.is_empty() || prog.is_empty() {
+                return Err("this kernel was built without the 32-bit modules (cargo xtask wow64)");
+            }
+            super::super::with(|_| ());
+            let vfs = crate::fs::vfs();
+            let ctx = vfs.root_context().map_err(|_| "no VFS")?;
+            let root = vfs.lookup(&ctx, &Cred::root(), At::Cwd, b"/nt/c", true).map_err(|_| "no C:")?;
+            let vr = VfsRoot::new(vfs, ctx, Cred::root());
+            create::install_file(&vr, &root, APP_DIR, "msgloop32.exe", prog).map_err(|_| "cannot write msgloop32.exe")?;
+            let memory = Arc::new(Memory::new(Layout::default()).map_err(|_| "no memory map")?);
+            let pid = crate::process::alloc_pid();
+            let process = Arc::new(Process::new_nt(pid, FORMAT, false));
+            let launch = super::super::Launch { image_path: String::from(MSGLOOP_EXE), args: Vec::new() };
+            let start = super::super::start_with(&process, &memory, prog, pid, &launch)
+                .map_err(|_| "the kernel rejected msgloop32.exe")?;
+            let tid = super::super::spawn_thread(&process, &memory, start.entry, start.teb, user::DEFAULT_HOOK, None)
+                .map_err(|_| "could not start the 32-bit thread")?;
+            let code = thread::join(tid).map_err(|_| "join failed")?;
+            if code != 0 {
+                crate::kprintln!("nt: msgloop32.exe ended with {code:#x}, not 0 (the number of checks that failed)");
+                return Err("user32 wrote past a 32-bit structure");
             }
             if !thread::wait_until(10, || Arc::strong_count(&memory) == 1) {
                 return Err("the 32-bit process kept its memory after it exited");

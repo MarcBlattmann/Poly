@@ -101,6 +101,21 @@ pub trait ShmMap {
     /// Copy `dst.len()` bytes from `offset`; false (and nothing copied) if
     /// that is not inside the mapping.
     fn read(&self, offset: usize, dst: &mut [u8]) -> bool;
+    /// Copy `dst.len()` pixels of 4 little-endian bytes from `offset`;
+    /// false (and nothing copied) if that is not inside the mapping. The
+    /// default reads the bytes and puts them together; a host whose mapping
+    /// is in its own memory copies straight into `dst` (one pass, what a
+    /// commit's copy costs).
+    fn read_pixels(&self, offset: usize, dst: &mut [u32]) -> bool {
+        let mut bytes = alloc::vec![0u8; dst.len() * 4];
+        if !self.read(offset, &mut bytes) {
+            return false;
+        }
+        for (px, b) in dst.iter_mut().zip(bytes.chunks_exact(4)) {
+            *px = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+        }
+        true
+    }
 }
 
 /// What the server needs from its environment.
@@ -411,6 +426,9 @@ struct SeatState {
     input: input::InputState,
     /// What the client the pointer is over asked it to look like.
     cursor: Option<cursor::CursorRequest>,
+    /// The look the server chooses itself, which wins over the client's (ADR 0234): the resize
+    /// arrows over a frame's border and during a resize, a Windows window's own cursor.
+    hint: Option<crate::compose::NamedCursor>,
 }
 
 /// What one client's frame callbacks and feedback wait for: the frame
@@ -446,8 +464,12 @@ pub struct Server {
     data: data_device::DataState,
     /// Popups with a grab, bottom to top: client and `xdg_popup`.
     popup_grabs: Vec<(ClientId, ObjectId)>,
-    /// Activation tokens handed out and not used yet.
-    tokens: Vec<String>,
+    /// Activation tokens handed out and not used yet, with the focus they may take
+    /// ([`TokenScope`]).
+    tokens: Vec<(String, TokenScope)>,
+    /// How many times the focus went from one client's window to another's (or to the shell):
+    /// a client's activation token is good while this has not changed since it was made.
+    focus_moves: u64,
     token_serial: u64,
     /// Launched apps without a window yet, and the pointer they make busy
     /// (`startup.rs`, ADR 0167).
@@ -529,6 +551,7 @@ impl Server {
             data: data_device::DataState::default(),
             popup_grabs: Vec::new(),
             tokens: Vec::new(),
+            focus_moves: 0,
             token_serial: 0,
             launches: crate::launch::Launches::new(),
             launch_now: 0,
@@ -1006,3 +1029,16 @@ impl Server {
 
 #[cfg(test)]
 mod tests;
+
+/// What an activation token may do (xdg-activation-v1: the compositor decides whether to honour
+/// an activation, "e.g. ... the token was not requested by a client that had focus").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TokenScope {
+    /// The desktop's own (a launch): good until used.
+    Desktop,
+    /// A client's, made while it had the focus: good while the focus has not moved to another
+    /// client since ([`Server::focus_moves`] still this value).
+    Focused(u64),
+    /// A client's, made without the focus: it activates nothing.
+    Unfocused,
+}

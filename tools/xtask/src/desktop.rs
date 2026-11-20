@@ -389,6 +389,11 @@ pub const STATE_FILE: &str = "poly-desktop-state.img";
 /// frames, composing, presenting, taking clients' pixels, key press to frame), on Chromium's disk
 /// too, whose compositor takes its arguments from a file.
 ///
+/// The guest has a sound card played through the host's speakers (`hostaudio`): virtio-sound
+/// (else Intel HDA) on `dsound` (Windows), `pa` (Linux) or `coreaudio` (macOS). `--no-sound` leaves
+/// it out; `--record-sound=FILE` (or `--record-sound FILE`) writes what the guest played to a WAV
+/// file instead. A host whose audio cannot start still boots, with a card that plays into nothing.
+///
 /// `--build-only` builds everything and stops before the boot.
 pub fn command(args: &[String]) -> Result {
     let ready = prepare(args)?;
@@ -421,6 +426,8 @@ pub struct Prepared {
     extra: Vec<String>,
     /// `--memory=` and `--cpus=` (ADR 0141).
     resources: crate::resources::Resources,
+    /// The sound card and where it plays (`None`: `--no-sound`).
+    sound: Option<crate::hostaudio::Plan>,
 }
 
 /// The options of [`command`] read, and everything built for the boot: the
@@ -459,11 +466,21 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
         },
     };
     let scale = scale_text(percent);
-    let mut extra: Vec<String> = args.iter().filter(|a| !a.starts_with("--")).cloned().collect();
+    let mut extra: Vec<String> = args
+        .iter()
+        .enumerate()
+        .filter(|&(i, a)| !a.starts_with("--") && !crate::hostaudio::is_record_file(args, i))
+        .map(|(_, a)| a.clone())
+        .collect();
+    let sound = crate::hostaudio::for_desktop("qemu-system-x86_64", args)?;
     // `--compositor-stats`: the compositor reports frame, copy and key-to-frame times (ADR 0224).
     let stats = args.iter().any(|a| a == "--compositor-stats");
     if stats && !chromium {
         extra.push("poly.init.arg=--stats".to_string());
+    }
+    // And the kernel what showing the frames costs (ADR 0243).
+    if stats {
+        extra.push("poly.drm.stats".to_string());
     }
     let state = root().join("target").join(STATE_FILE);
     // What the compositor is asked on Chromium's disk, where its first
@@ -518,6 +535,7 @@ pub fn prepare(args: &[String]) -> Result<Prepared> {
         qmp_port,
         extra,
         resources,
+        sound,
     })
 }
 
@@ -536,6 +554,7 @@ pub fn boot(p: Prepared) -> Result {
         qmp_port,
         extra,
         resources,
+        sound,
     } = p;
     // The compositor's `--scale` wins over the saved settings' scale (which
     // a run at another scale may have saved): asked for, or the host's when
@@ -596,6 +615,13 @@ pub fn boot(p: Prepared) -> Result {
         cmd.args(super::rootdisk::drive_args(disk));
     }
     cmd.arg("-initrd").arg(&image).args(devices_sized(size)).args(state_drive(&state));
+    match &sound {
+        Some(plan) => {
+            cmd.args(plan.qemu_args());
+            eprintln!("==> {}", plan.describe());
+        }
+        None => eprintln!("==> no sound card (--no-sound)"),
+    }
     if chrome_win {
         cmd.args(crate::net::nic_args(None, false));
         eprintln!(

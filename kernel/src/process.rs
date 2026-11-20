@@ -48,6 +48,11 @@ pub struct Process {
     /// the kernel started. A Linux process's current parent (after its
     /// parent ended) is in the personality's process tree (`linux::task`).
     pub ppid: u32,
+    /// The parent it was given when its own ended (an NT process's children
+    /// go to the nearest living ancestor, as Linux reparents orphans; ADR
+    /// 0230: a Windows installer's process tree stays whole in `/proc` while
+    /// the processes in between end); 0 while its parent lives.
+    pub adopted: AtomicU32,
     pub personality: Personality,
     pub format: binfmt::Format,
     /// Open files, root and working directory, umask, credentials
@@ -62,6 +67,9 @@ pub struct Process {
     /// calls are native (a native program, or one a Linux process
     /// `execve`d) and its children not waited for yet.
     pub native: crate::native::NativeState,
+    /// A Mach-O program started by Poly's dyld (`crate::xnu`, ADR 0237): its
+    /// system calls get the kernel's services.
+    pub xnu: bool,
     /// The process reports its system calls, output, signals and exit on
     /// the serial port (`poly.test.capture`, ADR 0027).
     pub traced: bool,
@@ -245,6 +253,16 @@ impl Process {
         p
     }
 
+    /// An XNU process for a Mach-O program (`crate::xnu`): no Linux state,
+    /// the console on fds 0, 1 and 2 (the kernel's log console when
+    /// `traced`).
+    pub fn new_xnu(pid: u32, ppid: u32, format: binfmt::Format, traced: bool) -> Process {
+        let files = if traced { crate::tty::log_console_files() } else { crate::fs::Files::with_console() };
+        let mut p = Process::with_state(pid, ppid, Personality::Xnu, format, None, traced, files);
+        p.xnu = true;
+        p
+    }
+
     /// A Linux process made by `fork` / `clone` (`linux::task`): its files
     /// and personality state come from the parent.
     pub fn new_linux_child(
@@ -270,11 +288,13 @@ impl Process {
         Process {
             pid,
             ppid,
+            adopted: AtomicU32::new(0),
             personality,
             format,
             files,
             linux,
             native: crate::native::NativeState::new(),
+            xnu: false,
             traced,
             cpu: crate::cputime::ProcessCpu::default(),
             threads: SpinLock::new(Threads::default()),

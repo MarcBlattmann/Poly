@@ -146,6 +146,7 @@ mod ext4disk;
 mod font;
 mod fonts;
 mod gitwin;
+mod hostaudio;
 mod hostfs;
 mod hostscreen;
 mod initramfs;
@@ -155,6 +156,7 @@ mod installer2;
 mod ktest;
 mod libsearch;
 mod linuxchrome;
+mod macho;
 mod macimports;
 mod mesa;
 mod native;
@@ -572,8 +574,20 @@ fn qemu_with(kernel: &Path, memory: &str, cpus: u32, append: &str, devices: Devi
     cmd.arg("-drive")
         .arg(format!("if=none,id=ext4,format=raw,file={}", ext4.display()))
         .args(["-device", &format!("virtio-blk-pci,drive=ext4,disable-legacy=on{vectors}")]);
+    // A slow device: QEMU's null device answering every request, flushes
+    // too, after `SLOW_DISK_LATENCY` (a host whose `fdatasync` takes its
+    // time): the fifth, `virtio4`, which the watchdog test drives
+    // (`virtio_blk::a_slow_device_is_nudged_...`).
+    cmd.args([
+        "-blockdev",
+        &format!("driver=null-co,node-name=slow,size=1048576,read-zeroes=on,latency-ns={SLOW_DISK_LATENCY}"),
+    ])
+    .args(["-device", &format!("virtio-blk-pci,drive=slow,disable-legacy=on{vectors}")]);
     cmd
 }
+
+/// How long the slow test device takes for every request, in nanoseconds.
+const SLOW_DISK_LATENCY: u64 = 300_000_000;
 
 /// Whether QEMU can open a window: on macOS (Cocoa) and Windows always,
 /// elsewhere when an X11 or Wayland display is set. Without one, QEMU's
@@ -1651,6 +1665,9 @@ const BOOT_GROUPS: &[BootGroup] = &[
     ("native", native::boot_test),
     // Dynamically linked glibc programs through glibc's own ld.so (dynamic.rs).
     ("dynamic", dynamic::boot_tests),
+    // x86-64 Mach-O programs through Poly's own dyld: static, chained and
+    // classic fixups, dylibs, TLV, initializers (macho.rs, ADR 0237).
+    ("macho", macho::boot_test),
     // BusyBox as init, its shell typed into on the serial console (busybox.rs).
     ("busybox", busybox::boot_test),
     // bash, coreutils, Python and gcc from the persistent ext4 root disk
@@ -1679,6 +1696,8 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // The same window from what `cargo xtask start` boots as "Desktop with Chrome for Windows": its
     // disk and launcher entry (chrometry.rs, ADR 0216).
     ("chrome-try", chrometry::group_boot_test),
+    // Chrome closed maximized starts again, maximized (chrometry.rs, ADR 0234).
+    ("chrome-try-max", chrometry::group_boot_test_maximized),
     // Git for Windows (MinGit) and its MSYS2 sh.exe on the NT personality, one boot: sh -c,
     // git --version, init, add, commit, log; skipped without the cached MinGit (gitwin.rs,
     // ADR 0194).
@@ -1809,6 +1828,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "programs",
             "native",
             "dynamic",
+            "macho",
             "busybox",
             "rootdisk",
             "toolkits",
@@ -1827,7 +1847,7 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
     // (the `chrome` job of the workflow fetches the package; ADR 0214).
     ("chrome-win", &["chrome-win"]),
     ("chrome-win-sandbox", &["chrome-win-sandbox", "chrome-win-defaults"]),
-    ("chrome-win-window", &["chrome-win-window", "chrome-try"]),
+    ("chrome-win-window", &["chrome-win-window", "chrome-try", "chrome-try-max"]),
     ("chrome-win-gpu", &["chrome-win-gpu"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
