@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreFoundation.framework/CFPreferencesAppSynchronize.yaml. Observed with C tests linked against CoreFoundation
+# (tests/macos/include/poly_mcf.h, ADR 0182); results per architecture in CFPreferencesAppSynchronize.tests/macos.json.
+id: macos/api/CoreFoundation.framework/CFPreferencesAppSynchronize
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with CoreFoundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are C programs that link CoreFoundation (the line `poly-mac: corefoundation`, tests/macos/include/poly_mcf.h); results and output go through raw system calls"
+  observed_by: spec-macos-cf
+  date: 2026-11-20
+summary: >
+  CFPreferencesAppSynchronize(applicationID) flushes the domain's pending changes and refreshes the
+  process's view; it answers true for every domain tried: one holding keys, one with no keys, one
+  never used, long and non-ASCII names, kCFPreferencesAnyApplication and
+  kCFPreferencesCurrentApplication, and when nothing changed; it can be called repeatedly. Values that
+  were set stay readable after it, a key removed before it stays removed, the key list reflects both,
+  and it does not create keys. It does not make the plist file appear at once: the file is updated by
+  the preferences daemon shortly after, so a test that wants to look at the file must wait or not look
+  (tests do not).
+returns:
+  success: "true (1)"
+errors:
+  null_application_id: "NULL and other invalid arguments are not checked and kill the process (SIGSEGV, or SIGTRAP on arm64 / SIGILL on x86_64); not to be relied on"
+side_effects: "asks the preferences daemon to write pending changes"
+threading: "thread safe"
+ordering: []
+timing:
+  typical: "microseconds to a few milliseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

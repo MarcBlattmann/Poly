@@ -1685,6 +1685,9 @@ pub fn collect(files: &PolyFiles) -> std::result::Result<Contents, String> {
     for (path, data) in crate::fonts::shell_tree() {
         tree.file(&path, 0o644, &data);
     }
+    for (path, data) in crate::cursors::tree() {
+        tree.file(&path, 0o644, &data);
+    }
     for (path, data) in crate::wallpapers::tree().map_err(|e| e.to_string())? {
         tree.file(&path, 0o644, &data);
     }

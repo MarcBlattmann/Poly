@@ -82,22 +82,42 @@ pub fn register_all() {
     if REGISTERED.swap(true, Ordering::AcqRel) {
         return;
     }
-    // SAFETY: plain calls; the structure below is a WNDCLASSEXW (80 bytes).
+    /// `WNDCLASSEXW` (`winuser.h`) in this process's layout: 80 bytes on x64, 48 in a 32-bit
+    /// process (an x64-sized one is refused there, and no control class would exist).
+    #[repr(C)]
+    #[derive(Default)]
+    struct WndClassEx {
+        size: u32,
+        style: u32,
+        wndproc: usize,
+        cls_extra: i32,
+        wnd_extra: i32,
+        instance: usize,
+        icon: usize,
+        cursor: usize,
+        brush: usize,
+        menu_name: usize,
+        class_name: usize,
+        icon_sm: usize,
+    }
+    // SAFETY: plain calls with a WNDCLASSEXW of this process's size.
     unsafe {
         let module = GetModuleHandleW(core::ptr::null());
         let cursor = LoadCursorW(0, 32512usize as *const u16);
         for name in class::NAMES {
             let mut wide: Vec<u16> = name.encode_utf16().collect();
             wide.push(0);
-            let mut wc = [0u8; 80];
-            wc[0..4].copy_from_slice(&80u32.to_le_bytes());
-            // CS_GLOBALCLASS | CS_DBLCLKS
-            wc[4..8].copy_from_slice(&0x4008u32.to_le_bytes());
-            wc[8..16].copy_from_slice(&(control_proc as usize as u64).to_le_bytes());
-            wc[24..32].copy_from_slice(&(module as u64).to_le_bytes());
-            wc[40..48].copy_from_slice(&(cursor as u64).to_le_bytes());
-            wc[64..72].copy_from_slice(&(wide.as_ptr() as u64).to_le_bytes());
-            RegisterClassExW(wc.as_ptr());
+            let wc = WndClassEx {
+                size: core::mem::size_of::<WndClassEx>() as u32,
+                // CS_GLOBALCLASS | CS_DBLCLKS
+                style: 0x4008,
+                wndproc: control_proc as usize,
+                instance: module as usize,
+                cursor: cursor as usize,
+                class_name: wide.as_ptr() as usize,
+                ..Default::default()
+            };
+            RegisterClassExW((&raw const wc).cast());
         }
     }
 }
@@ -122,6 +142,64 @@ fn class_name(hwnd: usize) -> String {
     // SAFETY: a buffer of 64 units.
     let n = unsafe { GetClassNameW(hwnd, buf.as_mut_ptr(), 64) }.max(0) as usize;
     String::from_utf16_lossy(&buf[..n])
+}
+
+/// The bytes of a pointer in this process.
+const P: usize = core::mem::size_of::<usize>();
+/// Offsets in the item structures of `commctrl.h`, in the process's width (pointers are aligned to
+/// their size, so the fields after the first pointer sit 4 bytes earlier in a 32-bit process than
+/// on x64; the x64 offsets read text pointers from the wrong place there).
+/// `TCITEMW`: mask, dwState, dwStateMask, pszText, cchTextMax, iImage, lParam (x64: 16, 24, 28, 32).
+const TC_TEXT: usize = 12usize.next_multiple_of(P);
+const TC_CCH: usize = TC_TEXT + P;
+const TC_IMAGE: usize = TC_CCH + 4;
+const TC_PARAM: usize = (TC_IMAGE + 4).next_multiple_of(P);
+/// `LVITEMW`: mask, iItem, iSubItem, state, stateMask, pszText, cchTextMax (x64: 24, 32).
+const LV_TEXT: usize = 20usize.next_multiple_of(P);
+const LV_CCH: usize = LV_TEXT + P;
+/// `LVCOLUMNW`: mask, fmt, cx, pszText (x64: 16).
+const LVC_TEXT: usize = 12usize.next_multiple_of(P);
+/// `TVITEMW`: mask, hItem, state, stateMask, pszText, cchTextMax (x64: 8, 16, 20, 24, 32).
+const TV_ITEM: usize = 4usize.next_multiple_of(P);
+const TV_TEXT: usize = (TV_ITEM + P + 8).next_multiple_of(P);
+const TV_CCH: usize = TV_TEXT + P;
+/// `TVINSERTSTRUCTW`: hParent, hInsertAfter, then the item (x64: 0, 8, 16).
+const TVI_ITEM: usize = 2 * P;
+
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(
+    TC_TEXT == 16
+        && TC_CCH == 24
+        && TC_IMAGE == 28
+        && TC_PARAM == 32
+        && LV_TEXT == 24
+        && LV_CCH == 32
+        && LVC_TEXT == 16
+        && TV_ITEM == 8
+        && TV_TEXT == 24
+        && TV_CCH == 32
+        && TVI_ITEM == 16
+);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(
+    TC_TEXT == 12
+        && TC_CCH == 16
+        && TC_IMAGE == 20
+        && TC_PARAM == 24
+        && LV_TEXT == 20
+        && LV_CCH == 24
+        && LVC_TEXT == 12
+        && TV_ITEM == 4
+        && TV_TEXT == 16
+        && TV_CCH == 20
+        && TVI_ITEM == 8
+);
+
+/// A handle-sized field as the 64-bit value Poly keeps (sign-extended: `TVI_ROOT` is
+/// `(HTREEITEM)-0x10000` in both widths).
+unsafe fn rd_handle(p: usize, off: usize) -> u64 {
+    // SAFETY: inside a structure of the caller's.
+    unsafe { rd::<isize>(p, off) as i64 as u64 }
 }
 
 unsafe fn rd<T: Copy>(p: usize, off: usize) -> T {
@@ -218,8 +296,9 @@ pub unsafe extern "system" fn control_proc(hwnd: usize, msg: u32, w: usize, l: i
                 size_on_create(hwnd, mk.size);
             }
             // The status bar's first part has the text the window was made with.
-            // SAFETY: the structure is the CREATESTRUCTW of the message (name at offset 72).
-            let text = unsafe { wide_at(rd::<usize>(l as usize, 56)) };
+            // SAFETY: the structure is the CREATESTRUCTW of the message: four pointers, cy, cx, y, x,
+            // style, then lpszName aligned (56 on x64, 36 in a 32-bit process).
+            let text = unsafe { wide_at(rd::<usize>(l as usize, (4 * P + 20).next_multiple_of(P))) };
             CTLS.with(|m| {
                 if let Some(Model::Status(s)) = m.get_mut(&hwnd) {
                     s.set_text(0, 0, &text);
@@ -531,13 +610,13 @@ unsafe fn tabs(t: &mut Tabs, msg: u32, w: usize, l: isize) -> Option<isize> {
             if l == 0 {
                 return Some(-1);
             }
-            // SAFETY: a TCITEM (mask 0, pszText 16, iImage 28, lParam 32).
+            // SAFETY: a TCITEM (mask 0, pszText, iImage, lParam at TC_TEXT, TC_IMAGE, TC_PARAM).
             let (mask, text, image, param) = unsafe {
                 (
                     rd::<u32>(l as usize, 0),
-                    rd::<usize>(l as usize, 16),
-                    rd::<i32>(l as usize, 28),
-                    rd::<isize>(l as usize, 32),
+                    rd::<usize>(l as usize, TC_TEXT),
+                    rd::<i32>(l as usize, TC_IMAGE),
+                    rd::<isize>(l as usize, TC_PARAM),
                 )
             };
             let text = if mask & TCIF_TEXT != 0 {
@@ -572,28 +651,30 @@ unsafe fn tabs(t: &mut Tabs, msg: u32, w: usize, l: isize) -> Option<isize> {
             if msg == TCM_GETITEMW {
                 if mask & TCIF_TEXT != 0 {
                     // SAFETY: the caller's buffer.
-                    unsafe { put(rd::<usize>(l as usize, 16), rd::<i32>(l as usize, 24).max(0) as usize, &tab.text) };
+                    unsafe {
+                        put(rd::<usize>(l as usize, TC_TEXT), rd::<i32>(l as usize, TC_CCH).max(0) as usize, &tab.text)
+                    };
                 }
                 if mask & TCIF_IMAGE != 0 {
                     // SAFETY: as above.
-                    unsafe { wr(l as usize, 28, tab.image) };
+                    unsafe { wr(l as usize, TC_IMAGE, tab.image) };
                 }
                 if mask & TCIF_PARAM != 0 {
                     // SAFETY: as above.
-                    unsafe { wr(l as usize, 32, tab.param) };
+                    unsafe { wr(l as usize, TC_PARAM, tab.param) };
                 }
             } else {
                 if mask & TCIF_TEXT != 0 {
                     // SAFETY: a NUL-terminated string.
-                    tab.text = unsafe { wide_at(rd::<usize>(l as usize, 16)) };
+                    tab.text = unsafe { wide_at(rd::<usize>(l as usize, TC_TEXT)) };
                 }
                 if mask & TCIF_IMAGE != 0 {
                     // SAFETY: as above.
-                    tab.image = unsafe { rd::<i32>(l as usize, 28) };
+                    tab.image = unsafe { rd::<i32>(l as usize, TC_IMAGE) };
                 }
                 if mask & TCIF_PARAM != 0 {
                     // SAFETY: as above.
-                    tab.param = unsafe { rd::<isize>(l as usize, 32) };
+                    tab.param = unsafe { rd::<isize>(l as usize, TC_PARAM) };
                 }
             }
             1
@@ -623,9 +704,9 @@ unsafe fn list(v: &mut ListView, msg: u32, w: usize, l: isize) -> Option<isize> 
             if l == 0 {
                 return Some(-1);
             }
-            // SAFETY: an LVCOLUMN (mask 0, cx 8, pszText 16).
+            // SAFETY: an LVCOLUMN (mask 0, cx 8, pszText at LVC_TEXT).
             let (mask, cx, text) =
-                unsafe { (rd::<u32>(l as usize, 0), rd::<i32>(l as usize, 8), rd::<usize>(l as usize, 16)) };
+                unsafe { (rd::<u32>(l as usize, 0), rd::<i32>(l as usize, 8), rd::<usize>(l as usize, LVC_TEXT)) };
             let col = Column {
                 // SAFETY: a NUL-terminated string.
                 text: if mask & LVCF_TEXT != 0 { unsafe { wide_at(text) } } else { Vec::new() },
@@ -637,9 +718,9 @@ unsafe fn list(v: &mut ListView, msg: u32, w: usize, l: isize) -> Option<isize> 
             if l == 0 {
                 return Some(-1);
             }
-            // SAFETY: an LVITEM (mask 0, iItem 4, pszText 24).
+            // SAFETY: an LVITEM (mask 0, iItem 4, pszText at LV_TEXT).
             let (mask, item, text) =
-                unsafe { (rd::<u32>(l as usize, 0), rd::<i32>(l as usize, 4), rd::<usize>(l as usize, 24)) };
+                unsafe { (rd::<u32>(l as usize, 0), rd::<i32>(l as usize, 4), rd::<usize>(l as usize, LV_TEXT)) };
             // SAFETY: a NUL-terminated string.
             let t = if mask & LVIF_TEXT != 0 { unsafe { wide_at(text) } } else { Vec::new() };
             v.insert_item(item, &t) as isize
@@ -648,13 +729,13 @@ unsafe fn list(v: &mut ListView, msg: u32, w: usize, l: isize) -> Option<isize> 
             if l == 0 {
                 return Some(0);
             }
-            // SAFETY: an LVITEM (mask 0, iItem 4, iSubItem 8, pszText 24).
+            // SAFETY: an LVITEM (mask 0, iItem 4, iSubItem 8, pszText at LV_TEXT).
             let (mask, item, sub, text) = unsafe {
                 (
                     rd::<u32>(l as usize, 0),
                     rd::<i32>(l as usize, 4),
                     rd::<i32>(l as usize, 8),
-                    rd::<usize>(l as usize, 24),
+                    rd::<usize>(l as usize, LV_TEXT),
                 )
             };
             let item = if msg == LVM_SETITEMTEXTW { w as i32 } else { item };
@@ -669,14 +750,14 @@ unsafe fn list(v: &mut ListView, msg: u32, w: usize, l: isize) -> Option<isize> 
             if l == 0 {
                 return Some(0);
             }
-            // SAFETY: an LVITEM (mask 0, iItem 4, iSubItem 8, pszText 24, cchTextMax 32).
+            // SAFETY: an LVITEM (mask 0, iItem 4, iSubItem 8, pszText and cchTextMax at LV_TEXT, LV_CCH).
             let (mask, item, sub, buf, cap) = unsafe {
                 (
                     rd::<u32>(l as usize, 0),
                     rd::<i32>(l as usize, 4),
                     rd::<i32>(l as usize, 8),
-                    rd::<usize>(l as usize, 24),
-                    rd::<i32>(l as usize, 32).max(0) as usize,
+                    rd::<usize>(l as usize, LV_TEXT),
+                    rd::<i32>(l as usize, LV_CCH).max(0) as usize,
                 )
             };
             let item = if msg == LVM_GETITEMTEXTW { w as i32 } else { item };
@@ -716,13 +797,13 @@ unsafe fn tree(t: &mut TreeView, msg: u32, w: usize, l: isize) -> Option<isize> 
             if l == 0 {
                 return Some(0);
             }
-            // SAFETY: a TVINSERTSTRUCT (hParent 0, hInsertAfter 8, mask 16, pszText 40).
+            // SAFETY: a TVINSERTSTRUCT (hParent 0, hInsertAfter P, the item at TVI_ITEM: mask, pszText).
             let (parent, after, mask, text) = unsafe {
                 (
-                    rd::<u64>(l as usize, 0),
-                    rd::<u64>(l as usize, 8),
-                    rd::<u32>(l as usize, 16),
-                    rd::<usize>(l as usize, 40),
+                    rd_handle(l as usize, 0),
+                    rd_handle(l as usize, P),
+                    rd::<u32>(l as usize, TVI_ITEM),
+                    rd::<usize>(l as usize, TVI_ITEM + TV_TEXT),
                 )
             };
             let parent = if parent == poly_comctl::TVI_ROOT { 0 } else { parent as u32 };
@@ -747,13 +828,13 @@ unsafe fn tree(t: &mut TreeView, msg: u32, w: usize, l: isize) -> Option<isize> 
             if l == 0 {
                 return Some(0);
             }
-            // SAFETY: a TVITEM (mask 0, hItem 8, pszText 24, cchTextMax 32).
+            // SAFETY: a TVITEM (mask 0, hItem, pszText, cchTextMax at TV_ITEM, TV_TEXT, TV_CCH).
             let (mask, item, buf, cap) = unsafe {
                 (
                     rd::<u32>(l as usize, 0),
-                    rd::<u64>(l as usize, 8),
-                    rd::<usize>(l as usize, 24),
-                    rd::<i32>(l as usize, 32).max(0) as usize,
+                    rd_handle(l as usize, TV_ITEM),
+                    rd::<usize>(l as usize, TV_TEXT),
+                    rd::<i32>(l as usize, TV_CCH).max(0) as usize,
                 )
             };
             let Some(txt) = t.text(item as u32) else { return Some(0) };

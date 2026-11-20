@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfbundlegetvalueforinfodictionarykey_types",
+      "source_sha256": "ac7df4d42e561da3f6669c4f33d39c688ed94d0aa4b4692408ea0b3a0051ea6b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "553b766bb87b3a5370729be922d4439549bd562e6616ddc32efcf476185a9670",
+          "exit_code": 0,
+          "stdout": "ok name != NULL && CFGetTypeID(name) == CFStringGetTypeID() && cf_is(name, \"Probe\")\nok CFBundleGetValueForInfoDictionaryKey(m, kCFBundleNameKey) == name\nok cf_is(CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"CFBundleVersion\")), \"42\")\nok cf_is(CFBundleGetValueForInfoDictionaryKey(m, kCFBundleVersionKey), \"42\")\nok cf_is(CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"CFBundleShortVersionString\")), \"1.2.3\")\nok n != NULL && CFGetTypeID(n) == CFNumberGetTypeID()\nok CFNumberGetValue(n, kCFNumberLongLongType, &out) && out == 7\nok CFNumberGetType(n) == kCFNumberSInt64Type\nok b == kCFBooleanTrue\nok arr != NULL && CFGetTypeID(arr) == CFArrayGetTypeID() && CFArrayGetCount(arr) == 2\nok cf_is(CFArrayGetValueAtIndex(arr, 1), \"b\")\nok CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"NoSuchKey\")) == NULL\nok CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"cfbundlename\")) == NULL\nok CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"\")) == NULL\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d012b9bb857ea8bdd79e7fecf8cf21a6c54890697eecad1808733673a3e7ef7f",
+          "exit_code": 0,
+          "stdout": "ok name != NULL && CFGetTypeID(name) == CFStringGetTypeID() && cf_is(name, \"Probe\")\nok CFBundleGetValueForInfoDictionaryKey(m, kCFBundleNameKey) == name\nok cf_is(CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"CFBundleVersion\")), \"42\")\nok cf_is(CFBundleGetValueForInfoDictionaryKey(m, kCFBundleVersionKey), \"42\")\nok cf_is(CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"CFBundleShortVersionString\")), \"1.2.3\")\nok n != NULL && CFGetTypeID(n) == CFNumberGetTypeID()\nok CFNumberGetValue(n, kCFNumberLongLongType, &out) && out == 7\nok CFNumberGetType(n) == kCFNumberSInt64Type\nok b == kCFBooleanTrue\nok arr != NULL && CFGetTypeID(arr) == CFArrayGetTypeID() && CFArrayGetCount(arr) == 2\nok cf_is(CFArrayGetValueAtIndex(arr, 1), \"b\")\nok CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"NoSuchKey\")) == NULL\nok CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"cfbundlename\")) == NULL\nok CFBundleGetValueForInfoDictionaryKey(m, CFSTR(\"\")) == NULL\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfarraycreate_mutable_and_capacity",
+      "source_sha256": "f03fac3a1c290a84cc784ca14ec0a2ae792a287da38a94a7c787fee9002d27d9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "769b8a2a10a4eaa4fc99ed291a6b68ffce436904ae2b63e0ea90e1efb4622c7b",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(m) == 0\nok CFArrayGetCount(m) == 100\nok cf_is(CFArrayGetValueAtIndex(m, 99), \"99\")\nok CFArrayGetCount(c) == 0 && CFArrayGetCount(m) == 100\nok CFArrayGetCount(d) == 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2fc7044503ae2e79b9c7a135492ec0f17f6bbab93c061d63db0757b256da6b2f",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(m) == 0\nok CFArrayGetCount(m) == 100\nok cf_is(CFArrayGetValueAtIndex(m, 99), \"99\")\nok CFArrayGetCount(c) == 0 && CFArrayGetCount(m) == 100\nok CFArrayGetCount(d) == 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfarraycreate_values_and_count",
+      "source_sha256": "ba3b0b8906a2eae25133e8403ead960fc26e516991fa42bc2535c220550ceb8d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a97e9358f494afa777a4f644bb636f9b3b6b4fbed8a810f7612b1c066c14e7c1",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(a) == 3\nok CFArrayGetValueAtIndex(a, 0) == v[0] && CFArrayGetValueAtIndex(a, 2) == v[2]\nok cf_is(CFArrayGetValueAtIndex(a, 0), \"a\")\nok CFArrayGetCount(two) == 2\nok e != NULL && CFArrayGetCount(e) == 0\nok CFArrayGetCount(dup) == 2\nok CFArrayGetCount(copy) == 3 && CFEqual(copy, a)\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "12435ea806213a93f63c7d98193f0c9ba7cf01b68ce7f3cbb214ea4af73ae5e2",
+          "exit_code": 0,
+          "stdout": "ok CFArrayGetCount(a) == 3\nok CFArrayGetValueAtIndex(a, 0) == v[0] && CFArrayGetValueAtIndex(a, 2) == v[2]\nok cf_is(CFArrayGetValueAtIndex(a, 0), \"a\")\nok CFArrayGetCount(two) == 2\nok e != NULL && CFArrayGetCount(e) == 0\nok CFArrayGetCount(dup) == 2\nok CFArrayGetCount(copy) == 3 && CFEqual(copy, a)\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

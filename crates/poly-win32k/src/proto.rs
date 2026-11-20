@@ -269,6 +269,11 @@ crate::wire_enum! {
         123 => SendCopy { hwnd: u64, w: u64, dw_data: u64, data: Vec<u8> },
         /// `GetShellWindow`: a `Handle`, 0 when the session has no shell (`Wm::shell_window`).
         126 => ShellWindow {},
+        /// The window-state page (ADR 0249): mapped read-only into the caller's process on its first
+        /// ask; `Value` is its address (0: none). Its first eight bytes are a generation the kernel
+        /// raises on every change of the window manager's state; a `Window` reply a thread got while
+        /// the generation had a value stays its answer as long as the value is the same.
+        127 => SharedPage {},
         /// A thread of the caller found its queue empty and blocks for messages (`blocking`), or
         /// only looked (an empty `PeekMessage`): `crate::idle` (ADR 0245). `Ok`.
         124 => InputIdle { blocking: bool },

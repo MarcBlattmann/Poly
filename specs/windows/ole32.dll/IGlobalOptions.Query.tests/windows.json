@@ -1,0 +1,30 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive",
+    "token": "elevated"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1 (-Token)",
+  "started": null,
+  "tests": [
+    {
+      "name": "go_q_defaults",
+      "exe_sha256": "abc5e9d4c4466f7b5f5f294165501d83a4c8b184c9c90b42339c563ce9496050",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJvcGVydHkgMCwgdmFsdWVzIC0sIGFwYXJ0bWVudCBtOiBwcm9jZXNzIGVuZGVkIHdpdGggMHgwCiAgc3RhcnQ6IFF1ZXJ5ID0gMHg4MDA3MDA1NyB1bmNoYW5nZWQKcHJvcGVydHkgMSwgdmFsdWVzIC0sIGFwYXJ0bWVudCBtOiBwcm9jZXNzIGVuZGVkIHdpdGggMHgwCiAgc3RhcnQ6IFF1ZXJ5ID0gMHgwMDAwMDAwMCAweDAKcHJvcGVydHkgMiwgdmFsdWVzIC0sIGFwYXJ0bWVudCBtOiBwcm9jZXNzIGVuZGVkIHdpdGggMHgwCiAgc3RhcnQ6IFF1ZXJ5ID0gMHg4MDAwNDAwNSB1bmNoYW5nZWQKcHJvcGVydHkgMywgdmFsdWVzIC0sIGFwYXJ0bWVudCBtOiBwcm9jZXNzIGVuZGVkIHdpdGggMHgwCiAgc3RhcnQ6IFF1ZXJ5ID0gMHgwMDAwMDAwMCAweDEKcHJvcGVydHkgNCwgdmFsdWVzIC0sIGFwYXJ0bWVudCBtOiBwcm9jZXNzIGVuZGVkIHdpdGggMHgwCiAgc3RhcnQ6IFF1ZXJ5ID0gMHgwMDAwMDAwMCAweDAKcHJvcGVydHkgNSwgdmFsdWVzIC0sIGFwYXJ0bWVudCBtOiBwcm9jZXNzIGVuZGVkIHdpdGggMHgwCiAgc3RhcnQ6IFF1ZXJ5ID0gMHgwMDAwMDAwMCAweDIKcHJvcGVydHkgNiwgdmFsdWVzIC0sIGFwYXJ0bWVudCBtOiBwcm9jZXNzIGVuZGVkIHdpdGggMHgwCiAgc3RhcnQ6IFF1ZXJ5ID0gMHgwMDAwMDAwMCAweDAKcHJvcGVydHkgNywgdmFsdWVzIC0sIGFwYXJ0bWVudCBtOiBwcm9jZXNzIGVuZGVkIHdpdGggMHgwCiAgc3RhcnQ6IFF1ZXJ5ID0gMHgwMDAwMDAwMCBsYXJnZQpwcm9wZXJ0eSA4LCB2YWx1ZXMgLSwgYXBhcnRtZW50IG06IHByb2Nlc3MgZW5kZWQgd2l0aCAweDAKICBzdGFydDogUXVlcnkgPSAweDAwMDAwMDAwIDB4MApwcm9wZXJ0eSA5LCB2YWx1ZXMgLSwgYXBhcnRtZW50IG06IHByb2Nlc3MgZW5kZWQgd2l0aCAweDAKICBzdGFydDogUXVlcnkgPSAweDgwMDcwMDU3IHVuY2hhbmdlZApwcm9wZXJ0eSAxLCB2YWx1ZXMgLSwgYXBhcnRtZW50IHM6IHByb2Nlc3MgZW5kZWQgd2l0aCAweDAKICBzdGFydDogUXVlcnkgPSAweDAwMDAwMDAwIDB4MApwcm9wZXJ0eSAzLCB2YWx1ZXMgLSwgYXBhcnRtZW50IHM6IHByb2Nlc3MgZW5kZWQgd2l0aCAweDAKICBzdGFydDogUXVlcnkgPSAweDAwMDAwMDAwIDB4MQpwcm9wZXJ0eSA1LCB2YWx1ZXMgLSwgYXBhcnRtZW50IHM6IHByb2Nlc3MgZW5kZWQgd2l0aCAweDAKICBzdGFydDogUXVlcnkgPSAweDAwMDAwMDAwIDB4Mgpwcm9wZXJ0eSAyNTYsIHZhbHVlcyAtLCBhcGFydG1lbnQgbTogcHJvY2VzcyBlbmRlZCB3aXRoIDB4MAogIHN0YXJ0OiBRdWVyeSA9IDB4ODAwNzAwNTcgdW5jaGFuZ2VkCnByb3BlcnR5IDQyOTQ5NjcyOTUsIHZhbHVlcyAtLCBhcGFydG1lbnQgbTogcHJvY2VzcyBlbmRlZCB3aXRoIDB4MAogIHN0YXJ0OiBRdWVyeSA9IDB4ODAwNzAwNTcgdW5jaGFuZ2VkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "property 0, values -, apartment m: process ended with 0x0\n  start: Query = 0x80070057 unchanged\nproperty 1, values -, apartment m: process ended with 0x0\n  start: Query = 0x00000000 0x0\nproperty 2, values -, apartment m: process ended with 0x0\n  start: Query = 0x80004005 unchanged\nproperty 3, values -, apartment m: process ended with 0x0\n  start: Query = 0x00000000 0x1\nproperty 4, values -, apartment m: process ended with 0x0\n  start: Query = 0x00000000 0x0\nproperty 5, values -, apartment m: process ended with 0x0\n  start: Query = 0x00000000 0x2\nproperty 6, values -, apartment m: process ended with 0x0\n  start: Query = 0x00000000 0x0\nproperty 7, values -, apartment m: process ended with 0x0\n  start: Query = 0x00000000 large\nproperty 8, values -, apartment m: process ended with 0x0\n  start: Query = 0x00000000 0x0\nproperty 9, values -, apartment m: process ended with 0x0\n  start: Query = 0x80070057 unchanged\nproperty 1, values -, apartment s: process ended with 0x0\n  start: Query = 0x00000000 0x0\nproperty 3, values -, apartment s: process ended with 0x0\n  start: Query = 0x00000000 0x1\nproperty 5, values -, apartment s: process ended with 0x0\n  start: Query = 0x00000000 0x2\nproperty 256, values -, apartment m: process ended with 0x0\n  start: Query = 0x80070057 unchanged\nproperty 4294967295, values -, apartment m: process ended with 0x0\n  start: Query = 0x80070057 unchanged\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 308
+    }
+  ]
+}

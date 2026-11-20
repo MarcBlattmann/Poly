@@ -51,6 +51,10 @@ pub(super) fn draw(
         layer.draw(fb, clip, s);
     }
     if let Some((x, y)) = scene.cursor() {
+        if let Some(img) = scene.cursor_image() {
+            draw_xcursor(fb, s.rect(scene.cursor_rect(x, y)).intersect(&clip), s.px(x), s.px(y), img);
+            return;
+        }
         match scene.cursor_look() {
             CursorLook::Arrow => draw_cursor(fb, clip, x, y, s),
             CursorLook::Image { content, hx, hy } => {
@@ -100,6 +104,35 @@ fn hides(w: &Window, clip: Rect, s: Scale) -> bool {
     let shown = if w.is_decorated() { placed.bounds } else { placed.surface };
     let drawn = shown.intersect(&placed.surface);
     drawn.intersect(&clip) == clip
+}
+
+/// A theme's picture (ADR 0252) with its hot spot at physical (`x`, `y`), pixel for pixel,
+/// premultiplied ARGB over the screen; only inside `area` (the damaged rectangle, clipped).
+fn draw_xcursor(fb: &mut dyn Framebuffer, area: Rect, x: i32, y: i32, img: &super::XImage) {
+    let (ox, oy) = (x - img.hot.0 as i32, y - img.hot.1 as i32);
+    let area = area.intersect(&Rect::new(ox, oy, img.width as i32, img.height as i32));
+    for py in area.y..area.bottom() {
+        let row = fb.row_mut(py as u32);
+        let src = &img.pixels[((py - oy) as u32 * img.width) as usize..][..img.width as usize];
+        for px in area.x..area.right() {
+            let p = src[(px - ox) as usize];
+            let a = p >> 24;
+            if a == 0 {
+                continue;
+            }
+            let d = &mut row[px as usize];
+            if a == 255 {
+                *d = OPAQUE | (p & 0x00ff_ffff);
+                continue;
+            }
+            // Premultiplied: out = src + dst * (255 - a) / 255, per colour.
+            let blend = |shift: u32| {
+                let (sc, dc) = ((p >> shift) & 0xff, (*d >> shift) & 0xff);
+                ((sc + (dc * (255 - a) + 127) / 255).min(255)) << shift
+            };
+            *d = OPAQUE | blend(16) | blend(8) | blend(0);
+        }
+    }
 }
 
 /// A named look ([`super::NamedCursor`]) with its hot spot at logical (`x`, `y`), its cells as

@@ -220,6 +220,20 @@ pub unsafe extern "system" fn BuildSecurityDescriptorW(
     }
 }
 
+/// An entry whose trustee is the special name `CURRENT_USER` ("The owner of the calling thread or
+/// process", Learn's `TRUSTEE` structure) with the SID it stands for, resolved as for
+/// `BuildSecurityDescriptorW` (its sheet: the calling process token's user). Other entries as
+/// they are; a name that cannot be resolved stays a name (and fails as an unknown one).
+fn current_user(mut e: Entry) -> Entry {
+    if let Trustee::Name(n) = &e.trustee
+        && n.eq_ignore_ascii_case("CURRENT_USER")
+        && let Ok(s) = trustee_sid(&e.trustee)
+    {
+        e.trustee = Trustee::Sid(s.to_bytes());
+    }
+    e
+}
+
 /// `SetEntriesInAclW`.
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn SetEntriesInAclW(
@@ -237,7 +251,8 @@ pub unsafe extern "system" fn SetEntriesInAclW(
         if count != 0 && entries.is_null() {
             return ERROR_INVALID_PARAMETER;
         }
-        let list: Vec<Entry> = (0..count as usize).map(|i| read_entry(entries.add(EA_SIZE * i))).collect();
+        let list: Vec<Entry> =
+            (0..count as usize).map(|i| current_user(read_entry(entries.add(EA_SIZE * i)))).collect();
         let old = (!old_acl.is_null()).then(|| {
             let size = usize::from((old_acl.add(2) as *const u16).read_unaligned());
             core::slice::from_raw_parts(old_acl, size.max(8))

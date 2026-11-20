@@ -48,6 +48,10 @@ build() { # arch tag min suffix link-flags
     cp sys/libSystem.B.dylib "$out/libSystem${sfx}_$tag.dylib"
     cp "libgreet$sfx.dylib" "$out/libgreet${sfx}_$tag.dylib"
     cp "hello${sfx}_$tag" "$out/"
+    if [ "$sfx$tag" = x64 ]; then
+        cc $arch $min "$src/bsd.c" bsd.o
+        link $arch $min $flags -o "$out/bsd_x64" bsd.o sys/libSystem.B.dylib
+    fi
 }
 
 build x86_64 x64 13.0 "" "-fixup_chains -init_offsets"

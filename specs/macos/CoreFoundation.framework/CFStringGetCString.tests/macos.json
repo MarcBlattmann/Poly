@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfstringgetcstring_encodings",
+      "source_sha256": "839c78bba9923ff727a059853e12e37479906d42021fd76a06b56dfcbacac7a0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6241a8fdca70c456b37099a32c17d863b55e4d57e02b3419f55b3f5cf8e78983",
+          "exit_code": 0,
+          "stdout": "ok CFStringGetCString(e, b, 10, kCFStringEncodingISOLatin1)\nok mem_eq(b, \"h\\xe9llo\", 6)\nok CFStringGetCString(e, b, 10, kCFStringEncodingMacRoman)\nok mem_eq(b, \"h\\x8ello\", 6)\nok CFStringGetCString(e, b, 10, kCFStringEncodingWindowsLatin1)\nok mem_eq(b, \"h\\xe9llo\", 6)\nok !CFStringGetCString(e, b, 10, kCFStringEncodingASCII)\nok CFStringGetCString(eu, b, 5, kCFStringEncodingWindowsLatin1)\nok (unsigned char)b[0] == 0x80 && b[1] == 0\nok !CFStringGetCString(eu, b, 5, kCFStringEncodingISOLatin1)\nok CFStringGetCString(eu, b, 5, kCFStringEncodingUTF8)\nok mem_eq(b, \"\\xe2\\x82\\xac\", 4)\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9ff0434162dfa825beaf0e4aab0755cee64bb72039e8eb734f1db669124f7c9b",
+          "exit_code": 0,
+          "stdout": "ok CFStringGetCString(e, b, 10, kCFStringEncodingISOLatin1)\nok mem_eq(b, \"h\\xe9llo\", 6)\nok CFStringGetCString(e, b, 10, kCFStringEncodingMacRoman)\nok mem_eq(b, \"h\\x8ello\", 6)\nok CFStringGetCString(e, b, 10, kCFStringEncodingWindowsLatin1)\nok mem_eq(b, \"h\\xe9llo\", 6)\nok !CFStringGetCString(e, b, 10, kCFStringEncodingASCII)\nok CFStringGetCString(eu, b, 5, kCFStringEncodingWindowsLatin1)\nok (unsigned char)b[0] == 0x80 && b[1] == 0\nok !CFStringGetCString(eu, b, 5, kCFStringEncodingISOLatin1)\nok CFStringGetCString(eu, b, 5, kCFStringEncodingUTF8)\nok mem_eq(b, \"\\xe2\\x82\\xac\", 4)\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringgetcstring_special_characters",
+      "source_sha256": "6b4219025cc96e4e88fb05a9597d2c832d35f5ff419bf51fa9d25814691ec122",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5b25a3b340abf39bccd6ace912fa401acd82cf5c77de6505e68dd93842a36fa2",
+          "exit_code": 0,
+          "stdout": "ok CFStringGetCString(S(\"a\\xf0\\x9f\\x98\\x80\"), b, 10, kCFStringEncodingUTF8)\nok mem_eq(b, \"a\\xf0\\x9f\\x98\\x80\\0\", 6) && (unsigned char)b[6] == 0x55\nok CFStringGetCString(CFStringCreateWithCharacters(kCFAllocatorDefault, nul, 3), b, 10, kCFStringEncodingUTF8)\nok mem_eq(b, \"A\\0B\\0\", 4) && (unsigned char)b[4] == 0x55\nok CFStringGetCString(CFSTR(\"€\"), b, 10, kCFStringEncodingUTF8)\nok mem_eq(b, \"\\xe2\\x82\\xac\\0\", 4)\nok CFStringGetMaximumSizeForEncoding(5, kCFStringEncodingUTF8) >= 15\nok CFStringGetMaximumSizeForEncoding(5, kCFStringEncodingASCII) == 5\nok CFStringGetMaximumSizeForEncoding(5, kCFStringEncodingUTF16) == 10\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "601447e9b30ed8f133a324d0e0bad00578c7c970c250761bde9a0fa08324f127",
+          "exit_code": 0,
+          "stdout": "ok CFStringGetCString(S(\"a\\xf0\\x9f\\x98\\x80\"), b, 10, kCFStringEncodingUTF8)\nok mem_eq(b, \"a\\xf0\\x9f\\x98\\x80\\0\", 6) && (unsigned char)b[6] == 0x55\nok CFStringGetCString(CFStringCreateWithCharacters(kCFAllocatorDefault, nul, 3), b, 10, kCFStringEncodingUTF8)\nok mem_eq(b, \"A\\0B\\0\", 4) && (unsigned char)b[4] == 0x55\nok CFStringGetCString(CFSTR(\"€\"), b, 10, kCFStringEncodingUTF8)\nok mem_eq(b, \"\\xe2\\x82\\xac\\0\", 4)\nok CFStringGetMaximumSizeForEncoding(5, kCFStringEncodingUTF8) >= 15\nok CFStringGetMaximumSizeForEncoding(5, kCFStringEncodingASCII) == 5\nok CFStringGetMaximumSizeForEncoding(5, kCFStringEncodingUTF16) == 10\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringgetcstring_utf16_forms",
+      "source_sha256": "7000cbbdfd27ef9cb065cf1b78db5c7c4887534e67f8cf1b8cc41d95e3f9199d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "24da8aafc67505229fee99fd7183f3f9e9e624e760004f8d5e74cb7bc740f1b3",
+          "exit_code": 0,
+          "stdout": "ok CFStringGetCString(a, b, 20, kCFStringEncodingUTF16LE)\nok mem_eq(b, \"h\\0e\\0l\\0l\\0o\\0\\0\", 11) && (unsigned char)b[11] == 0x55\nok CFStringGetCString(a, b, 20, kCFStringEncodingUTF16BE)\nok mem_eq(b, \"\\0h\\0e\\0l\\0l\\0o\\0\", 11) && (unsigned char)b[11] == 0x55\nok CFStringGetCString(a, b, 20, kCFStringEncodingUTF16)\nok mem_eq(b, \"\\xff\\xfeh\\0e\\0l\\0l\\0o\\0\\0\", 13) && (unsigned char)b[13] == 0x55\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4edfe8d3a956d2a4fdf9e9563462bd61889a8e1442a738e17c20b529a11cf648",
+          "exit_code": 0,
+          "stdout": "ok CFStringGetCString(a, b, 20, kCFStringEncodingUTF16LE)\nok mem_eq(b, \"h\\0e\\0l\\0l\\0o\\0\\0\", 11) && (unsigned char)b[11] == 0x55\nok CFStringGetCString(a, b, 20, kCFStringEncodingUTF16BE)\nok mem_eq(b, \"\\0h\\0e\\0l\\0l\\0o\\0\", 11) && (unsigned char)b[11] == 0x55\nok CFStringGetCString(a, b, 20, kCFStringEncodingUTF16)\nok mem_eq(b, \"\\xff\\xfeh\\0e\\0l\\0l\\0o\\0\\0\", 13) && (unsigned char)b[13] == 0x55\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

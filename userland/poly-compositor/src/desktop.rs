@@ -20,6 +20,43 @@ pub const FONT: &str = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
 /// Alpine Shell's fonts, where the desktop's images put them (ADR 0127).
 pub const SHELL_FONTS: &str = "/usr/share/poly/fonts";
 
+/// The cursor theme's files (ADR 0252): Bibata Modern Ice, as Alpine Shell's pointer, where the
+/// desktop's images put them (`cargo xtask cursors fetch`; GPL-3.0, its licence beside them).
+pub const CURSORS: &str = "/usr/share/icons/Bibata-Modern-Ice/cursors";
+
+/// The pointer's pictures from the cursor theme's files that are on the disk; `None` without any
+/// (the compositor draws its own).
+pub fn cursor_theme() -> Option<alloc::sync::Arc<poly_wayland::compose::CursorTheme>> {
+    use poly_wayland::compose::{CursorTheme, NamedCursor, XCursor};
+    const LOOKS: [NamedCursor; 12] = [
+        NamedCursor::Arrow,
+        NamedCursor::Progress,
+        NamedCursor::Hand,
+        NamedCursor::Text,
+        NamedCursor::Wait,
+        NamedCursor::Crosshair,
+        NamedCursor::Move,
+        NamedCursor::NotAllowed,
+        NamedCursor::ResizeEW,
+        NamedCursor::ResizeNS,
+        NamedCursor::ResizeNWSE,
+        NamedCursor::ResizeNESW,
+    ];
+    let mut theme = CursorTheme::default();
+    for n in LOOKS {
+        let path = format!("{CURSORS}/{}", CursorTheme::file_name(n));
+        if let Some(c) = poly_rt::fs::read(&path).ok().and_then(|b| XCursor::parse(&b)) {
+            theme.insert(n, c);
+        }
+    }
+    if theme.is_empty() {
+        println!("poly-compositor: no cursor theme in {CURSORS} (cursors not fetched?): Poly's own pointer");
+        return None;
+    }
+    println!("poly-compositor: cursor theme Bibata-Modern-Ice: {} of {} looks", theme.len(), LOOKS.len());
+    Some(alloc::sync::Arc::new(theme))
+}
+
 /// Alpine Shell's wallpapers, where the desktop's images put them
 /// (`poly_shell::picture` files, ADR 0127).
 pub const WALLPAPERS: &str = "/usr/share/poly/wallpapers";

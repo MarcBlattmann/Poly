@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "lnw_trunc",
+      "exe_sha256": "b150af8d057b3536951f6511327f4cfc34a49cd1367b364661939e1629900011",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "biAwOiByZXR1cm5zIGRlc3RpbmF0aW9uIHVuaXRzIFs3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3XQpuIDE6IHJldHVybnMgZGVzdGluYXRpb24gdW5pdHMgWzAsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzddCm4gMjogcmV0dXJucyBkZXN0aW5hdGlvbiB1bml0cyBbNjEsIDAsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzcsIDc3NzddCm4gMzogcmV0dXJucyBkZXN0aW5hdGlvbiB1bml0cyBbNjEsIDYyLCAwLCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3LCA3Nzc3XQpuIDg6IHJldHVybnMgZGVzdGluYXRpb24gdW5pdHMgWzYxLCA2MiwgNjMsIDY0LCA2NSwgNjYsIDY3LCAwLCA3Nzc3LCA3Nzc3LCA3Nzc3XQpuIDk6IHJldHVybnMgZGVzdGluYXRpb24gdW5pdHMgWzYxLCA2MiwgNjMsIDY0LCA2NSwgNjYsIDY3LCA2OCwgMCwgNzc3NywgNzc3N10KbiAxMDogcmV0dXJucyBkZXN0aW5hdGlvbiB1bml0cyBbNjEsIDYyLCA2MywgNjQsIDY1LCA2NiwgNjcsIDY4LCAwLCA3Nzc3LCA3Nzc3XQpuIDEyOiByZXR1cm5zIGRlc3RpbmF0aW9uIHVuaXRzIFs2MSwgNjIsIDYzLCA2NCwgNjUsIDY2LCA2NywgNjgsIDAsIDc3NzcsIDc3NzddCm4gLTE6IHJldHVybnMgZGVzdGluYXRpb24gdW5pdHMgWzYxLCA2MiwgNjMsIDY0LCA2NSwgNjYsIDY3LCA2OCwgMCwgNzc3NywgNzc3N10KbiAtMjE0NzQ4MzY0ODogcmV0dXJucyBkZXN0aW5hdGlvbiB1bml0cyBbNjEsIDYyLCA2MywgNjQsIDY1LCA2NiwgNjcsIDY4LCAwLCA3Nzc3LCA3Nzc3XQplbXB0eSBzb3VyY2UgbiA0OiByZXR1cm5zIGRlc3RpbmF0aW9uIHRydWUgdW5pdHMgWzAsIDc3NzcsIDc3NzcsIDc3NzddCm9kZCB1bml0cyBuIDM6IHJldHVybnMgZGVzdGluYXRpb24gdHJ1ZSB1bml0cyBbZDgwMCwgZGMwMCwgMCwgMF0Kc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "n 0: returns destination units [7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777]\nn 1: returns destination units [0, 7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777]\nn 2: returns destination units [61, 0, 7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777]\nn 3: returns destination units [61, 62, 0, 7777, 7777, 7777, 7777, 7777, 7777, 7777, 7777]\nn 8: returns destination units [61, 62, 63, 64, 65, 66, 67, 0, 7777, 7777, 7777]\nn 9: returns destination units [61, 62, 63, 64, 65, 66, 67, 68, 0, 7777, 7777]\nn 10: returns destination units [61, 62, 63, 64, 65, 66, 67, 68, 0, 7777, 7777]\nn 12: returns destination units [61, 62, 63, 64, 65, 66, 67, 68, 0, 7777, 7777]\nn -1: returns destination units [61, 62, 63, 64, 65, 66, 67, 68, 0, 7777, 7777]\nn -2147483648: returns destination units [61, 62, 63, 64, 65, 66, 67, 68, 0, 7777, 7777]\nempty source n 4: returns destination true units [0, 7777, 7777, 7777]\nodd units n 3: returns destination true units [d800, dc00, 0, 0]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 57
+    }
+  ]
+}

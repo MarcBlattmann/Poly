@@ -385,3 +385,38 @@ fn a_search_finds_the_window_of_another_process_by_its_class() {
         assert_eq!(rects(e, &[u64::from(created.hwnd)]), ["192 25,25,175,125 client 150x100"]);
     });
 }
+
+/// ADR 0249: `handle_read` answers `Window` as `handle` does, in the caller's units, without
+/// changing anything; a thread without a queue yet and every other request get `None`.
+#[test]
+fn a_read_is_answered_as_the_full_request_is() {
+    for awareness in [guic::AWARE_UNAWARE, guic::AWARE_SYSTEM, guic::AWARE_PER_MONITOR_V2] {
+        with_env(|e| {
+            session(e, Some(awareness));
+            let top = window(e, OVERLAPPED, (100, 100, 400, 300), 0);
+            let child = window(e, CHILD, (10, 10, 100, 50), top);
+            pump(e);
+            let ctx = Ctx { pid: 7, tid: e.tid.get(), now: 0 };
+            for h in [top, child, 0x0bad_0bad] {
+                let read = e.wm.borrow().handle_read(ctx, &Request::Window { hwnd: h });
+                assert_eq!(read, Some(e.call(Request::Window { hwnd: h })), "awareness {awareness}, window {h:#x}");
+            }
+            let stranger = Ctx { pid: 7, tid: 0x7777, now: 0 };
+            assert_eq!(e.wm.borrow().handle_read(stranger, &Request::Window { hwnd: top }), None);
+            for req in [
+                Request::Desktop {},
+                Request::KeyboardState {},
+                Request::GetLong { hwnd: top, index: -16, size: 4 },
+                Request::GetLong { hwnd: child, index: -12, size: 8 },
+            ] {
+                let read = e.wm.borrow().handle_read(ctx, &req);
+                assert_eq!(read, Some(e.call(req.clone())), "awareness {awareness}, {req:?}");
+            }
+            assert_eq!(
+                e.wm.borrow().handle_read(ctx, &Request::QueueStatus { flags: 0xff, clear: true }),
+                None,
+                "changes the queue"
+            );
+        });
+    }
+}

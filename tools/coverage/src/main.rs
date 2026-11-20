@@ -29,6 +29,7 @@
 //! coverage show <id>...          one entry: status, sources, tests, seeds (seeds hidden from implementers)
 //! ```
 
+mod childwait;
 mod generated;
 mod import;
 mod model;
@@ -272,6 +273,16 @@ fn check(args: &[String]) -> Result<(), String> {
             "{} Windows test names are used twice (rename one of the tests and record it again: `pipeline win build` builds all tests of its entries in one package)",
             duplicates.len()
         ));
+    }
+    let early = childwait::check(&root(), names::heldout_store(&root()).as_deref());
+    for h in early.iter().take(20) {
+        eprintln!(
+            "coverage: warning: {}:{}: `{}` reads an exit code before any wait (a test must wait for its child first; if it is on purpose, add `{}:{}` to tools/coverage/childwait-baseline.txt)",
+            h.path, h.line, h.function, h.path, h.function
+        );
+    }
+    if early.len() > 20 {
+        eprintln!("coverage: warning: ... and {} more exit-code reads before a wait", early.len() - 20);
     }
     let stale = c.stale_files(&coverage_dir())?;
     if !stale.is_empty() {

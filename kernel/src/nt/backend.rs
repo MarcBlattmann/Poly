@@ -171,6 +171,10 @@ impl Backend for MemBackend<'_> {
         crate::timeline::name_module(pid, base, size, &alloc::string::String::from_utf16_lossy(path));
     }
 
+    fn map_window_state_page(&mut self, addr: u64) -> Result<(), NtStatus> {
+        super::winstate::map_into(self.memory, addr).map_err(|()| poly_ntobj::status::STATUS_NOT_SUPPORTED)
+    }
+
     fn commit(&mut self, addr: u64, len: u64, p: HwProt) -> Result<(), NtStatus> {
         self.memory.map_anonymous(Placement::Fixed(addr), len, prot(p)).map(drop).map_err(|_| STATUS_NO_MEMORY)
     }

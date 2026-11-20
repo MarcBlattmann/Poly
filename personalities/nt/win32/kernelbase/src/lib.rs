@@ -19,6 +19,7 @@
 extern crate alloc;
 use poly_win32_rt as _;
 
+mod affinity;
 mod ansi;
 mod appcontainer;
 mod attrlist;
@@ -47,6 +48,7 @@ mod nls;
 mod nlsfmt;
 mod npipe;
 mod nt;
+mod package;
 mod pathcch;
 mod pipe;
 mod power;

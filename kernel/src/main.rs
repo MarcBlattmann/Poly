@@ -57,6 +57,7 @@ mod virtio_blk;
 mod virtio_gpu;
 mod virtio_input;
 mod xnu;
+mod xnu_mach;
 
 use alloc::boxed::Box;
 use core::panic::PanicInfo;

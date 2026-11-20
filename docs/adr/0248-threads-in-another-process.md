@@ -93,3 +93,31 @@ So the address the creator passes is one it found in its own process and expects
   - A thread made in another process is not added to a job's thread count.
 - The 64-bit-caller-into-32-bit-target case goes through the same path (the TEB, the stack and the start
   convention of the target's layout). It was observed on Windows but has no recorded test.
+
+## Addendum (chrome-feel-4): a thread's descriptor, ideal processor and affinity
+
+Integration round A found two held-out failures: `rmt_rights_dacl` ("a rights check against a thread's security
+descriptor") and `rmte_attrs` (a thread attribute not read back). The sheets of `GetThreadIdealProcessorEx` and
+`GetThreadGroupAffinity` (PR #399) say what the attributes must read back as.
+
+- **Every new thread has a descriptor.**
+  - Learn, "CreateRemoteThread": "The access control lists (ACL) in the default security descriptor for a thread
+    come from the primary token of the creator".
+  - Threads made by `NtCreateThreadEx` had none unless the caller gave one, so nothing could be read from or
+    checked against their descriptor. They now get the creator's default, after the creator's own handle is
+    opened, also in another process.
+  - The sheet's process-rights rules were checked separately on Poly: 5 descriptors × 36 handle-right
+    combinations, all 180 results as the sheet says.
+- **A thread's record keeps its affinity and its ideal processor**, so a thread that is suspended, not started
+  or finished has both.
+  - `ThreadAffinityMask` accepts only processors the system has (Learn, "SetThreadAffinityMask"). The kernel
+    applies a mask set before the thread starts when it starts.
+  - `ThreadIdealProcessorEx` (class 33, a `PROCESSOR_NUMBER`) reads the set one while it lies in the mask,
+    else one spread by thread id inside the mask. Setting it returns the previous one in the same buffer
+    (Poly's own convention with kernelbase).
+- **kernelbase:**
+  - `GetThreadIdealProcessorEx` and `GetThreadGroupAffinity` need a query right;
+  - `SetThreadIdealProcessorEx` needs `THREAD_SET_INFORMATION`;
+  - `SetThreadGroupAffinity` needs `THREAD_SET_INFORMATION` and a query right; mask 0 means the process mask;
+  - `CreateRemoteThreadEx` refuses an ideal processor or group affinity the system does not have (no thread is
+    made: `ERROR_INVALID_PARAMETER`, `STATUS_INVALID_PARAMETER`) and applies valid ones to the new thread.

@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:57:47",
+  "tests": [
+    {
+      "name": "cfstringcreatewithcstring_invalid_utf8",
+      "source_sha256": "62de828e304931bb0a8ebdfd6314e20a713609ff3d52a3ee732da10037b9467e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9c350b1ec1421386c120d4cc8fe2546b33a52ec40eb13c82ecb91161adfc11ef",
+          "exit_code": 0,
+          "stdout": "ok U8(\"\\xff\\xfe\") == NULL\nok U8(\"\\x80\") == NULL\nok U8(\"ab\\xc3\") == NULL\nok U8(\"\\xc0\\x80\") == NULL\nok U8(\"\\xe0\\x80\\x80\") == NULL\nok U8(\"\\xed\\xa0\\x80\") == NULL\nok U8(\"\\xf4\\x90\\x80\\x80\") == NULL\nok U8(\"\\xf0\\x9f\\x98\") == NULL\nok U8(\"fine\") != NULL\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9044772f1e94e57cc16cabb261ff1a22dace2753ed1929126a7008ed5aaf7d34",
+          "exit_code": 0,
+          "stdout": "ok U8(\"\\xff\\xfe\") == NULL\nok U8(\"\\x80\") == NULL\nok U8(\"ab\\xc3\") == NULL\nok U8(\"\\xc0\\x80\") == NULL\nok U8(\"\\xe0\\x80\\x80\") == NULL\nok U8(\"\\xed\\xa0\\x80\") == NULL\nok U8(\"\\xf4\\x90\\x80\\x80\") == NULL\nok U8(\"\\xf0\\x9f\\x98\") == NULL\nok U8(\"fine\") != NULL\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringcreatewithcstring_utf8",
+      "source_sha256": "bb3e5699853837385cd5d7928b5747f5014980046ce39156d6fa0f4178a56cdd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9532b07c4a58c6c116eb5a7753ba9d8dc511eeb73df2a07aab5b853db281ce71",
+          "exit_code": 0,
+          "stdout": "ok UNITS(U8(\"abc\"), 0x61, 0x62, 0x63)\nok UNITS(U8(\"h\\xc3\\xa9llo\"), 0x68, 0xe9, 0x6c, 0x6c, 0x6f)\nok UNITS(U8(\"\\xe2\\x82\\xac\"), 0x20ac)\nok UNITS(U8(\"\\xf0\\x9f\\x98\\x80\"), 0xd83d, 0xde00)\nok UNITS(U8(\"a\\xf0\\x9f\\x98\\x80z\"), 0x61, 0xd83d, 0xde00, 0x7a)\nok CFStringGetLength(U8(\"\")) == 0\nok CFGetTypeID(U8(\"x\")) == CFStringGetTypeID()\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "75f761089d4674bfa1712e4f421a1c324d0093da5a8a0b105efa7fc8e5aeb60f",
+          "exit_code": 0,
+          "stdout": "ok UNITS(U8(\"abc\"), 0x61, 0x62, 0x63)\nok UNITS(U8(\"h\\xc3\\xa9llo\"), 0x68, 0xe9, 0x6c, 0x6c, 0x6f)\nok UNITS(U8(\"\\xe2\\x82\\xac\"), 0x20ac)\nok UNITS(U8(\"\\xf0\\x9f\\x98\\x80\"), 0xd83d, 0xde00)\nok UNITS(U8(\"a\\xf0\\x9f\\x98\\x80z\"), 0x61, 0xd83d, 0xde00, 0x7a)\nok CFStringGetLength(U8(\"\")) == 0\nok CFGetTypeID(U8(\"x\")) == CFStringGetTypeID()\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cfstringcreatewithcstring_utf8_bom",
+      "source_sha256": "c5ed484a2349c68f86a33bf47712b9822244d4b4518dd8c50c916cd5b1b27993",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f0be583ea2a1ba165a34b426d1d207c5cdc9e043c7530373f4956c5a9b363e1f",
+          "exit_code": 0,
+          "stdout": "ok UNITS(U8(\"\\xef\\xbb\\xbf\" \"a\"), 0x61)\nok only != NULL && CFStringGetLength(only) == 0\nok UNITS(U8(\"a\\xef\\xbb\\xbf\" \"b\"), 0x61, 0xfeff, 0x62)\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cb012ee6c247a724ba6102ee05250f48232615309f7c02442394a241fc3c3e51",
+          "exit_code": 0,
+          "stdout": "ok UNITS(U8(\"\\xef\\xbb\\xbf\" \"a\"), 0x61)\nok only != NULL && CFStringGetLength(only) == 0\nok UNITS(U8(\"a\\xef\\xbb\\xbf\" \"b\"), 0x61, 0xfeff, 0x62)\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

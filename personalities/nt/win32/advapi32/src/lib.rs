@@ -684,7 +684,9 @@ pub unsafe extern "system" fn SetSecurityInfo(
             Ok(core::slice::from_raw_parts(p, size).to_vec())
         };
         if info & 4 != 0 {
-            parts.control |= sd::SE_DACL_PRESENT;
+            // The parents' inheritable ACEs are added (Learn, "SetSecurityInfo": "the function
+            // ... propagates any inheritable ACEs"), which a bare `NtSetSecurityObject` does not do.
+            parts.control |= sd::SE_DACL_PRESENT | sd::SE_DACL_AUTO_INHERIT_REQ;
             if dacl.is_null() {
                 parts.control |= sd::SE_DACL_PROTECTED;
             } else {
