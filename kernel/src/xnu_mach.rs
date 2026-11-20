@@ -13,6 +13,7 @@ use crate::time;
 use crate::user::memory::{Backing as VmBacking, Memory, Placement, Prot};
 use crate::user::{self};
 use alloc::sync::Arc;
+use core::sync::atomic::Ordering;
 use alloc::vec::Vec;
 use poly_mach::{TaskId, ThreadId, ulock};
 use poly_personality_xnu::kernel::{
@@ -49,6 +50,10 @@ pub struct MachThread<'a> {
 impl MachThread<'_> {
     fn memory(&self) -> Option<Arc<Memory>> {
         user::current_memory()
+    }
+
+    fn thread_entry(&self) -> u64 {
+        self.process.xnu.as_ref().map_or(0, |s| s.thread_entry.load(Ordering::SeqCst))
     }
 }
 
@@ -234,10 +239,32 @@ impl XnuKernel for MachThread<'_> {
     }
 
     fn thread_entry_registered(&self) -> bool {
-        false
+        self.thread_entry() != 0
     }
 
-    fn create_thread(&mut self, _start: ThreadStart) -> Result<u64, u32> {
-        Err(poly_personality_xnu::errno::EINVAL)
+    fn register_thread_entry(&mut self, entry: u64) -> Result<(), u32> {
+        let state = self.process.xnu.as_ref().ok_or(poly_personality_xnu::errno::EINVAL)?;
+        state
+            .thread_entry
+            .compare_exchange(0, entry.max(1), Ordering::SeqCst, Ordering::SeqCst)
+            .map(|_| ())
+            .map_err(|_| poly_personality_xnu::errno::EINVAL)
+    }
+
+    /// A new thread of this process at the registered entry point (Poly's
+    /// contract with its libpthread: `rdi` = thread structure, `rsi` =
+    /// start function, `rdx` = argument, `rsp` = the caller-made stack).
+    fn create_thread(&mut self, start: ThreadStart) -> Result<u64, u32> {
+        let einval = poly_personality_xnu::errno::EINVAL;
+        let process = crate::process::find(self.process.pid).ok_or(einval)?;
+        let memory = self.memory().ok_or(einval)?;
+        let entry = user::Entry { rip: self.thread_entry(), rsp: start.stack, args: [start.pthread, start.func, start.arg] };
+        let tid = user::spawn_in(process, memory, entry, user::DEFAULT_HOOK).map_err(|_| 35u32)?; // EAGAIN
+        let _ = crate::thread::detach(tid);
+        Ok(start.pthread)
+    }
+
+    fn end_thread(&mut self) {
+        let _ = user::request_exit(crate::process::ExitStatus::Exited(0));
     }
 }

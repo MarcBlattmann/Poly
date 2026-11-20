@@ -26,6 +26,20 @@
 //!
 //! `exit` is reported to the runtime, which prints its statistics and then
 //! makes the call.
+//!
+//! **Threads.** The runtime runs guest threads on host threads, one at a
+//! time (it holds one lock while translated code runs). With
+//! [`Bridge::defer`] set, a call that goes to the kernel is not made inside
+//! the run loop: the bridge keeps it ([`Bridge::pending`]) and stops the
+//! guest with [`YIELD`], so the runtime can release its lock for a call
+//! that may block, make it, and hand the result back
+//! ([`Bridge::complete`]). `bsdthread_register` and `bsdthread_create` stay
+//! here: a new guest thread gets a table of its own (its `TPIDRRO_EL0`:
+//! slot 0 its thread structure, then a copy of every image's thread-local
+//! template) and starts at the registered entry with Poly's contract (x0
+//! the thread structure, x1 the start function, x2 its argument), on a host
+//! thread the [`Host`] starts. `bsdthread_terminate` stops the guest thread
+//! with [`YIELD`] and [`Bridge::terminated`] set.
 
 use alloc::format;
 use alloc::string::String;
@@ -37,11 +51,15 @@ use poly_abi::{RFLAGS_CF, SyscallRegs};
 use poly_personality_xnu::Class;
 use poly_personality_xnu::arm64::{self, SVC_IMM};
 
-use crate::handoff::{EngineKind, Handoff};
+use crate::handoff::{EngineKind, Handoff, TlvImage};
+use alloc::vec::Vec;
 
 /// BSD call numbers (`sys/syscall.h`).
 pub mod sys {
     pub const EXIT: u64 = 1;
+    pub const BSDTHREAD_CREATE: u64 = 360;
+    pub const BSDTHREAD_TERMINATE: u64 = 361;
+    pub const BSDTHREAD_REGISTER: u64 = 366;
     pub const GETPID: u64 = 20;
     pub const KILL: u64 = 37;
     pub const MUNMAP: u64 = 73;
@@ -58,6 +76,43 @@ const MAP_ANON: u64 = 0x1000;
 /// Darwin errno values (`sys/errno.h`).
 const ENOMEM: u64 = 12;
 const EINVAL: u64 = 22;
+
+/// The `svc` result that stops the guest for the runtime: a deferred call
+/// or the end of a guest thread (see the module docs).
+pub const YIELD: i32 = i32::MIN;
+
+/// `PTHREAD_START_CUSTOM`: the caller made the stack and thread structure.
+const PTHREAD_START_CUSTOM: u64 = 0x0100_0000;
+
+/// A new guest thread for the [`Host`] to start.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GuestThread {
+    pub pc: u64,
+    pub sp: u64,
+    /// x0, x1, x2: the thread structure, the start function, its argument.
+    pub x: [u64; 3],
+    pub tpidrro: u64,
+}
+
+impl GuestThread {
+    /// The thread's first registers.
+    pub fn cpu(&self) -> Cpu {
+        let mut cpu = Cpu::new();
+        cpu.pc = self.pc;
+        cpu.sp = self.sp;
+        cpu.x[..3].copy_from_slice(&self.x);
+        cpu.tpidrro_el0 = self.tpidrro;
+        cpu
+    }
+}
+
+/// A call the bridge kept for the runtime to make ([`Bridge::defer`]).
+#[derive(Clone, Copy, Debug)]
+pub struct Pending {
+    pub frame: SyscallRegs,
+    pub stack: [u64; 2],
+    pub x16: u64,
+}
 
 /// Signal numbers (`sys/signal.h`).
 pub mod sig {
@@ -76,7 +131,15 @@ pub trait Host {
     /// `frame.rflags` the carry flag. `mem` is the guest's memory, for a
     /// host that cannot read guest addresses directly (tests).
     fn syscall(&mut self, frame: &mut SyscallRegs, stack: [u64; 2], mem: &mut GuestMem);
+
+    /// Start a host thread that runs the guest thread `t`; the errno if it
+    /// cannot.
+    fn create_thread(&mut self, _t: GuestThread) -> Result<(), u64> {
+        Err(EAGAIN)
+    }
 }
+
+const EAGAIN: u64 = 35;
 
 /// The guest's system calls (see the module docs).
 #[derive(Debug)]
@@ -94,6 +157,16 @@ pub struct Bridge<H> {
     pub bad_svc: Option<u16>,
     /// System calls made.
     pub calls: u64,
+    /// Keep the calls that go to the kernel for the runtime to make.
+    pub defer: bool,
+    /// The kept call.
+    pub pending: Option<Pending>,
+    /// A guest thread ended (bsdthread_terminate): its stack and size.
+    pub terminated: Option<(u64, u64)>,
+    /// libpthread's thread entry (bsdthread_register), 0 until then.
+    thread_start: u64,
+    /// The images with thread-local variables.
+    tlv: Vec<TlvImage>,
 }
 
 fn page_up(x: u64) -> Option<u64> {
@@ -111,7 +184,51 @@ impl<H: Host> Bridge<H> {
             exit: None,
             bad_svc: None,
             calls: 0,
+            defer: false,
+            pending: None,
+            terminated: None,
+            thread_start: 0,
+            tlv: h.tlv.clone(),
         }
+    }
+
+    /// Hand the result of the kept call back to the guest thread `cpu`.
+    pub fn complete(cpu: &mut Cpu, p: &Pending) {
+        arm64::from_frame(&p.frame, p.x16, &mut cpu.x, &mut cpu.nzcv);
+    }
+
+    /// Anonymous guest memory, readable and writable, as the guest's mmap
+    /// would map it.
+    fn map_anon(&mut self, len: u64, mem: &mut GuestMem) -> Result<u64, u64> {
+        let mut a = [0u64; 31];
+        a[..5].copy_from_slice(&[0, len, u64::from(R | W), MAP_ANON | 2, u64::MAX]);
+        self.mmap(&a, mem)
+    }
+
+    /// bsdthread_create(func, arg, stack, pthread, flags): the checks of the
+    /// sheet (as the kernel's), the thread's table, then the host thread.
+    fn create_thread(&mut self, a: &[u64; 31], mem: &mut GuestMem) -> Result<u64, u64> {
+        let (func, arg, stack, pthread, flags) = (a[0], a[1], a[2], a[3], a[4]);
+        if self.thread_start == 0 || func == 0 || flags & PTHREAD_START_CUSTOM == 0 || stack == 0 || pthread == 0 {
+            return Err(EINVAL);
+        }
+        // The table (16 KiB) and one block per image after it.
+        let blocks: Vec<u64> = self.tlv.iter().map(|t| page_up(t.size.max(1)).unwrap_or(PAGE_SIZE)).collect();
+        let total = PAGE_SIZE + blocks.iter().sum::<u64>();
+        let table = self.map_anon(total, mem)?;
+        let put = |mem: &mut GuestMem, at: u64, v: u64| mem.poke(at, &v.to_le_bytes()).map_err(|_| ENOMEM);
+        put(mem, table, pthread)?;
+        let mut at = table + PAGE_SIZE;
+        for (t, len) in self.tlv.clone().iter().zip(&blocks) {
+            put(mem, table + 8 * t.slot, at)?;
+            let mut init = alloc::vec![0u8; t.init_size as usize];
+            mem.peek(t.template, &mut init).map_err(|_| EINVAL)?;
+            mem.poke(at, &init).map_err(|_| ENOMEM)?;
+            at += len;
+        }
+        let t = GuestThread { pc: self.thread_start, sp: stack, x: [pthread, func, arg], tpidrro: table };
+        self.host.create_thread(t)?;
+        Ok(pthread)
     }
 
     fn in_window(&self, addr: u64, len: u64) -> bool {
@@ -229,6 +346,17 @@ impl<H: Host> Kernel for Bridge<H> {
                 self.exit = Some(status);
                 return Some(status);
             }
+            (Class::Bsd, sys::BSDTHREAD_REGISTER) => Some(if self.thread_start != 0 {
+                Err(EINVAL)
+            } else {
+                self.thread_start = cpu.x[0].max(1);
+                Ok(0)
+            }),
+            (Class::Bsd, sys::BSDTHREAD_CREATE) => Some(self.create_thread(&cpu.x, mem)),
+            (Class::Bsd, sys::BSDTHREAD_TERMINATE) => {
+                self.terminated = Some((cpu.x[0], cpu.x[1]));
+                return Some(YIELD);
+            }
             (Class::Bsd, sys::MMAP) => Some(self.mmap(&cpu.x, mem)),
             (Class::Bsd, sys::MUNMAP) => Some(self.munmap(&cpu.x, mem)),
             (Class::Bsd, sys::MPROTECT) => Some(self.mprotect(&cpu.x, mem)),
@@ -240,6 +368,10 @@ impl<H: Host> Kernel for Bridge<H> {
             Some(Err(e)) => {
                 frame.rax = e;
                 frame.rflags |= RFLAGS_CF;
+            }
+            None if self.defer => {
+                self.pending = Some(Pending { frame, stack: [cpu.x[6], cpu.x[7]], x16 });
+                return Some(YIELD);
             }
             None => self.host.syscall(&mut frame, [cpu.x[6], cpu.x[7]], mem),
         }

@@ -65,15 +65,20 @@ _poly_dyld_start:
     brk #1
 
 // The thread-local variable thunk every descriptor's first word points to:
-// x0 -> descriptor {thunk, key, offset}; the key is the address of the
-// image's thread-local block. Returns key + offset in x0; no other register
-// changes (x1 is saved on the stack around its use).
+// x0 -> descriptor {thunk, key, offset}. On arm64 the key is a slot of the
+// calling thread's table, which TPIDRRO_EL0 points to (slot 0 is the
+// thread structure, slot k the thread's block of image k; ADR 0257
+// addendum), so every thread has its own variables. Returns block +
+// offset in x0; no other register changes (x1 and x2 are saved on the
+// stack around their use).
     .p2align 7
     .globl _poly_tlv_get
 _poly_tlv_get:
-    str x1, [sp, #-16]!
+    stp x1, x2, [sp, #-16]!
+    ldr x1, [x0, #8]
+    mrs x2, tpidrro_el0
+    ldr x2, [x2, x1, lsl #3]
     ldr x1, [x0, #16]
-    ldr x0, [x0, #8]
-    add x0, x0, x1
-    ldr x1, [sp], #16
+    add x0, x2, x1
+    ldp x1, x2, [sp], #16
     ret

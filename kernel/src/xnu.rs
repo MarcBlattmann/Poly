@@ -205,11 +205,17 @@ fn map_start(memory: &Memory, program: &Program, entry: poly_dyld::Entry) -> Res
 pub struct XnuState {
     pub signals: SpinLock<Signals>,
     pub children: SpinLock<BTreeMap<u32, Arc<Process>>>,
+    /// libpthread's thread entry point (bsdthread_register), 0 until then.
+    pub thread_entry: core::sync::atomic::AtomicU64,
 }
 
 impl Default for XnuState {
     fn default() -> Self {
-        XnuState { signals: SpinLock::new(Signals::default()), children: SpinLock::new(BTreeMap::new()) }
+        XnuState {
+            signals: SpinLock::new(Signals::default()),
+            children: SpinLock::new(BTreeMap::new()),
+            thread_entry: core::sync::atomic::AtomicU64::new(0),
+        }
     }
 }
 

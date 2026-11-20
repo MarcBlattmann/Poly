@@ -82,6 +82,7 @@ struct Console {
     out: Vec<u8>,
     calls: Vec<u64>,
     killed: Option<u64>,
+    threads: Vec<run::GuestThread>,
 }
 
 fn answer(f: &mut SyscallRegs, r: Result<u64, u64>) {
@@ -98,6 +99,11 @@ fn answer(f: &mut SyscallRegs, r: Result<u64, u64>) {
 }
 
 impl Host for Console {
+    fn create_thread(&mut self, t: run::GuestThread) -> Result<(), u64> {
+        self.threads.push(t);
+        Ok(())
+    }
+
     fn syscall(&mut self, f: &mut SyscallRegs, _stack: [u64; 2], mem: &mut GuestMem) {
         self.calls.push(f.rax);
         let r = match f.rax {
@@ -410,4 +416,59 @@ fn a_crashing_program_stops_at_its_fault() {
         assert_eq!(r.status, None);
         assert!(matches!(r.stop, Stop::Fault(f) if f.addr == 8), "{kind:?}: {:?}", r.stop);
     }
+}
+
+#[test]
+fn threads_get_a_table_and_calls_can_be_deferred() {
+    use poly_a64_jit::jit::Kernel;
+    let layout = Layout::compact(0x1_0000_0000);
+    let template = layout.window_lo + 0x4000;
+    let h = crate::Handoff {
+        window_lo: layout.window_lo,
+        window_end: layout.window_end,
+        mmap_lo: layout.mmap_lo,
+        mmap_end: layout.mmap_end,
+        tlv: std::vec![crate::TlvImage { slot: 1, template, init_size: 4, size: 8 }],
+        ..Default::default()
+    };
+    let mut mem = GuestMem::new(layout.window_lo, layout.window_size());
+    mem.poke(template, &[1, 2, 3, 4]).unwrap();
+    let mut b = Bridge::new(Console::default(), &h);
+    let mut cpu = poly_a64::Cpu::new();
+    let mut call = |b: &mut Bridge<Console>, mem: &mut GuestMem, n: u64, args: &[u64]| {
+        cpu.x = [0; 31];
+        cpu.x[16] = n;
+        cpu.x[..args.len()].copy_from_slice(args);
+        let stop = b.svc(0x80, &mut cpu, mem);
+        (stop, cpu.x[0], cpu.nzcv & poly_personality_xnu::arm64::NZCV_C != 0)
+    };
+    let custom = 0x0100_0000;
+    // No entry point registered yet: EINVAL, as the kernel answers.
+    assert_eq!(call(&mut b, &mut mem, 360, &[0x111, 7, 0x2000, 0x3000, custom]), (None, 22, true));
+    assert_eq!(call(&mut b, &mut mem, 366, &[0x1_0000_0100]), (None, 0, false));
+    assert_eq!(call(&mut b, &mut mem, 366, &[0x1_0000_0100]), (None, 22, true));
+    // Without PTHREAD_START_CUSTOM: EINVAL.
+    assert_eq!(call(&mut b, &mut mem, 360, &[0x111, 7, 0x2000, 0x3000, 0]), (None, 22, true));
+    assert_eq!(call(&mut b, &mut mem, 360, &[0x111, 7, 0x2000, 0x3000, custom]), (None, 0x3000, false));
+    let t = b.host.threads[0];
+    assert_eq!((t.pc, t.sp, t.x), (0x1_0000_0100, 0x2000, [0x3000, 0x111, 7]));
+    // The table: the thread structure, then a copy of the template.
+    let mut w = [0u8; 8];
+    mem.peek(t.tpidrro, &mut w).unwrap();
+    assert_eq!(u64::from_le_bytes(w), 0x3000);
+    mem.peek(t.tpidrro + 8, &mut w).unwrap();
+    let block = u64::from_le_bytes(w);
+    let mut got = [0u8; 8];
+    mem.peek(block, &mut got).unwrap();
+    assert_eq!(got, [1, 2, 3, 4, 0, 0, 0, 0]);
+    assert_eq!(t.cpu().tpidrro_el0, t.tpidrro);
+    // Deferred: the call is kept for the runtime.
+    b.defer = true;
+    let (stop, _, _) = call(&mut b, &mut mem, 4, &[1, 0x10, 3]);
+    assert_eq!(stop, Some(run::YIELD));
+    let p = b.pending.take().unwrap();
+    assert_eq!((p.frame.rax, p.frame.rdi, p.frame.rdx), (0x200_0004, 1, 3));
+    // The end of a thread.
+    assert_eq!(call(&mut b, &mut mem, 361, &[0x2000, 0x8000]).0, Some(run::YIELD));
+    assert_eq!(b.terminated, Some((0x2000, 0x8000)));
 }

@@ -196,3 +196,26 @@ pub fn bsdthread_create(k: &mut dyn XnuKernel, a: &[u64; 8]) -> Result<u64, u32>
     }
     k.create_thread(s)
 }
+
+/// bsdthread_register(thread_start, workqueue_start, flags, ...): the
+/// first registration wins; a second one is `EINVAL` (the sheet).
+pub fn bsdthread_register(k: &mut dyn XnuKernel, a: &[u64; 8]) -> Result<u64, u32> {
+    if k.thread_entry_registered() {
+        return Err(EINVAL);
+    }
+    k.register_thread_entry(a[0]).map(|()| 0)
+}
+
+/// bsdthread_terminate(stack, size, thread port, semaphore): unmap the
+/// thread's stack (if a size is given) and end the calling thread.
+pub fn bsdthread_terminate(k: &mut dyn XnuKernel, a: &[u64; 8]) -> Result<u64, u32> {
+    let (stack, size) = (a[0], a[1]);
+    if size != 0 {
+        let page = k.page_size();
+        let start = stack & !(page - 1);
+        let end = stack.saturating_add(size).next_multiple_of(page);
+        k.unmap(start, end);
+    }
+    k.end_thread();
+    Ok(0)
+}

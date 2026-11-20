@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 
 /// `POLYA64` and a 0 byte.
 pub const MAGIC: u64 = u64::from_le_bytes(*b"POLYA64\0");
-pub const VERSION: u64 = 1;
+pub const VERSION: u64 = 2;
 /// Words before the regions.
 const FIXED_WORDS: usize = 18;
 /// The most regions a block may list.
@@ -34,6 +34,17 @@ pub struct Region {
     pub addr: u64,
     pub len: u64,
     pub prot: u8,
+}
+
+/// An image's thread-local variables, for the blocks of new threads: the
+/// thread's table has the block at `slot`, a copy of `init_size` bytes of
+/// the template at `template` followed by zeros up to `size`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TlvImage {
+    pub slot: u64,
+    pub template: u64,
+    pub init_size: u64,
+    pub size: u64,
 }
 
 /// The hand-off block.
@@ -62,6 +73,8 @@ pub struct Handoff {
     pub regions: Vec<Region>,
     /// The program's path (for messages).
     pub path: String,
+    /// The images with thread-local variables.
+    pub tlv: Vec<TlvImage>,
 }
 
 /// The environment variable that picks the engine: `interp` for the
@@ -84,7 +97,7 @@ impl Handoff {
     /// The block's bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
         let path = self.path.as_bytes();
-        let words = FIXED_WORDS + 3 * self.regions.len() + path.len().div_ceil(8);
+        let words = FIXED_WORDS + 3 * self.regions.len() + 1 + 4 * self.tlv.len() + path.len().div_ceil(8);
         let len = (words * 8) as u64;
         let mut w: Vec<u64> = Vec::with_capacity(words);
         w.extend([
@@ -112,6 +125,10 @@ impl Handoff {
         ]);
         for r in &self.regions {
             w.extend([r.addr, r.len, u64::from(r.prot)]);
+        }
+        w.push(self.tlv.len() as u64);
+        for t in &self.tlv {
+            w.extend([t.slot, t.template, t.init_size, t.size]);
         }
         let mut out: Vec<u8> = w.iter().flat_map(|v| v.to_le_bytes()).collect();
         out.extend_from_slice(path);
@@ -142,7 +159,17 @@ impl Handoff {
             let at = FIXED_WORDS + 3 * i;
             regions.push(Region { addr: w(at)?, len: w(at + 1)?, prot: u8::try_from(w(at + 2)?).ok()? });
         }
-        let from = (FIXED_WORDS + 3 * count) * 8;
+        let at = FIXED_WORDS + 3 * count;
+        let ntlv = usize::try_from(w(at)?).ok()?;
+        if ntlv > MAX_REGIONS {
+            return None;
+        }
+        let mut tlv = Vec::with_capacity(ntlv);
+        for i in 0..ntlv {
+            let o = at + 1 + 4 * i;
+            tlv.push(TlvImage { slot: w(o)?, template: w(o + 1)?, init_size: w(o + 2)?, size: w(o + 3)? });
+        }
+        let from = (at + 1 + 4 * ntlv) * 8;
         let path = b.get(from..from.checked_add(path_len)?)?;
         Some(Handoff {
             pc: w(3)?,
@@ -164,6 +191,7 @@ impl Handoff {
             stats: w(15)? != 0,
             regions,
             path: String::from(core::str::from_utf8(path).ok()?),
+            tlv,
         })
     }
 }
@@ -190,6 +218,7 @@ mod tests {
             stats: true,
             regions: vec![Region { addr: 0x1_0000_0000, len: 0x4000, prot: 5 }, Region { addr: 2, len: 3, prot: 3 }],
             path: String::from("/bin/a64-hello"),
+            tlv: vec![TlvImage { slot: 1, template: 0x1_0000_8000, init_size: 4, size: 16 }],
         }
     }
 

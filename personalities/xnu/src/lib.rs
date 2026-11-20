@@ -93,6 +93,8 @@ pub mod sys {
     pub const PSYNCH_CVSIGNAL: u64 = 304;
     pub const PSYNCH_CVWAIT: u64 = 305;
     pub const BSDTHREAD_CREATE: u64 = 360;
+    pub const BSDTHREAD_TERMINATE: u64 = 361;
+    pub const BSDTHREAD_REGISTER: u64 = 366;
     pub const ULOCK_WAIT: u64 = 515;
     pub const ULOCK_WAKE: u64 = 516;
     pub const ULOCK_WAIT2: u64 = 544;
@@ -137,6 +139,8 @@ fn bsd(k: &mut dyn XnuKernel, number: u64, a: &[u64; 8]) -> Option<Result<u64, u
         PSYNCH_CVSIGNAL => sync::cvsignal(k, a),
         PSYNCH_CVWAIT => sync::cvwait(k, a),
         BSDTHREAD_CREATE => sync::bsdthread_create(k, a),
+        BSDTHREAD_TERMINATE => sync::bsdthread_terminate(k, a),
+        BSDTHREAD_REGISTER => sync::bsdthread_register(k, a),
         ULOCK_WAIT => sync::ulock_wait(k, a[0] as u32, a[1], a[2], a[3].saturating_mul(1000)),
         ULOCK_WAIT2 => sync::ulock_wait(k, a[0] as u32, a[1], a[2], a[3]),
         ULOCK_WAKE => sync::ulock_wake(k, a[0] as u32, a[1]),

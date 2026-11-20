@@ -47,7 +47,7 @@ pub mod run;
 #[cfg(test)]
 mod tests;
 
-pub use handoff::{EngineKind, Handoff, Region};
+pub use handoff::{EngineKind, Handoff, Region, TlvImage};
 pub use layout::Layout;
 pub use poly_macho::CpuKind;
 

@@ -193,7 +193,21 @@ pub trait XnuKernel {
     /// (bsdthread_register).
     fn thread_entry_registered(&self) -> bool;
     /// Start a thread at the registered entry point; its pthread address.
+    /// Poly's contract with its own libpthread (ADR 0257 addendum): the
+    /// thread starts with the stack pointer at `stack` and, on x86-64,
+    /// `rdi` = the thread structure, `rsi` = the start function, `rdx` =
+    /// its argument.
     fn create_thread(&mut self, start: ThreadStart) -> Result<u64, u32>;
+
+    /// bsdthread_register: remember libpthread's thread entry point; a
+    /// second registration is `EINVAL` (the sheet).
+    fn register_thread_entry(&mut self, _entry: u64) -> Result<(), u32> {
+        Err(crate::errno::EINVAL as u32)
+    }
+
+    /// bsdthread_terminate: end the calling thread (not the process) once
+    /// the call returns.
+    fn end_thread(&mut self) {}
 }
 
 /// Run `f` with the Mach state locked and return its result.

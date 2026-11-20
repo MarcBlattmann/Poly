@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use poly_a64_jit::mem::{R, W, X};
 use poly_dyld::{Entry, Program, start};
 
-use crate::handoff::{Handoff, Region};
+use crate::handoff::{Handoff, Region, TlvImage};
 use crate::layout::{Layout, page_up};
 
 /// Where [`load`] puts things: the kernel's view of the new process's
@@ -99,15 +99,19 @@ pub fn load(t: &mut dyn Target, program: &Program, args: &Args<'_>) -> Result<Ha
     }
 
     // The system area: start code, thread-local blocks, the TSD page.
+    // The main thread's table (TPIDRRO_EL0): slot 0 its thread structure
+    // (libpthread's to fill), slot k its block of image k's thread-local
+    // variables.
     let mut system = Bump { next: l.system, end: l.system_end };
-    let header = program.images[0].base;
-    let (pc, with_header) = match (program.dynamic, program.entry) {
-        (false, Entry::Thread { pc, .. }) => (pc, false),
-        (_, entry) => (start_code(t, &mut system, &mut regions, program, entry)?, true),
-    };
     let tsd = system.take(16384)?;
     t.map(tsd, 16384)?;
     regions.push(Region { addr: tsd, len: 16384, prot: R | W });
+    let header = program.images[0].base;
+    let mut tlv = Vec::new();
+    let (pc, with_header) = match (program.dynamic, program.entry) {
+        (false, Entry::Thread { pc, .. }) => (pc, false),
+        (_, entry) => (start_code(t, &mut system, &mut regions, program, entry, tsd, &mut tlv)?, true),
+    };
 
     // The stack: the header address (when the start code runs), argc, argv,
     // envp, apple, the strings.
@@ -145,6 +149,7 @@ pub fn load(t: &mut dyn Target, program: &Program, args: &Args<'_>) -> Result<Ha
         stats,
         regions,
         path: args.path.to_string(),
+        tlv,
     })
 }
 
@@ -174,6 +179,8 @@ fn start_code(
     regions: &mut Vec<Region>,
     program: &Program,
     entry: Entry,
+    table: u64,
+    tlv: &mut Vec<TlvImage>,
 ) -> Result<u64, String> {
     let (target, mode) = match entry {
         Entry::Main { addr, .. } => (addr, start::Mode::CallMain),
@@ -199,10 +206,13 @@ fn start_code(
     regions.push(Region { addr: code, len, prot: R | X });
 
     // Thread-local variables: one block per image, a copy of its template
-    // as the fixups left it.
+    // as the fixups left it, at the image's slot of the thread's table;
+    // the descriptors' key is the slot.
     let thunk = code + start::ARM64_TLV_GET;
     for (i, im) in program.images.iter().enumerate() {
-        let Some(tlv) = &im.tlv else { continue };
+        let Some(info) = &im.tlv else { continue };
+        let tlv_list = &mut *tlv;
+        let tlv = info;
         let size = page_up(tlv.size.max(1));
         let block = system.take(size)?;
         t.map(block, size)?;
@@ -212,8 +222,14 @@ fn start_code(
             t.write(block, &init)?;
         }
         regions.push(Region { addr: block, len: size, prot: R | W });
+        let slot = tlv_list.len() as u64 + 1;
+        if slot >= 16384 / 8 {
+            return Err("too many images with thread-local variables".into());
+        }
+        t.write(table + 8 * slot, &block.to_le_bytes())?;
+        tlv_list.push(TlvImage { slot, template: tlv.template, init_size: tlv.init_size, size: tlv.size });
         let mut failed = None;
-        program.tlv_writes(i, block, thunk, &mut |a, v| {
+        program.tlv_writes(i, slot, thunk, &mut |a, v| {
             if failed.is_none()
                 && let Err(e) = t.write(a, &v.to_le_bytes())
             {

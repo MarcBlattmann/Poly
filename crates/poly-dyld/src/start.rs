@@ -24,7 +24,10 @@
 //! The arm64 start code ([`ARM64_START`], `stub/start_arm64.s`) does the
 //! same with the same data block at [`DATA_OFFSET`]; its thread-local thunk
 //! (at [`ARM64_TLV_GET`]) takes the descriptor in `x0` and returns the
-//! variable's address in `x0`, changing no other register.
+//! variable's address in `x0`, changing no other register. On arm64 a
+//! descriptor's key is a slot of the calling thread's table, which
+//! `TPIDRRO_EL0` points to, so each thread has its own block (ADR 0257
+//! addendum).
 
 use alloc::vec::Vec;
 
@@ -59,7 +62,7 @@ pub const DATA_OFFSET: u64 = 0x1000;
 /// The arm64 start code (`stub/start_arm64.s`) as instruction words, then
 /// the thread-local thunk at [`ARM64_TLV_GET`].
 #[rustfmt::skip]
-pub const ARM64_START: [u32; 70] = [
+pub const ARM64_START: [u32; 72] = [
     0x10000013, 0x91400673, 0x910003f4, 0xf9400695, 0x91004296, 0x8b150ed7,
     0x910022f7, 0xaa1703f8, 0xf8408709, 0xb5ffffe9, 0xd2800019, 0xf9400e69,
     0xeb09033f, 0x54000162, 0x9100826a, 0xf879794a, 0x91000739, 0xaa1503e0,
@@ -70,8 +73,8 @@ pub const ARM64_START: [u32; 70] = [
     0xd4200020, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f,
     0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f,
     0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f,
-    0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xf81f0fe1, 0xf9400801,
-    0xf9400400, 0x8b010000, 0xf84107e1, 0xd65f03c0,
+    0xd503201f, 0xd503201f, 0xd503201f, 0xd503201f, 0xa9bf0be1, 0xf9400401,
+    0xd53bd062, 0xf8617842, 0xf9400801, 0x8b010040, 0xa8c10be1, 0xd65f03c0,
 ];
 
 /// The offset of the thread-local thunk in [`ARM64_START`] (bytes).
@@ -197,10 +200,13 @@ mod tests {
     fn arm64_code_fits_and_has_the_thunk() {
         let bytes = arm64_start_bytes();
         assert!(bytes.len() as u64 <= DATA_OFFSET);
-        // str x1, [sp, #-16]!; ldr x1, [x0, #16]; ldr x0, [x0, #8];
-        // add x0, x0, x1; ldr x1, [sp], #16; ret
+        // stp x1, x2, [sp, #-16]!; ldr x1, [x0, #8]; mrs x2, tpidrro_el0;
+        // ldr x2, [x2, x1, lsl #3]; ldr x1, [x0, #16]; add x0, x2, x1;
+        // ldp x1, x2, [sp], #16; ret
         let t = &ARM64_START[(ARM64_TLV_GET / 4) as usize..];
-        assert_eq!(t, [0xf81f0fe1, 0xf9400801, 0xf9400400, 0x8b010000, 0xf84107e1, 0xd65f03c0]);
+        assert_eq!(t.len(), 8);
+        assert_eq!(t[2], 0xd53bd062); // mrs x2, tpidrro_el0
+        assert_eq!(t[7], 0xd65f03c0); // ret
         // adr x19, .; add x19, x19, #0x1000: the data block.
         assert_eq!(ARM64_START[..2], [0x10000013, 0x91400673]);
         // The raw exit call: mov x16, #1; svc #0x80.

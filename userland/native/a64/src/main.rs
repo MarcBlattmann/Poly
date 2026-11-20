@@ -19,6 +19,7 @@
 extern crate alloc;
 
 mod heap;
+mod threads;
 
 use poly_a64_jit::jit::Engine;
 use poly_a64_jit::mem::GuestMem;
@@ -79,6 +80,23 @@ fn syscall(frame: &mut SyscallRegs, stack: [u64; 2]) {
     frame.rflags = flags;
 }
 
+/// A raw x86-64 XNU BSD call with up to six arguments: `Ok(rax)`, or
+/// `Err(errno)` when the carry flag is set.
+fn raw(number: u64, a: [u64; 6]) -> Result<u64, u64> {
+    let mut f = SyscallRegs {
+        rax: 0x200_0000 | number,
+        rdi: a[0],
+        rsi: a[1],
+        rdx: a[2],
+        r10: a[3],
+        r8: a[4],
+        r9: a[5],
+        ..Default::default()
+    };
+    syscall(&mut f, [0, 0]);
+    if f.rflags & poly_abi::RFLAGS_CF != 0 { Err(f.rax) } else { Ok(f.rax) }
+}
+
 /// Write `s` to standard error.
 fn say(s: &str) {
     let mut f =
@@ -103,6 +121,21 @@ impl Host for Kernel {
     fn syscall(&mut self, frame: &mut SyscallRegs, stack: [u64; 2], _mem: &mut GuestMem) {
         syscall(frame, stack);
     }
+
+    fn create_thread(&mut self, t: poly_a64_xnu::run::GuestThread) -> Result<(), u64> {
+        threads::start_host_thread(t)
+    }
+}
+
+/// What every guest thread shares (behind `threads::GIL`).
+pub struct Shared {
+    engine: Engine,
+    mem: GuestMem,
+    bridge: Bridge<Kernel>,
+    kind: EngineKind,
+    stats: bool,
+    started: u64,
+    path: alloc::string::String,
 }
 
 fn now() -> u64 {
@@ -135,38 +168,26 @@ extern "C" fn start(handoff: u64) -> ! {
     // anonymous area) there, and the runtime's own memory lies outside it.
     // The guest touches only pages its flags allow.
     let mut mem = unsafe { GuestMem::from_raw(h.window_lo, size, h.window_lo as *mut u8) };
-    let mut cpu = match run::guest(&h, &mut mem) {
+    let cpu = match run::guest(&h, &mut mem) {
         Ok(cpu) => cpu,
         Err(e) => {
             say(&alloc::format!("poly-a64: {}: {e}\n", h.path));
             exit(127);
         }
     };
-    let mut engine = match h.engine {
+    let engine = match h.engine {
         // SAFETY: the kernel mapped the code area readable, writable and
         // executable for this runtime alone; it lives as long as the process.
         EngineKind::Jit if h.code_size > 0 => unsafe { Engine::with_code(h.code as *mut u8, h.code_size as usize) },
         _ => Engine::interpreter(),
     };
     let mut bridge = Bridge::new(Kernel, &h);
-    let t0 = now();
-    let stop = run::run(&mut engine, &mut cpu, &mut mem, &mut bridge);
-    let cycles = now().wrapping_sub(t0);
-    if h.stats {
-        say(&run::stats_line(h.engine, &engine, bridge.calls, cycles));
-    }
-    if let Some(status) = bridge.exit {
-        exit(status);
-    }
-    say(&run::stop_message(&h.path, stop, &cpu, bridge.bad_svc));
-    // The process ends with the signal a native program would get
-    // (SIGSEGV, SIGBUS, SIGILL, SIGTRAP, SIGSYS).
-    bridge.kill_self(run::stop_signal(stop, &mem, bridge.bad_svc), &mut mem);
-    // The guest catches or ignores it: its handler cannot run in translated
-    // code yet (signal frames come next), so the runtime faults on purpose
-    // and the process still ends abnormally.
-    // SAFETY: ud2 raises #UD, which ends this process.
-    unsafe { core::arch::asm!("ud2", options(noreturn)) }
+    // Calls to the kernel are made outside the run loop, without the lock.
+    bridge.defer = true;
+    let shared = Shared { engine, mem, bridge, kind: h.engine, stats: h.stats, started: now(), path: h.path.clone() };
+    // SAFETY: no other thread exists yet.
+    unsafe { *threads::SHARED.0.get() = Some(shared) };
+    threads::guest_loop(cpu)
 }
 
 #[panic_handler]
