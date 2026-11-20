@@ -1,0 +1,15 @@
+[package]
+name = "poly-objc"
+description = "Poly's Objective-C runtime logic: compiled metadata, classes, selectors, method lookup, +load order, reference counts, weak references, associations, autorelease pools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dev-dependencies]
+poly-dyld = { path = "../poly-dyld" }
+poly-macho = { path = "../poly-macho" }
+
+[lints]
+workspace = true

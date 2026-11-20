@@ -57,6 +57,7 @@ members = [
     "crates/poly-mach",
     "crates/poly-macho",
     "crates/poly-dyld",
+    "crates/poly-objc",
     "crates/poly-libsystem",
     "crates/poly-mem",
     "crates/poly-ntobj",
