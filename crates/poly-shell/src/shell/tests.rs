@@ -7,10 +7,13 @@ use poly_wayland::compose::MemoryFramebuffer;
 
 const BAR: u32 = 0x20_20_20;
 
+/// A shell whose session asked for the launcher at the start (the
+/// compositor's `--launcher`): most tests begin in it.
 fn shell() -> Shell {
     let mut s = Shell::new(1280, 800, sample_apps(), Text::new(None));
     s.set_animations(false);
     s.set_time(1_793_491_200, 0);
+    s.show_launcher_at_start();
     s
 }
 
@@ -55,6 +58,58 @@ fn the_ridge_and_the_launcher_hanging_from_it() {
     // The clock's text is drawn in the ridge's right part.
     let lit = (1100..1276).any(|x| (4..20).any(|y| fb.pixel(x, y) == Some(0xff_ffff)));
     assert!(lit);
+}
+
+/// After a normal boot the desktop is empty: no launcher, nothing over the
+/// wallpaper below the ridge (chrome-qa-3 item 6).
+#[test]
+fn the_launcher_is_closed_at_the_start() {
+    let mut s = Shell::new(1280, 800, sample_apps(), Text::new(None));
+    s.set_animations(false);
+    assert!(!s.launcher().is_visible());
+    assert_eq!(s.surface(), None);
+    assert!(s.current_extent().is_empty());
+    let fb = render(&s);
+    assert_eq!(fb.pixel(100, 2), Some(BAR), "the ridge");
+    assert_ne!(fb.pixel(900, 40), Some(BAR), "no launcher hanging from it");
+    // Not one the desktop showed by itself: the hotkey opens it, and a second press closes it.
+    s.toggle_launcher();
+    assert!(s.launcher().is_visible());
+    s.toggle_launcher();
+    assert!(!s.launcher().is_visible());
+    // A session that asks for it has it at the start, at once.
+    let mut asked = Shell::new(1280, 800, sample_apps(), Text::new(None));
+    asked.set_now_ms(10_000);
+    asked.show_launcher_at_start();
+    assert!(asked.launcher().is_visible());
+    assert_eq!(asked.current_extent().height, 48, "there at once, not sliding in");
+}
+
+/// Typing on the empty desktop opens the launcher with the letter typed in
+/// its search, so "chrome" typed right away finds Chrome (the first letters
+/// were lost, chrome-qa-3 item 6).
+#[test]
+fn typing_on_the_desktop_opens_the_launcher_with_the_letters() {
+    let mut s = Shell::new(1280, 800, sample_apps(), Text::new(None));
+    s.set_animations(false);
+    s.type_on_desktop('p');
+    assert!(s.launcher().is_visible());
+    assert_eq!(s.launcher().query(), "p");
+    for c in "ixel".chars() {
+        s.key(Key::Char(c));
+    }
+    assert_eq!(s.launcher().query(), "pixel");
+    assert_eq!(s.key(Key::Enter).map(|a| a.name), Some("Pixel Viewer".into()));
+    assert!(!s.launcher().is_visible());
+    // Again, after it closed.
+    s.type_on_desktop('q');
+    assert_eq!(s.surface(), Some(Surface::Launcher));
+    // While it shows, typing on the desktop changes nothing (its keys go through `key`).
+    s.type_on_desktop('z');
+    assert_eq!(s.launcher().query(), "q");
+    // The user opened it by typing: with text in it the hotkey closes it.
+    s.toggle_launcher();
+    assert!(!s.launcher().is_visible());
 }
 
 #[test]
@@ -122,6 +177,7 @@ fn no_match_shows_the_search_row_only_and_the_clock_ticks() {
 fn the_launcher_opens_and_closes_with_alpines_animation() {
     let mut s = Shell::new(1280, 800, sample_apps(), Text::new(None));
     s.set_now_ms(10_000);
+    s.show_launcher_at_start();
     // Present at the start, at once.
     assert_eq!(s.current_extent().height, 48);
     s.hide_launcher();
@@ -504,6 +560,7 @@ fn shell_with_icons() -> Shell {
     let mut s = Shell::new(1280, 800, apps, Text::new(None));
     s.set_animations(false);
     s.set_time(1_793_491_200, 0);
+    s.show_launcher_at_start();
     s.set_icon_files(alloc::boxed::Box::new(disk(&[(VIEWER_ICON, png(32, 32, [255, 0, 0, 255]))])));
     s
 }
@@ -537,6 +594,7 @@ fn an_installed_apps_own_icon_is_drawn_in_the_launcher() {
     apps.iter_mut().find(|a| a.name == "Pixel Viewer").unwrap().icon = Some("viewer".into());
     let mut plain = Shell::new(1280, 800, apps, Text::new(None));
     plain.set_animations(false);
+    plain.show_launcher_at_start();
     for c in "viewer".chars() {
         plain.key(Key::Char(c));
     }

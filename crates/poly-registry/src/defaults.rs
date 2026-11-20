@@ -318,6 +318,43 @@ pub fn make_path(reg: &mut Registry, parent: KeyId, path: &str, volatile: bool, 
     Ok(cur)
 }
 
+/// The `Classes` subkeys whose 32-bit view lives below `Classes\WOW6432Node` (Learn: "Registry
+/// Keys Affected by WOW64": the others, `TypeLib` and `AppID` among them, are shared).
+const CLASSES_REDIRECTED: [&str; 5] = ["CLSID", "Interface", "DirectShow", "Media Type", "MediaFoundation"];
+
+/// The 32-bit view's keys in the software hive `root` (ADR 0186), made in a new hive and in one
+/// loaded from a file older than them alike (Learn: "Registry Redirector"):
+///
+/// - `WOW6432Node` (the 32-bit view of `HKLM\SOFTWARE`) and, below `Classes\WOW6432Node`, the
+///   five redirected `Classes` subkeys (`RegCreateKeyExW.yaml` `level_by_level`: a 32-bit
+///   `CLSID` exists on Windows).
+/// - The default registrations below a redirected `Classes` subkey ([`SOFTWARE_KEYS`]: the
+///   proxy/stub classes and interfaces of COM marshalling) in the 32-bit view too, as a Windows
+///   install has them for its 32-bit programs: their servers are named without a path, so each
+///   view's process loads its own `oleaut32.dll`. A key the hive already has keeps its values.
+fn wow64_view_keys(reg: &mut Registry, root: KeyId, now: u64) -> Result<(), NtStatus> {
+    make_path(reg, root, WOW6432_NODE, false, now)?;
+    for sub in CLASSES_REDIRECTED {
+        make_path(reg, root, &alloc::format!("Classes\\{WOW6432_NODE}\\{sub}"), false, now)?;
+    }
+    for key in SOFTWARE_KEYS {
+        let Some(rest) = key.path.strip_prefix("Classes\\") else { continue };
+        if !CLASSES_REDIRECTED.iter().any(|s| rest.split('\\').next() == Some(s)) {
+            continue;
+        }
+        let mut cur = make_path(reg, root, &alloc::format!("Classes\\{WOW6432_NODE}"), false, now)?;
+        let mut created = false;
+        for c in rest.split('\\').filter(|c| !c.is_empty()) {
+            let (k, d) = reg.create_key(cur, &wide(c), CreateOptions::default(), now)?;
+            (cur, created) = (k, d == crate::tree::Disposition::Created);
+        }
+        if created {
+            set(reg, cur, key.values, now)?;
+        }
+    }
+    Ok(())
+}
+
 fn set(reg: &mut Registry, key: KeyId, values: &[(&str, Data)], now: u64) -> Result<(), NtStatus> {
     for (name, data) in values {
         reg.set_value(key, &wide(name), data.kind(), &data.bytes(), now)?;
@@ -368,11 +405,8 @@ pub fn install(
             populate(reg, root, spec, now)?;
         }
         if spec.file == "SOFTWARE" {
-            // The 32-bit view of `HKLM\SOFTWARE` (ADR 0186, stage 2) lives here: a machine
-            // whose hive file is older than that gets the empty key too (Learn: "Registry
-            // Redirector").
             let root = reg.hive(id).root;
-            make_path(reg, root, WOW6432_NODE, false, now)?;
+            wow64_view_keys(reg, root, now)?;
         }
         out.push(outcome);
     }
