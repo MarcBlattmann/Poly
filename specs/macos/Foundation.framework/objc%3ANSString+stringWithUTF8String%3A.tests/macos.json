@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsstring_stringwithutf8string_invalid",
+      "source_sha256": "c8f3703d1f54f28ec102de45a368c57de6d0d7331abe495fa9a2d3280c5ee18c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2b492c600001677741ae19916625fe107fe44f72ec420606a9d4e0015b26baff",
+          "exit_code": 0,
+          "stdout": "ok [NSString stringWithUTF8String:\"\\xff\\xfe\"] == nil\nok [NSString stringWithUTF8String:\"\\x80\"] == nil\nok [NSString stringWithUTF8String:\"ab\\xc3\"] == nil\nok [NSString stringWithUTF8String:\"\\xc0\\x80\"] == nil\nok [NSString stringWithUTF8String:\"\\xed\\xa0\\x80\"] == nil\nok [NSString stringWithUTF8String:\"\\xf4\\x90\\x80\\x80\"] == nil\nok [NSString stringWithUTF8String:\"\\xf0\\x9f\\x98\"] == nil\nok [NSString stringWithUTF8String:\"fine\"] != nil\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9d94f051d29ba4c21577c286fe77556edf193f1064edaae5833a31cce7b7fac1",
+          "exit_code": 0,
+          "stdout": "ok [NSString stringWithUTF8String:\"\\xff\\xfe\"] == nil\nok [NSString stringWithUTF8String:\"\\x80\"] == nil\nok [NSString stringWithUTF8String:\"ab\\xc3\"] == nil\nok [NSString stringWithUTF8String:\"\\xc0\\x80\"] == nil\nok [NSString stringWithUTF8String:\"\\xed\\xa0\\x80\"] == nil\nok [NSString stringWithUTF8String:\"\\xf4\\x90\\x80\\x80\"] == nil\nok [NSString stringWithUTF8String:\"\\xf0\\x9f\\x98\"] == nil\nok [NSString stringWithUTF8String:\"fine\"] != nil\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsstring_stringwithutf8string_valid",
+      "source_sha256": "47245342dc1929758dc55c82b00673eed8c7403d9c4f3405e1c1d5b6666cda18",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6f0be32a95e98bfb2a088ae27bee517e06a7c672193ef2de05e43d5d75712734",
+          "exit_code": 0,
+          "stdout": "ok s != nil && CFStringGetLength((__bridge CFStringRef)s) == 5\nok CFStringGetCharacterAtIndex((__bridge CFStringRef)s, 1) == 0x00e9\nok ns_is(s, \"h\\xc3\\xa9llo\")\nok CFStringGetLength((__bridge CFStringRef)e) == 4\nok CFStringGetCharacterAtIndex((__bridge CFStringRef)e, 1) == 0xd83d && CFStringGetCharacterAtIndex((__bridge CFStringRef)e, 2) == 0xde00\nok empty != nil && CFStringGetLength((__bridge CFStringRef)empty) == 0\nok CFStringGetLength((__bridge CFStringRef)[NSString stringWithUTF8String:\"\\xef\\xbb\\xbf\" \"a\"]) == 1\nok CFStringGetLength((__bridge CFStringRef)[NSString stringWithUTF8String:\"a\\xef\\xbb\\xbf\" \"b\"]) == 3\nok [[NSString stringWithUTF8String:\"same\"] isEqualToString:@\"same\"]\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b732145acb4e8f235adcc8b64ab6f78197e8aaff1ddb2d5c4a77f6c783efd4ea",
+          "exit_code": 0,
+          "stdout": "ok s != nil && CFStringGetLength((__bridge CFStringRef)s) == 5\nok CFStringGetCharacterAtIndex((__bridge CFStringRef)s, 1) == 0x00e9\nok ns_is(s, \"h\\xc3\\xa9llo\")\nok CFStringGetLength((__bridge CFStringRef)e) == 4\nok CFStringGetCharacterAtIndex((__bridge CFStringRef)e, 1) == 0xd83d && CFStringGetCharacterAtIndex((__bridge CFStringRef)e, 2) == 0xde00\nok empty != nil && CFStringGetLength((__bridge CFStringRef)empty) == 0\nok CFStringGetLength((__bridge CFStringRef)[NSString stringWithUTF8String:\"\\xef\\xbb\\xbf\" \"a\"]) == 1\nok CFStringGetLength((__bridge CFStringRef)[NSString stringWithUTF8String:\"a\\xef\\xbb\\xbf\" \"b\"]) == 3\nok [[NSString stringWithUTF8String:\"same\"] isEqualToString:@\"same\"]\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

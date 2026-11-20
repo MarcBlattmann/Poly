@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSUserDefaults.setObject%3AforKey%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSUserDefaults.setObject%3AforKey%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSUserDefaults.setObject:forKey:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSUserDefaults setObject:forKey:] stores a property list object (string, number, Boolean, array,
+  dictionary, data, date) under the key, visible at once to objectForKey: and the typed getters
+  without synchronising: a number reads as integerForKey: 42, boolForKey: YES, doubleForKey: 42.0 and
+  stringForKey: '42' (a string reads as integer 0); setBool:YES is stored as the kCFBooleanTrue
+  constant; arrays and dictionaries keep their content; the stored value is a snapshot (a mutable
+  string changed afterwards does not change it). Setting again replaces (also with another type); nil
+  or removeObjectForKey: removes the key (removing a missing one does nothing); a nil key and an empty
+  key are accepted; synchronize answers YES; values reach CFPreferences (CFPreferencesCopyAppValue
+  with the suite name as domain gives the same) and values set with CFPreferencesSetAppValue come back
+  through objectForKey:. A non-property-list value (an NSObject) made the process abort and must not
+  be used.
+returns:
+  success: "nothing"
+errors:
+  non_plist_value: "aborts the process; not supported"
+side_effects: "changes the process's view of the domain at once; the daemon writes the file later"
+threading: "safe from any thread"
+ordering: []
+timing:
+  typical: "microseconds in the process"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

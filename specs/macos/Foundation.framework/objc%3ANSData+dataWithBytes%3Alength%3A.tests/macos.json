@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsdata_datawithbytes_basics",
+      "source_sha256": "50dde0da0b3ec42b58d055da7b0bb3f3742a6d714ca56c44da94025e0c6cd23d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b46543951e62b328fc8508aba59d2d69c7fe582f1d1b5e1c8cc1bc081bcf6f94",
+          "exit_code": 0,
+          "stdout": "ok d.length == 3 && ((const char *)d.bytes)[0] == 'x' && ((const char *)d.bytes)[2] == 'z'\nok e != nil && e.length == 0 && e.bytes == NULL\nok [d isEqualToData:[NSData dataWithBytes:\"xyz\" length:3]] && ![d isEqualToData:[NSData dataWithBytes:\"xyq\" length:3]]\nok sub.length == 2 && ((const char *)sub.bytes)[0] == 'y'\nok ns_is([[NSData dataWithBytes:\"abc\" length:3] description], \"{length = 3, bytes = 0x616263}\")\nok ns_is([e description], \"{length = 0, bytes = 0x}\")\nok [d isEqual:[NSData dataWithBytes:\"xyz\" length:3]] && [d hash] == [[NSData dataWithBytes:\"xyz\" length:3] hash]\nok ns_is(ex.name, \"NSRangeException\")\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "24815371c182b8bd1be8595c121fbdc74b9dd167c3f705d51b06a003a8cf8c82",
+          "exit_code": 0,
+          "stdout": "ok d.length == 3 && ((const char *)d.bytes)[0] == 'x' && ((const char *)d.bytes)[2] == 'z'\nok e != nil && e.length == 0 && e.bytes == NULL\nok [d isEqualToData:[NSData dataWithBytes:\"xyz\" length:3]] && ![d isEqualToData:[NSData dataWithBytes:\"xyq\" length:3]]\nok sub.length == 2 && ((const char *)sub.bytes)[0] == 'y'\nok ns_is([[NSData dataWithBytes:\"abc\" length:3] description], \"{length = 3, bytes = 0x616263}\")\nok ns_is([e description], \"{length = 0, bytes = 0x}\")\nok [d isEqual:[NSData dataWithBytes:\"xyz\" length:3]] && [d hash] == [[NSData dataWithBytes:\"xyz\" length:3] hash]\nok ns_is(ex.name, \"NSRangeException\")\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsdata_datawithbytes_mutable_and_bridging",
+      "source_sha256": "81da4c0a7a11c6db62d65d711a0fee01dd55f0157176aad74ea7ea25e89ab0b7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "96d5f89aedacdef6c9818085592460d5863ff87504aea1dc3734fbf010800cf8",
+          "exit_code": 0,
+          "stdout": "ok m.length == 5 && ((const char *)m.bytes)[3] == 'd'\nok m.length == 7 && ((const char *)m.bytes)[4] == 'e' && ((const char *)m.bytes)[6] == 0\nok m.length == 2\nok CFGetTypeID((__bridge CFTypeRef)d) == CFDataGetTypeID()\nok CFDataGetLength((__bridge CFDataRef)d) == 3\nok CFDataGetBytePtr((__bridge CFDataRef)d) == d.bytes\nok [ns isEqualToData:d] && CFEqual((__bridge CFTypeRef)ns, (__bridge CFTypeRef)d)\nok CFDataGetLength(cm) == 1\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cb77c12d977889e3ce475684ae44e7be26436b74097189ffc4e1d72df88611bb",
+          "exit_code": 0,
+          "stdout": "ok m.length == 5 && ((const char *)m.bytes)[3] == 'd'\nok m.length == 7 && ((const char *)m.bytes)[4] == 'e' && ((const char *)m.bytes)[6] == 0\nok m.length == 2\nok CFGetTypeID((__bridge CFTypeRef)d) == CFDataGetTypeID()\nok CFDataGetLength((__bridge CFDataRef)d) == 3\nok CFDataGetBytePtr((__bridge CFDataRef)d) == d.bytes\nok [ns isEqualToData:d] && CFEqual((__bridge CFTypeRef)ns, (__bridge CFTypeRef)d)\nok CFDataGetLength(cm) == 1\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

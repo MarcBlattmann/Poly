@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsrunloop_currentrunloop_sources",
+      "source_sha256": "3baa41781e67da85069d19323c93a167071e3f92f5ed571c2b39f427bc2bcafa",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0356e321c60939172bcaf6927700016768ee0b6c7f985be7f02b7aee42acbdd4",
+          "exit_code": 0,
+          "stdout": "ok t->ran == 0\nok t->ran == 1\nok c->ran == 0\nok CFArrayContainsValue(modes, CFRangeMake(0, CFArrayGetCount(modes)), CFSTR(\"PolyListedMode\"))\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5a966003113a40f505be044be609aa7cbfd65038202177f7147337f2f4f229e7",
+          "exit_code": 0,
+          "stdout": "ok t->ran == 0\nok t->ran == 1\nok c->ran == 0\nok CFArrayContainsValue(modes, CFRangeMake(0, CFArrayGetCount(modes)), CFSTR(\"PolyListedMode\"))\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsrunloop_currentrunloop_timers_and_modes",
+      "source_sha256": "1bb969ca2824e54db6c6d45a2eb003737c978e68ef0f52e21effd4273f5f5a76",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c8840fa9ea3dbbd73d4595c8d489b5f3b331d8dd46e2128e77dc7c5fd1b7165b",
+          "exit_code": 0,
+          "stdout": "ok fired == 1 && [[NSDate date] timeIntervalSinceDate:t0] >= 0.25\nok ns_is(mode, \"kCFRunLoopDefaultMode\")\nok ticks >= 5 && ticks <= 12\nok !rep.isValid\nok ticks == before\nok custom == 0\nok custom == 1\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7b3d47f600be61178e7eaf529decf6f2194a87b845dc356469a584576081babc",
+          "exit_code": 0,
+          "stdout": "ok fired == 1 && [[NSDate date] timeIntervalSinceDate:t0] >= 0.25\nok ns_is(mode, \"kCFRunLoopDefaultMode\")\nok ticks >= 5 && ticks <= 12\nok !rep.isValid\nok ticks == before\nok custom == 0\nok custom == 1\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

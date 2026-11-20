@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/NSHomeDirectory.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in NSHomeDirectory.tests/macos.json.
+id: "macos/api/Foundation.framework/NSHomeDirectory"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  NSHomeDirectory() returns the current user's home directory as an absolute path with no trailing
+  slash, to an existing directory, the same on every call, taken from the user database and not from
+  the environment: a program started with an empty environment and one started with
+  HOME=/tmp/fake-home both get the account's directory; NSUserName() is not empty and, for an ordinary
+  account, the home directory's last component; '~' and '~/x' expand through
+  stringByExpandingTildeInPath to this directory and its child.
+returns:
+  success: "an autoreleased string"
+errors: {}
+side_effects: "may read the user database the first time"
+threading: "safe from any thread"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

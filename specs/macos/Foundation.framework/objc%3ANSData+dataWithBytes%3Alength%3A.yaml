@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSData+dataWithBytes%3Alength%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSData+dataWithBytes%3Alength%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSData+dataWithBytes:length:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  +[NSData dataWithBytes:length:] copies length bytes into an immutable data object (the source can
+  change afterwards); length gives the count, bytes the stored bytes; empty data has length 0 and a
+  NULL bytes pointer, also for bytes NULL with length 0; isEqualToData: compares byte for byte (equal
+  data have equal hashes), subdataWithRange: takes a part (a range past the end raises
+  NSRangeException), the description is '{length = 3, bytes = 0x616263}' ('{length = 0, bytes = 0x}'
+  for empty). NSMutableData appends (appendBytes:length:), sets its length (growing with zero bytes,
+  truncating) and starts from dataWithData:. Bridging: NSData is a CFData: CFDataGetLength and
+  CFDataGetBytePtr give the same length and the same pointer as length and bytes, CFEqual agrees with
+  isEqualToData:, a CFData from CFDataCreate answers the NSData methods, and an NSMutableData over
+  CFDataCreateMutable shows its edits in CFDataGetLength. NULL bytes with a length above 0 kills the
+  process.
+returns:
+  success: "an autoreleased NSData"
+errors:
+  null_bytes_with_length: "a nil or invalid receiver or argument not listed here is undefined; not to be relied on"
+  range_out_of_bounds: "raises NSRangeException"
+side_effects: "allocates and copies"
+threading: "immutable data is safe to read from any thread"
+ordering: []
+timing:
+  typical: "microseconds, linear in the length"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

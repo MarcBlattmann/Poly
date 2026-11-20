@@ -730,6 +730,19 @@ starts a copy of the test from inside it, so that the main bundle is a real appl
 `cf_prefs_clean`. Preferences tests use domains named `test.poly.cfspec.<name>` only and remove
 their keys.
 
+**Tests about Foundation** (`specs/macos/Foundation.framework/<symbol>.tests/`; entry ids of methods are
+`objc:Class.method:`, `objc:Class+classMethod:` and `objc:Class.@property` as in the coverage map, written
+with `:` as `%3A` in file names): a test whose header comment has the line `poly-mac: foundation` stays a
+`.c` file but is compiled as Objective-C with ARC (`-x objective-c -fobjc-arc`, `-framework Foundation`),
+may load Foundation, CoreFoundation and libobjc and import their symbols (`NS...`, `CF...`,
+`_OBJC_...`, `_objc_...`, plus the blocks and unwinder symbols the compiler emits); everything else is
+refused as before. A second line `poly-mac: no-arc` builds it without ARC (NSAutoreleasePool is not
+available under ARC). It includes `poly_mfn.h`, which pulls in `poly_mcf.h` and wraps `test_main` in an
+autorelease pool; `ns_is` compares strings through CoreFoundation, so a test of an NSString method does not
+rest on that method. Tests that need a real bundle, arguments or an environment start a copy of themselves
+inside `T.app` with `cf_enter_app` / `cf_enter_app_ex(plist, extra_argument, envp)`. The defaults tests use
+suites named `test.poly.nsspec.<name>` only and remove them with `removePersistentDomainForName:`.
+
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.
 
