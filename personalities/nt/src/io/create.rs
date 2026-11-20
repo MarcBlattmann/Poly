@@ -375,12 +375,23 @@ impl CreateHook<'_> {
             *last = file;
             stream = s.map(<[u16]>::to_vec);
         }
-        // The whole name is checked before anything is looked up.
-        for part in &parts {
+        // The whole name is checked before anything is looked up, except `.` and `..`: an NT path
+        // is not normalised, and such a component is met where the walk reaches it, so one below
+        // a directory that does not exist is "path not found" (sheet `GetFileAttributesExW` rule
+        // `forms`: `\\?\<dir>\nosuch\..\file` is ERROR_PATH_NOT_FOUND).
+        let is_dots = |p: &[u16]| !p.is_empty() && p.len() <= 2 && p.iter().all(|&c| c == u16::from(b'.'));
+        for part in parts.iter().filter(|p| !is_dots(p)) {
             names::check_component(part)?;
         }
         let follow = self.params.options & FILE_OPEN_REPARSE_POINT == 0;
         let vr = self.io.vfs()?;
+        if let Some(dots) = parts.iter().position(|p| is_dots(p)) {
+            let before = walk::resolve(vr, start, start_path, &parts[..dots], follow)?;
+            if dots > 0 && before.node.is_none() {
+                return Err(STATUS_OBJECT_PATH_NOT_FOUND);
+            }
+            return Err(STATUS_OBJECT_NAME_INVALID);
+        }
         let found = walk::resolve(vr, start, start_path, &parts, follow)?;
         // The root directory of a volume asked for as a file (`CreateFileW` without
         // `FILE_FLAG_BACKUP_SEMANTICS`): no such path (the sheet of `OpenVolume`: `C:\` and

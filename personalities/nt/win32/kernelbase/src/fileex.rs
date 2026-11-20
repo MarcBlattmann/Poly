@@ -216,8 +216,9 @@ pub unsafe extern "system" fn LockFileEx(
 ) -> i32 {
     // SAFETY: the caller's OVERLAPPED.
     let offset = unsafe { overlapped_range(overlapped) };
-    let allowed = fileex::LOCKFILE_FAIL_IMMEDIATELY | fileex::LOCKFILE_EXCLUSIVE_LOCK;
-    let (offset, length) = match fileex::lock_range(flags, reserved, len_low, len_high, offset, allowed) {
+    // Flag bits other than the two documented ones are ignored (sheet `LockFileEx` rule `flags`:
+    // the unknown bit 4 is accepted).
+    let (offset, length) = match fileex::lock_range(flags, reserved, len_low, len_high, offset, u32::MAX) {
         Ok(r) => r,
         Err(e) => return fail(e, FALSE),
     };
@@ -435,12 +436,19 @@ pub unsafe extern "system" fn GetFinalPathNameByHandleW(handle: Handle, buf: *mu
 // ----- GetLongPathNameW, GetShortPathNameW ---------------------------------------------------------------
 
 /// The units of a `WIN32_FIND_DATAW`'s file name.
-fn found_name(data: &[u8; find_data::SIZE]) -> Vec<u16> {
+pub(crate) fn found_name(data: &[u8; find_data::SIZE]) -> Vec<u16> {
     let raw = &data[find_data::FILE_NAME..find_data::FILE_NAME + 2 * find_data::MAX_PATH];
     raw.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&c| c != 0).collect()
 }
 
-/// The directories as `FindFirstFileW` sees them (`poly_kernelbase::shortname::DirLookup`).
+/// Every entry of `dir` (a path ending in a separator) with its creation time, from a
+/// `FindExInfoBasic` search (which makes no short names itself).
+pub(crate) fn list_basic(dir: &[u16]) -> Result<Vec<(Vec<u16>, u64)>, u32> {
+    poly_kernelbase::shortname::DirLookup::list(&mut FindLookup, dir)
+}
+
+/// The directories as `FindFirstFileW` sees them (`poly_kernelbase::shortname::DirLookup`), with
+/// `FindExInfoBasic` searches (a standard search asks for these short names).
 struct FindLookup;
 
 impl poly_kernelbase::shortname::DirLookup for FindLookup {
@@ -451,7 +459,7 @@ impl poly_kernelbase::shortname::DirLookup for FindLookup {
         pattern.push(0);
         let mut data = [0u8; find_data::SIZE];
         // SAFETY: a NUL-terminated pattern; a WIN32_FIND_DATAW.
-        let h = unsafe { crate::file::FindFirstFileW(pattern.as_ptr(), data.as_mut_ptr()) };
+        let h = unsafe { crate::file::find_first(pattern.as_ptr(), data.as_mut_ptr(), true) };
         if h == INVALID_HANDLE_VALUE {
             let e = last_error();
             return if e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND { Ok(None) } else { Err(e) };
@@ -469,7 +477,7 @@ impl poly_kernelbase::shortname::DirLookup for FindLookup {
         let mut data = [0u8; find_data::SIZE];
         let mut out = Vec::new();
         // SAFETY: a NUL-terminated pattern; a WIN32_FIND_DATAW.
-        let h = unsafe { crate::file::FindFirstFileW(pattern.as_ptr(), data.as_mut_ptr()) };
+        let h = unsafe { crate::file::find_first(pattern.as_ptr(), data.as_mut_ptr(), true) };
         if h == INVALID_HANDLE_VALUE {
             let e = last_error();
             return if e == ERROR_FILE_NOT_FOUND { Ok(out) } else { Err(e) };
