@@ -217,7 +217,7 @@ pub fn shell_cached() -> Option<PathBuf> {
 }
 
 /// Download `url` to `to` with curl (over HTTPS only).
-fn download(url: &str, to: &Path) -> Result {
+pub(crate) fn download(url: &str, to: &Path) -> Result {
     eprintln!("==> downloading {url}");
     let partial = to.with_extension("part");
     let fetched = Command::new("curl")

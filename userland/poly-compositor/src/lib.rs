@@ -715,6 +715,8 @@ fn run(args: &[String]) -> Result<u8, String> {
         );
     }
     let mut server = Server::new(Config { output, ..Config::default() }, Box::new(host));
+    // The pointer's pictures from the cursor theme's files (ADR 0252).
+    server.scene_mut().set_cursor_theme(desktop::cursor_theme());
     // The busy pointer ends when a window of the launched app (or of a
     // process it started) shows (ADR 0167).
     server.set_pid_parent(os::parent_pid);
