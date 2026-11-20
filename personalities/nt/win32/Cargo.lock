@@ -532,6 +532,10 @@ name = "poly-pe"
 version = "0.0.1"
 
 [[package]]
+name = "poly-png"
+version = "0.0.1"
+
+[[package]]
 name = "poly-rtl"
 version = "0.0.1"
 dependencies = [
@@ -614,6 +618,7 @@ name = "poly-win32k"
 version = "0.0.1"
 dependencies = [
  "poly-nls",
+ "poly-png",
 ]
 
 [[package]]

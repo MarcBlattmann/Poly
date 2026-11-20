@@ -1,0 +1,39 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/mmdevapi.dll/IAudioRenderClient.yaml
+id: windows/api/mmdevapi.dll/IAudioRenderClient
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer) with one real sound card, tests run by tools/pipeline/windows/poly-oracle.ps1 over SSH (session 0, the non-interactive window station; the audio service runs and winmm reaches the card from there), only silence is played; the audio service runs and Core Audio reaches the card from there; every test ran at least twice with identical output, each run in a fresh scratch directory"
+  observed_by: spec-win-wasapi
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the oracle machine above, which has one real sound card (played with buffers of silence only), and of Chrome for Testing 157.0.8103.38 playing a Web Audio page on it through a logging COM wrapper (docs/windows/wasapi-trace.md, specs/windows/apps/chrome/traces/s6-audio.trace.json). Microsoft Learn: "Core Audio APIs", "IMMDeviceEnumerator", "IMMDeviceCollection", "IMMDevice", "IMMNotificationClient", "IAudioClient", "IAudioClient2", "IAudioClient3", "IAudioRenderClient", "IAudioClock", "IAudioSessionControl", "IAudioSessionEvents", "WAVEFORMATEXTENSIBLE", "Rendering a Stream", "Audio Client Return Codes"; constants and layouts from mmdeviceapi.h, audioclient.h, audiopolicy.h, audiosessiontypes.h, mmreg.h, ksmedia.h, winerror.h. No Wine, ReactOS or Chromium source was read and no Microsoft or Google binary was disassembled or debugged.
+summary: >
+  GetBuffer and ReleaseBuffer: how an application hands frames to the stream.
+interface:
+  signature: "interface IAudioRenderClient : IUnknown (slots: 3 GetBuffer(UINT32 frames, BYTE** data), 4 ReleaseBuffer(UINT32 frames, DWORD flags))"
+chrome: "Chrome for Windows' audio service makes these calls (the COM-level oracle trace): it creates the enumerator, opens a client on the default render device in shared mode with an event callback, and renders silence-or-tone in a loop of one 480-frame write per event."
+rules:
+  get_release: "GetBuffer(n) returns a writable pointer to n frames (n * block align bytes) and ReleaseBuffer(n, 0) raises GetCurrentPadding by n; GetBuffer(0) is S_OK and returns no pointer (also on a full buffer); ReleaseBuffer(0) is always S_OK, also with no GetBuffer; fewer frames than asked may be released (GetBuffer(200), ReleaseBuffer(50) raises the padding by 50); a request larger than the free space (also GetBuffer(1) on a full buffer, and buffer size + 1) is AUDCLNT_E_BUFFER_TOO_LARGE (0x88890006) with no pointer; the free space is the buffer size minus the padding"
+  order: "a second GetBuffer before ReleaseBuffer is AUDCLNT_E_OUT_OF_ORDER (0x88890007), no pointer; ReleaseBuffer of more than 0 frames without GetBuffer is AUDCLNT_E_OUT_OF_ORDER; releasing more frames than asked is AUDCLNT_E_INVALID_SIZE (0x88890009); a failed ReleaseBuffer leaves the buffer outstanding and the padding unchanged; Reset with a buffer outstanding is AUDCLNT_E_BUFFER_OPERATION_PENDING (0x8889000B); a good ReleaseBuffer ends it"
+  flags: "for a render client only 0 and AUDCLNT_BUFFERFLAGS_SILENT (2) are valid: DATA_DISCONTINUITY (1), TIMESTAMP_ERROR (4), 8 and combinations with them are E_INVALIDARG; with SILENT the data is not read"
+  playout: "released frames play: a fully released buffer (flag SILENT, or zero bytes written) drains to padding 0 within a second once the stream runs; with a one-period refill per event the padding at each wake-up is the buffer size minus one period"
+errors:
+  buffer_too_large: "AUDCLNT_E_BUFFER_TOO_LARGE (0x88890006)"
+  out_of_order: "AUDCLNT_E_OUT_OF_ORDER (0x88890007)"
+  invalid_size: "AUDCLNT_E_INVALID_SIZE (0x88890009)"
+  buffer_operation_pending: "AUDCLNT_E_BUFFER_OPERATION_PENDING (0x8889000B)"
+  invalid_argument: "E_INVALIDARG (0x80070057)"
+side_effects: "none"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "under 100 microseconds"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, importing ole32.dll and kernel32.dll by name and calling the COM interfaces through their vtables (slot numbers from the interface headers). Every test but the two that exercise COM before it is initialised needs a sound device and COM initialised; audio data is silence only (the SILENT buffer flag, or zero bytes). Observations are result codes, counts, sizes in frames, flags and relations ("the position equals the bytes written", "about fifty events in 500 ms"), never pointers, handles, thread ids or times. The values that belong to the oracle's device are the mix format (48000 Hz, two channels, 32-bit float), the engine period (480 frames = 10 ms) and what follows from them; a device with another mix format would give other numbers by the same formulas. Waits are bounded (a second or less per condition).
+not_covered: >
+  Exclusive mode (the oracle's endpoint refuses it with AUDCLNT_E_UNSUPPORTED_FORMAT); capture endpoints and the capture client; other devices than the default render endpoint; a sandboxed audio process; device removal while a stream runs; ISimpleAudioVolume, IAudioStreamVolume and IAudioEndpointVolume; IAudioClient2's offload methods; ActivateAudioInterfaceAsync (mmdevapi ordinal 17, which chrome.dll delay-loads; Chrome activated through IMMDevice::Activate in every run).

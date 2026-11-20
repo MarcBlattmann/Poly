@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_stream_clients",
+      "exe_sha256": "a1f7558baad585afc7506d069f1cbebc8774cd82494fee16be9dcfff27ef722b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgc2VwYXJhdGUgY2xpZW50cwpvayBzZXBhcmF0ZSByZW5kZXIgY2xpZW50cwpvayBzZXBhcmF0ZSBldmVudHMKd3JpdGUgNDgwIGZyYW1lcyB0byB0aGUgZmlyc3QgPSBTX09LICgweDAwMDAwMDAwKQpvayB3cml0ZSA0ODAgZnJhbWVzIHRvIHRoZSBmaXJzdApvayBmaXJzdCBwYWRkaW5nCm9rIHNlY29uZCBwYWRkaW5nCnByZWZpbGwgdGhlIGZpcnN0ID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgcHJlZmlsbCB0aGUgZmlyc3QKcHJlZmlsbCB0aGUgc2Vjb25kID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgcHJlZmlsbCB0aGUgc2Vjb25kClN0YXJ0IHRoZSBmaXJzdCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFN0YXJ0IHRoZSBmaXJzdApTdGFydCB0aGUgc2Vjb25kID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RhcnQgdGhlIHNlY29uZApvayB0aGUgZmlyc3QgZ2V0cyBldmVudHMKb2sgdGhlIHNlY29uZCBnZXRzIGV2ZW50cwpTdG9wIHRoZSBmaXJzdCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFN0b3AgdGhlIGZpcnN0Cm9rIHRoZSBzZWNvbmQgc3RpbGwgZ2V0cyBldmVudHMKU3RvcCB0aGUgc2Vjb25kID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RvcCB0aGUgc2Vjb25kClN0YXJ0IHRoZSBmaXJzdCBhZ2FpbiA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFN0YXJ0IHRoZSBmaXJzdCBhZ2FpbgpyZWxlYXNlZCBhIHJ1bm5pbmcgY2xpZW50IChyZWZlcmVuY2UgY291bnQgYWZ0ZXI6IDEpCm9rIHRoZSBvdGhlciBjbGllbnQgaXMgdW5hZmZlY3RlZApzdW1tYXJ5IDE3IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok separate clients\nok separate render clients\nok separate events\nwrite 480 frames to the first = S_OK (0x00000000)\nok write 480 frames to the first\nok first padding\nok second padding\nprefill the first = S_OK (0x00000000)\nok prefill the first\nprefill the second = S_OK (0x00000000)\nok prefill the second\nStart the first = S_OK (0x00000000)\nok Start the first\nStart the second = S_OK (0x00000000)\nok Start the second\nok the first gets events\nok the second gets events\nStop the first = S_OK (0x00000000)\nok Stop the first\nok the second still gets events\nStop the second = S_OK (0x00000000)\nok Stop the second\nStart the first again = S_OK (0x00000000)\nok Start the first again\nreleased a running client (reference count after: 1)\nok the other client is unaffected\nsummary 17 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 183
+    },
+    {
+      "name": "ws_stream_services",
+      "exe_sha256": "97513a305198ec0b12b3507d4cb8b7383a4dd99b5d95c814e15175fe75cd7d64",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SW5pdGlhbGl6ZSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEluaXRpYWxpemUKR2V0U2VydmljZShJQXVkaW9SZW5kZXJDbGllbnQpID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0U2VydmljZShJQXVkaW9SZW5kZXJDbGllbnQpCm9rIGFuIG9iamVjdAphZ2FpbiA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIGFnYWluCm9rIHRoZSBzYW1lIG9iamVjdApHZXRTZXJ2aWNlKElBdWRpb0Nsb2NrKSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldFNlcnZpY2UoSUF1ZGlvQ2xvY2spCm9rIGFuIG9iamVjdAphZ2FpbiA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIGFnYWluCm9rIHRoZSBzYW1lIG9iamVjdApHZXRTZXJ2aWNlKElBdWRpb1Nlc3Npb25Db250cm9sKSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldFNlcnZpY2UoSUF1ZGlvU2Vzc2lvbkNvbnRyb2wpCm9rIGFuIG9iamVjdAphZ2FpbiA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIGFnYWluCm9rIHRoZSBzYW1lIG9iamVjdApHZXRTZXJ2aWNlKElTaW1wbGVBdWRpb1ZvbHVtZSkgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRTZXJ2aWNlKElTaW1wbGVBdWRpb1ZvbHVtZSkKb2sgYW4gb2JqZWN0CmFnYWluID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgYWdhaW4Kb2sgdGhlIHNhbWUgb2JqZWN0CkdldFNlcnZpY2UoSUF1ZGlvQ2FwdHVyZUNsaWVudCkgPSBBVURDTE5UX0VfV1JPTkdfRU5EUE9JTlRfVFlQRSAoMHg4ODg5MDAwMykKb2sgR2V0U2VydmljZShJQXVkaW9DYXB0dXJlQ2xpZW50KQpvayBubyBvYmplY3QKR2V0U2VydmljZShtYWRlLXVwIGludGVyZmFjZSkgPSBFX05PSU5URVJGQUNFICgweDgwMDA0MDAyKQpvayBHZXRTZXJ2aWNlKG1hZGUtdXAgaW50ZXJmYWNlKQpvayBubyBvYmplY3QKR2V0U2VydmljZShOVUxMIG91dHB1dCkgPSBFX1BPSU5URVIgKDB4ODAwMDQwMDMpCm9rIEdldFNlcnZpY2UoTlVMTCBvdXRwdXQpCnN1bW1hcnkgMjIgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Initialize = S_OK (0x00000000)\nok Initialize\nGetService(IAudioRenderClient) = S_OK (0x00000000)\nok GetService(IAudioRenderClient)\nok an object\nagain = S_OK (0x00000000)\nok again\nok the same object\nGetService(IAudioClock) = S_OK (0x00000000)\nok GetService(IAudioClock)\nok an object\nagain = S_OK (0x00000000)\nok again\nok the same object\nGetService(IAudioSessionControl) = S_OK (0x00000000)\nok GetService(IAudioSessionControl)\nok an object\nagain = S_OK (0x00000000)\nok again\nok the same object\nGetService(ISimpleAudioVolume) = S_OK (0x00000000)\nok GetService(ISimpleAudioVolume)\nok an object\nagain = S_OK (0x00000000)\nok again\nok the same object\nGetService(IAudioCaptureClient) = AUDCLNT_E_WRONG_ENDPOINT_TYPE (0x88890003)\nok GetService(IAudioCaptureClient)\nok no object\nGetService(made-up interface) = E_NOINTERFACE (0x80004002)\nok GetService(made-up interface)\nok no object\nGetService(NULL output) = E_POINTER (0x80004003)\nok GetService(NULL output)\nsummary 22 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 151
+    },
+    {
+      "name": "ws_stream_startstop",
+      "exe_sha256": "f958135775c318f5f206b92559e0238489894a74554fa16920ab9299f5824194",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "U3RvcCBiZWZvcmUgU3RhcnQgPSBTX0ZBTFNFICgweDAwMDAwMDAxKQpvayBTdG9wIGJlZm9yZSBTdGFydApSZXNldCBiZWZvcmUgU3RhcnQgPSBTX09LICgweDAwMDAwMDAwKQpvayBSZXNldCBiZWZvcmUgU3RhcnQKcHJlZmlsbCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIHByZWZpbGwKU3RhcnQgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdGFydApTdGFydCBhZ2FpbiA9IEFVRENMTlRfRV9OT1RfU1RPUFBFRCAoMHg4ODg5MDAwNSkKb2sgU3RhcnQgYWdhaW4KUmVzZXQgd2hpbGUgcnVubmluZyA9IEFVRENMTlRfRV9OT1RfU1RPUFBFRCAoMHg4ODg5MDAwNSkKb2sgUmVzZXQgd2hpbGUgcnVubmluZwpTdG9wID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RvcApTdG9wIGFnYWluID0gU19GQUxTRSAoMHgwMDAwMDAwMSkKb2sgU3RvcCBhZ2FpbgpTdGFydCBhZnRlciBTdG9wID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RhcnQgYWZ0ZXIgU3RvcApTdG9wID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RvcApSZXNldCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFJlc2V0ClJlc2V0IGFnYWluID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgUmVzZXQgYWdhaW4KR2V0Q3VycmVudFBhZGRpbmcgYWZ0ZXIgUmVzZXQgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRDdXJyZW50UGFkZGluZyBhZnRlciBSZXNldApvayBwYWRkaW5nIDAKcHJlZmlsbCBhZ2FpbiA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIHByZWZpbGwgYWdhaW4KU3RhcnQgYWZ0ZXIgUmVzZXQgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdGFydCBhZnRlciBSZXNldApTdG9wID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RvcApSZXNldCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFJlc2V0CnN1bW1hcnkgMTggcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Stop before Start = S_FALSE (0x00000001)\nok Stop before Start\nReset before Start = S_OK (0x00000000)\nok Reset before Start\nprefill = S_OK (0x00000000)\nok prefill\nStart = S_OK (0x00000000)\nok Start\nStart again = AUDCLNT_E_NOT_STOPPED (0x88890005)\nok Start again\nReset while running = AUDCLNT_E_NOT_STOPPED (0x88890005)\nok Reset while running\nStop = S_OK (0x00000000)\nok Stop\nStop again = S_FALSE (0x00000001)\nok Stop again\nStart after Stop = S_OK (0x00000000)\nok Start after Stop\nStop = S_OK (0x00000000)\nok Stop\nReset = S_OK (0x00000000)\nok Reset\nReset again = S_OK (0x00000000)\nok Reset again\nGetCurrentPadding after Reset = S_OK (0x00000000)\nok GetCurrentPadding after Reset\nok padding 0\nprefill again = S_OK (0x00000000)\nok prefill again\nStart after Reset = S_OK (0x00000000)\nok Start after Reset\nStop = S_OK (0x00000000)\nok Stop\nReset = S_OK (0x00000000)\nok Reset\nsummary 18 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 159
+    }
+  ]
+}

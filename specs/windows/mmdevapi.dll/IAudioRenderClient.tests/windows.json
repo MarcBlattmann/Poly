@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_render_order",
+      "exe_sha256": "35f559cd41add320ac3422f581e79dff9e6265c201fb5828ae1fe00d61560aa9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "UmVsZWFzZUJ1ZmZlcigxMCkgd2l0aCBubyBHZXRCdWZmZXIgPSBBVURDTE5UX0VfT1VUX09GX09SREVSICgweDg4ODkwMDA3KQpvayBSZWxlYXNlQnVmZmVyKDEwKSB3aXRoIG5vIEdldEJ1ZmZlcgpHZXRCdWZmZXIoMTAwKSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldEJ1ZmZlcigxMDApCkdldEJ1ZmZlcigxMCkgYmVmb3JlIHJlbGVhc2luZyA9IEFVRENMTlRfRV9PVVRfT0ZfT1JERVIgKDB4ODg4OTAwMDcpCm9rIEdldEJ1ZmZlcigxMCkgYmVmb3JlIHJlbGVhc2luZwpvayBubyBwb2ludGVyClJlbGVhc2VCdWZmZXIoMTAxKSA9IEFVRENMTlRfRV9JTlZBTElEX1NJWkUgKDB4ODg4OTAwMDkpCm9rIFJlbGVhc2VCdWZmZXIoMTAxKQpSZWxlYXNlQnVmZmVyKDEwMCwgVElNRVNUQU1QX0VSUk9SKSA9IEVfSU5WQUxJREFSRyAoMHg4MDA3MDA1NykKb2sgUmVsZWFzZUJ1ZmZlcigxMDAsIFRJTUVTVEFNUF9FUlJPUikKUmVsZWFzZUJ1ZmZlcigxMDAsIDB4OCkgPSBFX0lOVkFMSURBUkcgKDB4ODAwNzAwNTcpCm9rIFJlbGVhc2VCdWZmZXIoMTAwLCAweDgpCm9rIG5vdGhpbmcgd2FzIHJlbGVhc2VkIGJ5IHRoZSBmYWlsZWQgY2FsbHMKUmVzZXQgd2l0aCB0aGUgYnVmZmVyIG91dHN0YW5kaW5nID0gQVVEQ0xOVF9FX0JVRkZFUl9PUEVSQVRJT05fUEVORElORyAoMHg4ODg5MDAwYikKb2sgUmVzZXQgd2l0aCB0aGUgYnVmZmVyIG91dHN0YW5kaW5nClJlbGVhc2VCdWZmZXIoMTAwLCBEQVRBX0RJU0NPTlRJTlVJVFkpID0gRV9JTlZBTElEQVJHICgweDgwMDcwMDU3KQpvayBSZWxlYXNlQnVmZmVyKDEwMCwgREFUQV9ESVNDT05USU5VSVRZKQpSZWxlYXNlQnVmZmVyKDEwMCwgU0lMRU5UKSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFJlbGVhc2VCdWZmZXIoMTAwLCBTSUxFTlQpCm9rIHBhZGRpbmcKUmVzZXQgPSBTX09LICgweDAwMDAwMDAwKQpvayBSZXNldApvayBSZXNldCBlbXB0aWVzIHRoZSBidWZmZXIKR2V0QnVmZmVyKDEwKSBhZ2FpbiA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldEJ1ZmZlcigxMCkgYWdhaW4KUmVsZWFzZUJ1ZmZlcigxMCwgU0lMRU5UIHwgREFUQV9ESVNDT05USU5VSVRZKSA9IEVfSU5WQUxJREFSRyAoMHg4MDA3MDA1NykKb2sgUmVsZWFzZUJ1ZmZlcigxMCwgU0lMRU5UIHwgREFUQV9ESVNDT05USU5VSVRZKQpSZWxlYXNlQnVmZmVyKDEwLCAwKSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFJlbGVhc2VCdWZmZXIoMTAsIDApClJlbGVhc2VCdWZmZXIoMTApIHdpdGggbm8gR2V0QnVmZmVyID0gQVVEQ0xOVF9FX09VVF9PRl9PUkRFUiAoMHg4ODg5MDAwNykKb2sgUmVsZWFzZUJ1ZmZlcigxMCkgd2l0aCBubyBHZXRCdWZmZXIKc3VtbWFyeSAxOCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ReleaseBuffer(10) with no GetBuffer = AUDCLNT_E_OUT_OF_ORDER (0x88890007)\nok ReleaseBuffer(10) with no GetBuffer\nGetBuffer(100) = S_OK (0x00000000)\nok GetBuffer(100)\nGetBuffer(10) before releasing = AUDCLNT_E_OUT_OF_ORDER (0x88890007)\nok GetBuffer(10) before releasing\nok no pointer\nReleaseBuffer(101) = AUDCLNT_E_INVALID_SIZE (0x88890009)\nok ReleaseBuffer(101)\nReleaseBuffer(100, TIMESTAMP_ERROR) = E_INVALIDARG (0x80070057)\nok ReleaseBuffer(100, TIMESTAMP_ERROR)\nReleaseBuffer(100, 0x8) = E_INVALIDARG (0x80070057)\nok ReleaseBuffer(100, 0x8)\nok nothing was released by the failed calls\nReset with the buffer outstanding = AUDCLNT_E_BUFFER_OPERATION_PENDING (0x8889000b)\nok Reset with the buffer outstanding\nReleaseBuffer(100, DATA_DISCONTINUITY) = E_INVALIDARG (0x80070057)\nok ReleaseBuffer(100, DATA_DISCONTINUITY)\nReleaseBuffer(100, SILENT) = S_OK (0x00000000)\nok ReleaseBuffer(100, SILENT)\nok padding\nReset = S_OK (0x00000000)\nok Reset\nok Reset empties the buffer\nGetBuffer(10) again = S_OK (0x00000000)\nok GetBuffer(10) again\nReleaseBuffer(10, SILENT | DATA_DISCONTINUITY) = E_INVALIDARG (0x80070057)\nok ReleaseBuffer(10, SILENT | DATA_DISCONTINUITY)\nReleaseBuffer(10, 0) = S_OK (0x00000000)\nok ReleaseBuffer(10, 0)\nReleaseBuffer(10) with no GetBuffer = AUDCLNT_E_OUT_OF_ORDER (0x88890007)\nok ReleaseBuffer(10) with no GetBuffer\nsummary 18 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 151
+    },
+    {
+      "name": "ws_render_playout",
+      "exe_sha256": "24663606c911f1a9c9dda15f30c8668fe8e101ace2bdd066c2fbd00105066c7a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0QnVmZmVyKHdob2xlIGJ1ZmZlcikgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRCdWZmZXIod2hvbGUgYnVmZmVyKQpSZWxlYXNlQnVmZmVyKHdob2xlIGJ1ZmZlciwgMCkgPSBTX09LICgweDAwMDAwMDAwKQpvayBSZWxlYXNlQnVmZmVyKHdob2xlIGJ1ZmZlciwgMCkKb2sgZnVsbApTdGFydCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFN0YXJ0CnRoZSBidWZmZXIgZHJhaW5zIHRvIDA6IHRydWUKb2sgZHJhaW5lZCB3aXRoaW4gYSBzZWNvbmQKb2sgdGhlIHBhZGRpbmcgbmV2ZXIgd2VudCBhYm92ZSB0aGUgYnVmZmVyIHNpemUKcmVmaWxsID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgcmVmaWxsCmFmdGVyIHRoZSBmaXJzdCBldmVudHMgdGhlIHBhZGRpbmcgYXQgZWFjaCB3YWtlLXVwIGlzIHRoZSBidWZmZXIgc2l6ZSBtaW51cyBvbmUgcGVyaW9kOiB0cnVlCm9rIHBhZGRpbmcgYXQgd2FrZS11cCBpcyB0aGUgYnVmZmVyIHNpemUgbWludXMgb25lIHBlcmlvZApTdG9wID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RvcApzdW1tYXJ5IDkgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetBuffer(whole buffer) = S_OK (0x00000000)\nok GetBuffer(whole buffer)\nReleaseBuffer(whole buffer, 0) = S_OK (0x00000000)\nok ReleaseBuffer(whole buffer, 0)\nok full\nStart = S_OK (0x00000000)\nok Start\nthe buffer drains to 0: true\nok drained within a second\nok the padding never went above the buffer size\nrefill = S_OK (0x00000000)\nok refill\nafter the first events the padding at each wake-up is the buffer size minus one period: true\nok padding at wake-up is the buffer size minus one period\nStop = S_OK (0x00000000)\nok Stop\nsummary 9 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 369
+    }
+  ]
+}
