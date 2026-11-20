@@ -105,9 +105,12 @@ pub use stacks::{Deepest, STACKS, configure, report_stacks};
 use stacks::{Stack, StackFrames, stack_limit};
 pub use wait_queue::WaitQueue;
 
-/// Thread table size, boot and idle threads included: room for Chromium's
-/// processes (about 250 threads) next to the desktop's.
-pub const MAX_THREADS: usize = 512;
+/// Thread table size, boot and idle threads included. Chrome for Windows runs 12–18 threads in
+/// each renderer and over a hundred in its browser process: a long session with a few windows
+/// and tabs reached 480 blocked NT threads, and at 512 a new renderer's first thread could not be
+/// made (`NtResumeThread` failed with `STATUS_NO_MEMORY`; Chrome stopped on a failed check, and
+/// every window went). Windows has no such fixed limit; 4096 leaves room for many tabs.
+pub const MAX_THREADS: usize = 4096;
 
 /// Most CPUs the scheduler runs.
 pub const MAX_CPUS: usize = arch::MAX_CPUS;
@@ -337,7 +340,11 @@ fn spawn_with(
         Err(e) => {
             drop(t);
             stack.free();
-            return Err(if e == Error::TableFull { SpawnError::TableFull } else { SpawnError::NoSuchCpu });
+            if e == Error::TableFull {
+                table_full();
+                return Err(SpawnError::TableFull);
+            }
+            return Err(SpawnError::NoSuchCpu);
         }
     };
     // Set up before the lock goes: another CPU may pick it at once.
@@ -1141,6 +1148,18 @@ fn free_frames() -> u64 {
     FRAMES.lock().as_ref().map_or(0, |f| f.free_frames())
 }
 
+/// A thread could not be made because every slot is in use: the log says so (at most every 10 s),
+/// since what the program does next (Chrome stops on a failed check) does not name the cause.
+fn table_full() {
+    static LAST: AtomicU64 = AtomicU64::new(0);
+    let now = time::now_ns();
+    let last = LAST.load(core::sync::atomic::Ordering::Relaxed);
+    if last == 0 || now.saturating_sub(last) > 10_000_000_000 {
+        LAST.store(now, core::sync::atomic::Ordering::Relaxed);
+        crate::kprintln!("thread: the thread table is full ({MAX_THREADS} threads); a new thread was refused");
+    }
+}
+
 fn live_threads() -> usize {
     let _irq = InterruptsOff::new();
     THREADS.lock().sched.threads()
@@ -1150,11 +1169,14 @@ kernel_test! {
     fn exit_frees_slots_and_stacks() -> TestResult {
         // The other CPUs parked: nothing else takes frames or slots.
         let _only = crate::smp::exclusive();
+        // On the heap (the table is larger than a kernel stack), and made before the frames are
+        // counted.
+        let mut ids = alloc::vec![None; MAX_THREADS];
         let (frames_before, threads_before) = (free_frames(), live_threads());
         let room = MAX_THREADS - threads_before;
         // Fill the table three times over, joining every thread each time.
         for _ in 0..3 {
-            let mut ids = [None; MAX_THREADS];
+            ids.fill(None);
             let mut n = 0;
             loop {
                 match spawn(triple, n) {

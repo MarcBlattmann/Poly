@@ -208,6 +208,11 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
     };
     let attributes = abi::arg(k, regs, 10)?;
     let extra = read_create_attributes(k, attributes)?;
+    // `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`: a handle with `PROCESS_CREATE_PROCESS` (Learn).
+    let parent = match extra.parent {
+        Some(h) => Some(process_of(k, h, poly_ntobj::access::PROCESS_CREATE_PROCESS)?),
+        None => None,
+    };
     // The descriptors of the new process and thread objects (`lpProcessAttributes`,
     // `lpThreadAttributes`).
     let (process_at, thread_at) = (abi::arg(k, regs, 4)?, abi::arg(k, regs, 5)?);
@@ -239,6 +244,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         error_mode: extra.error_mode,
         process_security,
         thread_security,
+        parent,
     };
     let created = k.create_process(req)?;
     return_handle(k, process_out, created.process)?;
@@ -253,7 +259,7 @@ pub fn create_user_process<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
 /// list (`value` points at `size` bytes of handles), 2 the mitigation policy
 /// (`value` points at the two 64-bit words, `size` 8 or 16), 3 the job list (as the handle list),
 /// 4 the breakaway request, 5 the creator's error mode (the 32-bit `value`), 6 the child
-/// process policy (`value` is the 32-bit value).
+/// process policy (`value` is the 32-bit value), 7 the parent process (`value` is the handle).
 #[derive(Default)]
 struct CreateAttributes {
     handle_list: Option<Vec<Handle>>,
@@ -266,6 +272,8 @@ struct CreateAttributes {
     breakaway: bool,
     /// The creator's error mode (`SetErrorMode`), which the child starts with.
     error_mode: u32,
+    /// `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS`'s handle.
+    parent: Option<Handle>,
 }
 
 impl CreateAttributes {
@@ -308,6 +316,7 @@ fn read_create_attributes<K: NtKernel>(k: &mut K, at: u64) -> Result<CreateAttri
             3 => out.jobs = list(k)?,
             4 => out.breakaway = value != 0,
             5 => out.error_mode = value as u32,
+            7 => out.parent = Some(Handle(value)),
             _ => {}
         }
     }

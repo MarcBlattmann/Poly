@@ -1,0 +1,1338 @@
+//! CreateRemoteThread, CreateRemoteThreadEx and NtCreateThreadEx into a process that runs under a RESTRICTED token
+//! (CreateRestrictedToken: privileges removed, one restricting SID), started by a caller at medium integrity (the
+//! standard token) with CreateProcessAsUser, as a browser starts a sandboxed child. Handles of several kinds.
+#![no_std]
+#![no_main]
+#![allow(
+    dead_code,
+    non_camel_case_types,
+    non_upper_case_globals,
+    non_snake_case,
+    unused_imports,
+    unused_mut,
+    clippy::all
+)]
+
+// The declarations in this file are from Microsoft Learn (prototypes) and the public SDK headers
+// (constants, layouts); the helpers are this test's own. One image, two roles: started with
+// `--child <kind> <event name>` it is the TARGET process of the test (it signals the named event, then waits
+// or exits); otherwise it is the test, which starts targets of its own image and creates threads in them.
+
+use core::ffi::c_void;
+use core::fmt::Write as _;
+use core::sync::atomic::{AtomicU32, Ordering};
+use poly_wtest::*;
+
+type BOOL = i32;
+type HANDLE = *mut c_void;
+type DWORD = u32;
+type NTSTATUS = i32;
+
+/// A fixed-size text buffer for formatting lines.
+struct Buf<const N: usize> {
+    b: [u8; N],
+    n: usize,
+}
+
+impl<const N: usize> Buf<N> {
+    const fn new() -> Self {
+        Buf { b: [0; N], n: 0 }
+    }
+    fn as_str(&self) -> &str {
+        core::str::from_utf8(&self.b[..self.n]).unwrap_or("?")
+    }
+}
+
+impl<const N: usize> core::fmt::Write for Buf<N> {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for &c in s.as_bytes() {
+            if self.n < N {
+                self.b[self.n] = c;
+                self.n += 1;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// One observation line, formatted (at most 250 characters survive).
+macro_rules! say {
+    ($t:expr, $($a:tt)*) => {{
+        let mut b = Buf::<250>::new();
+        let _ = write!(b, $($a)*);
+        $t.line(b.as_str());
+    }};
+}
+
+/// A NUL-terminated UTF-16 copy of a string (up to 299 units).
+fn wide(s: &str) -> [u16; 300] {
+    let mut w = [0u16; 300];
+    for (i, c) in s.chars().enumerate().take(299) {
+        w[i] = c as u32 as u16;
+    }
+    w
+}
+
+/// The units of a NUL-terminated UTF-16 string at `p` (at most `max`).
+fn wstr_at<'a>(p: *const u16, max: usize) -> &'a [u16] {
+    if p.is_null() {
+        return &[];
+    }
+    let mut n = 0;
+    // SAFETY: the caller passes a NUL-terminated string the system returned; the scan stops at `max`.
+    unsafe {
+        while n < max && *p.add(n) != 0 {
+            n += 1;
+        }
+        core::slice::from_raw_parts(p, n)
+    }
+}
+
+#[repr(C)]
+struct StartupInfoW {
+    cb: u32,
+    pad0: u32,
+    rest: [usize; 12],
+}
+
+#[repr(C)]
+struct ProcInfo {
+    process: HANDLE,
+    thread: HANDLE,
+    pid: u32,
+    tid: u32,
+}
+
+#[repr(C)]
+struct SecurityAttributes {
+    length: u32,
+    descriptor: *mut c_void,
+    inherit: BOOL,
+}
+
+#[repr(C)]
+struct MemInfo {
+    base: usize,
+    alloc_base: usize,
+    alloc_protect: u32,
+    partition: u16,
+    pad: u16,
+    size: usize,
+    state: u32,
+    protect: u32,
+    kind: u32,
+    pad2: u32,
+}
+
+#[repr(C)]
+struct ThreadBasic {
+    exit_status: i32,
+    pad: u32,
+    teb: usize,
+    pid: usize,
+    tid: usize,
+    affinity: usize,
+    priority: i32,
+    base_priority: i32,
+}
+
+#[repr(C)]
+struct ObjBasic {
+    attributes: u32,
+    granted: u32,
+    handle_count: u32,
+    pointer_count: u32,
+    rest: [u32; 10],
+}
+
+const WAIT_TIMEOUT: u32 = 0x102;
+const WAIT_FAILED: u32 = 0xFFFF_FFFF;
+const INFINITE: u32 = 0xFFFF_FFFF;
+const STILL_ACTIVE: u32 = 259;
+const CREATE_SUSPENDED: u32 = 4;
+const STACK_SIZE_PARAM_IS_A_RESERVATION: u32 = 0x10000;
+
+const PROCESS_TERMINATE: u32 = 0x1;
+const PROCESS_CREATE_THREAD: u32 = 0x2;
+const PROCESS_VM_OPERATION: u32 = 0x8;
+const PROCESS_VM_READ: u32 = 0x10;
+const PROCESS_VM_WRITE: u32 = 0x20;
+const PROCESS_DUP_HANDLE: u32 = 0x40;
+const PROCESS_QUERY_INFORMATION: u32 = 0x400;
+const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+const SYNCHRONIZE_: u32 = 0x0010_0000;
+const PROCESS_ALL_ACCESS: u32 = 0x1F_FFFF;
+const THREAD_ALL_ACCESS: u32 = 0x1F_FFFF;
+const MEM_COMMIT_RESERVE: u32 = 0x3000;
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn GetLastError() -> u32;
+    fn SetLastError(code: u32);
+    fn CloseHandle(h: HANDLE) -> BOOL;
+    fn GetCurrentProcess() -> HANDLE;
+    fn GetCurrentProcessId() -> u32;
+    fn GetCurrentThread() -> HANDLE;
+    fn GetCurrentThreadId() -> u32;
+    fn GetModuleFileNameW(module: HANDLE, buf: *mut u16, size: u32) -> u32;
+    fn GetModuleHandleW(name: *const u16) -> HANDLE;
+    fn GetProcAddress(m: HANDLE, name: *const u8) -> usize;
+    fn GetCommandLineW() -> *const u16;
+    fn CreateProcessW(
+        app: *const u16,
+        cmd: *mut u16,
+        pa: *const c_void,
+        ta: *const c_void,
+        inherit: BOOL,
+        flags: u32,
+        env: *const c_void,
+        dir: *const u16,
+        si: *mut StartupInfoW,
+        pi: *mut ProcInfo,
+    ) -> BOOL;
+    fn WaitForSingleObject(h: HANDLE, ms: u32) -> u32;
+    fn GetExitCodeProcess(h: HANDLE, code: *mut u32) -> BOOL;
+    fn GetExitCodeThread(h: HANDLE, code: *mut u32) -> BOOL;
+    fn TerminateProcess(h: HANDLE, code: u32) -> BOOL;
+    fn ResumeThread(h: HANDLE) -> u32;
+    fn SuspendThread(h: HANDLE) -> u32;
+    fn CreateEventW(sa: *const c_void, manual: BOOL, initial: BOOL, name: *const u16) -> HANDLE;
+    fn OpenEventW(access: u32, inherit: BOOL, name: *const u16) -> HANDLE;
+    fn SetEvent(h: HANDLE) -> BOOL;
+    fn Sleep(ms: u32);
+    fn SetErrorMode(mode: u32) -> u32;
+    fn OpenProcess(access: u32, inherit: BOOL, pid: u32) -> HANDLE;
+    fn OpenThread(access: u32, inherit: BOOL, tid: u32) -> HANDLE;
+    fn DuplicateHandle(
+        sp: HANDLE,
+        sh: HANDLE,
+        tp: HANDLE,
+        th: *mut HANDLE,
+        access: u32,
+        inherit: BOOL,
+        opts: u32,
+    ) -> BOOL;
+    fn GetHandleInformation(h: HANDLE, flags: *mut u32) -> BOOL;
+    fn GetThreadId(h: HANDLE) -> u32;
+    fn GetProcessIdOfThread(h: HANDLE) -> u32;
+    fn GetProcessId(h: HANDLE) -> u32;
+    fn CreateThread(sa: *const c_void, stack: usize, start: usize, arg: usize, flags: u32, tid: *mut u32) -> HANDLE;
+    fn CreateRemoteThread(
+        process: HANDLE,
+        sa: *const c_void,
+        stack: usize,
+        start: usize,
+        arg: usize,
+        flags: u32,
+        tid: *mut u32,
+    ) -> HANDLE;
+    fn CreateRemoteThreadEx(
+        process: HANDLE,
+        sa: *const c_void,
+        stack: usize,
+        start: usize,
+        arg: usize,
+        flags: u32,
+        attrs: *mut c_void,
+        tid: *mut u32,
+    ) -> HANDLE;
+    fn VirtualAllocEx(process: HANDLE, addr: usize, size: usize, kind: u32, prot: u32) -> usize;
+    fn VirtualFreeEx(process: HANDLE, addr: usize, size: usize, kind: u32) -> BOOL;
+    fn VirtualQueryEx(process: HANDLE, addr: usize, info: *mut MemInfo, len: usize) -> usize;
+    fn WriteProcessMemory(process: HANDLE, addr: usize, buf: *const u8, n: usize, written: *mut usize) -> BOOL;
+    fn ReadProcessMemory(process: HANDLE, addr: usize, buf: *mut u8, n: usize, read: *mut usize) -> BOOL;
+    fn InitializeProcThreadAttributeList(list: *mut c_void, count: u32, flags: u32, size: *mut usize) -> BOOL;
+    fn UpdateProcThreadAttribute(
+        list: *mut c_void,
+        flags: u32,
+        attr: usize,
+        value: *const c_void,
+        size: usize,
+        prev: *mut c_void,
+        ret: *mut usize,
+    ) -> BOOL;
+    fn DeleteProcThreadAttributeList(list: *mut c_void);
+}
+
+#[link(name = "ntdll", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn RtlGetLastNtStatus() -> i32;
+    fn NtQueryObject(h: HANDLE, class: u32, buf: *mut c_void, len: u32, ret: *mut u32) -> i32;
+    fn NtQueryInformationThread(h: HANDLE, class: u32, buf: *mut c_void, len: u32, ret: *mut u32) -> i32;
+    fn NtCreateThreadEx(
+        thread: *mut HANDLE,
+        access: u32,
+        oa: *const c_void,
+        process: HANDLE,
+        start: usize,
+        arg: usize,
+        flags: u32,
+        zero_bits: usize,
+        stack_size: usize,
+        max_stack: usize,
+        attrs: *mut c_void,
+    ) -> i32;
+}
+
+fn gle() -> i64 {
+    // SAFETY: plain call.
+    i64::from(unsafe { GetLastError() })
+}
+
+fn status_now() -> u32 {
+    // SAFETY: plain call.
+    unsafe { RtlGetLastNtStatus() as u32 }
+}
+
+fn nul() -> HANDLE {
+    core::ptr::null_mut()
+}
+
+fn is_valid(h: HANDLE) -> bool {
+    !h.is_null() && h as isize != -1
+}
+
+fn close(h: HANDLE) {
+    if is_valid(h) {
+        // SAFETY: a handle this test owns.
+        unsafe { CloseHandle(h) };
+    }
+}
+
+fn k32(name: &str) -> usize {
+    let w = wide("kernel32.dll");
+    // SAFETY: valid names.
+    unsafe {
+        let m = GetModuleHandleW(w.as_ptr());
+        let mut n = [0u8; 64];
+        n[..name.len()].copy_from_slice(name.as_bytes());
+        GetProcAddress(m, n.as_ptr())
+    }
+}
+
+fn self_path() -> ([u16; 300], usize) {
+    let mut p = [0u16; 300];
+    // SAFETY: valid buffer.
+    let n = unsafe { GetModuleFileNameW(nul(), p.as_mut_ptr(), 299) } as usize;
+    (p, n)
+}
+
+/// The text after ` --child ` on this process's command line.
+fn child_args() -> Option<Buf<160>> {
+    // SAFETY: the command line is a NUL-terminated string owned by the process.
+    let cl = wstr_at(unsafe { GetCommandLineW() }, 600);
+    let key = b" --child ";
+    let mut i = 0;
+    while i + key.len() <= cl.len() {
+        if key.iter().enumerate().all(|(k, &c)| cl[i + k] == u16::from(c)) {
+            let mut b = Buf::<160>::new();
+            for &c in &cl[i + key.len()..] {
+                let _ = write!(b, "{}", (c as u8) as char);
+            }
+            return Some(b);
+        }
+        i += 1;
+    }
+    None
+}
+
+// ---------------------------------------------------------------- targets
+
+static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+struct Child {
+    process: HANDLE,
+    thread: HANDLE,
+    ev: HANDLE,
+    pid: u32,
+    tid: u32,
+}
+
+/// Start a target process (this image as a child) of kind `kind` ("sleep": signals ready, then sleeps for ever;
+/// "exit": signals ready and exits with code 7). `flags`: creation flags (CREATE_SUSPENDED...).
+fn spawn(kind: &str, flags: u32) -> Child {
+    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+    // SAFETY: plain call.
+    let me = unsafe { GetCurrentProcessId() };
+    let mut name = Buf::<60>::new();
+    let _ = write!(name, "PolyRt{me}x{n}");
+    let evname = wide(name.as_str());
+    // SAFETY: valid name.
+    let ev = unsafe { CreateEventW(core::ptr::null(), 1, 0, evname.as_ptr()) };
+    let (exe, _) = self_path();
+    let mut cmd = [0u16; 600];
+    let mut k = 0;
+    cmd[k] = b'"' as u16;
+    k += 1;
+    for &u in wstr_at(exe.as_ptr(), 299) {
+        cmd[k] = u;
+        k += 1;
+    }
+    let mut tail = Buf::<160>::new();
+    let _ = write!(tail, "\" --child {kind} {}", name.as_str());
+    for b in tail.as_str().bytes() {
+        cmd[k] = u16::from(b);
+        k += 1;
+    }
+    let mut si = StartupInfoW { cb: 104, pad0: 0, rest: [0; 12] };
+    let mut pi = ProcInfo { process: nul(), thread: nul(), pid: 0, tid: 0 };
+    // SAFETY: valid buffers.
+    let ok = unsafe {
+        CreateProcessW(
+            exe.as_ptr(),
+            cmd.as_mut_ptr(),
+            core::ptr::null(),
+            core::ptr::null(),
+            0,
+            flags,
+            core::ptr::null(),
+            core::ptr::null(),
+            &mut si,
+            &mut pi,
+        )
+    };
+    if ok == 0 {
+        return Child { process: nul(), thread: nul(), ev, pid: 0, tid: 0 };
+    }
+    Child { process: pi.process, thread: pi.thread, ev, pid: pi.pid, tid: pi.tid }
+}
+
+/// Wait until the target has signalled that it is running its own code.
+fn wait_ready(c: &Child) -> bool {
+    // SAFETY: valid handle.
+    unsafe { WaitForSingleObject(c.ev, 5000) == 0 }
+}
+
+/// A ready target of kind "sleep".
+fn target() -> Child {
+    let c = spawn("sleep", 0);
+    if !c.process.is_null() {
+        wait_ready(&c);
+    }
+    c
+}
+
+fn kill(c: Child) {
+    if !c.process.is_null() {
+        // SAFETY: handles from CreateProcessW.
+        unsafe {
+            TerminateProcess(c.process, 0xDEAD);
+            WaitForSingleObject(c.process, 5000);
+        }
+    }
+    close(c.process);
+    close(c.thread);
+    close(c.ev);
+}
+
+fn alive(h: HANDLE) -> bool {
+    // SAFETY: valid handle.
+    unsafe { WaitForSingleObject(h, 0) == WAIT_TIMEOUT }
+}
+
+fn exit_code_of_process(h: HANDLE) -> i64 {
+    let mut c = 0u32;
+    // SAFETY: valid buffer.
+    let ok = unsafe { GetExitCodeProcess(h, &mut c) };
+    if ok == 0 { -1 } else { i64::from(c) }
+}
+
+fn exit_code_of_thread(h: HANDLE) -> i64 {
+    let mut c = 0u32;
+    // SAFETY: valid buffer.
+    let ok = unsafe { GetExitCodeThread(h, &mut c) };
+    if ok == 0 { -1 } else { i64::from(c) }
+}
+
+/// Wait up to `ms` for a handle: 0 signalled, 0x102 timeout, 0xFFFFFFFF failed.
+fn wait(h: HANDLE, ms: u32) -> u32 {
+    // SAFETY: valid handle.
+    unsafe { WaitForSingleObject(h, ms) }
+}
+
+/// The access mask NtQueryObject reports for a handle (PUBLIC_OBJECT_BASIC_INFORMATION), or 0xFFFFFFFF.
+fn granted(h: HANDLE) -> u32 {
+    let mut b = ObjBasic { attributes: 0, granted: 0, handle_count: 0, pointer_count: 0, rest: [0; 10] };
+    let mut r = 0u32;
+    // SAFETY: valid buffer.
+    let st = unsafe { NtQueryObject(h, 0, &mut b as *mut ObjBasic as *mut c_void, 56, &mut r) };
+    if st < 0 { 0xFFFF_FFFF } else { b.granted }
+}
+
+/// A copy of the handle `h` with exactly the rights `rights`, or null.
+fn limited(h: HANDLE, rights: u32) -> HANDLE {
+    let mut out = nul();
+    // SAFETY: valid handles.
+    let ok = unsafe { DuplicateHandle(GetCurrentProcess(), h, GetCurrentProcess(), &mut out, rights, 0, 0) };
+    if ok == 0 { nul() } else { out }
+}
+
+// ---- memory of the target
+
+fn read_u32(p: HANDLE, addr: usize) -> Option<u32> {
+    let mut v = [0u8; 4];
+    let mut n = 0usize;
+    // SAFETY: valid buffer.
+    let ok = unsafe { ReadProcessMemory(p, addr, v.as_mut_ptr(), 4, &mut n) };
+    if ok == 0 || n != 4 { None } else { Some(u32::from_le_bytes(v)) }
+}
+
+fn read_usize(p: HANDLE, addr: usize) -> Option<usize> {
+    let mut v = [0u8; 8];
+    let mut n = 0usize;
+    // SAFETY: valid buffer.
+    let ok = unsafe { ReadProcessMemory(p, addr, v.as_mut_ptr(), 8, &mut n) };
+    if ok == 0 || n != 8 { None } else { Some(usize::from_le_bytes(v)) }
+}
+
+fn write_mem(p: HANDLE, addr: usize, data: &[u8]) -> bool {
+    let mut n = 0usize;
+    // SAFETY: valid buffer.
+    let ok = unsafe { WriteProcessMemory(p, addr, data.as_ptr(), data.len(), &mut n) };
+    ok != 0 && n == data.len()
+}
+
+/// The machine code of a start routine written into the target: `u32 f(Data *d)`; it stores the id of the
+/// process and of the thread it runs in (it calls two kernel32 functions whose addresses are in the data
+/// block), its stack pointer and a marker into the block, and returns 0x77.
+const CODE: [u8; 41] = [
+    0x53, // push rbx
+    0x48, 0x83, 0xEC, 0x20, // sub rsp,0x20
+    0x48, 0x89, 0xCB, // mov rbx,rcx
+    0xFF, 0x13, // call [rbx]
+    0x89, 0x43, 0x10, // mov [rbx+0x10],eax
+    0xFF, 0x53, 0x08, // call [rbx+8]
+    0x89, 0x43, 0x14, // mov [rbx+0x14],eax
+    0x48, 0x89, 0x63, 0x20, // mov [rbx+0x20],rsp
+    0xC7, 0x43, 0x1C, 0xED, 0x5E, 0xDE, 0xC0, // mov dword [rbx+0x1C],0xC0DE5EED
+    0xB8, 0x77, 0x00, 0x00, 0x00, // mov eax,0x77
+    0x48, 0x83, 0xC4, 0x20, // add rsp,0x20
+    0x5B, // pop rbx
+    0xC3, // ret
+];
+const MARKER: u32 = 0xC0DE_5EED;
+const DATA_OFF: usize = 0x100;
+
+/// Code and data in one new page of the target.
+struct Inj {
+    page: usize,
+}
+
+impl Inj {
+    fn start(&self) -> usize {
+        self.page
+    }
+    fn param(&self) -> usize {
+        self.page + DATA_OFF
+    }
+    fn marker(&self, p: HANDLE) -> Option<u32> {
+        read_u32(p, self.page + DATA_OFF + 0x1C)
+    }
+    fn pid(&self, p: HANDLE) -> Option<u32> {
+        read_u32(p, self.page + DATA_OFF + 0x10)
+    }
+    fn tid(&self, p: HANDLE) -> Option<u32> {
+        read_u32(p, self.page + DATA_OFF + 0x14)
+    }
+    fn sp(&self, p: HANDLE) -> Option<usize> {
+        read_usize(p, self.page + DATA_OFF + 0x20)
+    }
+}
+
+/// Allocate an executable page in `p` and write the start routine and its data block (the addresses of
+/// GetCurrentProcessId and GetCurrentThreadId, which kernel32 has at the same address in every process).
+fn inject(p: HANDLE) -> Option<Inj> {
+    // SAFETY: plain call.
+    let page = unsafe { VirtualAllocEx(p, 0, 0x1000, MEM_COMMIT_RESERVE, 0x40) };
+    if page == 0 {
+        return None;
+    }
+    let mut data = [0u8; 0x30];
+    data[0..8].copy_from_slice(&k32("GetCurrentProcessId").to_le_bytes());
+    data[8..16].copy_from_slice(&k32("GetCurrentThreadId").to_le_bytes());
+    if !write_mem(p, page, &CODE) || !write_mem(p, page + DATA_OFF, &data) {
+        return None;
+    }
+    Some(Inj { page })
+}
+
+// ---- the calls under test, with the three error reports
+
+struct Made {
+    h: HANDLE,
+    tid: u32,
+    err: i64,
+    st: u32,
+}
+
+impl Made {
+    fn ok(&self) -> bool {
+        !self.h.is_null()
+    }
+    fn text(&self) -> Buf<80> {
+        let mut b = Buf::<80>::new();
+        if self.ok() {
+            let _ = write!(b, "handle");
+        } else {
+            let _ = write!(b, "NULL gle={} status={:#x}", self.err, self.st);
+        }
+        b
+    }
+}
+
+/// kernel32!CreateRemoteThread.
+fn crt(p: HANDLE, stack: usize, start: usize, arg: usize, flags: u32) -> Made {
+    let mut tid = 0xAAAA_AAAAu32;
+    // SAFETY: plain call.
+    unsafe {
+        SetLastError(0xDEAD);
+        let h = CreateRemoteThread(p, core::ptr::null(), stack, start, arg, flags, &mut tid);
+        let err = gle();
+        let st = status_now();
+        Made { h, tid, err, st }
+    }
+}
+
+/// kernel32!CreateRemoteThreadEx.
+fn crte(p: HANDLE, stack: usize, start: usize, arg: usize, flags: u32, attrs: *mut c_void) -> Made {
+    let mut tid = 0xAAAA_AAAAu32;
+    // SAFETY: plain call.
+    unsafe {
+        SetLastError(0xDEAD);
+        let h = CreateRemoteThreadEx(p, core::ptr::null(), stack, start, arg, flags, attrs, &mut tid);
+        let err = gle();
+        let st = status_now();
+        Made { h, tid, err, st }
+    }
+}
+
+/// ntdll!NtCreateThreadEx: (status, handle).
+fn nct(
+    p: HANDLE,
+    access: u32,
+    start: usize,
+    arg: usize,
+    flags: u32,
+    zero: usize,
+    stack: usize,
+    maxstack: usize,
+) -> (i32, HANDLE) {
+    let mut h = nul();
+    // SAFETY: plain call.
+    let st = unsafe {
+        NtCreateThreadEx(
+            &mut h,
+            access,
+            core::ptr::null(),
+            p,
+            start,
+            arg,
+            flags,
+            zero,
+            stack,
+            maxstack,
+            core::ptr::null_mut(),
+        )
+    };
+    (st, h)
+}
+
+fn yn(b: bool) -> &'static str {
+    if b { "yes" } else { "no" }
+}
+
+fn opt_hex(v: Option<u32>) -> Buf<24> {
+    let mut b = Buf::<24>::new();
+    match v {
+        Some(x) => {
+            let _ = write!(b, "{x:#x}");
+        }
+        None => {
+            let _ = write!(b, "unreadable");
+        }
+    }
+    b
+}
+
+/// Let a new thread run to its end: resume it (a no-op for a running one), wait for it, and return the wait
+/// result and the exit code.
+fn run_out(h: HANDLE) -> (u32, i64) {
+    // SAFETY: valid handle.
+    unsafe { ResumeThread(h) };
+    let w = wait(h, 10000);
+    (w, exit_code_of_thread(h))
+}
+
+/// The stack of the live thread `h` of the process `p`: (reserved bytes, committed bytes, guard pages).
+fn stack_of(p: HANDLE, h: HANDLE) -> Option<(usize, usize, usize)> {
+    let mut tb =
+        ThreadBasic { exit_status: 0, pad: 0, teb: 0, pid: 0, tid: 0, affinity: 0, priority: 0, base_priority: 0 };
+    let mut r = 0u32;
+    // SAFETY: valid buffer.
+    let st = unsafe { NtQueryInformationThread(h, 0, &mut tb as *mut ThreadBasic as *mut c_void, 48, &mut r) };
+    if st < 0 {
+        return None;
+    }
+    let base = read_usize(p, tb.teb + 8)?;
+    let mut mi = MemInfo {
+        base: 0,
+        alloc_base: 0,
+        alloc_protect: 0,
+        partition: 0,
+        pad: 0,
+        size: 0,
+        state: 0,
+        protect: 0,
+        kind: 0,
+        pad2: 0,
+    };
+    // SAFETY: valid buffer.
+    let n = unsafe { VirtualQueryEx(p, base - 1, &mut mi, 48) };
+    if n == 0 {
+        return None;
+    }
+    let alloc = mi.alloc_base;
+    let (mut commit, mut guards) = (0usize, 0usize);
+    let mut a = alloc;
+    while a < base {
+        // SAFETY: valid buffer.
+        let n = unsafe { VirtualQueryEx(p, a, &mut mi, 48) };
+        if n == 0 || mi.size == 0 {
+            return None;
+        }
+        if mi.state == 0x1000 {
+            commit += mi.size;
+        }
+        if mi.protect & 0x100 != 0 {
+            guards += mi.size / 0x1000;
+        }
+        a += mi.size;
+    }
+    Some((base - alloc, commit, guards))
+}
+
+/// The SizeOfStackReserve and SizeOfStackCommit fields of this image's own PE optional header.
+fn image_stack() -> (usize, usize) {
+    // SAFETY: the image of this process is mapped at its module handle.
+    unsafe {
+        let base = GetModuleHandleW(core::ptr::null()) as usize;
+        let pe = *((base + 0x3c) as *const u32) as usize;
+        let opt = base + pe + 24;
+        (*((opt + 72) as *const u64) as usize, *((opt + 80) as *const u64) as usize)
+    }
+}
+
+/// One line about the stack of a remote thread created with `stack` and `flags`.
+fn stack_line(t: &mut Test, label: &str, c: &Child, stack: usize, flags: u32) {
+    let sleep = k32("Sleep");
+    let m = crt(c.process, stack, sleep, 60000, flags);
+    if !m.ok() {
+        say!(t, "{label}: create {}", m.text().as_str());
+        return;
+    }
+    // SAFETY: valid handle.
+    unsafe { ResumeThread(m.h) };
+    let mut r = stack_of(c.process, m.h);
+    let mut tries = 0;
+    while (r.is_none() || r.map(|x| x.1) == Some(0)) && tries < 200 {
+        // SAFETY: plain call.
+        unsafe { Sleep(25) };
+        r = stack_of(c.process, m.h);
+        tries += 1;
+    }
+    match r {
+        Some((res, com, _g)) => {
+            if flags & STACK_SIZE_PARAM_IS_A_RESERVATION == 0 && stack != 0 {
+                say!(t, "{label}: reserve={}K, committed at least the requested size: {}", res / 1024, yn(com >= stack))
+            } else {
+                say!(t, "{label}: reserve={}K, committed at least one page: {}", res / 1024, yn(com >= 0x1000))
+            }
+        }
+        None => say!(t, "{label}: stack not readable"),
+    }
+    close(m.h);
+}
+
+// ---------------------------------------------------------------- the child role
+
+fn child_main(args: &str) -> u32 {
+    // SAFETY: plain calls.
+    unsafe { SetErrorMode(0x8003) };
+    let mut it = args.split(' ');
+    let kind = it.next().unwrap_or("");
+    let name = it.next().unwrap_or("");
+    // `h<hex>`: an inherited handle to the event; otherwise the name of an event
+    let ev = if let Some(hex) = name.strip_prefix('h') {
+        usize::from_str_radix(hex, 16).unwrap_or(0) as HANDLE
+    } else {
+        let w = wide(name);
+        // SAFETY: valid name.
+        unsafe { OpenEventW(2, 0, w.as_ptr()) }
+    };
+    if !ev.is_null() {
+        // SAFETY: valid handle.
+        unsafe { SetEvent(ev) };
+    }
+    match kind {
+        "exit" => 7,
+        _ => loop {
+            // SAFETY: plain call.
+            unsafe { Sleep(INFINITE) };
+        },
+    }
+}
+
+macro_rules! main_rt {
+    ($test:path) => {
+        #[unsafe(no_mangle)]
+        pub extern "system" fn mainCRTStartup() -> ! {
+            if let Some(a) = child_args() {
+                exit(child_main(a.as_str()))
+            }
+            if open_output().is_err() {
+                exit(EXIT_NO_OUTPUT);
+            }
+            let mut t = Test::new();
+            $test(&mut t);
+            let code = t.finish();
+            exit(code)
+        }
+    };
+}
+
+// ---------------------------------------------------------------- sandboxed targets (advapi32, userenv)
+//
+// A target of this test's image under a restricted token, at low integrity, in a job, or in an AppContainer, started by
+// a caller at medium integrity (the standard token), the way a browser starts its sandboxed children. The readiness
+// event is inherited (a named event is not reachable by such a target).
+
+#[repr(C)]
+struct SidAndAttrs {
+    sid: *mut c_void,
+    attrs: u32,
+}
+
+#[repr(C)]
+struct SecCaps {
+    sid: *mut c_void,
+    caps: *mut c_void,
+    count: u32,
+    reserved: u32,
+}
+
+#[repr(C)]
+struct StartupInfoExW {
+    si: StartupInfoW,
+    attrs: *mut c_void,
+}
+
+#[link(name = "advapi32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn OpenProcessToken(p: HANDLE, access: u32, out: *mut HANDLE) -> BOOL;
+    fn DuplicateTokenEx(t: HANDLE, access: u32, sa: *const c_void, imp: u32, ttype: u32, out: *mut HANDLE) -> BOOL;
+    fn CreateRestrictedToken(
+        t: HANDLE,
+        flags: u32,
+        nd: u32,
+        dsids: *const SidAndAttrs,
+        np: u32,
+        privs: *const c_void,
+        nr: u32,
+        rsids: *const SidAndAttrs,
+        out: *mut HANDLE,
+    ) -> BOOL;
+    fn SetTokenInformation(t: HANDLE, class: u32, buf: *const c_void, len: u32) -> BOOL;
+    fn GetTokenInformation(t: HANDLE, class: u32, buf: *mut c_void, len: u32, ret: *mut u32) -> BOOL;
+    fn IsTokenRestricted(t: HANDLE) -> BOOL;
+    fn ConvertStringSidToSidW(s: *const u16, out: *mut *mut c_void) -> BOOL;
+    fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
+        s: *const u16,
+        rev: u32,
+        sd: *mut *mut c_void,
+        size: *mut u32,
+    ) -> BOOL;
+    fn SetFileSecurityW(name: *const u16, info: u32, sd: *mut c_void) -> BOOL;
+    fn GetLengthSid(sid: *mut c_void) -> u32;
+    fn GetSecurityDescriptorDacl(
+        sd: *mut c_void,
+        present: *mut BOOL,
+        dacl: *mut *mut c_void,
+        defaulted: *mut BOOL,
+    ) -> BOOL;
+    fn GetSidSubAuthorityCount(sid: *mut c_void) -> *mut u8;
+    fn GetSidSubAuthority(sid: *mut c_void, n: u32) -> *mut u32;
+    fn CreateProcessAsUserW(
+        token: HANDLE,
+        app: *const u16,
+        cmd: *mut u16,
+        pa: *const c_void,
+        ta: *const c_void,
+        inherit: BOOL,
+        flags: u32,
+        env: *const c_void,
+        dir: *const u16,
+        si: *mut StartupInfoW,
+        pi: *mut ProcInfo,
+    ) -> BOOL;
+}
+
+#[link(name = "userenv", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CreateAppContainerProfile(
+        name: *const u16,
+        display: *const u16,
+        desc: *const u16,
+        caps: *const c_void,
+        ncaps: u32,
+        sid: *mut *mut c_void,
+    ) -> i32;
+    fn DeriveAppContainerSidFromAppContainerName(name: *const u16, sid: *mut *mut c_void) -> i32;
+    fn DeleteAppContainerProfile(name: *const u16) -> i32;
+}
+
+#[link(name = "kernel32", kind = "raw-dylib")]
+unsafe extern "system" {
+    fn CreateJobObjectW(sa: *const c_void, name: *const u16) -> HANDLE;
+    fn SetInformationJobObject(job: HANDLE, class: u32, info: *const c_void, len: u32) -> BOOL;
+    fn AssignProcessToJobObject(job: HANDLE, process: HANDLE) -> BOOL;
+    #[link_name = "CreateProcessW"]
+    fn CreateProcessW_ex(
+        app: *const u16,
+        cmd: *mut u16,
+        pa: *const c_void,
+        ta: *const c_void,
+        inherit: BOOL,
+        flags: u32,
+        env: *const c_void,
+        dir: *const u16,
+        si: *mut StartupInfoExW,
+        pi: *mut ProcInfo,
+    ) -> BOOL;
+}
+
+/// A new handle to `pid` opened with `rights`, or null (last error set).
+fn open_proc(pid: u32, rights: u32) -> HANDLE {
+    // SAFETY: plain call.
+    unsafe { OpenProcess(rights, 0, pid) }
+}
+
+const TOKEN_ALL: u32 = 0xF01FF;
+const TOKEN_QUERY: u32 = 8;
+const DISABLE_MAX_PRIVILEGE: u32 = 1;
+
+/// The token of this process (all access), or null.
+fn my_token() -> HANDLE {
+    let mut t = nul();
+    // SAFETY: valid buffer.
+    let ok = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_ALL, &mut t) };
+    if ok == 0 { nul() } else { t }
+}
+
+/// A restricted primary token made from this process's: privileges removed, one restricting SID (the user's).
+fn restricted_token() -> HANDLE {
+    let base = my_token();
+    if base.is_null() {
+        return nul();
+    }
+    let mut buf = [0u64; 64];
+    let mut n = 0u32;
+    // SAFETY: valid buffers; class 1 is TokenUser.
+    unsafe { GetTokenInformation(base, 1, buf.as_mut_ptr() as *mut c_void, 512, &mut n) };
+    // SAFETY: TOKEN_USER begins with the SID pointer.
+    let sid = unsafe { *(buf.as_ptr() as *const *mut c_void) };
+    // the user, Everyone, Users and RESTRICTED: the SIDs system files grant read and execute to
+    let mut rs = [
+        SidAndAttrs { sid, attrs: 0 },
+        SidAndAttrs { sid: core::ptr::null_mut(), attrs: 0 },
+        SidAndAttrs { sid: core::ptr::null_mut(), attrs: 0 },
+        SidAndAttrs { sid: core::ptr::null_mut(), attrs: 0 },
+    ];
+    for (i, text) in ["S-1-1-0", "S-1-5-32-545", "S-1-5-12"].iter().enumerate() {
+        let w = wide(text);
+        // SAFETY: valid pointers.
+        unsafe { ConvertStringSidToSidW(w.as_ptr(), &mut rs[i + 1].sid) };
+    }
+    let mut out = nul();
+    // SAFETY: valid pointers.
+    let ok = unsafe {
+        CreateRestrictedToken(
+            base,
+            DISABLE_MAX_PRIVILEGE,
+            0,
+            core::ptr::null(),
+            0,
+            core::ptr::null(),
+            4,
+            rs.as_ptr(),
+            &mut out,
+        )
+    };
+    close(base);
+    if ok == 0 { nul() } else { out }
+}
+
+/// A primary copy of `base` (or of this process's token) with its integrity level set to the RID `rid`.
+fn level_token(base: HANDLE, rid: u32) -> HANDLE {
+    let own = base.is_null();
+    let src = if own { my_token() } else { base };
+    if src.is_null() {
+        return nul();
+    }
+    let mut out = nul();
+    // SAFETY: valid pointers; impersonation level 2, token type 1 (primary).
+    let ok = unsafe { DuplicateTokenEx(src, TOKEN_ALL, core::ptr::null(), 2, 1, &mut out) };
+    if own {
+        close(src);
+    }
+    if ok == 0 {
+        return nul();
+    }
+    let mut b = Buf::<40>::new();
+    let _ = write!(b, "S-1-16-{rid}");
+    let w = wide(b.as_str());
+    let mut sid: *mut c_void = core::ptr::null_mut();
+    // SAFETY: valid pointers.
+    if unsafe { ConvertStringSidToSidW(w.as_ptr(), &mut sid) } == 0 {
+        close(out);
+        return nul();
+    }
+    let label = SidAndAttrs { sid, attrs: 0x20 };
+    // SAFETY: valid pointers; class 25 is TokenIntegrityLevel.
+    let ok =
+        unsafe { SetTokenInformation(out, 25, &label as *const SidAndAttrs as *const c_void, 16 + GetLengthSid(sid)) };
+    if ok == 0 {
+        close(out);
+        return nul();
+    }
+    out
+}
+
+/// A copy of `base` whose default DACL (the one a new process of the token gets for itself) grants only SYSTEM.
+fn locked_token(base: HANDLE) -> HANDLE {
+    let mut out = nul();
+    // SAFETY: valid pointers; impersonation level 2, token type 1 (primary).
+    if unsafe { DuplicateTokenEx(base, TOKEN_ALL, core::ptr::null(), 2, 1, &mut out) } == 0 {
+        return nul();
+    }
+    let sddl = wide("D:(A;;GA;;;SY)");
+    let mut sd: *mut c_void = core::ptr::null_mut();
+    // SAFETY: valid pointers.
+    if unsafe { ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.as_ptr(), 1, &mut sd, core::ptr::null_mut()) }
+        == 0
+    {
+        close(out);
+        return nul();
+    }
+    let (mut present, mut defaulted) = (0, 0);
+    let mut dacl: *mut c_void = core::ptr::null_mut();
+    // SAFETY: valid pointers; class 6 is TokenDefaultDacl (a structure holding the ACL pointer).
+    let ok = unsafe {
+        GetSecurityDescriptorDacl(sd, &mut present, &mut dacl, &mut defaulted) != 0
+            && SetTokenInformation(out, 6, &dacl as *const *mut c_void as *const c_void, 8) != 0
+    };
+    if !ok {
+        close(out);
+        return nul();
+    }
+    out
+}
+
+/// (is restricted, integrity level RID) of a process's token, read through the process handle.
+fn token_facts(p: HANDLE) -> Option<(bool, u32)> {
+    let mut t = nul();
+    // SAFETY: valid buffer.
+    if unsafe { OpenProcessToken(p, TOKEN_QUERY, &mut t) } == 0 {
+        return None;
+    }
+    // SAFETY: valid handle.
+    let restricted = unsafe { IsTokenRestricted(t) } != 0;
+    let mut buf = [0u64; 32];
+    let mut n = 0u32;
+    // SAFETY: valid buffers; class 25 is TokenIntegrityLevel.
+    let ok = unsafe { GetTokenInformation(t, 25, buf.as_mut_ptr() as *mut c_void, 256, &mut n) };
+    let mut rid = 0;
+    if ok != 0 {
+        // SAFETY: TOKEN_MANDATORY_LABEL begins with the SID pointer.
+        unsafe {
+            let sid = *(buf.as_ptr() as *const *mut c_void);
+            let count = *GetSidSubAuthorityCount(sid);
+            rid = *GetSidSubAuthority(sid, u32::from(count) - 1);
+        }
+    }
+    close(t);
+    Some((restricted, rid))
+}
+
+fn token_line(t: &mut Test, c: &Child) {
+    match token_facts(c.process) {
+        Some((r, rid)) => say!(t, "target token: restricted {}, integrity level {:#x}", yn(r), rid),
+        None => say!(t, "target token: not readable"),
+    }
+}
+
+/// A job object like a browser's for its sandboxed children: one active process, UI restrictions, kill on close.
+fn sandbox_job() -> HANDLE {
+    // SAFETY: plain calls with valid buffers.
+    unsafe {
+        let job = CreateJobObjectW(core::ptr::null(), core::ptr::null());
+        if job.is_null() {
+            return job;
+        }
+        let mut ext = [0u64; 18];
+        // LimitFlags (offset 16): ACTIVE_PROCESS 0x8 | KILL_ON_JOB_CLOSE 0x2000; ActiveProcessLimit (offset 40): 1
+        let p = ext.as_mut_ptr() as *mut u8;
+        *(p.add(16) as *mut u32) = 0x2008;
+        *(p.add(40) as *mut u32) = 1;
+        SetInformationJobObject(job, 9, p as *const c_void, 144);
+        let ui = 0xFFu32;
+        SetInformationJobObject(job, 4, &ui as *const u32 as *const c_void, 4);
+        job
+    }
+}
+
+/// How the sandboxed target is made.
+struct Sandbox {
+    token: HANDLE,
+    job: HANDLE,
+    container: Option<*mut c_void>,
+}
+
+/// Start a target of this image under `sb`. The readiness event is an anonymous inheritable event whose handle value
+/// is on the command line.
+fn spawn_sandboxed(sb: &Sandbox) -> Child {
+    let sa = SecurityAttributes { length: 24, descriptor: nul(), inherit: 1 };
+    // SAFETY: valid attributes.
+    let ev = unsafe { CreateEventW(&sa as *const SecurityAttributes as *const c_void, 1, 0, core::ptr::null()) };
+    let (exe, _) = self_path();
+    let mut cmd = [0u16; 600];
+    let mut k = 0;
+    cmd[k] = b'"' as u16;
+    k += 1;
+    for &u in wstr_at(exe.as_ptr(), 299) {
+        cmd[k] = u;
+        k += 1;
+    }
+    let mut tail = Buf::<160>::new();
+    let _ = write!(tail, "\" --child sleep h{:x}", ev as usize);
+    for b in tail.as_str().bytes() {
+        cmd[k] = u16::from(b);
+        k += 1;
+    }
+    let mut pi = ProcInfo { process: nul(), thread: nul(), pid: 0, tid: 0 };
+    let flags = if sb.job.is_null() { 0 } else { CREATE_SUSPENDED };
+    let ok;
+    if let Some(sid) = sb.container {
+        let mut caps = SecCaps { sid, caps: core::ptr::null_mut(), count: 0, reserved: 0 };
+        let mut size = 0usize;
+        // SAFETY: the size query with a NULL list is the documented use.
+        unsafe { InitializeProcThreadAttributeList(core::ptr::null_mut(), 1, 0, &mut size) };
+        let mut list = [0u64; 32];
+        let lp = list.as_mut_ptr() as *mut c_void;
+        // SAFETY: the buffer is large enough for one attribute.
+        unsafe {
+            InitializeProcThreadAttributeList(lp, 1, 0, &mut size);
+            UpdateProcThreadAttribute(
+                lp,
+                0,
+                0x2_0009,
+                &mut caps as *mut SecCaps as *const c_void,
+                24,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+            );
+        }
+        let mut si = StartupInfoExW { si: StartupInfoW { cb: 112, pad0: 0, rest: [0; 12] }, attrs: lp };
+        // SAFETY: valid buffers.
+        ok = unsafe {
+            CreateProcessW_ex(
+                exe.as_ptr(),
+                cmd.as_mut_ptr(),
+                core::ptr::null(),
+                core::ptr::null(),
+                1,
+                flags | 0x80000,
+                core::ptr::null(),
+                core::ptr::null(),
+                &mut si,
+                &mut pi,
+            )
+        };
+        // SAFETY: the list was initialised.
+        unsafe { DeleteProcThreadAttributeList(lp) };
+    } else {
+        let mut si = StartupInfoW { cb: 104, pad0: 0, rest: [0; 12] };
+        // SAFETY: valid buffers.
+        ok = unsafe {
+            CreateProcessAsUserW(
+                sb.token,
+                exe.as_ptr(),
+                cmd.as_mut_ptr(),
+                core::ptr::null(),
+                core::ptr::null(),
+                1,
+                flags,
+                core::ptr::null(),
+                core::ptr::null(),
+                &mut si,
+                &mut pi,
+            )
+        };
+    }
+    if ok == 0 {
+        return Child { process: nul(), thread: nul(), ev, pid: 0, tid: 0 };
+    }
+    if !sb.job.is_null() {
+        // SAFETY: valid handles.
+        unsafe {
+            AssignProcessToJobObject(sb.job, pi.process);
+            ResumeThread(pi.thread);
+        }
+    }
+    Child { process: pi.process, thread: pi.thread, ev, pid: pi.pid, tid: pi.tid }
+}
+
+/// The calls under test against a sandboxed target `c` (its handle is the full one CreateProcess returned).
+fn sandbox_cases(t: &mut Test, c: &Child) {
+    // SAFETY: plain call.
+    let me = unsafe { GetCurrentProcessId() };
+    say!(t, "target started: {}", yn(!c.process.is_null()));
+    if c.process.is_null() {
+        return;
+    }
+    say!(t, "target ready: {}", yn(wait_ready(c)));
+    token_line(t, c);
+    let exit_thread = k32("ExitThread");
+    // the handle CreateProcess returned
+    let m = crt(c.process, 0, exit_thread, 0x1234, 0);
+    say!(t, "CreateRemoteThread with the creator's handle: {}", m.text().as_str());
+    if m.ok() {
+        // SAFETY: valid handle.
+        unsafe {
+            say!(
+                t,
+                "  thread is in the target: {}, not in the caller: {}",
+                yn(GetProcessIdOfThread(m.h) == c.pid),
+                yn(GetProcessIdOfThread(m.h) != me)
+            )
+        };
+        let (w, code) = run_out(m.h);
+        say!(t, "  wait {:#x}, exit code {:#x}", w, code);
+        close(m.h);
+    }
+    let (st, h) = nct(c.process, THREAD_ALL_ACCESS, exit_thread, 0x4321, 0, 0, 0, 0);
+    say!(t, "NtCreateThreadEx with the creator's handle: status {:#x}", st as u32);
+    if st >= 0 {
+        let (w, code) = run_out(h);
+        say!(t, "  wait {:#x}, exit code {:#x}", w, code);
+        close(h);
+    }
+    let m = crte(c.process, 0, exit_thread, 0x2468, 0, core::ptr::null_mut());
+    say!(t, "CreateRemoteThreadEx with the creator's handle: {}", m.text().as_str());
+    if m.ok() {
+        let (w, code) = run_out(m.h);
+        say!(t, "  wait {:#x}, exit code {:#x}", w, code);
+        close(m.h);
+    }
+    // code written into the target
+    match inject(c.process) {
+        Some(inj) => {
+            let m = crt(c.process, 0, inj.start(), inj.param(), CREATE_SUSPENDED);
+            say!(t, "code in the target, suspended: {}", m.text().as_str());
+            if m.ok() {
+                say!(t, "  wait 300 ms: {:#x}, marker {}", wait(m.h, 300), opt_hex(inj.marker(c.process)).as_str());
+                let (w, code) = run_out(m.h);
+                say!(
+                    t,
+                    "  after resume: wait {:#x}, exit code {:#x}, marker {}",
+                    w,
+                    code,
+                    opt_hex(inj.marker(c.process)).as_str()
+                );
+                say!(t, "  thread saw the target's process id: {}", yn(inj.pid(c.process) == Some(c.pid)));
+                say!(t, "  thread saw its own id == returned id: {}", yn(inj.tid(c.process) == Some(m.tid)));
+                close(m.h);
+            }
+        }
+        None => say!(t, "code could not be written into the target"),
+    }
+    // handles opened by process id, as another process would
+    let all5 =
+        PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ;
+    for (label, rights) in [
+        ("the five rights of Learn's list", all5),
+        ("PROCESS_CREATE_THREAD only", PROCESS_CREATE_THREAD),
+        ("PROCESS_QUERY_LIMITED_INFORMATION only", PROCESS_QUERY_LIMITED_INFORMATION),
+    ] {
+        // SAFETY: plain call.
+        unsafe { SetLastError(0xDEAD) };
+        let o = open_proc(c.pid, rights);
+        if o.is_null() {
+            say!(t, "OpenProcess with {label}: NULL gle={}", gle());
+            continue;
+        }
+        let m = crt(o, 0, exit_thread, 0x1357, 0);
+        if m.ok() {
+            let (w, code) = run_out(m.h);
+            say!(
+                t,
+                "OpenProcess with {label}: handle; CreateRemoteThread: handle, wait {:#x} exit code {:#x}",
+                w,
+                code
+            );
+            close(m.h);
+        } else {
+            say!(t, "OpenProcess with {label}: handle; CreateRemoteThread: {}", m.text().as_str());
+        }
+        let (st, h) = nct(o, THREAD_ALL_ACCESS, exit_thread, 0x1357, 0, 0, 0, 0);
+        if st >= 0 {
+            run_out(h);
+            close(h);
+        }
+        say!(t, "  NtCreateThreadEx with it: status {:#x}", st as u32);
+        close(o);
+    }
+    // a copy of the creator's handle without any right
+    let zero = limited(c.process, 0);
+    let m = crt(zero, 0, exit_thread, 0x1111, 0);
+    say!(t, "CreateRemoteThread with a copy of the handle without rights: {}", m.text().as_str());
+    if m.ok() {
+        run_out(m.h);
+        close(m.h);
+    }
+    close(zero);
+    // the target can be made to end
+    let m = crt(c.process, 0, k32("ExitProcess"), 0x55, 0);
+    say!(t, "thread running ExitProcess(0x55): {}", m.text().as_str());
+    if m.ok() {
+        say!(
+            t,
+            "  target process ended: wait {:#x}, exit code {:#x}",
+            wait(c.process, 10000),
+            exit_code_of_process(c.process)
+        );
+        close(m.h);
+    }
+}
+
+fn say_sandbox_failed(t: &mut Test, what: &str) {
+    say!(t, "{what}: could not be made (gle {})", gle());
+}
+main_rt!(test);
+
+fn test(t: &mut Test) {
+    match token_facts(unsafe { GetCurrentProcess() }) {
+        Some((r, rid)) => say!(t, "caller token: restricted {}, integrity level {:#x}", yn(r), rid),
+        None => say!(t, "caller token: not readable"),
+    }
+    let tok = restricted_token();
+    say!(t, "restricted token made: {}", yn(!tok.is_null()));
+    if tok.is_null() {
+        say_sandbox_failed(t, "restricted token");
+        return;
+    }
+    let sb = Sandbox { token: tok, job: nul(), container: None };
+    let c = spawn_sandboxed(&sb);
+    sandbox_cases(t, &c);
+    kill(c);
+    close(tok);
+}

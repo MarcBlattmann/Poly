@@ -360,13 +360,18 @@ mod nt {
         assert_eq!(r.write(1).frames(), 0);
         assert_eq!(r.peek(6), Spans { first: (0, 6), second: (0, 0) });
         r.consume(6);
-        assert_eq!((r.played(), r.queued()), (6, 2));
+        assert_eq!((r.taken(), r.played(), r.queued()), (6, 0, 2));
+        // The device plays what the mixer took, no more.
+        r.heard(4);
+        assert_eq!(r.played(), 4);
+        r.heard(100);
+        assert_eq!(r.played(), 6);
         // The next write goes round the end.
         assert_eq!(r.write(5), Spans { first: (0, 5), second: (0, 0) });
         assert_eq!(r.peek(7), Spans { first: (6, 2), second: (0, 5) });
         // More than queued cannot be used.
         r.consume(100);
-        assert_eq!((r.played(), r.queued(), r.room()), (13, 0, 8));
+        assert_eq!((r.taken(), r.queued(), r.room()), (13, 0, 8));
         let s = r.write(8);
         assert_eq!(s, Spans { first: (5, 3), second: (0, 5) });
     }
@@ -380,6 +385,7 @@ mod nt {
         r.start();
         r.write(4);
         r.consume(4);
+        r.heard(4);
         r.ran_short(6);
         r.ran_short(10);
         let i = r.info();

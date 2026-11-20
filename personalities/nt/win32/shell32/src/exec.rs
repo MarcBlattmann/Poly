@@ -336,6 +336,32 @@ fn start(app: Option<&[u16]>, command: &[u16], dir: Option<&[u16]>, show: i32) -
     if ok == 0 { Err(unsafe { GetLastError() }) } else { Ok(pi) }
 }
 
+/// `ShellExecute` of the desktop's `Shell.Application` (`crate::dispatch`): a program (`file`,
+/// NUL-terminated, with its parameters and directory, verb none or `open`) is started as a child
+/// of the session's shell process ([`crate::shellchild`]). `None` when that does not apply (not a
+/// program, another verb, no shell process): the caller then starts it as `ShellExecuteW` does.
+pub fn start_from_shell(
+    file: &[u16],
+    params: Option<&[u16]>,
+    dir: Option<&[u16]>,
+    verb: Option<&[u16]>,
+    show: i32,
+) -> Option<Result<(), u32>> {
+    let strip = |s: &[u16]| -> Vec<u16> { s.iter().copied().take_while(|&c| c != 0).collect() };
+    let verb = verb.map(strip).filter(|v| !v.is_empty());
+    if verb.as_ref().is_some_and(|v| !si::same_path(v, &w("open"))) {
+        return None;
+    }
+    let dir = dir.map(strip).filter(|d| !d.is_empty());
+    let path = full_path(&strip(file), dir.as_deref());
+    if !si::is_program(&path) || crate::item::exists(&path) != Some(false) {
+        return None;
+    }
+    let params = params.map(strip).unwrap_or_default();
+    let cmd = si::quote_for_command_line(&path, &params);
+    crate::shellchild::start(&cmd, dir.as_deref(), show)
+}
+
 /// The `hInstApp` of a failure with Win32 error `e`.
 fn inst_of(e: u32) -> usize {
     match e {
