@@ -1294,7 +1294,7 @@
 </g>
 <text x="15.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="start">Windows</text>
 <text x="585.0" y="444.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14" font-weight="600" fill="#e6edf3" text-anchor="end">1.7%</text>
-<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">1,088 / 63,119 entries · 69,296 app-provided not counted</text>
+<text x="15.0" y="459.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="400" fill="#9198a1" text-anchor="start">1,096 / 63,119 entries · 69,296 app-provided not counted</text>
 <g><title>MSVC runtimes: 44 / 20,419 done (0.2%)</title>
 <rect x="16.0" y="469.0" width="182.4" height="218.0" fill="#21262d"/>
 <rect x="16.0" y="469.0" width="0.4" height="218.0" fill="#2ea043"/>
@@ -1328,11 +1328,11 @@
 <text x="205.4" y="650.4" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">ntoskrn…</text>
 <text x="205.4" y="664.4" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">0%</text>
 </g>
-<g><title>kernel32: 112 / 1,563 done (7.2%)</title>
+<g><title>kernel32: 115 / 1,563 done (7.4%)</title>
 <rect x="265.2" y="469.0" width="53.7" height="53.8" fill="#21262d"/>
-<rect x="265.2" y="469.0" width="3.8" height="53.8" fill="#2ea043"/>
-<rect x="269.0" y="469.0" width="10.5" height="53.8" fill="#bb8009"/>
-<rect x="279.5" y="469.0" width="11.5" height="53.8" fill="#388bfd"/>
+<rect x="265.2" y="469.0" width="4.0" height="53.8" fill="#2ea043"/>
+<rect x="269.1" y="469.0" width="10.5" height="53.8" fill="#bb8009"/>
+<rect x="279.6" y="469.0" width="11.4" height="53.8" fill="#388bfd"/>
 <rect x="264.2" y="468.0" width="55.7" height="55.8" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="270.2" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">kernel…</text>
 <text x="270.2" y="497.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="10" font-weight="400" fill="#9198a1" text-anchor="start">7%</text>
@@ -1400,11 +1400,11 @@
 <rect x="364.9" y="468.0" width="35.0" height="35.0" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="370.9" y="483.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">set…</text>
 </g>
-<g><title>advapi32: 96 / 593 done (16.2%)</title>
+<g><title>advapi32: 101 / 593 done (17.0%)</title>
 <rect x="365.9" y="504.0" width="33.0" height="31.7" fill="#21262d"/>
-<rect x="365.9" y="504.0" width="5.3" height="31.7" fill="#2ea043"/>
-<rect x="371.3" y="504.0" width="4.9" height="31.7" fill="#bb8009"/>
-<rect x="376.2" y="504.0" width="4.3" height="31.7" fill="#388bfd"/>
+<rect x="365.9" y="504.0" width="5.6" height="31.7" fill="#2ea043"/>
+<rect x="371.6" y="504.0" width="4.9" height="31.7" fill="#bb8009"/>
+<rect x="376.4" y="504.0" width="4.0" height="31.7" fill="#388bfd"/>
 <rect x="364.9" y="503.0" width="35.0" height="33.7" fill="none" stroke="#0d1117" stroke-width="1.5"/>
 <text x="370.9" y="518.0" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11" font-weight="500" fill="#e6edf3" text-anchor="start">adv…</text>
 </g>
