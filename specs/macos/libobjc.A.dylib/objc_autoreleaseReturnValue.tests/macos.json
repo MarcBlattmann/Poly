@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:50:53",
+  "tests": [
+    {
+      "name": "arc_autoreleasereturnvalue_arcfn",
+      "source_sha256": "1a885daedba7dfbd91b719550b110ab9b7a8bd310dba6d1b96cc72a52f902b7c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "449015edc608a4d6de1cc64a6520598bb380b476a9878a33b954fc41608533c9",
+          "exit_code": 0,
+          "stdout": "value retainCount of the returned object 1\nvalue deallocs while it is held 0\nvalue deallocs at the end of the scope 1\nvalue deallocs after 100 more scopes, pool not yet popped 101\nvalue deallocs after the pop 101\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5c13f48f7b85a2c822f541941248492aebd92cc1c57d7179b6531486042cda7c",
+          "exit_code": 0,
+          "stdout": "value retainCount of the returned object 1\nvalue deallocs while it is held 0\nvalue deallocs at the end of the scope 1\nvalue deallocs after 100 more scopes, pool not yet popped 101\nvalue deallocs after the pop 101\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_autoreleasereturnvalue_pairing",
+      "source_sha256": "23365ce3a5c3d2d9ed490868f539caa4fb9d586faf5489c16d629a4f609c7463",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7d141f7b11a05b8e7020cf21b130c30910be195ea52798a8f1e5620d586afe73",
+          "exit_code": 0,
+          "stdout": "ok same object\nvalue paired: retainCount 1\nvalue paired: deallocs after the pop (nothing was in the pool) 0\nvalue paired: deallocs after the release 1\nvalue unpaired: retainCount 1\nvalue unpaired: deallocs after the pop 1\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "733971ad68cf1949700523760ff3b66c22246434b7b921a0e1f84d830776a30b",
+          "exit_code": 0,
+          "stdout": "ok same object\nvalue paired: retainCount 1\nvalue paired: deallocs after the pop (nothing was in the pool) 0\nvalue paired: deallocs after the release 1\nvalue unpaired: retainCount 1\nvalue unpaired: deallocs after the pop 1\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_autoreleasereturnvalue_unmatched",
+      "source_sha256": "9f7e29a43706afb48c3df4817bb404da51c0dcf1b8c6450eced218bcf86a25c1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6f4b6a6d91aa818b6bcd997b1ef9e8582837c9bfe7c51421f97527b55319fd5f",
+          "exit_code": 0,
+          "stdout": "ok returns its argument\nvalue retainCount 1\nvalue deallocs before pop 0\nvalue deallocs after pop 1\nok nil in, nil out\nvalue retainCount (second) 1\nvalue deallocs (second) 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f32ce2012b93bdb3b99ece4cd0e592a5dc42524a138c69175b93c23285b7ba4c",
+          "exit_code": 0,
+          "stdout": "ok returns its argument\nvalue retainCount 1\nvalue deallocs before pop 0\nvalue deallocs after pop 1\nok nil in, nil out\nvalue retainCount (second) 1\nvalue deallocs (second) 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

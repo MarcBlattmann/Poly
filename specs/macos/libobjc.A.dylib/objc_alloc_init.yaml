@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_alloc_init.yaml. Observed with Objective-C test programs built for x86_64 and arm64
+# (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in objc_alloc_init.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_alloc_init
+oracle:
+  os: "macOS 27.0 (26A428)"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 (26A428), Darwin 27.0.0; tests are single C files compiled as Objective-C by `pipeline mac build` (clang, without ARC) and linked with /usr/lib/libobjc.A.dylib and libSystem; each runs 3 times per architecture in a fresh empty scratch directory with an empty environment. arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); no output differed between the two architectures in any test of this entry. No Foundation: the root class NSObject exported by libobjc itself is the only class used."
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  objc_alloc_init(cls) is what the compiler emits for [[cls alloc] init]. It is objc_alloc(cls)
+  followed by -init sent to the new object, and it returns what -init returns, not necessarily the
+  object that was allocated: when -init answers a different object (an object of another class made
+  inside -init) that object is returned, with its own retain count of 1 (the allocated instance is
+  then the init method's to dispose of). When -init releases self and returns nil the call returns
+  nil. A nil class gives nil and -init is not called. +alloc of the class (when overridden) runs
+  once, -init runs once (an override at any level of the superclass chain; each level's super call
+  runs as usual), and an -init added to the class at run time with class_addMethod is honoured. A
+  class method that happens to be called init has no effect. A class made with
+  objc_allocateClassPair that inherits -init from a registered superclass reaches it. The result of
+  a class whose -init returns an unrelated object (even a class object) is that object, unchanged.
+returns:
+  success: "the value of -init: normally the allocated instance with retain count 1"
+  init_substitutes: "the object -init returned, retain count 1 when it was freshly made; released once, its -dealloc runs once"
+  init_returns_nil: "nil"
+  nil_class: "nil, -init not called (count unchanged)"
+errors:
+  none: "no error is reported"
+side_effects: >
+  The instance is allocated and initialised as the class's own methods decide; nothing is
+  autoreleased by the call itself.
+threading: >
+  Not observed to depend on threads.
+ordering:
+  - "+alloc (if overridden) runs before -init"
+  - "exactly one -init message per call"
+  - "for a nil class neither runs"
+timing:
+  typical: "microseconds: one message send and an allocation"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

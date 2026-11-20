@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:05",
+  "tests": [
+    {
+      "name": "msgsend_stret_basic",
+      "source_sha256": "220c0b7083e53cf0f13fb7e3ea70c37e58733e5353293837a1c163fd9b665dd6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e266550b3596ee43e4b966fca2d4975c254f7dd5551dab4422a4182754b4db89",
+          "exit_code": 0,
+          "stdout": "ok objc_msgSend_stret does not exist on arm64\nok objc_msgSendSuper2_stret does not exist on arm64\nok objc_msgSend_fpret does not exist on arm64\nok arm64: objc_msgSend returns the 24-byte struct\nok arm64: and the 100-byte one\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4416afd1d6c52cf9cc4ad5cc2d59712c336b3c264885d640e97285506ef37d54",
+          "exit_code": 0,
+          "stdout": "ok objc_msgSend_stret exists\nok 24-byte struct, five arguments\nok 32-byte struct of doubles\nok 100-byte struct\nok a struct of two long doubles\nok self and _cmd are delivered\nok override\nok class method\nok inherited class method\nok the neighbours of the buffer are intact\nok and the buffer holds the result\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "msgsend_stret_nil",
+      "source_sha256": "4ffc46742b79191b8a8a4aba64bf638871de15aa5d89b6a4e9c7017a6c99588e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1945e6ba4645543fc8e793786633a7d447707e44efef5ecdadc296e344f9a967",
+          "exit_code": 0,
+          "stdout": "ok x86_64 only (objc_msgSend_stret does not exist on arm64)\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2b116d34a6976bdcce0753282502e97dfa70f9ffcbf1153024968ed3ebf0e058",
+          "exit_code": 0,
+          "stdout": "ok nil receiver leaves the buffer alone\nok nil Class too\nok an unknown selector too\nok nothing ran\nok a live receiver fills the buffer\nok and the method ran once\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

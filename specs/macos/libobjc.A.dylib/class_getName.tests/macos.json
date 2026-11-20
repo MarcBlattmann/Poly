@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "getname_runtime",
+      "source_sha256": "3e486ebe48c8866177120f41eb9ae07967c2a58dc44c99047ab43110f5457b78",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8449b2aef41f63febe46e68de86b4f6f412a5d74e3c6204fe4090024cdc0b560",
+          "exit_code": 0,
+          "stdout": "ok the returned name is the original\nok the returned pointer is not the caller's buffer\nok and after registration\nok 300 characters\nvalue length 300\nvalue symbols Gnr Spaces & Symbols!\nvalue an empty name gives a class 1\nvalue its name \nok subclass name\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "eb00f38ed18b9cef17d4e44867a21c0c57417971e1aef7d2b8705c06028eaac9",
+          "exit_code": 0,
+          "stdout": "ok the returned name is the original\nok the returned pointer is not the caller's buffer\nok and after registration\nok 300 characters\nvalue length 300\nvalue symbols Gnr Spaces & Symbols!\nvalue an empty name gives a class 1\nvalue its name \nok subclass name\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

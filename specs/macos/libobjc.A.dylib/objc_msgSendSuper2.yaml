@@ -1,0 +1,47 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_msgSendSuper2.yaml. Observed with Objective-C test programs (tests/macos/include/poly_mobjc.h,
+# ADR 0182); results per architecture in objc_msgSendSuper2.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_msgSendSuper2
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, 3 runs per architecture with identical output; arm64 observed natively, x86_64 under Rosetta 2 (no native Intel Mac was available, so a difference between Rosetta and real Intel hardware would not show); the programs are Objective-C compiled with Apple clang, loading /usr/lib/libobjc.A.dylib, with no Foundation except where a sheet says so (poly-mac: libobjc, poly_mobjc.h)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  The call behind [super message]. The first argument points to a pair
+  (receiver, class): the message goes to receiver, but the method search starts
+  in the SUPERCLASS of the class in the pair (the class the calling code is
+  defined in), not in the receiver's own class. So with a Leaf receiver and
+  Leaf in the pair, a method Leaf itself defines is skipped and the one in the
+  next class up that has it is run. The selector follows as the second argument,
+  the method's arguments after it; self in the method is the receiver and _cmd the
+  selector. For a class method the receiver is the class object and the class in
+  the pair is the metaclass of the calling class. Unlike objc_msgSend a nil
+  receiver is NOT short-circuited: the method is found and called with self ==
+  nil (observed: the method ran and returned its value 1). A selector no class on the
+  search path implements is resolved like objc_msgSend does it, except that
+  +resolveInstanceMethod: is sent to the class where the search started (the
+  superclass of the pair's class), and the method is added there (observed:
+  self in the resolver was that superclass, the method then found in it, not in the
+  pair's class). The call must go through a pointer of the method's exact type. Arguments
+  pass through unchanged: ten integer arguments (the last on the stack), eleven
+  mixed floating arguments, two-register structs, and on arm64 a struct returned
+  through x8.
+returns:
+  success: "what the method found returns"
+  search_start: "the superclass of the class in the pair; the pair's class's own method is skipped"
+  nil_receiver: "the method runs with self == nil and its value is returned (not zero unless the method returns zero)"
+  arm64_large_struct: "returned through the hidden result pointer like objc_msgSend"
+  x86_64_large_struct: "use objc_msgSendSuper2_stret"
+errors:
+  unrecognized_selector: "as objc_msgSend (not separately observed for super sends)"
+side_effects: "may add a method (by the resolver) to the class where the search started"
+threading: "as objc_msgSend"
+ordering:
+  - "the resolver of the superclass is asked at most once for a selector, as in objc_msgSend"
+timing:
+  typical: "nanoseconds to microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

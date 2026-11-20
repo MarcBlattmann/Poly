@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_loadweakretained_basic",
+      "source_sha256": "5ab851705eef6a7b926d0a14d67dec70a94e008292b0e40e3cdffeef21d5d59a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6b9f203ee5e1a042ba4743be9c307fd9225af1818954b83bc1ba33cf2c72b85d",
+          "exit_code": 0,
+          "stdout": "ok an empty location loads nil\nvalue retainCount before the load 1\nok returns the object\nvalue retainCount after the load 2\nok the location is unchanged\nvalue retainCount after releasing the loaded reference 1\nvalue retainCount after two loads 3\nvalue deallocs while a loaded reference is held 0\nok still loadable\nvalue deallocs after the last release 1\nok nil after the object is gone\nok the location was zeroed\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3d122b07d8d6e6ac34da9c43dfabe75567f615cf9490943cf457e2fccef2c20e",
+          "exit_code": 0,
+          "stdout": "ok an empty location loads nil\nvalue retainCount before the load 1\nok returns the object\nvalue retainCount after the load 2\nok the location is unchanged\nvalue retainCount after releasing the loaded reference 1\nvalue retainCount after two loads 3\nvalue deallocs while a loaded reference is held 0\nok still loadable\nvalue deallocs after the last release 1\nok nil after the object is gone\nok the location was zeroed\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_loadweakretained_hooks",
+      "source_sha256": "ab3fc72c3d7a70988aaf4b9adcc55ee3775592e0b50fb052b3248a4785a34af8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "abc999eafde092ccb8573485936e42cee5ccaa8138dfc66825bc280f7f3b777b",
+          "exit_code": 0,
+          "stdout": "value -retainWeakReference calls before any load 0\nvalue -retainWeakReference calls after a load 1\nok loaded\nvalue deallocs 1\nvalue the weak reference read nil inside -dealloc 1\nok a NO answer: nil returned\nok a NO answer: the location is unchanged\nvalue a NO answer: retainCount unchanged 1\nok the location is zeroed when it dies\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ec213ebdb0160c82b6e2526805f8b65ca783f86ab0f4601e1a276096aeb89778",
+          "exit_code": 0,
+          "stdout": "value -retainWeakReference calls before any load 0\nvalue -retainWeakReference calls after a load 1\nok loaded\nvalue deallocs 1\nvalue the weak reference read nil inside -dealloc 1\nok a NO answer: nil returned\nok a NO answer: the location is unchanged\nvalue a NO answer: retainCount unchanged 1\nok the location is zeroed when it dies\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

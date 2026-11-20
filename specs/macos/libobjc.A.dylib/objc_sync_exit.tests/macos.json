@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:39:11",
+  "tests": [
+    {
+      "name": "syncexit_exceptions",
+      "source_sha256": "503d3187d432061f62933714ac142b0a7dcab9a9541afdcb3758befed57bcae3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7fcad251c9836d97572e71a1e0b49fd771d466597334bf15c6e4ccbbf29f4dc4",
+          "exit_code": 0,
+          "stdout": "ok exception passed through @synchronized\nvalue exit by this thread after the exception (lock was released) -1\nvalue exit from another thread inside @synchronized (not its owner) -1\nvalue exit after leaving @synchronized by break -1\nok nested blocks run\nvalue nothing held after nested blocks -1\nok @synchronized (nil) runs the body\nvalue the object evaluated at entry is the one unlocked -1\nvalue and the other object was never locked -1\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c2138fb4e8d8a0fbb8394a738b70047b63898ba358e428f19789d7aa2455bfd7",
+          "exit_code": 0,
+          "stdout": "ok exception passed through @synchronized\nvalue exit by this thread after the exception (lock was released) -1\nvalue exit from another thread inside @synchronized (not its owner) -1\nvalue exit after leaving @synchronized by break -1\nok nested blocks run\nvalue nothing held after nested blocks -1\nok @synchronized (nil) runs the body\nvalue the object evaluated at entry is the one unlocked -1\nvalue and the other object was never locked -1\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "syncexit_recursive",
+      "source_sha256": "155f64094bfdcb54eebfb03875d120f70882dc5d3bdef2a1321aad42d672c0dd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6f75118fde22feaa0bcbab01e9b0d923abbb6a89caf1f42eb8356176f0345645",
+          "exit_code": 0,
+          "stdout": "value exits after which the waiter got in (of the first four) 0\nvalue waiter in before the last exit 0\nvalue waiter in after the last exit 1\nvalue errors in 200 nested enters and exits 0\nvalue one exit too many -1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "586cba9e0646c10732a9ae8aacf24323a076271fe5ca80c207e9b3ac36e89cf9",
+          "exit_code": 0,
+          "stdout": "value exits after which the waiter got in (of the first four) 0\nvalue waiter in before the last exit 0\nvalue waiter in after the last exit 1\nvalue errors in 200 nested enters and exits 0\nvalue one exit too many -1\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

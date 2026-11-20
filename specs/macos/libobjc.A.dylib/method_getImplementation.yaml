@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/method_getImplementation.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in method_getImplementation.tests/macos.json.
+id: macos/api/libobjc.A.dylib/method_getImplementation
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  IMP method_getImplementation(Method m). The function pointer a method currently holds. For a
+  compiled method it is callable as a function of (self, _cmd, args...) and gives the method's result;
+  for a subclass that inherits a method the Method is the superclass's, so the IMP is the same, and a
+  subclass override has a different IMP. It equals class_getMethodImplementation for the same class
+  and selector, is stable between calls and is what a message to the class would call. It follows
+  class_addMethod, class_replaceMethod (read through the same Method pointer),
+  method_setImplementation and method_exchangeImplementations. A NULL Method gives NULL. NSObject's
+  methods and class methods (asked through the metaclass) have non-NULL IMPs; NSObject's -hash called
+  through its IMP agrees with the message.
+returns:
+  imp: "the method's implementation"
+  null: "NULL for a NULL Method"
+errors:
+  none: "no error codes"
+side_effects: "none"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering: []
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

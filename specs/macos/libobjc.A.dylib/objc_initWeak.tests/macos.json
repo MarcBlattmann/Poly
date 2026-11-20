@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:12",
+  "tests": [
+    {
+      "name": "arc_initweak_basic",
+      "source_sha256": "67128a48ca9bbc2c6418d41f266c2b0a999c1907505bb6c7a81ddc54834bbd46",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b875069d2b58f72ba6a9098f8d07a037fceee2441b8e984d0ffa256cfc80ad04",
+          "exit_code": 0,
+          "stdout": "ok returns the object\nok the location holds the object\nvalue retainCount unchanged 1\nok loads it back\nok nil: returns nil\nok nil: the location is nil\nvalue deallocs 1\nok the location is zeroed when the object dies\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "42c68c18ed5d2ac1d91a2e854a8ed59689733ffe0553e03f7b8026fe9b0ca667",
+          "exit_code": 0,
+          "stdout": "ok returns the object\nok the location holds the object\nvalue retainCount unchanged 1\nok loads it back\nok nil: returns nil\nok nil: the location is nil\nvalue deallocs 1\nok the location is zeroed when the object dies\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_initweak_many",
+      "source_sha256": "0f99197f0f8a63bd33033ec671a21a848869f407f243b8f3acf953bce256212f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d39271fda2ac4dcb044343499d9865c6f4b3e74830911b93a3371934d0357de4",
+          "exit_code": 0,
+          "stdout": "value a 1\nvalue b 1\nvalue c 1\nvalue deallocs 1\nok a zeroed\nok c zeroed\nok class object\nok class object location\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "13c8df01f4c8cb51739a67bd02409137405b59fdfdfcb2009483a362d2d091f8",
+          "exit_code": 0,
+          "stdout": "value a 1\nvalue b 1\nvalue c 1\nvalue deallocs 1\nok a zeroed\nok c zeroed\nok class object\nok class object location\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
