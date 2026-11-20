@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 13:39:53",
+  "tests": [
+    {
+      "name": "nsapplicationdelegate_applicationdidfinishlaunching_delegate_weak",
+      "source_sha256": "c35949ef20f5d25f469837bca06ecff9c64f8ff7aead996f307843e08bc19648",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1c632027964d5d10e8004762701a9be414316d55a4f648168c874306267b426a",
+          "exit_code": 0,
+          "stdout": "ok a.delegate == d\nok a.delegate == nil\nok a.delegate == nil\nok calls == 0\nok calls == 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b605a9807def7f71c5dc193ad4db29df11ca871fffaeda06654c18180133fc5c",
+          "exit_code": 0,
+          "stdout": "ok a.delegate == d\nok a.delegate == nil\nok a.delegate == nil\nok calls == 0\nok calls == 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsapplicationdelegate_applicationdidfinishlaunching_sequence",
+      "source_sha256": "347737671bee30eca52f8882d3f671de500e16bfc25183e15bf2816958e92267",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d6cf9ebc7fcff28e4f224939f33f99063abd17792e8aa86bf12a154e38ecdb6c",
+          "exit_code": 0,
+          "stdout": "ok a.delegate == d\nok ns_is(x.name, \"NSApplicationWillFinishLaunchingNotification\")\nok ns_is(x.name, \"NSApplicationDidFinishLaunchingNotification\")\nok str_eq(log_, \"wd\")\nok will_obj_is_app && did_obj_is_app\nok a.delegate == b\nok str_eq(log_, \"wd\")\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a45074bc13b1329c13a3361645379b4896aaa3c748f3ccbddac9b2d781ebbdbb",
+          "exit_code": 0,
+          "stdout": "ok a.delegate == d\nok ns_is(x.name, \"NSApplicationWillFinishLaunchingNotification\")\nok ns_is(x.name, \"NSApplicationDidFinishLaunchingNotification\")\nok str_eq(log_, \"wd\")\nok will_obj_is_app && did_obj_is_app\nok a.delegate == b\nok str_eq(log_, \"wd\")\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsview_cachedisplayinrect_content",
+      "source_sha256": "21586449c45af480669c248501739ff6a15cdf7218184b13ae273592d226f21b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d6848cfd41f7a1b50a1fbcdd0383717781d98b5d34aaf76831fc952f2fa18673",
+          "exit_code": 0,
+          "stdout": "ok (ak_px(r, rx, ry) & 255) == 255 && (ak_px(r, rx + 3 * s - 1, ry + 2 * s - 1) & 255) == 255\nok ak_px(r, 0, 0) == 0 && ak_px(r, rx - 1, ry) == 0 && ak_px(r, rx, ry - 1) == 0\nok ak_px(r, rx, ry) == ak_px(r, rx + 1, ry + 1)\nok (ak_px(r, bx, ry) & 255) == 255 && ak_px(r, bx, ry) != ak_px(r, rx, ry)\nvalue sys_red_pixel 3929220095\nvalue sys_blue_pixel 1080399359\nvalue sys_scale 2\nok ak_hash(d) == ak_hash(r)\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2398b0aa9c428de4a315254ea86640a27dec27695f57bc8badf2bd2a2390771b",
+          "exit_code": 0,
+          "stdout": "ok (ak_px(r, rx, ry) & 255) == 255 && (ak_px(r, rx + 3 * s - 1, ry + 2 * s - 1) & 255) == 255\nok ak_px(r, 0, 0) == 0 && ak_px(r, rx - 1, ry) == 0 && ak_px(r, rx, ry - 1) == 0\nok ak_px(r, rx, ry) == ak_px(r, rx + 1, ry + 1)\nok (ak_px(r, bx, ry) & 255) == 255 && ak_px(r, bx, ry) != ak_px(r, rx, ry)\nvalue sys_red_pixel 3929220095\nvalue sys_blue_pixel 1080399359\nvalue sys_scale 2\nok ak_hash(d) == ak_hash(r)\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsview_cachedisplayinrect_rep",
+      "source_sha256": "417c63326b3a34a254fb4f4aaf97e8068dfaa2c11b0a03df998303512ddcbb90",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8464437fbfc6c33466e3028e94d5710111e1fdd98cc9922354aa592456d3fd13",
+          "exit_code": 0,
+          "stdout": "ok alone.pixelsWide == (NSInteger)(10 * mainScale) && alone.pixelsHigh == (NSInteger)(8 * mainScale)\nvalue sys_alone_colorSpace Generic RGB\nok r.pixelsWide == (NSInteger)(10 * scale) && r.pixelsHigh == (NSInteger)(8 * scale)\nok r.size.width is 10\nok r.size.height is 8\nok r.bitsPerPixel == 32 && r.samplesPerPixel == 4 && r.hasAlpha && !r.isPlanar && r.bitsPerSample == 8\nok r.bytesPerRow >= r.pixelsWide * 4\nok r.colorSpace != [NSColorSpace sRGBColorSpace]\nok zero\nok s.pixelsWide == (NSInteger)(4 * scale) && s.pixelsHigh == (NSInteger)(2 * scale)\nvalue sys_rep_pixelsWide 20\nvalue sys_rep_pixelsHigh 16\nvalue sys_rep_bytesPerRow 96\nvalue sys_rep_colorSpace Color LCD\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f9da45759079036b60ad268a80ab3fa98edf0800a95b33622ee3095a3cad2848",
+          "exit_code": 0,
+          "stdout": "ok alone.pixelsWide == (NSInteger)(10 * mainScale) && alone.pixelsHigh == (NSInteger)(8 * mainScale)\nvalue sys_alone_colorSpace Generic RGB\nok r.pixelsWide == (NSInteger)(10 * scale) && r.pixelsHigh == (NSInteger)(8 * scale)\nok r.size.width is 10\nok r.size.height is 8\nok r.bitsPerPixel == 32 && r.samplesPerPixel == 4 && r.hasAlpha && !r.isPlanar && r.bitsPerSample == 8\nok r.bytesPerRow >= r.pixelsWide * 4\nok r.colorSpace != [NSColorSpace sRGBColorSpace]\nok zero\nok s.pixelsWide == (NSInteger)(4 * scale) && s.pixelsHigh == (NSInteger)(2 * scale)\nvalue sys_rep_pixelsWide 20\nvalue sys_rep_pixelsHigh 16\nvalue sys_rep_bytesPerRow 96\nvalue sys_rep_colorSpace Color LCD\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

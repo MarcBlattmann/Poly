@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsappearance_appearancenamed_inheritance",
+      "source_sha256": "ad300fed3489a0568d8cc81a60a0fa6592ed11911cbd9915e5eb3ba29c571011",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e8e22f8a7058f0e161b7950af050bd6dee88b986f8724328104f2afe696b55d2",
+          "exit_code": 0,
+          "stdout": "ok a.appearance == nil\nok w.appearance == nil && w.contentView.appearance == nil\nok system != nil && w.contentView.effectiveAppearance == system\nok loose.effectiveAppearance == system\nok w.effectiveAppearance == ak_dark() && w.contentView.effectiveAppearance == ak_dark()\nok sub.effectiveAppearance == ak_dark()\nok sub.effectiveAppearance == ak_light() && w.contentView.effectiveAppearance == ak_dark()\nok deep.effectiveAppearance == ak_light()\nok w.effectiveAppearance == ak_light()\nok w2.effectiveAppearance == ak_dark() && a.effectiveAppearance == ak_dark()\nok a.appearance == nil\nok w2.effectiveAppearance == system\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "85dffeba8c09dd88ca71bd934ba873939167410df19a25550d4cc7f9458b7ee0",
+          "exit_code": 0,
+          "stdout": "ok a.appearance == nil\nok w.appearance == nil && w.contentView.appearance == nil\nok system != nil && w.contentView.effectiveAppearance == system\nok loose.effectiveAppearance == system\nok w.effectiveAppearance == ak_dark() && w.contentView.effectiveAppearance == ak_dark()\nok sub.effectiveAppearance == ak_dark()\nok sub.effectiveAppearance == ak_light() && w.contentView.effectiveAppearance == ak_dark()\nok deep.effectiveAppearance == ak_light()\nok w.effectiveAppearance == ak_light()\nok w2.effectiveAppearance == ak_dark() && a.effectiveAppearance == ak_dark()\nok a.appearance == nil\nok w2.effectiveAppearance == system\nsummary 12 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsappearance_appearancenamed_perform",
+      "source_sha256": "7e48da3b3aca3c668a00a9f42c567788a128c0781905be46880acde0933d772a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "66f3168a10e8dc9fb6721e50ee60b5c5892304fb33a22b9e23f19d9a3bf01991",
+          "exit_code": 0,
+          "stdout": "ok inside == ak_dark()\nok r1 > 0.9 && r2 < 0.1 && r3 > 0.9\nok NSAppearance.currentDrawingAppearance == before\nok (pd >> 24) > 200 && (pl >> 24) < 40\nvalue sys_dark_px 3638089944\nvalue sys_light_px 216\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "141247b3fde21758458aee585e8bac3ece31ccfbb9f1fe00eb86d9c07feca573",
+          "exit_code": 0,
+          "stdout": "ok inside == ak_dark()\nok r1 > 0.9 && r2 < 0.1 && r3 > 0.9\nok NSAppearance.currentDrawingAppearance == before\nok (pd >> 24) > 200 && (pl >> 24) < 40\nvalue sys_dark_px 3638089944\nvalue sys_light_px 216\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

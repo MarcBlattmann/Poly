@@ -772,6 +772,23 @@ for a character) have `sys_` in their names and say SYSTEM-DEPENDENT: their reco
 choices, which Poly need not copy. Drawing tests render into an 8-bit gray `CGBitmapContext` and print the
 pixels row by row.
 
+**Tests about AppKit** (`specs/macos/AppKit.framework/<symbol>.tests/`): a test whose header comment
+has the line `poly-mac: appkit` is an Objective-C program (a `.c` file built with ARC) linked with
+`-framework AppKit -framework Foundation -framework QuartzCore` that may import the symbols of AppKit,
+Foundation, CoreFoundation, CoreGraphics, CoreText, QuartzCore and the Objective-C runtime. It includes
+`poly_mak.h` (on top of `poly_mfn.h`), which starts a 12 second watchdog and gives `ak_window` (an
+invisible window: alpha 0, clicks pass through), `ak_spin` (turn the run loop), `ak_stop_run_after`
+(`[NSApp run]` only returns after `stop:` and one more event), `ak_light`/`ak_dark` and `ak_render` (draw a
+view into an sRGB bitmap the test makes, so that pixel bytes do not depend on the display). The test
+program is not in an application bundle: its activation policy is Prohibited, it is never active and no
+window becomes key, so nothing takes the keyboard or the mouse from the person at the Mac, and the
+Mac's console session (the window server) must exist. Tests set the appearance they need (the Mac's
+setting is not read). Values that depend on the macOS release or the Mac (sizes of system controls,
+system colours and fonts, the display) are printed with a `sys_` name and called SYSTEM-DEPENDENT in the
+sheet. Raw numbers of `NSTextAlignment` differ between the architectures in the SDK, so tests compare with
+the named constants; the pixels of system controls differ by one step between x86_64 and arm64, which
+is why each architecture is recorded on its own.
+
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.
 

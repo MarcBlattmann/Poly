@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 13:39:53",
+  "tests": [
+    {
+      "name": "nsapplication_sharedapplication_singleton",
+      "source_sha256": "c49832df619b4e6a3087f4a12f98511a166855663e6a98f0162f4b1ddb67f287",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5b78e59808d3f4ba1b3c571c002cea177740a7aa2f410ea0c23e585f0d14935f",
+          "exit_code": 0,
+          "stdout": "ok NSApp == nil\nok a != nil\nok NSApp == a\nok [NSApplication sharedApplication] == a\nok ak_init() == a\nok [a class] == [NSApplication class]\nok [a isKindOfClass:[NSResponder class]]\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2f2e37e43623c7c98c01a3091fa3aeb0bd145e21ebe49cdaf458cc86ee5eb95b",
+          "exit_code": 0,
+          "stdout": "ok NSApp == nil\nok a != nil\nok NSApp == a\nok [NSApplication sharedApplication] == a\nok ak_init() == a\nok [a class] == [NSApplication class]\nok [a isKindOfClass:[NSResponder class]]\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsapplication_sharedapplication_windows_list",
+      "source_sha256": "a5893f0bfc55fc9ff5d19c99b29ebba6023a5ed8887cab3c146d05d3358b10d6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a1b5f77b602fd6d40390e7196a615b3410968bfc805db1c9c2e7a70078111aa7",
+          "exit_code": 0,
+          "stdout": "ok a.windows.count == 1 && a.windows[0] == w1\nok before.count == 2 && before[0] == w1 && before[1] == w2\nok a.windows.count == 3 && before.count == 2\nok a.windows.count == 3\nok [a.windows containsObject:w3]\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "424f7c22541a2e73022bad33b25328971775d07da63cd670b9479951f66634aa",
+          "exit_code": 0,
+          "stdout": "ok a.windows.count == 1 && a.windows[0] == w1\nok before.count == 2 && before[0] == w1 && before[1] == w2\nok a.windows.count == 3 && before.count == 2\nok a.windows.count == 3\nok [a.windows containsObject:w3]\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

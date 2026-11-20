@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/AppKit.framework/objc%3ANSWindow.@title.yaml. Observed with Objective-C test programs linked against AppKit
+# (tests/macos/include/poly_mak.h, ADR 0182); results per architecture in objc%3ANSWindow.@title.tests/macos.json.
+id: "macos/api/AppKit.framework/objc:NSWindow.@title"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the AppKit, Foundation, CoreGraphics and QuartzCore of that release, SIP on, the owner's logged-in graphical session (the window server is needed), the display a 1512 x 982 point built-in one at scale 2, the system appearance set to dark (tests always set the appearance they need); tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: appkit`, tests/macos/include/poly_mak.h): the program is not in an application bundle, so its activation policy is Prohibited, it is never the active application and no window is ever key or main; its windows are invisible (alpha 0, mouse clicks pass through) and are closed or ordered out before the test ends, and a watchdog ends a test after 12 seconds; pixels are drawn into bitmaps the test makes (tagged sRGB) so that colours do not depend on the display; values that depend on this macOS release or this Mac (sizes of system controls, system colours and fonts, the display) are printed with the name prefix sys_ and are described as SYSTEM-DEPENDENT; NSTextAlignment's numbers differ between the two architectures in the SDK (tests compare with the named constants), and the pixels of system controls differ by one step between them (each architecture is recorded on its own); results and output go through raw system calls"
+  observed_by: spec-macos-appkit-basics
+  date: 2026-11-20
+summary: >
+  NSWindow title: a new window's title is the empty string (not nil); setTitle: stores a copy (a
+  mutable string changed later does not change it) and the getter returns an equal string; non-ASCII
+  text, emoji (9 UTF-16 units for 'Grüße 中😀') and 5000 characters are kept whole; the empty string
+  gives an empty title; setting nil raises NSInternalInconsistencyException and keeps the old title; a
+  borderless window keeps a title too without a title bar to show it; changing the title does not
+  change the frame and posts no notification, calls no delegate method, and is per window and survives
+  ordering front and out. titleVisibility starts visible (0, hidden is 1), titlebarAppearsTransparent
+  NO, representedFilename the empty string, and setting it changes neither title nor frame;
+  setTitleWithRepresentedFilename: sets the represented filename and a title that starts with the last
+  path component (SYSTEM-DEPENDENT: this macOS shows 'other.txt  —  /tmp/some', with the folder added
+  after two spaces, a dash and two spaces).
+returns:
+  success: "the title string (never nil)"
+errors:
+  nil_title: "NSInternalInconsistencyException"
+side_effects: "none beyond what the summary says"
+threading: "AppKit objects are used on the main thread only; the tests use them there (a watchdog thread only ends the process)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds; drawing, ordering and notifications settle within a run-loop turn (tests spin the loop for 0.05 to 0.3 s)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

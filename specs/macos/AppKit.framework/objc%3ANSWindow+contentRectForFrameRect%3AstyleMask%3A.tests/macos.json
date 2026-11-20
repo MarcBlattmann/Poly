@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nswindow_contentrectforframerect_instance",
+      "source_sha256": "08594d5a9988d82164b65eb5506a8a1842365e538c3169863f7abf38ad4dd62f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7cd263e9488ed3056121f3e448474168359bdc075b0cafdf11b4f5f404218c3a",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects([w contentRectForFrameRect:NSMakeRect(5, 6, 400, 300)], NSMakeRect(5, 6, 400, 268))\nok NSEqualRects([w contentRectForFrameRect:NSMakeRect(5, 6, 400, 300)], [NSWindow contentRectForFrameRect:NSMakeRect(5, 6, 400, 300) styleMask:NSWindowStyleMaskTitled])\nok NSEqualRects(w.contentView.frame, NSMakeRect(0, 0, 400, 268))\nok tiny.size.width is 50\nok tiny.size.height <= 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "618e5e7892b854456b1238fb47a06d627e2ef795a36ff5fa1b5c59167f1e7e93",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects([w contentRectForFrameRect:NSMakeRect(5, 6, 400, 300)], NSMakeRect(5, 6, 400, 268))\nok NSEqualRects([w contentRectForFrameRect:NSMakeRect(5, 6, 400, 300)], [NSWindow contentRectForFrameRect:NSMakeRect(5, 6, 400, 300) styleMask:NSWindowStyleMaskTitled])\nok NSEqualRects(w.contentView.frame, NSMakeRect(0, 0, 400, 268))\nok tiny.size.width is 50\nok tiny.size.height <= 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nswindow_contentrectforframerect_masks",
+      "source_sha256": "b6a0d88aefe748a6fb36b810bc7453809e91ed39170b04e3390400e1154df26f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f0ede80d702307e6acd65b168e9d63dc05cf1633913cffcb45894b28c46294f9",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskBorderless], NSMakeRect(100, 200, 300, 232))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled], NSMakeRect(100, 200, 300, 200))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable], NSMakeRect(100, 200, 300, 200))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView], NSMakeRect(100, 200, 300, 232))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskResizable], NSMakeRect(100, 200, 300, 232))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow], NSMakeRect(100, 200, 300, 208))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskHUDWindow], NSMakeRect(100, 200, 300, 213))\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2b84a913c77c5aca14c6a5d8179fb3c21ae88379f9b299648a580a3dff286df0",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskBorderless], NSMakeRect(100, 200, 300, 232))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled], NSMakeRect(100, 200, 300, 200))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable], NSMakeRect(100, 200, 300, 200))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskFullSizeContentView], NSMakeRect(100, 200, 300, 232))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskResizable], NSMakeRect(100, 200, 300, 232))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskUtilityWindow], NSMakeRect(100, 200, 300, 208))\nok NSEqualRects([NSWindow contentRectForFrameRect:f styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskHUDWindow], NSMakeRect(100, 200, 300, 213))\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
