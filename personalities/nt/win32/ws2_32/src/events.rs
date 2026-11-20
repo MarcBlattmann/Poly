@@ -10,6 +10,7 @@
 //! `after_*` hooks.
 
 use crate::afd;
+use crate::lock::Locked;
 use crate::sock::{self, Socket};
 use crate::{Handle, check_started, fail};
 use alloc::vec::Vec;
@@ -56,29 +57,17 @@ const POLL_MS: i64 = 20;
 
 // ----- the table of selected sockets ------------------------------------------------------
 
-struct Table {
-    locked: AtomicBool,
-    list: core::cell::UnsafeCell<Vec<(Socket, Registration)>>,
-}
-
-// SAFETY: access to `list` is serialised by `locked`.
-unsafe impl Sync for Table {}
-
-static TABLE: Table = Table { locked: AtomicBool::new(false), list: core::cell::UnsafeCell::new(Vec::new()) };
+static TABLE: Locked<Vec<(Socket, Registration)>> = Locked::new(Vec::new());
 /// How many sockets are selected (so the hooks cost nothing when none is).
 static COUNT: AtomicUsize = AtomicUsize::new(0);
 static HELPER_STARTED: AtomicBool = AtomicBool::new(false);
 
 fn with_table<R>(f: impl FnOnce(&mut Vec<(Socket, Registration)>) -> R) -> R {
-    while TABLE.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-        core::hint::spin_loop();
-    }
-    // SAFETY: the lock is held.
-    let list = unsafe { &mut *TABLE.list.get() };
-    let r = f(list);
-    COUNT.store(list.len(), Ordering::Release);
-    TABLE.locked.store(false, Ordering::Release);
-    r
+    TABLE.with(|list| {
+        let r = f(list);
+        COUNT.store(list.len(), Ordering::Release);
+        r
+    })
 }
 
 fn find(t: &mut [(Socket, Registration)], s: Socket) -> Option<&mut Registration> {
@@ -97,7 +86,10 @@ fn hook(s: Socket, f: impl FnOnce(&mut Registration)) {
 }
 
 /// `recv` ran on `s`: `FD_READ` may be recorded again, and when no data is left the record that
-/// was not taken yet loses its `FD_READ` (the event object stays signalled).
+/// was not taken yet loses its `FD_READ` (the event object stays signalled). Data that is left is
+/// recorded now (Learn, "WSAEventSelect": a re-enabling call records the event again if its
+/// condition still holds), not at the helper's next look: a program that reads in pieces is told
+/// at once that there is more.
 pub fn after_recv(s: Socket) {
     if COUNT.load(Ordering::Acquire) == 0 {
         return;
@@ -109,6 +101,9 @@ pub fn after_recv(s: Socket) {
             r.data_drained();
         }
     });
+    if !drained {
+        refresh(s);
+    }
 }
 
 /// `send` failed with `WSAEWOULDBLOCK` on `s`.
@@ -243,17 +238,26 @@ fn refresh(s: Socket) {
 }
 
 unsafe extern "system" fn helper(_parameter: *mut u8) -> u32 {
+    // Sockets that were ready at the last look without anything new to record (data the program
+    // has not read yet): the next look leaves their data out, so it waits for the other sockets
+    // (and their ends) instead of returning at once; the look after that takes them in again.
+    let mut quiet: Vec<Socket> = Vec::new();
     loop {
         let snap: Vec<(Socket, u32)> = with_table(|t| {
             t.iter()
                 .filter_map(|(s, r)| {
-                    let (read, write) = r.wants();
+                    let (mut read, write) = r.wants();
                     let end = r.watches_end();
+                    if quiet.contains(s) {
+                        read = false;
+                    }
                     // A socket with nothing left to watch is not polled (it would return at once).
                     (read || write || end).then(|| (*s, poll::events_interest(read, write, end)))
                 })
                 .collect()
         });
+        let rested = !quiet.is_empty();
+        quiet.clear();
         if snap.is_empty() {
             // SAFETY: plain kernel32 call.
             unsafe { Sleep(50) };
@@ -266,20 +270,15 @@ unsafe extern "system" fn helper(_parameter: *mut u8) -> u32 {
             unsafe { Sleep(20) };
             continue;
         };
-        let mut moved = false;
         for (&(s, _), &r) in snap.iter().zip(&revents) {
             if r & poll::nval() != 0 {
                 // Closed behind our back: forget it.
                 with_table(|t| t.retain(|(k, _)| *k != s));
                 continue;
             }
-            moved |= observe(s, r, look);
-        }
-        if !moved {
-            // Ready sockets nobody can record anything for (the program has not acted yet) would
-            // return at once: do not spin.
-            // SAFETY: plain kernel32 call.
-            unsafe { Sleep(2) };
+            if !observe(s, r, look) && poll::flags(r).0 && !rested {
+                quiet.push(s);
+            }
         }
     }
 }
