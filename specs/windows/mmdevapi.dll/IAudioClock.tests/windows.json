@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_clock_position",
+      "exe_sha256": "8bda514d753ab8f89282e80647c02a545dcc6ea97ea10a1e83c55aa1a2f8f3ad",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0UG9zaXRpb24gYmVmb3JlIFN0YXJ0ID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0UG9zaXRpb24gYmVmb3JlIFN0YXJ0Cm9rIHBvc2l0aW9uIDAKb2sgYSBRUEMgdmFsdWUKcHJlZmlsbCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIHByZWZpbGwKb2sgcG9zaXRpb24gMCB1bnRpbCB0aGUgc3RyZWFtIHJ1bnMKU3RhcnQgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdGFydApvayB0aGUgYnVmZmVyIGlzIHBsYXllZCBvdXQKcG9zaXRpb24gbmV2ZXIgd2VudCBkb3duOiB0cnVlLCBuZXZlciBiZXlvbmQgdGhlIGJ5dGVzIHdyaXR0ZW46IHRydWUKb2sgbmV2ZXIgd2VudCBkb3duCm9rIG5ldmVyIGJleW9uZCB0aGUgYnl0ZXMgd3JpdHRlbgpTdG9wID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RvcApHZXRQb3NpdGlvbiBhZnRlciBTdG9wID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0UG9zaXRpb24gYWZ0ZXIgU3RvcApwb3NpdGlvbiBlcXVhbHMgdGhlIGJ5dGVzIHdyaXR0ZW46IHRydWUKb2sgcG9zaXRpb24gaXMgdGhlIGJ5dGVzIHdyaXR0ZW4KUVBDIHZhbHVlIHdpdGhpbiBhIHNlY29uZCBvZiBub3c6IHRydWUKb2sgUVBDIHZhbHVlIHdpdGhpbiBhIHNlY29uZCBvZiBub3cKc3VtbWFyeSAxMyBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetPosition before Start = S_OK (0x00000000)\nok GetPosition before Start\nok position 0\nok a QPC value\nprefill = S_OK (0x00000000)\nok prefill\nok position 0 until the stream runs\nStart = S_OK (0x00000000)\nok Start\nok the buffer is played out\nposition never went down: true, never beyond the bytes written: true\nok never went down\nok never beyond the bytes written\nStop = S_OK (0x00000000)\nok Stop\nGetPosition after Stop = S_OK (0x00000000)\nok GetPosition after Stop\nposition equals the bytes written: true\nok position is the bytes written\nQPC value within a second of now: true\nok QPC value within a second of now\nsummary 13 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 184
+    },
+    {
+      "name": "ws_clock_stop_reset",
+      "exe_sha256": "23f47f42d8bf740ebe942a0d4d6d54b46b78148bba5559e1cc321212730b3665",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJlZmlsbCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIHByZWZpbGwKU3RhcnQgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdGFydApvayBwbGF5ZWQgb3V0ClN0b3AgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdG9wCm9rIHBvc2l0aW9uIGlzIGZyb3plbiB3aGlsZSBzdG9wcGVkCm9rIHBvc2l0aW9uIGlzIHRoZSBieXRlcyB3cml0dGVuCndyaXRlIG1vcmUgPSBTX09LICgweDAwMDAwMDAwKQpvayB3cml0ZSBtb3JlClN0YXJ0IGFnYWluID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RhcnQgYWdhaW4Kb2sgcGxheWVkIG91dCBhZ2FpbgpTdG9wID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RvcApwb3NpdGlvbiBjb250aW51ZWQ6IHRydWUKb2sgaXQgY29udGludWVzIGZyb20gd2hlcmUgaXQgd2FzCm9rIGFuZCBjb3VudHMgdGhlIG5ldyBieXRlcwpSZXNldCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFJlc2V0Cm9rIFJlc2V0IHNldHMgdGhlIHBvc2l0aW9uIHRvIDAKcHJlZmlsbCBhZ2FpbiA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIHByZWZpbGwgYWdhaW4KU3RhcnQgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdGFydApvayBwbGF5ZWQgb3V0ClN0b3AgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdG9wCm9rIGNvdW50cyBmcm9tIDAgYWdhaW4Kc3VtbWFyeSAxOSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "prefill = S_OK (0x00000000)\nok prefill\nStart = S_OK (0x00000000)\nok Start\nok played out\nStop = S_OK (0x00000000)\nok Stop\nok position is frozen while stopped\nok position is the bytes written\nwrite more = S_OK (0x00000000)\nok write more\nStart again = S_OK (0x00000000)\nok Start again\nok played out again\nStop = S_OK (0x00000000)\nok Stop\nposition continued: true\nok it continues from where it was\nok and counts the new bytes\nReset = S_OK (0x00000000)\nok Reset\nok Reset sets the position to 0\nprefill again = S_OK (0x00000000)\nok prefill again\nStart = S_OK (0x00000000)\nok Start\nok played out\nStop = S_OK (0x00000000)\nok Stop\nok counts from 0 again\nsummary 19 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 357
+    }
+  ]
+}
