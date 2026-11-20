@@ -244,8 +244,9 @@ impl Server {
             | Hit::Close(window)
             | Hit::Maximize(window)
             | Hit::Minimize(window)
-            | Hit::TitleBar(window)
-            | Hit::Border(window) => windows.iter().position(|w| w.id() == window).map_or(windows.len(), |i| i + 1),
+            | Hit::TitleBar(window) => windows.iter().position(|w| w.id() == window).map_or(windows.len(), |i| i + 1),
+            // A frame's sizing zone: the window's own sizing borders (an app's, inside that zone) win.
+            Hit::Border(window) => windows.iter().position(|w| w.id() == window).unwrap_or(windows.len()),
         };
         for w in windows[below.min(windows.len())..].iter().rev().filter(|w| w.is_visible()) {
             let Some(i) = self.internal.get(&w.id()) else { continue };

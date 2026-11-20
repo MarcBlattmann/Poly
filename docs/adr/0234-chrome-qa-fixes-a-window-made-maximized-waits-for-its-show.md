@@ -210,3 +210,30 @@ left-right arrows at the window's edge, both in Chrome for Windows and in Linux 
      `GetSystemMetrics` (`SM_MOUSEPRESENT`, the oracle reports none) changed nothing.
    - Whether Chrome on Windows shows the "Close" tooltip in this case needs an observation on
      the oracle (a spec agent's job). Until then it is taken as Chrome's own behaviour.
+
+## Addendum: the resize grab zone and the launcher after boot
+
+1. **Resize grab zone** (QA round 2, item 13). The standard is Windows' sizing border at 200 %:
+   `SM_CXFRAME` 5 plus `SM_CXPADDEDBORDER` 8 = 13 pixels at 192 DPI (`GetSystemMetrics.yaml`,
+   ADR 0231). Chrome's own invisible borders are exactly that (13,0,13,13). Two places were
+   narrower:
+   - The compositor turned the 13 pixels into logical ones by truncating, 6 logical = 12 pixels.
+     It now rounds up (7 logical, 14 pixels), so the whole border takes the pointer.
+   - Windows that Poly frames itself (Files, Terminal, Wayland apps without their own frame)
+     grabbed only on the 1-pixel visible border. They now have an invisible sizing zone beyond it
+     (`compose::RESIZE_REACH`). Border and zone are 8 logical pixels: Windows' 8 at 96 DPI,
+     16 pixels at 200 %. A window's own sizing borders inside that zone still win.
+   - Measured: a drag from 12 pixels beyond Chrome's right edge at 200 % resizes it. QA's
+     17–21 pixels are outside Windows' border at 200 % too, so they stay outside.
+2. **The launcher after boot** (QA round 2, item 14). The desktop shows the launcher by itself at
+   the start and when the last window closes. The Windows key toggled it, so the owner's
+   "Windows key, type chrome, Enter" closed it and the typing went nowhere.
+   - Now a launcher the desktop showed by itself, with nothing typed, stays for the key
+     (`Shell::toggle_launcher`, `show_launcher_unasked`): the user who presses it wants the
+     launcher and finds it open.
+   - A launcher the user opened, or one with text in it, is a toggle as before.
+   - Keeping the launcher at the start, rather than not showing it, keeps every flow that types
+     right after boot working.
+   - Boot check in `desktop-shell`: the Windows key right after the start, then "send", Enter;
+     the same after the launcher came back. With the old toggle the check fails: "the Windows
+     key keeps the launcher shown at the start".
