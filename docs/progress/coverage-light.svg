@@ -1586,7 +1586,8 @@
 </g>
 <g><title>winmm: 0 / 189 done (0.0%)</title>
 <rect x="423.4" y="597.7" width="18.3" height="16.5" fill="#e6eaef"/>
-<rect x="423.4" y="597.7" width="6.2" height="16.5" fill="#d4a72c"/>
+<rect x="423.4" y="597.7" width="4.6" height="16.5" fill="#d4a72c"/>
+<rect x="428.0" y="597.7" width="1.8" height="16.5" fill="#218bff"/>
 <rect x="422.4" y="596.7" width="20.3" height="18.5" fill="none" stroke="#ffffff" stroke-width="1.5"/>
 </g>
 <g><title>winspool.drv: 0 / 188 done (0.0%)</title>
