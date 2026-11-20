@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_event_missing",
+      "exe_sha256": "0980e2be9d44ff5fe38f38bf0ca2c838ad433a1b2c48d7bce861a9688ff04e16",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SW5pdGlhbGl6ZShFVkVOVENBTExCQUNLKSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEluaXRpYWxpemUoRVZFTlRDQUxMQkFDSykKcHJlZmlsbCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIHByZWZpbGwKU3RhcnQgd2l0aG91dCBhbiBldmVudCA9IEFVRENMTlRfRV9FVkVOVEhBTkRMRV9OT1RfU0VUICgweDg4ODkwMDE0KQpvayBTdGFydCB3aXRob3V0IGFuIGV2ZW50ClNldEV2ZW50SGFuZGxlKE5VTEwpID0gRV9JTlZBTElEQVJHICgweDgwMDcwMDU3KQpvayBTZXRFdmVudEhhbmRsZShOVUxMKQpTZXRFdmVudEhhbmRsZSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFNldEV2ZW50SGFuZGxlClNldEV2ZW50SGFuZGxlIGFnYWluLCBhbm90aGVyIGV2ZW50ID0gRV9VTkVYUEVDVEVEICgweDgwMDBmZmZmKQpvayBTZXRFdmVudEhhbmRsZSBhZ2FpbiwgYW5vdGhlciBldmVudApTdGFydCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFN0YXJ0Cm9rIHRoZSBmaXJzdCBldmVudCBpcyB0aGUgb25lIHRoYXQgaXMgc2V0Cm9rIHRoZSBzZWNvbmQgaXMgbm90ClN0b3AgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdG9wCkluaXRpYWxpemUobm8gZmxhZ3MpID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgSW5pdGlhbGl6ZShubyBmbGFncykKU2V0RXZlbnRIYW5kbGUgPSBBVURDTE5UX0VfRVZFTlRIQU5ETEVfTk9UX0VYUEVDVEVEICgweDg4ODkwMDExKQpvayBTZXRFdmVudEhhbmRsZQpwcmVmaWxsID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgcHJlZmlsbApTdGFydCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFN0YXJ0Cm9rIG5vIGV2ZW50IGlzIHNldApTdG9wID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU3RvcApzdW1tYXJ5IDE2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "Initialize(EVENTCALLBACK) = S_OK (0x00000000)\nok Initialize(EVENTCALLBACK)\nprefill = S_OK (0x00000000)\nok prefill\nStart without an event = AUDCLNT_E_EVENTHANDLE_NOT_SET (0x88890014)\nok Start without an event\nSetEventHandle(NULL) = E_INVALIDARG (0x80070057)\nok SetEventHandle(NULL)\nSetEventHandle = S_OK (0x00000000)\nok SetEventHandle\nSetEventHandle again, another event = E_UNEXPECTED (0x8000ffff)\nok SetEventHandle again, another event\nStart = S_OK (0x00000000)\nok Start\nok the first event is the one that is set\nok the second is not\nStop = S_OK (0x00000000)\nok Stop\nInitialize(no flags) = S_OK (0x00000000)\nok Initialize(no flags)\nSetEventHandle = AUDCLNT_E_EVENTHANDLE_NOT_EXPECTED (0x88890011)\nok SetEventHandle\nprefill = S_OK (0x00000000)\nok prefill\nStart = S_OK (0x00000000)\nok Start\nok no event is set\nStop = S_OK (0x00000000)\nok Stop\nsummary 16 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 489
+    },
+    {
+      "name": "ws_event_period",
+      "exe_sha256": "da18c3df0edc3a9d98fb11d847e022f77442a2ed3b1495dc7ff5828995b899d9",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgdGhlIGV2ZW50IGlzIG5vdCBzZXQgYmVmb3JlIFN0YXJ0CnByZWZpbGwgPSBTX09LICgweDAwMDAwMDAwKQpvayBwcmVmaWxsCm9rIHN0aWxsIG5vdCBzZXQgYWZ0ZXIgdGhlIHByZWZpbGwKU3RhcnQgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdGFydApvayB0aGUgZmlyc3QgZXZlbnQgd2l0aGluIDEwMCBtcwpldmVudHMgd2l0aCByZWZpbGxpbmcgaW4gNTAwIG1zIGJldHdlZW4gMzUgYW5kIDY1OiB0cnVlCm9rIGFib3V0IDUwIGV2ZW50cyBpbiA1MDAgbXMKcGFkZGluZyBhdCBlYWNoIHdha2UtdXAgd2FzIHRoZSBidWZmZXIgc2l6ZSBtaW51cyBvbmUgcGVyaW9kOiB0cnVlCm9rIHBhZGRpbmcgYXQgZWFjaCB3YWtlLXVwIGlzIGJ1ZmZlciBzaXplIC0gcGVyaW9kCmV2ZW50cyB3aXRob3V0IHdyaXRpbmcgaW4gNTAwIG1zIGJldHdlZW4gMzUgYW5kIDY1OiB0cnVlCm9rIHRoZSBldmVudHMga2VlcCBjb21pbmcsIGF0IHRoZSBzYW1lIHJhdGUKb2sgdGhlIGJ1ZmZlciBoYXMgcnVuIGVtcHR5ClN0b3AgPSBTX09LICgweDAwMDAwMDAwKQpvayBTdG9wCnN1bW1hcnkgMTAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok the event is not set before Start\nprefill = S_OK (0x00000000)\nok prefill\nok still not set after the prefill\nStart = S_OK (0x00000000)\nok Start\nok the first event within 100 ms\nevents with refilling in 500 ms between 35 and 65: true\nok about 50 events in 500 ms\npadding at each wake-up was the buffer size minus one period: true\nok padding at each wake-up is buffer size - period\nevents without writing in 500 ms between 35 and 65: true\nok the events keep coming, at the same rate\nok the buffer has run empty\nStop = S_OK (0x00000000)\nok Stop\nsummary 10 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1271
+    }
+  ]
+}

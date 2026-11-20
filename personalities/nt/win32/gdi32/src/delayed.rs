@@ -27,7 +27,6 @@ poly_win32_rt::fail_exports!(
         GdiComment,
         GetEnhMetaFileBits,
         GetEnhMetaFileHeader,
-        GetOutlineTextMetricsW,
         GetPixelFormat,
         PlayEnhMetaFile,
         PlayEnhMetaFileRecord,
@@ -48,4 +47,4 @@ poly_win32_rt::fail_exports!(
 );
 
 // Learn: `GDI_ERROR` and `SP_ERROR`, both -1, are the failures.
-poly_win32_rt::fail_exports!("gdi32", win32_minus_one, [GetFontData, SetAbortProc]);
+poly_win32_rt::fail_exports!("gdi32", win32_minus_one, [SetAbortProc]);

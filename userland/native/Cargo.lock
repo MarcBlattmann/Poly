@@ -305,6 +305,7 @@ name = "poly-win32k"
 version = "0.0.1"
 dependencies = [
  "poly-nls",
+ "poly-png",
 ]
 
 [[package]]
