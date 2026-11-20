@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_semaphore_wait_more",
+      "source_sha256": "6d3e4219dba80286a537a692c123fa171bb1e16153424707662fb841482e4ad2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "eb8c05787c56b3b69f547ccdf867283dcf0cac711acb747e01f265001599270f",
+          "exit_code": 0,
+          "stdout": "ok 100 other blocks finished while 16 blocks sat in a semaphore wait\nok the 16 waiters finished after 16 signals\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "90dae5ba46f289f6a46e0f694f2d3aaf1577406d9268f9eded52898bce04d0f8",
+          "exit_code": 0,
+          "stdout": "ok 100 other blocks finished while 16 blocks sat in a semaphore wait\nok the 16 waiters finished after 16 signals\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_semaphore_wait_timeout",
+      "source_sha256": "ce1e8ea1afbecc6aec15818393245e4a71f1a5c68e50e343f8808f47a1820132",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "77728edb8cb700a1ec8a8316d87de89bfc949922e1c5cae38ce7c40748495686",
+          "exit_code": 0,
+          "stdout": "ok 100 ms, no token: nonzero\nok it waited at least 100 ms\nok and not a second more\nvalue the timeout result 49\nok DISPATCH_TIME_NOW with no token returns at once, nonzero\nok with a token present: 0\nok immediately\nok a timeout in the past (DISPATCH_TIME_NOW - 1 s) behaves like NOW\nok DISPATCH_TIME_FOREVER waits until a signal arrives\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "136cd1c91e3e22bfdb008423920ae383bed9be9542a5e51b015acf90c8db4874",
+          "exit_code": 0,
+          "stdout": "ok 100 ms, no token: nonzero\nok it waited at least 100 ms\nok and not a second more\nvalue the timeout result 49\nok DISPATCH_TIME_NOW with no token returns at once, nonzero\nok with a token present: 0\nok immediately\nok a timeout in the past (DISPATCH_TIME_NOW - 1 s) behaves like NOW\nok DISPATCH_TIME_FOREVER waits until a signal arrives\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

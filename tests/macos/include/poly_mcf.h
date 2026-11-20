@@ -219,7 +219,7 @@ static __attribute__((unused)) void value_cf(const char *name, CFStringRef s) {
 
 /* `CK(cond)` reports a check named by its own text; `CKV(cond, got)` also
  * shows a number when it fails. */
-#define CK(c) check(#c, (c) ? 1 : 0, 0)
+#define CK(...) check(#__VA_ARGS__, (__VA_ARGS__) ? 1 : 0, 0)
 #define CKV(c, got) check(#c, (c) ? 1 : 0, (i64)(got))
 
 /* A CFString read back as UTF-8 into `buf` (empty when it is NULL or cannot be
@@ -353,6 +353,23 @@ static __attribute__((unused)) int cf_build_app(const char *plist) {
            cf_copy_file(poly_argv[0], "T.app/Contents/MacOS/t");
 }
 
+/* As cf_enter_app, but the copy gets a second argument `extra` (if not NULL) and
+ * the environment `envp` (NULL-terminated, NULL for an empty one). */
+static __attribute__((unused)) int cf_enter_app_ex(const char *plist, const char *extra, char **envp) {
+    if (is_child("--in-app")) return 1;
+    if (!cf_build_app(plist)) {
+        check("the test application could be built", 0, 0);
+        finish();
+        poly_exit(1);
+    }
+    char *argv[4] = {(char *)"T.app/Contents/MacOS/t", (char *)"--in-app", (char *)extra, 0};
+    char *noenv[1] = {0};
+    sysret r = bsd3(SYS_execve, "T.app/Contents/MacOS/t", argv, envp ? envp : noenv);
+    check("the test application could be started", 0, r.err);
+    finish();
+    poly_exit(1);
+}
+
 static __attribute__((unused)) int cf_enter_app(const char *plist) {
     if (is_child("--in-app")) return 1;
     if (!cf_build_app(plist)) {
@@ -405,10 +422,13 @@ static __attribute__((unused)) void cf_prefs_clean(CFStringRef domain) {
 
 int test_main(void);
 
+/* poly_mfn.h defines its own main (it wraps the test in an autorelease pool). */
+#ifndef POLY_MCF_NO_MAIN
 int main(int argc, char **argv) {
     poly_argc = argc;
     poly_argv = argv;
     poly_exit(test_main());
 }
+#endif
 
 #endif

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 10:31:51",
+  "tests": [
+    {
+      "name": "nsdictionary_bridging",
+      "source_sha256": "e24fd8ccc671e8df0ddf683e41fb8c1cf8195141be8e729e827aa5ca08649dfa",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "56edca54ad7ed4cd9e9fe1378467e371dfd550affc38747856a4606ae138101e",
+          "exit_code": 0,
+          "stdout": "ok CFGetTypeID(cf) == CFDictionaryGetTypeID()\nok CFDictionaryGetCount(cf) == 2\nok cf_is(CFDictionaryGetValue(cf, CFSTR(\"k2\")), \"v2\")\nok CFDictionaryContainsKey(cf, CFSTR(\"k1\")) && !CFDictionaryContainsKey(cf, CFSTR(\"k3\"))\nok ns.count == 1 && ns_is(ns[@\"a\"], \"b\")\nok [ns isEqualToDictionary:@{@\"a\": @\"b\"}]\nok CFEqual((__bridge CFTypeRef)ns, (__bridge CFTypeRef)@{@\"a\": @\"b\"})\nok ns_is([@{@\"k\": @\"v\"} description], \"{\\n    k = v;\\n}\")\nok CFDictionaryGetCount((__bridge CFDictionaryRef)m) == 1\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b2f66a092a92d5f049059936121bd3accbc77ae7de7af1d05a023c38dc48db96",
+          "exit_code": 0,
+          "stdout": "ok CFGetTypeID(cf) == CFDictionaryGetTypeID()\nok CFDictionaryGetCount(cf) == 2\nok cf_is(CFDictionaryGetValue(cf, CFSTR(\"k2\")), \"v2\")\nok CFDictionaryContainsKey(cf, CFSTR(\"k1\")) && !CFDictionaryContainsKey(cf, CFSTR(\"k3\"))\nok ns.count == 1 && ns_is(ns[@\"a\"], \"b\")\nok [ns isEqualToDictionary:@{@\"a\": @\"b\"}]\nok CFEqual((__bridge CFTypeRef)ns, (__bridge CFTypeRef)@{@\"a\": @\"b\"})\nok ns_is([@{@\"k\": @\"v\"} description], \"{\\n    k = v;\\n}\")\nok CFDictionaryGetCount((__bridge CFDictionaryRef)m) == 1\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsdictionary_dictionarywithobjects_errors_and_mutation",
+      "source_sha256": "147d8842a04aa9d3ee59c4cacf0388ac767fcc3eaaf51acd4459ad6a446855f8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1849fb8ebf619f457512d80630fd577c267053b9f95f1c339a595948bae81a37",
+          "exit_code": 0,
+          "stdout": "ok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok m.count == 2 && ns_is(m[@\"k\"], \"replaced\")\nok m.count == 1\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok ns_is(m2[@\"mk\"], \"value\") && m2[@\"mk!\"] == nil\nok [m2.allKeys[0] isKindOfClass:[NSString class]] && m2.allKeys[0] != mk\nok d.count == 1\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "12f1afd4b613c3e00949941b068ea03e5b8c00fd518f93caf6948d6e20035d99",
+          "exit_code": 0,
+          "stdout": "ok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok m.count == 2 && ns_is(m[@\"k\"], \"replaced\")\nok m.count == 1\nok r != nil && ns_is(r, \"NSInvalidArgumentException\")\nok ns_is(m2[@\"mk\"], \"value\") && m2[@\"mk!\"] == nil\nok [m2.allKeys[0] isKindOfClass:[NSString class]] && m2.allKeys[0] != mk\nok d.count == 1\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

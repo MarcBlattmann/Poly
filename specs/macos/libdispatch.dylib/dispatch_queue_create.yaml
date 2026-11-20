@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_queue_create.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_queue_create.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_queue_create
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_queue_create(label, attr) makes a queue: serial for attr NULL (DISPATCH_QUEUE_SERIAL is NULL) and
+  concurrent for DISPATCH_QUEUE_CONCURRENT (not NULL); every call makes a new queue, also for the same label. The label
+  is copied (changing the caller's string changes nothing; a 299 byte label was kept whole); a NULL or empty label gives
+  an empty, non-NULL label string. dispatch_queue_get_label(q) gives it, and dispatch_queue_get_label(DISPATCH_CURRENT_QUEUE_LABEL)
+  (a NULL queue) gives the label of the queue the caller runs on: "com.apple.main-thread" on the main thread, the queue's
+  own label (the same pointer) inside one of its blocks, "com.apple.root.default-qos" in a block of the default global
+  queue. A serial queue runs its blocks one at a time in submission order (1000 blocks: in order, never two at once) on a
+  thread that is not the main thread (when the main thread does not drain it). A concurrent queue starts blocks without
+  waiting for earlier ones to end (two blocks that wait for each other both finish; four blocks were running at once). A
+  queue released by its creator with blocks pending still runs them. Same on both architectures.
+returns:
+  "queue": "a new queue object, never NULL for a valid label"
+errors:
+  "none": "no error result"
+side_effects: "makes a queue object (reference count 1)"
+threading: "submission from any thread; see dispatch_async"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

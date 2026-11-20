@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/Foundation.framework/objc%3ANSBundle.pathForResource%3AofType%3A.yaml. Observed with Objective-C test programs linked against Foundation
+# (tests/macos/include/poly_mfn.h, ADR 0182); results per architecture in objc%3ANSBundle.pathForResource%3AofType%3A.tests/macos.json.
+id: "macos/api/Foundation.framework/objc:NSBundle.pathForResource:ofType:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the Foundation of that release, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: foundation`, tests/macos/include/poly_mfn.h; NSAutoreleasePool's without ARC, `poly-mac: no-arc`); results and output go through raw system calls"
+  observed_by: spec-macos-foundation
+  date: 2026-11-20
+summary: >
+  -[NSBundle pathForResource:ofType:] returns the absolute path of a resource in the bundle's
+  Resources directory (Contents/Resources of an application) or nil. Name 'hello' with type 'txt'
+  finds hello.txt; the whole file name 'hello.txt' with type nil also; name 'hello' with type nil does
+  not (the extension is not guessed); a wrong type ('png'), an empty type '' or a missing name give
+  nil. pathForResource:ofType:inDirectory: searches a subdirectory ('deep','txt','sub' finds
+  Resources/sub/deep.txt; the same name without the directory is nil). A resource that exists only in
+  a language directory (Resources/en.lproj/loc.txt) is found without naming it.
+  URLForResource:withExtension: gives a file URL with the same path;
+  pathsForResourcesOfType:inDirectory: lists matches (at least the two .txt files; an empty array, not
+  nil, when none). The file behind the path can be opened and read (NSData dataWithContentsOfFile:
+  gives the bytes written, 'hi\n'). In a program outside any bundle every lookup gives nil.
+returns:
+  found: "absolute path string"
+  not_found: "nil"
+errors: {}
+side_effects: "reads directories"
+threading: "objects are immutable or the class says otherwise; immutable values may be read from any thread"
+ordering: []
+timing:
+  typical: "microseconds to a millisecond"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/kernel32.dll/ProcessIdToSessionId.yaml
+id: windows/api/kernel32.dll/ProcessIdToSessionId
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), 64-bit tests run by tools/pipeline/windows/poly-oracle.ps1 -Token elevated in the interactive desktop session of the local account \"server\" (session 1, member of Administrators, full elevated token); every test ran at least twice with identical output, each run in a fresh scratch directory. The same tests built for 32-bit x86 (outside the pipeline, run by the same runner) gave the same output except where a sheet says what a 32-bit caller sees."
+  observed_by: spec-win-updater-services
+  date: 2026-11-20
+sources: >
+  Observations of our own 64-bit test programs on the machine above (each test ran at least twice with identical output). Microsoft Learn pages of the functions (kernel32 / fileapi.h, winbase.h, processthreadsapi.h, wow64apiset.h, memoryapi.h, synchapi.h, combaseapi.h, objbase.h, userenv.h) for names, parameters and the error values in winerror.h. What the documentation does not say (error codes, edge cases, the effect of access rights) is taken from the observations only. No Microsoft or Google binary was decompiled or disassembled; Wine's and ReactOS's sources were not read.
+summary: >
+  Gives the terminal-services session of the process with the given id. It works for any existing process, whatever the caller's rights, and fails with ERROR_INVALID_PARAMETER for an id that no process has.
+interface:
+  signature: "BOOL ProcessIdToSessionId(DWORD dwProcessId, DWORD *pSessionId)"
+installer: "Google's updater 157 and 159 (32-bit) import this function; their run on Poly reaches it while they install and start their two services and register their update service and scheduled task. What they pass is not known beyond the import."
+rules:
+  self: "TRUE for the id of the calling process; the session equals the session id in the caller's token (TokenSessionId)"
+  other_process: "TRUE for a running child process, with the same session as the caller's token"
+  no_process: "ERROR_INVALID_PARAMETER 87 and the output untouched for: the id of a thread (the calling thread's id), 0, 1, 2, 3, 0xFFFFFFFF and any number no process has; also for a process that has ended once nothing holds it any longer (a process that has ended but that the caller still holds a handle to is still answered: TRUE and the session; the moment the system drops the process is not fixed, so the sheet does not specify the case without a handle)"
+  null_output: "a NULL output pointer returns FALSE with ERROR_INVALID_PARAMETER 87; the process does not fault"
+  stable: "200 calls for the calling process from two threads at once all returned TRUE and the same session"
+errors:
+  invalid_parameter: "ERROR_INVALID_PARAMETER 87"
+side_effects: "none"
+threading: "any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle"
+  guarantees: none
+tests:
+  visible: 1
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), one file each, run on the oracle with the elevated token in the interactive session. Scenarios that could end the process (a NULL pointer where the function reads or writes through it) run in a child process of the same image (`--child ...`) and the parent prints the exit code. Observations are results, error codes, booleans and counts; never addresses, process or thread ids, times or the name of the machine. Files the tests make live next to the test program and are deleted by the test.
+not_covered: >
+  behaviour on other file systems than the NTFS volume of the test directory; 32-bit callers (the pipeline builds 64-bit tests only).

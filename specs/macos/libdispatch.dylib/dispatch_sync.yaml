@@ -1,0 +1,31 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/dispatch_sync.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in dispatch_sync.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/dispatch_sync
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  dispatch_sync(queue, block) runs the block and returns after it ended. When the queue is idle it runs on the calling thread (also on a global queue and
+  on a serial queue: the thread id was the caller's; the main thread running a block it sent to a global queue was on the main thread). Blocks submitted with
+  dispatch_async before it on a serial queue run before it. Nested dispatch_sync into other queues runs in call order (1, 2, 3). A call from another
+  thread into a busy serial queue waits for the busy block to end: the sync block had not run 100 ms later and ran after the busy one. On a concurrent queue it runs while an
+  async block of that queue is still running. The block sees the caller's locals; results come back through __block variables. dispatch_sync to the queue the caller is
+  running on deadlocks (not tested).
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "runs the block"
+threading: "blocks the caller"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

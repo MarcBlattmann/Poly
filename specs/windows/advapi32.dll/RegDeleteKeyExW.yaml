@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/RegDeleteKeyExW.yaml
+id: windows/api/advapi32.dll/RegDeleteKeyExW
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as an administrator with its elevated token (the programs write below HKEY_LOCAL_MACHINE); every test is a 32-bit (i686) program, which runs under WOW64 on the machine, ran twice with identical output, and removed every key it made"
+  observed_by: "spec-win-wow64-registry"
+  date: "2026-11-20"
+sources: "Observations of our own 32-bit test programs on the machine above (keys of a GUID and a vendor name of the programs' own, looked at in both physical places through the 64-bit view, which does no redirection). Microsoft Learn: \"Registry Redirector\", \"Registry Keys Affected by WOW64\", \"Accessing an Alternate Registry View\", \"Registry Key Security and Access Rights\", RegCreateKeyExW, RegCreateKeyExA, RegCreateKeyW, RegOpenKeyExW, RegOpenKeyW, RegDeleteKeyExW, RegDeleteKeyW, NtCreateKey, NtOpenKey, NtQueryKey, \"OBJECT_ATTRIBUTES\"; winreg.h, winnt.h, winerror.h, winternl.h for constants and layouts. Wine's and ReactOS's code and tests were not used, no Microsoft binary was decompiled or disassembled."
+summary: "Deletes a registry key that has no subkeys. In a 32-bit process the key deleted is the one of the 32-bit view unless the access argument is KEY_WOW64_64KEY; with no view bit it is the view of the open key the name is relative to. A key of the same name in the other view stays."
+interface:
+  signature: "LSTATUS RegDeleteKeyExW(HKEY hKey, LPCWSTR lpSubKey, REGSAM samDesired, DWORD Reserved)"
+  samDesired: "KEY_WOW64_32KEY (0x200) or KEY_WOW64_64KEY (0x100); 0 and other access bits mean no view choice"
+  result: "0 on success, otherwise a Win32 error code"
+rules:
+  views: "A 32-bit process on 64-bit Windows (WOW64) sees the 32-bit view of the registry unless the access of the call has KEY_WOW64_64KEY (0x100), which asks for the native (64-bit) view, whose keys are the physical ones; KEY_WOW64_32KEY (0x200) asks for the 32-bit view explicitly. The physical key of the 32-bit view of a redirected key lives below Wow6432Node (spelled WOW6432Node in the registry as stored). Below HKEY_LOCAL_MACHINE\\Software every key is redirected to Software\\Wow6432Node\\<key> except the shared ones; below Software\\Classes only CLSID, Interface, DirectShow, Media Type and MediaFoundation are redirected, to Software\\Classes\\Wow6432Node\\<key>. Shared (one key for both views): Software\\Classes itself and its other subkeys (TypeLib, AppID), Software\\Microsoft\\Windows\\CurrentVersion\\App Paths and \\Policies, Software\\Policies, Software\\RegisteredApplications. Redirected, observed: Software and the vendor keys below it, Software\\Microsoft, ...\\CurrentVersion, ...\\Run, ...\\Uninstall, Software\\Classes\\CLSID, \\Interface, \\DirectShow, \\Media Type, \\MediaFoundation."
+  inheritance: "A key made, opened or deleted below an open key without a view bit in the access is in the view of that open key: a key opened (or made) with KEY_WOW64_64KEY gives native keys below it; one opened with KEY_WOW64_32KEY or with no view bit gives keys of the 32-bit view; the predefined keys HKEY_LOCAL_MACHINE and HKEY_CLASSES_ROOT count as opened with no bit. A view bit in the call wins over the open key's view where the key asked for can lie in that view below the open key (the shared Software\\Classes opened with no bit: CLSID with KEY_WOW64_64KEY is the native CLSID, and with KEY_WOW64_64KEY opened, CLSID with KEY_WOW64_32KEY is the redirected one). The view is part of the open key's physical place: Software opened without KEY_WOW64_64KEY IS Software\\Wow6432Node (NtQueryKey says so), Software\\Classes\\CLSID opened without it is Software\\Classes\\Wow6432Node\\CLSID, so a key made below them lies below Wow6432Node whatever the bit of the call (below Software, a vendor key with KEY_WOW64_64KEY is still the 32-bit-view one); only a handle opened with KEY_WOW64_64KEY gives native keys. A path that names Wow6432Node itself is the physical key and is not redirected again, in every view."
+  from_the_root: "a key of the same name in both places (Software\\Classes\\CLSID\\{GUID}, and Software\\<vendor>): deleted from HKEY_LOCAL_MACHINE itself with no bit or 32: the 32-bit-view key (the native one is left); with 64: the native key (the 32-bit one is left)."
+  below_handles: "below Software\\Classes opened with no bit or 32 (name CLSID\\{GUID}): no bit and 32 delete the 32-bit key, 64 the native one; opened with 64: no bit and 64 delete the native key, 32 the 32-bit one. Below Software\\Classes\\CLSID (name {GUID}) opened with no bit or 32: the 32-bit key whatever the bit; opened with 64: no bit and 64 the native key, 32 the 32-bit one. Below Software (name <vendor>) opened with no bit or 32: the 32-bit key whatever the bit; opened with 64: no bit and 64 the native key, 32 the 32-bit one."
+  hkcr: "from HKEY_CLASSES_ROOT (name CLSID\\{GUID}) the bits are honoured: no bit and 32 delete the 32-bit key, 64 the native one; below HKEY_CLASSES_ROOT\\CLSID opened with 64 and no bit in the call the native key."
+  access_values: "access 1, KEY_READ and KEY_ALL_ACCESS without a view bit: the 32-bit key; KEY_READ|KEY_WOW64_32KEY: the 32-bit key; KEY_READ|KEY_WOW64_64KEY and KEY_ALL_ACCESS|KEY_WOW64_64KEY: the native key; both view bits (0x300): ERROR_INVALID_PARAMETER (87), both keys stay."
+  reserved: "a non-zero Reserved: ERROR_INVALID_PARAMETER (87), both keys stay."
+  opened_for_reading: "the open key the name is relative to may have been opened for reading only: the delete works (the 32-bit key is deleted)."
+errors:
+  not_found: "ERROR_FILE_NOT_FOUND (2): a key that does not exist in the view asked for (a key that exists only in the other view: 2 with no bit and with 32 for a native-only key; deleted with 64), a missing key"
+  has_subkeys: "ERROR_ACCESS_DENIED (5): a key with a subkey; it stays; after the subkey is deleted the delete works"
+  invalid_parameter: "ERROR_INVALID_PARAMETER (87): both view bits, a non-zero Reserved"
+  invalid_handle: "ERROR_INVALID_HANDLE (6): a closed or invented handle"
+  success: "0"
+side_effects: "deletes the key; only keys the programs made"
+threading: "the registry is shared; the programs make keys under names of their own and nothing else touches them"
+ordering: []
+timing:
+  typical: "well under a millisecond per call"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: "32-bit Rust tests (ADR 0075, ADR 0259: the line `// poly-arch: x86` makes the pipeline build them for i686-pc-windows-msvc), importing advapi32.dll and ntdll.dll by name, each carrying its own declarations (Learn prototypes, header constants). Each makes keys below HKEY_LOCAL_MACHINE under a GUID and a vendor name of its own, looks where they are by opening the physical places (Software\\Classes\\CLSID\\<GUID> and Software\\Classes\\Wow6432Node\\CLSID\\<GUID>, Software\\<vendor> and Software\\Wow6432Node\\<vendor>) through the 64-bit view, which does not redirect, prints `native`, `x86`, `both` or `none`, and removes its keys again (at the start and at the end). Observations are statuses, dispositions and those words, never handles or addresses; the programs need an administrator token. Compare the lines, not the order of the keys."
+not_covered: "64-bit processes, the exact error of a key opened without delete access in a hive other than HKEY_LOCAL_MACHINE."
