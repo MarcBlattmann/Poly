@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_set_attributes_errors",
+      "source_sha256": "cdb9873399ce79bb80fef3525c3874b3e48391857e1c1e313f4110bd7f2c776b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3bef89538244ed43b2a88679c9e8d4c9b37a747ee646bd5b55a3d2bcbc277982",
+          "exit_code": 0,
+          "stdout": "ok a count of 0: KERN_FAILURE (5)\nok a count of 2 is accepted\nok flavor 999: KERN_INVALID_ARGUMENT (4)\nok MACH_PORT_RECEIVE_STATUS cannot be set: KERN_INVALID_ARGUMENT\nok a name not in the task: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7aadf675b660d79a3af534bf7bd57b105225e0f64eefb4235652b8a8931efbbd",
+          "exit_code": 0,
+          "stdout": "ok a count of 0: KERN_FAILURE (5)\nok a count of 2 is accepted\nok flavor 999: KERN_INVALID_ARGUMENT (4)\nok MACH_PORT_RECEIVE_STATUS cannot be set: KERN_INVALID_ARGUMENT\nok a name not in the task: KERN_INVALID_NAME\nok a send right only: KERN_INVALID_RIGHT\nok a port set: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_set_attributes_qlimit",
+      "source_sha256": "7c6dbf52e2724614f7226e34110d5675b1fcde2e33fb94ffbe0337145027a71f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0e0b272d0b317c460aa1f9d315aabb69909310ece828d8b6a13b6e420f3695fb",
+          "exit_code": 0,
+          "stdout": "ok the default is 5\nok set 2 succeeds\nok read back 2\nok and in the receive status\nok set 1024 succeeds\nok set 1025 is KERN_INVALID_VALUE (18)\nok and the limit stays 1024\nok set 0 succeeds\nok read back 0\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fd71087bcd6282e3596eaf07bb319afc7b03a502f437d77bdb63180b578bb3be",
+          "exit_code": 0,
+          "stdout": "ok the default is 5\nok set 2 succeeds\nok read back 2\nok and in the receive status\nok set 1024 succeeds\nok set 1025 is KERN_INVALID_VALUE (18)\nok and the limit stays 1024\nok set 0 succeeds\nok read back 0\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

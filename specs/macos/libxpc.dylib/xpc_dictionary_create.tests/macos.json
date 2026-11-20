@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "xpc_dictionary_create_keys",
+      "source_sha256": "02c8dd182d5acd90b1edc5ac7042e3c8e5be3dd4b0f753616d1c0fb945e7dc00",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9f61cc095920fe196d7dac1185a1421edc9e705eea5a6bc8f0e95ec2abcdd061",
+          "exit_code": 0,
+          "stdout": "ok the empty key works\nok keys are case-sensitive\nok a longer key with the same prefix is another key\nok a 299-character key works\nok and differs from one that differs in its last character\nok setting a key again replaces the value\nok a NULL value removes the key\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5d3f76cbb6719479d226395715218b12482f6a2f90df619dc68086653bdebeb8",
+          "exit_code": 0,
+          "stdout": "ok the empty key works\nok keys are case-sensitive\nok a longer key with the same prefix is another key\nok a 299-character key works\nok and differs from one that differs in its last character\nok setting a key again replaces the value\nok a NULL value removes the key\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "xpc_dictionary_create_with_values",
+      "source_sha256": "fdb596854c842e6d65ddb816c5213070e8a93dc1e6ec382b5094bac208db0bf7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "aebbcf9c63fa9c3eabb6c2f435e75dc91c509e569a4e9718aa12f3cbbef18445",
+          "exit_code": 0,
+          "stdout": "ok count 3\nok the int64 is there\nok the string is there\nok the bool is there\nok keys were copied: the changed buffer is no key\nok types are kept\nok count 0 with non-NULL arrays: empty\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a04c63605407915546002cec8c2061613842c884aaf47116dce9ccd586d75c1f",
+          "exit_code": 0,
+          "stdout": "ok count 3\nok the int64 is there\nok the string is there\nok the bool is there\nok keys were copied: the changed buffer is no key\nok types are kept\nok count 0 with non-NULL arrays: empty\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

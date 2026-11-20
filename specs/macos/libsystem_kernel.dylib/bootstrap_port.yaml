@@ -1,0 +1,30 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/bootstrap_port.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in bootstrap_port.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/bootstrap_port
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  bootstrap_port is a data symbol of libSystem (a mach_port_t, like mach_task_self_) set before main: the task's bootstrap
+  special port. It is not MACH_PORT_NULL and not MACH_PORT_DEAD, a 32-bit name, and a send right and nothing else in the task
+  (type 0x10000, at least one user reference). task_get_special_port(task_self, TASK_BOOTSTRAP_PORT) returns the same name and
+  adds one user reference each time (mach_port_deallocate gives it back); bootstrap_port itself does not change by calling the
+  bootstrap functions. A child started with posix_spawn has its own bootstrap_port with the same properties and it reaches the
+  same bootstrap server: a name the parent checked in is found through it. The right is send-only: guard, set_attributes,
+  get_attributes, peek, insert_member, request_notification NO_SENDERS and destruct on it are KERN_INVALID_RIGHT; a
+  COPY_SEND extract gives the same name; MAKE_SEND is KERN_INVALID_RIGHT; a DEAD_NAME notification can be requested.
+returns:
+  value: "a send right (type 0x10000)"
+errors: {}
+side_effects: none
+threading: "read-only after start-up"
+ordering: []
+timing:
+  typical: "a memory read"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

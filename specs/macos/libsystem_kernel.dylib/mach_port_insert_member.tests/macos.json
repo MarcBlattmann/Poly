@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "mach_port_insert_member_basic",
+      "source_sha256": "682c98429a9150fe34c4d9fa217c712d664b955ef729d957188fca6c1dedbd86",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "02cdf223fd543adce035eee647f216efa65412ee8af97250297279bc15232b03",
+          "exit_code": 0,
+          "stdout": "ok an empty set has no members\nok insert succeeds\nok the set has one member, the port\nok the port's status says it is in a set\nok again: KERN_ALREADY_IN_SET (11)\nok a second set takes it too\nok each set lists it\nok extract from the second set\nok extract from the first\nok a second extract: KERN_NOT_IN_SET (12)\nok the port is still a receive right\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "03f00d29a039e0803f2126915700180f46475d6d195ed045547f6a293eba56f7",
+          "exit_code": 0,
+          "stdout": "ok an empty set has no members\nok insert succeeds\nok the set has one member, the port\nok the port's status says it is in a set\nok again: KERN_ALREADY_IN_SET (11)\nok a second set takes it too\nok each set lists it\nok extract from the second set\nok extract from the first\nok a second extract: KERN_NOT_IN_SET (12)\nok the port is still a receive right\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "mach_port_insert_member_errors",
+      "source_sha256": "0e97b66caf34d3f1225cbf78cf2b760a1519f4522560c6e49d6633f206b3c697",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "64cdf9046bfe915454b36ab5dfdc2f7be6f4a6a1335f885ffdd972f3bbe7ac64",
+          "exit_code": 0,
+          "stdout": "ok a member name not in the task: KERN_INVALID_NAME\nok a set name not in the task: KERN_INVALID_NAME\nok a port set as the member: KERN_INVALID_RIGHT\nok a send right only as the member: KERN_INVALID_RIGHT\nok a port as the set: KERN_INVALID_RIGHT\nok MACH_PORT_NULL as the member: KERN_INVALID_RIGHT\nok MACH_PORT_NULL as the set: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nok a port with a send right too is accepted\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c449837b647203d21ef388334cfe9cde25b6db2f445b284bdf0f40c297850a51",
+          "exit_code": 0,
+          "stdout": "ok a member name not in the task: KERN_INVALID_NAME\nok a set name not in the task: KERN_INVALID_NAME\nok a port set as the member: KERN_INVALID_RIGHT\nok a send right only as the member: KERN_INVALID_RIGHT\nok a port as the set: KERN_INVALID_RIGHT\nok MACH_PORT_NULL as the member: KERN_INVALID_RIGHT\nok MACH_PORT_NULL as the set: KERN_INVALID_RIGHT\nok an invalid task: MACH_SEND_INVALID_DEST\nok a port with a send right too is accepted\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

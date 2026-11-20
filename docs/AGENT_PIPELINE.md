@@ -65,6 +65,11 @@ at the top of `tools/pipeline/src/main.rs`. Outputs go under
 `target/pipeline/` (`bin/`, `traces/`, `runs/<time>-<target>/` with
 `summary.json` and `report.txt`, `runs/latest`).
 
+macOS tests make raw system calls and import nothing from libSystem (ADR 0182). A test about a
+function of libSystem itself (the bootstrap server calls, `mach_port_*`, XPC, `posix_spawn` attributes) says
+`poly-mac: libsystem` in a comment among its first 30 lines: `mac build` then lets it import libSystem's
+symbols (it still loads no other library), and it prints through `tests/macos/include/poly_mapi.h`.
+
 ### Test corpus
 
 `tests/linux/*.c` are freestanding static programs (no C library, raw

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 09:03:58",
+  "tests": [
+    {
+      "name": "posix_spawnattr_setspecialport_np_child",
+      "source_sha256": "452b99ebae2df544a44cd1c9484cef32dcce71bed6423baa7ead2ab453d97353",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f89685e3f861c545a0c88dbe6320f84066b4a495cdbea233791c60f4ecf36408",
+          "exit_code": 0,
+          "stdout": "ok posix_spawn succeeds\nok child: look_up through its bootstrap port finds the parent's name\nok child: task_get_special_port agrees with bootstrap_port\nsummary 2 passed, 0 failed\nok the child ends with status 0\nok nothing was sent to the port given\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fb3cfad36f8aae0f378ad7959846dcee1c03a02f034f34e1cffd6a9fc852ce31",
+          "exit_code": 0,
+          "stdout": "ok posix_spawn succeeds\nok child: look_up through its bootstrap port finds the parent's name\nok child: task_get_special_port agrees with bootstrap_port\nsummary 2 passed, 0 failed\nok the child ends with status 0\nok nothing was sent to the port given\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "posix_spawnattr_setspecialport_np_null",
+      "source_sha256": "763a95390fc0f268a2ee40dcf509957a7ae39cbb42c2bf05a3cd9ce03e8d8076",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "19eb08f6097271697b857cdcbd4cb78eeb6831937f4ce5e616ddb64f3c480fa7",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL: posix_spawn succeeds\nok child: bootstrap_port is a send right\nsummary 1 passed, 0 failed\nok the child ends with status 0\nok a name that does not exist: posix_spawn succeeds\nok child: bootstrap_port is a send right\nsummary 1 passed, 0 failed\nok the child ends with status 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ef98254611d27790f4ab78b20bec3b7081be53f408e659a25ceea26bb946f839",
+          "exit_code": 0,
+          "stdout": "ok MACH_PORT_NULL: posix_spawn succeeds\nok child: bootstrap_port is a send right\nsummary 1 passed, 0 failed\nok the child ends with status 0\nok a name that does not exist: posix_spawn succeeds\nok child: bootstrap_port is a send right\nsummary 1 passed, 0 failed\nok the child ends with status 0\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

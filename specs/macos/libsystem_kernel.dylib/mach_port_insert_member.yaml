@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libsystem_kernel.dylib/mach_port_insert_member.yaml. Observed with C tests (libSystem calls, tests/macos/include/poly_mapi.h; ADR 0182);
+# results per architecture in mach_port_insert_member.tests/macos.json.
+id: macos/api/libsystem_kernel.dylib/mach_port_insert_member
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: libsystem` directive (tests/macos/include/poly_mapi.h) so that they call libSystem, each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20); both slices gave the same results"
+  observed_by: spec-macos-bootstrap
+  date: 2026-11-20
+summary: >
+  mach_port_insert_member(task, name, set) puts the receive right `name` into port set `set`. A second insert into the same
+  set is KERN_ALREADY_IN_SET (11); a port can be in two sets (each lists it) and mach_port_extract_member(task, name, set)
+  removes it from one (a second extract is KERN_NOT_IN_SET (12)). The port's receive status has mps_pset 1 while it is in a set.
+  A message sent to a member is received by receiving on the set and carries the member's name as its local port; a member that
+  was taken out stops delivering to the set; destroying the member removes it from the set. A port that also has a send
+  right is accepted. Names not in the task: KERN_INVALID_NAME (15); a member that is a port set, a send-only name or
+  MACH_PORT_NULL, and a "set" that is a port or MACH_PORT_NULL: KERN_INVALID_RIGHT (17); an invalid task:
+  MACH_SEND_INVALID_DEST. mach_port_get_set_status lists the members (a vm_deallocate of the array is needed).
+returns:
+  success: "KERN_SUCCESS (0)"
+errors:
+  already_in_set: "KERN_ALREADY_IN_SET (11)"
+  not_in_set: "KERN_NOT_IN_SET (12) from extract_member"
+  invalid_name: "KERN_INVALID_NAME (15)"
+  invalid_right: "KERN_INVALID_RIGHT (17)"
+  bad_task: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: "the port joins the set"
+threading: "no thread-specific behaviour observed"
+ordering: []
+timing:
+  typical: "microseconds: one Mach call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

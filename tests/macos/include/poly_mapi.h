@@ -30,6 +30,8 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <dispatch/dispatch.h>
+#include <xpc/xpc.h>
 
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 
@@ -150,7 +152,7 @@ static __attribute__((unused)) int drain(mach_port_t port, mach_msg_timeout_t ti
  * argv[2] = arg (either may be NULL) and returns the child's pid (-1 on
  * failure). */
 static __attribute__((unused)) int is_child(const char *mode) { return poly_argc > 1 && strcmp(poly_argv[1], mode) == 0; }
-static __attribute__((unused)) const char *child_arg(void) { return poly_argc > 2 ? poly_argv[2] : ""; }
+static __attribute__((unused)) char *child_arg(void) { return poly_argc > 2 ? poly_argv[2] : (char *)""; }
 static __attribute__((unused)) pid_t start_self(const char *mode, const char *arg) {
     char *argv[4] = {poly_argv[0], (char *)mode, (char *)arg, NULL};
     pid_t pid = -1;
@@ -161,6 +163,26 @@ static __attribute__((unused)) int wait_child(pid_t pid) {
     int st = 0;
     if (waitpid(pid, &st, 0) != pid) return -1;
     return WIFEXITED(st) ? WEXITSTATUS(st) : 1000 + WTERMSIG(st);
+}
+/* bootstrap_look_up, repeated for up to `seconds` until it gives `want` (or, when want is
+ * KERN_SUCCESS, until it succeeds): the server learns of a process's death a moment after it. */
+static __attribute__((unused)) kern_return_t look_up_until(const char *name, kern_return_t want, int seconds, mach_port_t *out) {
+    kern_return_t kr = 0;
+    for (int i = 0; i < seconds * 20; i++) {
+        kr = bootstrap_look_up(bootstrap_port, (char *)name, out);
+        if (kr == want) return kr;
+        usleep(50000);
+    }
+    return kr;
+}
+/* XPC: the description string of an error object, or "-" for anything else. */
+static __attribute__((unused)) const char *xpc_error_text(xpc_object_t o) {
+    const char *s = (o && xpc_get_type(o) == XPC_TYPE_ERROR) ? xpc_dictionary_get_string(o, XPC_ERROR_KEY_DESCRIPTION) : NULL;
+    return s ? s : "-";
+}
+/* XPC: wait for a semaphore for up to `seconds`; 1 when it was signalled. */
+static __attribute__((unused)) int xpc_wait(dispatch_semaphore_t sem, int seconds) {
+    return dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)seconds * NSEC_PER_SEC)) == 0;
 }
 /* A service name nobody else uses: com.poly.spec.<tag>.<pid>. */
 static __attribute__((unused)) void service_name(char *buf, size_t n, const char *tag) {
