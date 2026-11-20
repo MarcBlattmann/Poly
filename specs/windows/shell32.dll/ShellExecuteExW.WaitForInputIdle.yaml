@@ -1,0 +1,51 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/shell32.dll/ShellExecuteExW.WaitForInputIdle.yaml
+id: windows/api/shell32.dll/ShellExecuteExW.WaitForInputIdle
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran twice with identical output. The first three tests were run once more in the user's interactive session (poly-oracle.ps1 -Interactive: session 1, the filtered token) with byte-identical observations; the 60 s test (sxwii_cap) was run in session 0 only."
+  observed_by: spec-win-waitforinputidle
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above. Microsoft Learn: ShellExecuteExW and SHELLEXECUTEINFOW
+  (SEE_MASK_WAITFORINPUTIDLE 0x02000000, SEE_MASK_NOCLOSEPROCESS 0x40, SEE_MASK_NOASYNC 0x100, SEE_MASK_FLAG_NO_UI 0x400, shellapi.h),
+  WaitForInputIdle (see WaitForInputIdle.yaml). The implementer's list is poly-dev/handoff/wait-for-input-idle.md. Wine's tests
+  were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The mask SEE_MASK_WAITFORINPUTIDLE of ShellExecuteExW (verb `open`, an executable): the call starts the program and, before
+  it returns, waits until the new process is idle for input, as WaitForInputIdle does, but it never reports a failure of that wait: the
+  call is TRUE with hInstApp above 32 and hProcess set (with SEE_MASK_NOCLOSEPROCESS) in every case recorded, also for a
+  console-subsystem child (WaitForInputIdle itself would refuse it with 1471) and also when the child is never idle. The wait is
+  skipped for a console child (the call returns at once); for a GUI child it lasts until the child's idle point, or, if there is none,
+  until the child ends or about 60 s have passed. Without the mask the call returns at once. NOASYNC and NO_UI change nothing. This
+  is what installers and launchers need to know: after the call a GUI program has opened its window and is ready for input, or the
+  program is not a GUI one and the call did not wait. Poly's ShellExecuteExW ignores the mask today.
+interface:
+  mask: "SEE_MASK_WAITFORINPUTIDLE = 0x02000000, always used together with SEE_MASK_NOCLOSEPROCESS (0x40) here so that hProcess is returned"
+rules:
+  without_mask: "SEE_MASK_NOCLOSEPROCESS alone, GUI or console child with a GetMessage loop after 1.5 s: TRUE, hInstApp above 32, hProcess set, last error unchanged, and the call returns BEFORE the child's idle point."
+  gui_child_idle: "mask set, a GUI-subsystem child (a copy of the test image with subsystem 2) whose first message call is a blocking GetMessage 1.5 s after its start: TRUE, hInstApp above 32, hProcess set, last error unchanged; the call returns within 2 s AFTER the child's idle point. The same with a hidden window and a message loop, with the flags NOASYNC, NO_UI added (one at a time), and for a child whose first message call is PeekMessage returning FALSE (the shell's wait counts that as the end of start-up where WaitForInputIdle does not: the call returns within 2 s after the child's first message call)."
+  gui_child_without_user32: "mask set, a GUI child that never loads user32 and sleeps: TRUE, hInstApp above 32, hProcess set, returns before any idle point (the child has none); how long it waited was not measured for this child (the never_idle cases measure it for similar ones)."
+  console_child: "mask set (alone, with NOASYNC, with NO_UI, with both), a console child with a GetMessage loop after 1.5 s, one with a hidden window and a loop, one that never loads user32, one that loads user32 and calls nothing: TRUE, hInstApp above 32, hProcess set, last error unchanged, the call returns BEFORE the child's idle point (it does not wait), no error is reported although WaitForInputIdle would say 1471."
+  never_idle: "a child that is never idle (no message call): a console child that exits after 3 s or spins for 8 s: the call takes less than 1 s. A GUI child that exits after 3 s: the call takes 2.5 to 6 s (it waited until the child ended). A GUI child with a window and no message call for 4.5 s, one with only a queue (IsGUIThread) and no message call for 4.5 s, one with a window for 14 s: the call takes 2.5 to 6 s, 2.5 to 6 s and more than 12 s: it waits until the child ends. A GUI child with a window and no message call for 110 s: the call takes 55 to 70 s: the wait stops after about 60 s and the call still returns TRUE with hInstApp above 32 and hProcess set (the child keeps running)."
+  return_values: "in all the cases above: TRUE, hInstApp above 32, hProcess set; the last error is left alone (the sentinel 0x12345 set before the call is still there)."
+errors: {}
+side_effects: "starts a process; the call blocks the caller for the wait"
+threading: "the wait is on the calling thread; with NOASYNC or without it the same"
+ordering: "the call returns after the child's idle point (GUI child) and never before the process exists"
+timing:
+  typical: "a GUI child: up to its idle point; a console child: no wait; never-idle GUI child: until it ends, at most about 60 s"
+  guarantees: none
+tests:
+  visible: 3
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075) with the helpers of WaitForInputIdle.yaml (children are the test's own image, `--child <kind> <event> <delay>`;
+  the idle point is an event the child sets right before its first message call, a second event is set 2 s later; the lines say
+  `before`, `within 2 s after` or `more than 2 s after`). Elapsed time appears only as a bucket (less than 1 s, 1 to 2.5 s, 2.5 to
+  6 s, 6 to 12 s, 12 to 30 s, 30 to 55 s, 55 to 70 s, 70 to 100 s, more than 100 s) in the never-idle cases, where the child's
+  life (3 s, 4.5 s, 14 s, 110 s) is far from every border. The ShellExecuteExW call uses the verb `open`, the child's image as file and
+  `--child ...` as parameters. sxwii_cap needs a test timeout of 400 s (two runs of 60 s).
+not_covered: >
+  Documents and URLs, verb `runas` with the mask (a consent prompt, see ShellExecuteExW.Elevation.yaml), SEE_MASK_NOCLOSEPROCESS
+  absent (nothing to observe then), a child whose first message call is SendMessage, 32-bit images, SEE_MASK_INVOKEIDLIST.
