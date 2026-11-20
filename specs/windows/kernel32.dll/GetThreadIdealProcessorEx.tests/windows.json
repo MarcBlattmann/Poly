@@ -1,0 +1,70 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "gtip_exattr",
+      "exe_sha256": "0fb1f11683cc31346ce6a56bdfb43ac7dfe571348489472152ff7014618722e1",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHJvY2Vzc29yIDA6IGhhbmRsZTsgcmVhZHMgYmFjayBleGFjdGx5IHRoYXQ6IHllcwp0aGUgbGFzdCBwcm9jZXNzb3I6IGhhbmRsZTsgcmVhZHMgYmFjayBleGFjdGx5IHRoYXQ6IHllcwpudW1iZXIgPSBwcm9jZXNzb3IgY291bnQ6IE5VTEwgZ2xlPTg3IHN0YXR1cz0weGMwMDAwMDBkCm51bWJlciAyMDA6IE5VTEwgZ2xlPTg3IHN0YXR1cz0weGMwMDAwMDBkCmdyb3VwIDE6IE5VTEwgZ2xlPTg3IHN0YXR1cz0weGMwMDAwMDBkCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "processor 0: handle; reads back exactly that: yes\nthe last processor: handle; reads back exactly that: yes\nnumber = processor count: NULL gle=87 status=0xc000000d\nnumber 200: NULL gle=87 status=0xc000000d\ngroup 1: NULL gle=87 status=0xc000000d\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 279
+    },
+    {
+      "name": "gtip_local",
+      "exe_sha256": "66115a917abb49ea67f88465b6d33f0e04af42d6b661010181e6dd210e0711fe",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "cHNldWRvIGhhbmRsZSBvZiB0aGUgY3VycmVudCB0aHJlYWQ6IG9rOiBncm91cCAwLCBudW1iZXIgYmVsb3cgdGhlIHByb2Nlc3NvciBjb3VudCB5ZXMsIHJlc2VydmVkIDAKcmVhbCBoYW5kbGUgdG8gdGhlIGN1cnJlbnQgdGhyZWFkOiBvazogZ3JvdXAgMCwgbnVtYmVyIGJlbG93IHRoZSBwcm9jZXNzb3IgY291bnQgeWVzLCByZXNlcnZlZCAwCnBzZXVkbyBhbmQgcmVhbCBoYW5kbGUgZ2l2ZSB0aGUgc2FtZSBwcm9jZXNzb3I6IHllcwp0aGUgcHJvY2Vzc29yIGNvdW50IGlzIGF0IGxlYXN0IDE6IHllcwpuZXcgc3VzcGVuZGVkIHRocmVhZDogb2s6IGdyb3VwIDAsIG51bWJlciBiZWxvdyB0aGUgcHJvY2Vzc29yIGNvdW50IHllcywgcmVzZXJ2ZWQgMAp0aHJlYWQgaGFzIGVuZGVkOiB3YWl0IDB4MApoYW5kbGUgb2YgdGhlIGZpbmlzaGVkIHRocmVhZDogb2s6IGdyb3VwIDAsIG51bWJlciBiZWxvdyB0aGUgcHJvY2Vzc29yIGNvdW50IHllcywgcmVzZXJ2ZWQgMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "pseudo handle of the current thread: ok: group 0, number below the processor count yes, reserved 0\nreal handle to the current thread: ok: group 0, number below the processor count yes, reserved 0\npseudo and real handle give the same processor: yes\nthe processor count is at least 1: yes\nnew suspended thread: ok: group 0, number below the processor count yes, reserved 0\nthread has ended: wait 0x0\nhandle of the finished thread: ok: group 0, number below the processor count yes, reserved 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 44
+    },
+    {
+      "name": "gtip_rights",
+      "exe_sha256": "58406bb6e510e67a8c466798afe8f30218d1cb221e408bd05b7dff5bb341e891",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "bm8gcmlnaHRzOiBlcnJvciA1ClRIUkVBRF9URVJNSU5BVEU6IGVycm9yIDUKVEhSRUFEX1NVU1BFTkRfUkVTVU1FOiBlcnJvciA1ClRIUkVBRF9TRVRfSU5GT1JNQVRJT046IGVycm9yIDUKVEhSRUFEX1FVRVJZX0lORk9STUFUSU9OOiBvazogZ3JvdXAgMCwgbnVtYmVyIGJlbG93IHRoZSBwcm9jZXNzb3IgY291bnQgeWVzLCByZXNlcnZlZCAwClRIUkVBRF9TRVRfTElNSVRFRF9JTkZPUk1BVElPTjogZXJyb3IgNQpUSFJFQURfUVVFUllfTElNSVRFRF9JTkZPUk1BVElPTjogb2s6IGdyb3VwIDAsIG51bWJlciBiZWxvdyB0aGUgcHJvY2Vzc29yIGNvdW50IHllcywgcmVzZXJ2ZWQgMApUSFJFQURfUkVTVU1FOiBlcnJvciA1ClNZTkNIUk9OSVpFOiBlcnJvciA1ClRIUkVBRF9TRVRfSU5GT1JNQVRJT04gYW5kIFRIUkVBRF9TRVRfTElNSVRFRF9JTkZPUk1BVElPTjogZXJyb3IgNQphbGwgcmlnaHRzOiBvazogZ3JvdXAgMCwgbnVtYmVyIGJlbG93IHRoZSBwcm9jZXNzb3IgY291bnQgeWVzLCByZXNlcnZlZCAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "no rights: error 5\nTHREAD_TERMINATE: error 5\nTHREAD_SUSPEND_RESUME: error 5\nTHREAD_SET_INFORMATION: error 5\nTHREAD_QUERY_INFORMATION: ok: group 0, number below the processor count yes, reserved 0\nTHREAD_SET_LIMITED_INFORMATION: error 5\nTHREAD_QUERY_LIMITED_INFORMATION: ok: group 0, number below the processor count yes, reserved 0\nTHREAD_RESUME: error 5\nSYNCHRONIZE: error 5\nTHREAD_SET_INFORMATION and THREAD_SET_LIMITED_INFORMATION: error 5\nall rights: ok: group 0, number below the processor count yes, reserved 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 41
+    },
+    {
+      "name": "gtip_set",
+      "exe_sha256": "d47058fef0b7dc55e307da87843a6de8d6cb7220e54f6a181d9f9318fad5bf7d",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "c2V0IHByb2Nlc3NvciAwOiBvazsgcHJldmlvdXMgdmFsdWUgaXMgYSB2YWxpZCBwcm9jZXNzb3Igb2YgZ3JvdXAgMDogeWVzOyByZWFkcyBiYWNrIDA6IHllcwpzZXQgdGhlIGxhc3QgcHJvY2Vzc29yOiBvazsgcHJldmlvdXMgdmFsdWUgaXMgMDogeWVzOyByZWFkcyBiYWNrOiB5ZXMKc2V0IG51bWJlciA9IHByb2Nlc3NvciBjb3VudDogZXJyb3IgODc7IHN0aWxsIHRoZSBsYXN0IHByb2Nlc3NvcjogeWVzCnNldCBudW1iZXIgMjAwOiBlcnJvciA4Nzsgc3RpbGwgdGhlIGxhc3QgcHJvY2Vzc29yOiB5ZXMKc2V0IG51bWJlciAyNTU6IGVycm9yIDg3OyBzdGlsbCB0aGUgbGFzdCBwcm9jZXNzb3I6IHllcwpzZXQgZ3JvdXAgMTogZXJyb3IgODc7IHN0aWxsIHRoZSBsYXN0IHByb2Nlc3NvcjogeWVzCnNldCByZXNlcnZlZCBieXRlIDc6IGVycm9yIDg3OyBzdGlsbCB0aGUgbGFzdCBwcm9jZXNzb3I6IHllcwpOVUxMIHBvaW50ZXIgZm9yIHRoZSBwcmV2aW91cyB2YWx1ZTogb2sgMSwgZXJyb3IgLTIKYSBzZWNvbmQgaGFuZGxlIChxdWVyeS1saW1pdGVkKSByZWFkcyBwcm9jZXNzb3IgMDogeWVzCnNldCB3aXRoIG5vIHJpZ2h0czogZXJyb3IgNQpzZXQgd2l0aCBUSFJFQURfU0VUX0lORk9STUFUSU9OOiBvawpzZXQgd2l0aCBUSFJFQURfU0VUX0xJTUlURURfSU5GT1JNQVRJT046IGVycm9yIDUKc2V0IHdpdGggVEhSRUFEX1FVRVJZX0lORk9STUFUSU9OOiBlcnJvciA1CnNldCB3aXRoIFRIUkVBRF9RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OOiBlcnJvciA1CnNldCB3aXRoIFRIUkVBRF9TRVRfSU5GT1JNQVRJT04gYW5kIFRIUkVBRF9RVUVSWV9MSU1JVEVEX0lORk9STUFUSU9OOiBvawpzZXQgd2l0aCBOVUxMOiBlcnJvciA2CnJlbW90ZSB0aHJlYWQsIHNldCBwcm9jZXNzb3IgMDogb2s7IHByZXZpb3VzIHZhbGlkOiB5ZXM7IHJlYWRzIGJhY2sgMDogeWVzCnJlbW90ZSB0aHJlYWQgdGhyb3VnaCBhIHNlY29uZCBoYW5kbGUgb3BlbmVkIGJ5IGlkOiByZWFkcyAwOiB5ZXMKcmVtb3RlIHRocmVhZCwgc2V0IHRoZSBsYXN0IHByb2Nlc3Nvcjogb2s7IHJlYWRzIGJhY2s6IHllcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "set processor 0: ok; previous value is a valid processor of group 0: yes; reads back 0: yes\nset the last processor: ok; previous value is 0: yes; reads back: yes\nset number = processor count: error 87; still the last processor: yes\nset number 200: error 87; still the last processor: yes\nset number 255: error 87; still the last processor: yes\nset group 1: error 87; still the last processor: yes\nset reserved byte 7: error 87; still the last processor: yes\nNULL pointer for the previous value: ok 1, error -2\na second handle (query-limited) reads processor 0: yes\nset with no rights: error 5\nset with THREAD_SET_INFORMATION: ok\nset with THREAD_SET_LIMITED_INFORMATION: error 5\nset with THREAD_QUERY_INFORMATION: error 5\nset with THREAD_QUERY_LIMITED_INFORMATION: error 5\nset with THREAD_SET_INFORMATION and THREAD_QUERY_LIMITED_INFORMATION: ok\nset with NULL: error 6\nremote thread, set processor 0: ok; previous valid: yes; reads back 0: yes\nremote thread through a second handle opened by id: reads 0: yes\nremote thread, set the last processor: ok; reads back: yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/advapi32.dll/SetFileSecurityW.yaml
+id: windows/api/advapi32.dll/SetFileSecurityW
+oracle:
+  os: Windows 11 Home 26H2 (build 26300.9974), x64
+  machine: 'homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0) as the local account "server" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory. The tests whose names end in _std ran with poly-oracle.ps1 -Token standard (a one-time scheduled task in the interactive desktop session 1 of the same account: medium integrity, Administrators deny-only, the filtered standard token)'
+  observed_by: spec-win-remote-thread-2
+  date: '2026-11-20'
+sources: 'Observations of our own test programs on the machine above (files made in the directory of the test image; descriptors written as SDDL text and read back as SDDL text through ConvertStringSecurityDescriptorToSecurityDescriptorW and ConvertSecurityDescriptorToStringSecurityDescriptorW, with the caller''s own SIDs printed as <user> and <group>). Microsoft Learn: SetFileSecurityA/W, GetFileSecurityA/W, SECURITY_INFORMATION, Security Descriptor Control, Mandatory Integrity Control, Security Descriptor String Format, Privilege Constants, Access Rights for Files, winerror.h. No Microsoft binary was decompiled or disassembled; Wine''s and ReactOS''s sources were not read.'
+summary: Sets the owner, group, DACL, SACL and mandatory integrity label of a file or directory given by path, from a descriptor and a SECURITY_INFORMATION mask that says which parts to take. The call opens the file itself with the access the parts need (WRITE_OWNER, WRITE_DAC, ACCESS_SYSTEM_SECURITY) and does not propagate inheritable ACEs to existing children. Chrome's sandbox and the AppContainer test of CreateRemoteThread use it to make a file readable for AppContainers.
+interface:
+  signature: BOOL SetFileSecurityW(LPCWSTR lpFileName, SECURITY_INFORMATION SecurityInformation, PSECURITY_DESCRIPTOR pSecurityDescriptor)
+  result: TRUE, or FALSE with the last error set
+rules:
+  dacl_replaced: 'with DACL_SECURITY_INFORMATION (4) the DACL of the descriptor replaces the file''s: its ACEs come back in the order given. Generic rights are mapped: GA (generic all) reads back as FA (0x1F01FF), FR|FX (generic read|execute) as 0x1200a9; an ACE marked ID (inherited) keeps the flag; deny ACEs keep their place ((D;;FW;;;WD) first).'
+  null_and_empty_dacl: a descriptor with a NULL DACL ('D:NO_ACCESS_CONTROL') makes the file's DACL NULL (everyone has every access), reads back 'D:NO_ACCESS_CONTROL'; an empty DACL ('D:') reads back 'D:' (nobody has access except through ownership); a descriptor that has no DACL at all, given with the DACL information, ALSO sets a NULL DACL.
+  protection: 'only the control flags of the DESCRIPTOR matter: a descriptor whose DACL is protected (''D:P...'' or ''D:PAI...'') gives a file whose DACL reads back with P; the information flags PROTECTED_DACL_SECURITY_INFORMATION (0x80000000) and UNPROTECTED_DACL_SECURITY_INFORMATION (0x20000000) change nothing visible: a descriptor without P set with the protected flag reads back without P, a descriptor with P set with the unprotected flag reads back with P. The auto-inherited flags (AI, AR) of the descriptor are not stored: ''D:AI(A;;FA;;;WD)'' reads back ''D:(A;;FA;;;WD)''.'
+  only_asked_parts: 'only the parts the information asks for change: a descriptor with owner SY, group SY and a DACL, set with the DACL information alone, leaves the file''s owner and group as they were.'
+  owner_elevated: 'OWNER_SECURITY_INFORMATION (1) by a caller with the elevated administrator token: any SID can be made the owner: Administrators (BA), Everyone (WD), SYSTEM (SY), the caller''s own user; each reads back. GROUP_SECURITY_INFORMATION (2): any SID too; owner and group together (3) work.'
+  owner_standard: 'by a caller with the standard (filtered, medium integrity) token: the owner can be set to the caller''s own user (it is already) but to Administrators, Everyone or SYSTEM the call fails with ERROR_INVALID_OWNER (1307) and the owner stays; the group can be set to Administrators, Everyone and SYSTEM.'
+  missing_component: 'OWNER or GROUP information with a descriptor that has no owner (or no group): ERROR_INVALID_SECURITY_DESCR (1338), the file''s owner (group) is unchanged.'
+  label_elevated: 'LABEL_SECURITY_INFORMATION (0x10) with a descriptor whose SACL holds a mandatory-label ACE (SDDL ''S:(ML;;NW;;;LW)''): by the elevated administrator the labels LW (low), ME (medium), HI (high) are set and read back through the label information; with the system level SI the call fails with ERROR_INVALID_LABEL (1299) and the label stays HI. The policy flags (NW no-write-up, NR, NX, NRNX) read back as given. A file made by the caller has no label (the label information reads back empty).'
+  label_standard: 'by the standard token: low and medium work (also NRNX), high and system level fail with ERROR_INVALID_LABEL (1299) and the label stays what it was.'
+  sacl_information: 'SACL_SECURITY_INFORMATION (8) with an audit ACE (''S:(AU;SA;FA;;;WD)''): the elevated administrator can set it (without enabling anything first) and read it back through the SACL information; the SACL information alone does NOT return the label ACE (it comes back through the label information; both together return the audit ACE and the label). By the standard token the call fails with ERROR_PRIVILEGE_NOT_HELD (1314), and so does reading the SACL (see GetFileSecurityW); the privilege name is known to the system but cannot be enabled by that token.'
+  sharing_and_paths: a file that is open elsewhere with no sharing at all (CreateFile with share mode 0) can still be given a new DACL; an extended-length path (\\?\ prefix) works.
+  directories: 'on a directory the DACL, its inheritance flags (OICI, OICIIO, NP) and the group are stored and read back; an inheritable ACE is NOT pushed down: a file that already was in the directory keeps its DACL (SetFileSecurity does not propagate).'
+  own_dacl_can_lock_the_owner: 'an ACE for OWNER RIGHTS (SDDL OW) takes the implicit READ_CONTROL and WRITE_DAC of the owner away: after a DACL ''(A;;FR;;;OW)(A;;FA;;;SY)'' (owner may only read) a further SetFileSecurityW on the file fails with ERROR_ACCESS_DENIED (5) for the owner.'
+  unprobed_absolute: a descriptor in absolute form (a SECURITY_DESCRIPTOR from InitializeSecurityDescriptor with an empty DACL set by SetSecurityDescriptorDacl) was accepted and gave an empty DACL (observed in a probe; no recorded test); all recorded tests give self-relative descriptors made from SDDL.
+errors:
+  file_not_found: 'the file does not exist: FALSE, ERROR_FILE_NOT_FOUND (2); the directory part does not exist: ERROR_PATH_NOT_FOUND (3)'
+  bad_name: 'NULL name or empty name: FALSE, ERROR_INVALID_NAME (123)'
+  bad_descriptor: 'NULL descriptor: ERROR_NOACCESS (998); a descriptor of zero bytes (revision 0): ERROR_UNKNOWN_REVISION (1305)'
+  bad_information: 'SECURITY_INFORMATION 0: ERROR_ACCESS_DENIED (5); undefined bits (0x200, 0x400, 0x1000, 0x4000, 0x40000000) alone: ERROR_ACCESS_DENIED (5)'
+  invalid_owner: '1307 ERROR_INVALID_OWNER, 1299 ERROR_INVALID_LABEL, 1314 ERROR_PRIVILEGE_NOT_HELD, 1338 ERROR_INVALID_SECURITY_DESCR: see the rules'
+  access_denied: 'no WRITE_DAC (or WRITE_OWNER for the owner, ACCESS_SYSTEM_SECURITY for the SACL) on the file: ERROR_ACCESS_DENIED (5)'
+side_effects: changes the security descriptor of the file or directory
+threading: may be called from any thread
+ordering: []
+timing:
+  typical: well under a millisecond per call
+  guarantees: none
+building_tests: Rust tests (ADR 0075), one file each, run by the elevated administrator token of the SSH session, except the tests whose names end in _std (the standard token). Each makes its own files in the directory of the test image. Descriptors are given and read back as SDDL text; the caller's own SIDs print as <user> and <group>; the label and SACL parts are read through GetFileSecurityW. Observations are results, last errors and SDDL strings, never SID values of this machine.
+not_covered: Setting through a handle (SetKernelObjectSecurity, SetSecurityInfo, SetNamedSecurityInfoW are other entries); SetNamedSecurityInfoW-style propagation; files on other file systems; network paths; files held open with delete-pending; a descriptor in absolute form (one probe only); the owner of a file whose owner may not be changed by a non-owner (WRITE_OWNER with SeTakeOwnership); SACL entries of other kinds than an audit ACE and the label; the SE_SACL_PROTECTED and SACL auto-inherit flags; reparse points.
+tests:
+  visible: 5
+  held_out: 2
