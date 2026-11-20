@@ -165,3 +165,21 @@ To run the tests on Poly the boot needs a sound device (virtio-sound) for every 
 says `NO SOUND DEVICE`: one each in `waveOutGetNumDevs`, `GetDevCapsW`, `Open`, `GetVolume`) need a boot **without** one.
 `win poly` and `polycheck` boot one configuration per run, so the integrator has to give them both (the two sets can be
 told apart by that first line).
+
+### W1 implemented (impl-win-audio, 2026-11-20)
+
+- **`winmm`'s `waveOut*`** on `\Device\PolyAudio` (`personalities/nt/win32/winmm/src/wave.rs`, the decisions in
+  `poly_kernelbase::waveout`). The 48 visible tests pass on Poly. `win poly` and `polycheck` now boot each test the
+  way it needs (`sound` in the manifest, `docs/AGENT_PIPELINE.md`): a card for the tests that import a `winmm` sound
+  function, none for the four `NO SOUND DEVICE` tests.
+- **ADR 0244 amended.** A stream's frames count as played when the device finished their period, not when the mixer
+  took them: the sheets caught buffers reported done about 70 ms early.
+- **Chrome for Windows does not play through `waveOut`.** Chrome 157 on the desktop with a sound card was observed
+  with a trace line on every `waveOut*` entry (not committed). Its audio process:
+  - asks for `CLSID_MMDeviceEnumerator`, which is not registered;
+  - calls `waveOutGetNumDevs` two or three times and gets 1;
+  - never calls `waveOutOpen`, `waveOutGetDevCaps*` or any other `winmm` function.
+
+  The tone page's `AudioContext` runs (44.1 kHz, output latency 32 ms) into nothing: QEMU's recording stays empty.
+  Starting Chrome with `--force-wave-audio` (it reached the browser, per `chrome://version`) changes nothing. **Chrome
+  needs W2 (WASAPI shared mode)**; W1 serves programs that use `waveOut` themselves.

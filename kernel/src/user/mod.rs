@@ -311,6 +311,11 @@ impl UserThread {
         (self.process_arc().pid, self.tid)
     }
 
+    /// The thread as timeline records name it (ADR 0247).
+    pub(crate) fn timeline_ident(&self) -> u64 {
+        poly_timeline::ident(self.process.as_ref().map_or(0, |p| p.pid), self.tid)
+    }
+
     /// Its process.
     pub(crate) fn process(&self) -> &Process {
         self.process_arc()

@@ -7,7 +7,7 @@
 poly_win32_rt::fail_exports!(
     "winmm",
     value(0),
-    [PlaySoundA, PlaySoundW, midiInGetNumDevs, midiOutGetNumDevs, timeSetEvent, waveInGetNumDevs, waveOutGetNumDevs,]
+    [PlaySoundA, PlaySoundW, midiInGetNumDevs, midiOutGetNumDevs, timeSetEvent, waveInGetNumDevs,]
 );
 
 poly_win32_rt::fail_exports!("winmm", value(277), [mciSendCommandA, mciSendCommandW,]);
@@ -55,21 +55,6 @@ poly_win32_rt::fail_exports!(
         waveInReset,
         waveInStart,
         waveInUnprepareHeader,
-        waveOutClose,
-        waveOutGetDevCapsA,
-        waveOutGetDevCapsW,
-        waveOutGetErrorTextW,
-        waveOutGetPosition,
-        waveOutGetVolume,
-        waveOutMessage,
-        waveOutOpen,
-        waveOutPause,
-        waveOutPrepareHeader,
-        waveOutReset,
-        waveOutRestart,
-        waveOutSetVolume,
-        waveOutUnprepareHeader,
-        waveOutWrite,
     ]
 );
 

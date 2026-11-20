@@ -345,6 +345,12 @@ struct NtState {
 
 static STATE: Mutex<Option<NtState>> = Mutex::new(None);
 
+/// The NT personality's locks threads sleep on, for the timeline (ADR 0247).
+pub fn name_timeline_queues() {
+    crate::timeline::name_queue(STATE.queue_address(), "nt-state-lock");
+    crate::timeline::name_queue(io::draining_queue(), "nt-io-drain");
+}
+
 /// `poly.win32k.session=interactive`: win32k reproduces the interactive
 /// desktop session of the slice B oracle instead of session 0 (ADR 0131).
 static INTERACTIVE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
@@ -415,7 +421,8 @@ static ONLY_SET: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool
 
 /// Whether a diagnostic needs the processes' command lines.
 fn wants_command_lines() -> bool {
-    WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0
+    crate::timeline::on()
+        || WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0
         || MEM_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0
         || ONLY_SET.load(core::sync::atomic::Ordering::Relaxed)
 }
@@ -443,10 +450,25 @@ fn read_command_line(pid: u32) -> Option<String> {
 
 /// Remember the calling process's command line if a diagnostic needs it and it is not known.
 fn note_command_line(pid: u32) {
-    if !wants_command_lines() || COMMAND_LINES.lock().contains_key(&pid) {
+    if !wants_command_lines() {
+        return;
+    }
+    // Known already: no lock (every system call comes here).
+    static NOTED: [core::sync::atomic::AtomicU64; 1024] = [const { core::sync::atomic::AtomicU64::new(0) }; 1024];
+    let slot = nt_pid_bit(pid);
+    if let Some((word, bit)) = slot
+        && NOTED[word].load(core::sync::atomic::Ordering::Relaxed) & bit != 0
+    {
+        return;
+    }
+    if COMMAND_LINES.lock().contains_key(&pid) {
         return;
     }
     if let Some(line) = read_command_line(pid) {
+        if let Some((word, bit)) = slot {
+            NOTED[word].fetch_or(bit, core::sync::atomic::Ordering::Relaxed);
+        }
+        crate::timeline::name_process(pid, &line);
         COMMAND_LINES.lock().insert(pid, line);
     }
 }
@@ -798,7 +820,18 @@ fn with<R>(f: impl FnOnce(&mut NtState) -> R) -> R {
     if guard.is_none() {
         make_state(&mut guard);
     }
-    f(guard.as_mut().expect("made above"))
+    run_noting_completions(guard.as_mut().expect("made above"), f)
+}
+
+/// Run `f` on the state; if it queued an I/O completion, the current thread owes a drain: it
+/// returns to user mode only after the completion is delivered (ADR 0247, [`io::after_call`]).
+fn run_noting_completions<R>(s: &mut NtState, f: impl FnOnce(&mut NtState) -> R) -> R {
+    let before = s.sys.io.completions_queued();
+    let r = f(s);
+    if s.sys.io.completions_queued() != before {
+        io::owe_drain();
+    }
+    r
 }
 
 /// The NT state of the first NT use, made in a frame of its own: `with`
@@ -831,11 +864,11 @@ fn make_state(slot: &mut Option<NtState>) {
     if let Ok(tid) = thread::spawn_named("nt-boot-services", boot_services, 0) {
         let _ = thread::detach(tid);
     }
-    // An interactive logon's session (standard or elevated) has a shell holding the filtered
-    // token (ADR 0222, 0235); the admin logon of the older recordings has none.
-    if state.sys.logon != poly_personality_nt::security::Logon::Admin
-        && let Ok(tid) = thread::spawn_named("nt-shell", shell_main, 0)
-    {
+    // An interactive user is logged on at the console in every boot, as on the machine the
+    // recordings come from: their shell runs in session 1 with their filtered token, whatever
+    // logon the programs of the boot have (ADR 0222, 0235). The SSH logon's programs (the `admin`
+    // logon, session 0) reach it too, as the desktop's `ShellWindows` chain does on Windows.
+    if let Ok(tid) = thread::spawn_named("nt-shell", shell_main, 0) {
         let _ = thread::detach(tid);
     }
     if INTERACTIVE.load(core::sync::atomic::Ordering::Relaxed) {
@@ -875,12 +908,37 @@ fn build_state(slot: &mut Option<NtState>) {
 
 /// Run `f` on the NT state if the first NT use made it already.
 fn with_existing<R>(f: impl FnOnce(&mut NtState) -> R) -> Option<R> {
-    STATE.lock().as_mut().map(f)
+    STATE.lock().as_mut().map(|s| run_noting_completions(s, f))
 }
 
 /// Whether `pid` is an NT process the kernel has set up.
 pub fn is_nt_process(pid: u32) -> bool {
-    with(|s| s.processes.contains_key(&ProcessId(pid)))
+    match nt_pid_bit(pid) {
+        Some((word, bit)) => NT_PIDS[word].load(core::sync::atomic::Ordering::Acquire) & bit != 0,
+        None => with(|s| s.processes.contains_key(&ProcessId(pid))),
+    }
+}
+
+/// Which processes are in the NT state's table, for [`is_nt_process`] without the NT lock: every
+/// system call of every NT thread asks it first, and the lock it took queued them (ADR 0247). Set
+/// and cleared under the lock, with the table; process ids past the bitmap ask the table.
+static NT_PIDS: [core::sync::atomic::AtomicU64; 1024] = [const { core::sync::atomic::AtomicU64::new(0) }; 1024];
+
+/// Process `pid`'s word and bit in [`NT_PIDS`], if it has one.
+fn nt_pid_bit(pid: u32) -> Option<(usize, u64)> {
+    let pid = pid as usize;
+    (pid < NT_PIDS.len() * 64).then(|| (pid / 64, 1u64 << (pid % 64)))
+}
+
+/// Mark process `pid` as in the NT table or not (with the table, under the NT lock).
+fn note_nt_pid(pid: u32, present: bool) {
+    if let Some((word, bit)) = nt_pid_bit(pid) {
+        if present {
+            NT_PIDS[word].fetch_or(bit, core::sync::atomic::Ordering::Release);
+        } else {
+            NT_PIDS[word].fetch_and(!bit, core::sync::atomic::Ordering::Release);
+        }
+    }
 }
 
 /// The calling thread's view of the kernel for one system call.
@@ -1100,6 +1158,16 @@ impl NtKernel for Kernel {
     }
 
     fn debug_print(&mut self, text: &[u8]) {
+        // A thread's name for the timeline (ADR 0247), never a line of the log.
+        if let Some(rest) = text.strip_prefix(b"\x1ftimeline-name ") {
+            let rest = alloc::string::String::from_utf8_lossy(rest);
+            if let Some((tid, name)) = rest.split_once(' ')
+                && let Ok(tid) = tid.parse::<u32>()
+            {
+                crate::timeline::name_thread(self.pid.0, tid, name);
+            }
+            return;
+        }
         crate::kprintln!("nt: pid {}: {}", self.pid.0, alloc::string::String::from_utf8_lossy(text).trim_end());
     }
 
@@ -1250,6 +1318,16 @@ pub fn syscall(process: &Process, regs: &mut SyscallRegs) -> Outcome {
     let mut k = Kernel::new(ProcessId(process.pid), ThreadRef(u64::from(tid)), memory);
     let trace = TRACE.load(core::sync::atomic::Ordering::Relaxed);
     let trail = TRAIL_LEN.load(core::sync::atomic::Ordering::Relaxed);
+    // A call that needs neither the NT state nor the work below (the clock): no lock at all
+    // (ADR 0247). Traced runs keep every call on the full path.
+    if trace == 0
+        && trail == 0
+        && !crate::arch::user::compat()
+        && !apitrace::wanted()
+        && let Some(outcome) = poly_personality_nt::dispatch_unlocked(&mut k, regs)
+    {
+        return outcome;
+    }
     note_command_line(process.pid);
     let traced =
         (trace != 0 || trail != 0 || apitrace::wanted()).then(|| selected(process.pid)).filter(|&s| s).map(|_| {
@@ -1457,6 +1535,7 @@ fn start_params(
     let console_app = image.info.optional.subsystem == poly_pe::subsystem::WINDOWS_CUI;
     let started = with(|s| {
         s.processes.insert(pid, NtProcess::new(pid));
+        note_nt_pid(pid.0, true);
         s.created.insert(pid, registry::filetime_now());
         s.finished.remove(&pid);
         s.peak.remove(&pid);
@@ -1563,6 +1642,7 @@ fn start_params(
             Err(e) => {
                 s.created.remove(&pid);
                 let mut proc = s.processes.remove(&pid).expect("just inserted");
+                note_nt_pid(pid.0, false);
                 let mut b = MemBackend { memory, sections: &mut s.sections };
                 exec::process_exit(&mut s.sys, &mut proc, &mut b);
                 Err(e)
@@ -1631,7 +1711,9 @@ fn create_process(
     };
     if req.suspended {
         // CREATE_SUSPENDED (ADR 0089): the first thread starts when its
-        // suspend count drops to zero (`sched::resume`).
+        // suspend count drops to zero (`sched::resume`). Until then a thread
+        // another process makes in it does not end it by leaving.
+        process.hold();
         with(|s| {
             let c = s.ctl.entry(first).or_default();
             c.suspend_count = 1;
@@ -1778,6 +1860,7 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
     if WAITS_EVERY.load(core::sync::atomic::Ordering::Relaxed) != 0 {
         crate::kprintln!("nt-waits: p{pid} ended at {} ms", crate::time::now_ns() / 1_000_000);
     }
+    let mut dropped = Vec::new();
     let host_needed = with(|s| {
         if let Some(created) = s.created.remove(&ProcessId(pid)) {
             let cpu = used;
@@ -1794,7 +1877,19 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
             );
         }
         s.peak.remove(&ProcessId(pid));
+        // A first thread that never started keeps no reference to the process.
+        let unstarted: Vec<_> =
+            s.processes.get(&ProcessId(pid)).map_or_else(Vec::new, |p| p.threads.iter().map(|t| t.thread).collect());
+        for t in unstarted {
+            if let Some(c) = s.ctl.get_mut(&t) {
+                c.deferred_start = None;
+                if let Some(d) = c.deferred_process.take() {
+                    dropped.push(d);
+                }
+            }
+        }
         if let Some(mut proc) = s.processes.remove(&ProcessId(pid)) {
+            note_nt_pid(pid, false);
             let mut b = MemBackend { memory, sections: &mut s.sections };
             exec::process_exit(&mut s.sys, &mut proc, &mut b);
         }
@@ -1804,6 +1899,8 @@ pub fn process_exit(pid: u32, memory: &Arc<Memory>) {
         let now_ms = crate::time::now_ns() / 1_000_000;
         poly_personality_nt::scm::process_ended(&mut s.sys, ProcessId(pid), now_ms, registry::filetime_now())
     });
+    // Dropped out of the lock: a memory map may sleep as it goes.
+    drop(dropped);
     if host_needed {
         start_service_host();
     }
@@ -1868,9 +1965,9 @@ fn services_main(_: usize) -> usize {
     0
 }
 
-/// Start `C:\Windows\explorer.exe`, the stand-in of the session's shell (ADR 0222), with the
-/// logon's filtered token: an elevated program finds it and starts a process de-elevated with a
-/// copy of that token.
+/// Start `C:\Windows\explorer.exe`, the stand-in of the interactive user's shell (ADR 0222), in
+/// session 1 with that user's filtered token: an elevated program finds it and starts a process
+/// de-elevated with a copy of that token.
 fn shell_main(_: usize) -> usize {
     if EXPLORER_EXE.is_empty() {
         return 0;

@@ -348,11 +348,15 @@ fn spawn_with(
         }
     };
     // Set up before the lock goes: another CPU may pick it at once.
+    let kernel = user.is_none();
     install(&mut t, id, stack, f, arg, user);
     t.names[id.slot()] = name;
     let kicks = t.sched.take_kicks();
     drop(t);
     kick(kicks);
+    if kernel {
+        crate::timeline::name_kernel_thread(id.slot(), name);
+    }
     Ok(id)
 }
 
@@ -436,6 +440,13 @@ fn switch(sw: Switch) {
     {
         let mut guard = THREADS.lock();
         let t = &mut *guard;
+        let left = match t.sched.state(sw.from) {
+            Some(State::Runnable) => poly_timeline::Left::Runnable,
+            Some(State::Blocked) => poly_timeline::Left::Blocked,
+            Some(State::Exited) => poly_timeline::Left::Exited,
+            _ => poly_timeline::Left::Other,
+        };
+        crate::timeline::switched(ident_of(t, sw.from), left, ident_of(t, sw.to));
         let top = t.stacks[sw.to.slot()].map(|s| s.top());
         let [from, to] = t.user.get_disjoint_mut([sw.from.slot(), sw.to.slot()]).expect("switch to the running thread");
         if let Some(u) = from.as_deref() {
@@ -454,6 +465,15 @@ fn switch(sw: Switch) {
     // stays allocated until it exits and is reaped; `save` is a static slot.
     unsafe { context::switch(save, load) };
     finish_switch();
+}
+
+/// Thread `id` as timeline records name it (`poly_timeline::ident`): a user thread by its
+/// process and thread ids, a kernel thread by its slot.
+fn ident_of(t: &Threads, id: ThreadId) -> u64 {
+    match t.user[id.slot()].as_deref() {
+        Some(u) => u.timeline_ident(),
+        None => poly_timeline::ident(poly_timeline::KERNEL_PID, id.slot() as u32),
+    }
 }
 
 /// Runs on the thread just switched in (on the CPU that switched to it),
@@ -929,7 +949,9 @@ fn wake_due(now: u64) {
                 // SAFETY: the entry existed, so the queue is alive (see
                 // `Timeout`); THREADS is locked, as its inner queue requires.
                 let q = unsafe { &mut *(*(to.queue as *const WaitQueue)).0.get() };
-                t.sched.wake_all(q);
+                while let Some(id) = t.sched.wake_one(q) {
+                    crate::timeline::woke(ident_of(&t, id));
+                }
             }
             if n < BATCH {
                 break;

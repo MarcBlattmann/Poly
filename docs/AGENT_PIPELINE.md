@@ -455,6 +455,13 @@ On Poly a `poly.win.token=standard` test run has nobody to click: the consent di
 Per-test `token` and `session` in `windows.json` rows are kept by `tests split` (`RunResult`).
 Never click through or approve a real consent prompt on the oracle, and never change UAC settings there.
 
+**Tests that need a sound card, or none.** The oracle has a sound card. `win build` notes in the manifest what a test
+needs (`sound`): a test that imports a `winmm.dll` sound function (`waveOut*`, `waveIn*`, `midi*`, `mixer*`,
+`PlaySound*`) gets `card`, and `win poly` (and `win polycheck`) boots Poly with a sound card whose output goes
+nowhere (`-audiodev none`; virtio-sound, else Intel HDA). A test whose first line says `NO SOUND DEVICE` was recorded
+with the oracle's card turned off; it gets `none` and boots without one. Every other test boots as before, without
+a card.
+
 **Tests with resources and dialogs** (menus, dialogs, string tables, bitmaps, icons,
 accelerators; `specs/windows/user32.dll/LoadMenuW.tests` and its relatives). A test that
 needs the resources of its own executable carries them as data: the resource directory

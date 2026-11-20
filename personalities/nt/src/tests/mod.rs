@@ -13,6 +13,7 @@ mod memory;
 mod objects;
 mod registry;
 mod sections;
+mod unlocked;
 mod win32k;
 mod winsta;
 

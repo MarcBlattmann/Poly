@@ -17,7 +17,10 @@ use crate::{thread, time};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
-use poly_ntobj::status::{STATUS_INVALID_HANDLE, STATUS_SUCCESS, STATUS_TIMEOUT, STATUS_UNSUCCESSFUL, STATUS_USER_APC};
+use poly_ntobj::status::{
+    STATUS_INVALID_HANDLE, STATUS_PROCESS_IS_TERMINATING, STATUS_SUCCESS, STATUS_TIMEOUT, STATUS_UNSUCCESSFUL,
+    STATUS_USER_APC,
+};
 use poly_ntobj::{NtStatus, ObjectId, ProcessId, ThreadRef, WaitCancel, WaitId};
 use poly_personality_nt::context::NtContext;
 use poly_personality_nt::kernel::{Apc, NtTimeout, ThreadCreate, ThreadCreated};
@@ -332,24 +335,58 @@ pub fn resume_apc(tid: ThreadRef) -> NtStatus {
     }
 }
 
-/// `NtCreateThreadEx` for the calling process: lay out the thread and start
-/// it (or defer it, created suspended).
+/// `NtCreateThreadEx`: lay out the thread in the calling process or, with `req.process`, in
+/// another one (`CreateRemoteThread`), and start it (or defer it, created suspended). The handle
+/// goes in the caller's table. A target whose first thread has not started yet (created
+/// suspended) takes the thread too; the thread then starts its loader.
 pub fn create_thread(
     pid: ProcessId,
     caller: ThreadRef,
     memory: &Arc<Memory>,
     req: ThreadCreate,
 ) -> Result<ThreadCreated, NtStatus> {
-    let process = find(pid).ok_or(STATUS_UNSUCCESSFUL)?;
+    let target = req.process.unwrap_or(pid);
+    let (process, memory) = if target == pid {
+        (find(pid).ok_or(STATUS_UNSUCCESSFUL)?, Arc::clone(memory))
+    } else {
+        let m = super::io::memory_of(target.0).ok_or(STATUS_PROCESS_IS_TERMINATING)?;
+        (process_arc(target).ok_or(STATUS_PROCESS_IS_TERMINATING)?, m)
+    };
+    if target != pid && process.is_exiting() {
+        return Err(STATUS_PROCESS_IS_TERMINATING);
+    }
     let tid_u32 = crate::process::alloc_nt_id();
     let tref = ThreadRef(u64::from(tid_u32));
     let (start, handle) = with(|s| {
-        let proc = s.processes.get_mut(&pid).ok_or(STATUS_INVALID_HANDLE)?;
-        let mut b = MemBackend { memory, sections: &mut s.sections };
+        let proc = s.processes.get_mut(&target).ok_or(STATUS_PROCESS_IS_TERMINATING)?;
+        if target != pid && proc.exit_status.is_some() {
+            return Err(STATUS_PROCESS_IS_TERMINATING);
+        }
+        let mut b = MemBackend { memory: &memory, sections: &mut s.sections };
         let start = exec::create_thread(&mut s.sys, proc, &mut b, &req, tref)?;
         let obj = s.sys.objects.thread_object(tref).expect("new thread object");
         let caller = poly_ntobj::Caller::user(pid, caller);
-        let handle = s.sys.objects.open_by_pointer(&caller, obj, req.desired_access, 0)?;
+        let attributes = if req.inherit { poly_ntobj::OBJ_INHERIT } else { 0 };
+        // ACCESS_SYSTEM_SECURITY needs a privilege the caller may not hold: then the handle
+        // gets the rest.
+        let handle = match s.sys.objects.open_by_pointer(&caller, obj, req.desired_access, attributes) {
+            Err(e) if e == poly_ntobj::status::STATUS_PRIVILEGE_NOT_HELD => s.sys.objects.open_by_pointer(
+                &caller,
+                obj,
+                req.desired_access & !poly_ntobj::access::ACCESS_SYSTEM_SECURITY,
+                attributes,
+            ),
+            r => r,
+        };
+        let handle = match handle {
+            Ok(h) => h,
+            Err(e) => {
+                let proc = s.processes.get_mut(&target).expect("still there");
+                let mut b = MemBackend { memory: &memory, sections: &mut s.sections };
+                exec::thread_exit(&mut s.sys, proc, &mut b, tref, STATUS_UNSUCCESSFUL);
+                return Err(e);
+            }
+        };
         // The descriptor the creator asked for applies after its own handle is open.
         if let Some(sd) = req.security.as_deref() {
             let token = s.sys.objects.security.effective(pid, caller.thread);
@@ -357,8 +394,8 @@ pub fn create_thread(
         }
         Ok::<_, NtStatus>((start, handle))
     })?;
-    let entry = Entry { rip: start.entry, rsp: start.rsp, args: [start.start_routine, start.argument, 0] };
-    let created = ThreadCreated { handle, client: ClientId { process: pid, thread: tref } };
+    let entry = Entry { rip: start.entry, rsp: start.rsp, args: [start.start_routine, start.argument, start.exe_base] };
+    let created = ThreadCreated { handle, client: ClientId { process: target, thread: tref } };
 
     if req.suspended {
         with(|s| {
@@ -368,8 +405,29 @@ pub fn create_thread(
         });
         return Ok(created);
     }
-    spawn(&process, memory, tref, entry, start.teb)?;
+    if let Err(e) = spawn(&process, &memory, tref, entry, start.teb) {
+        with(|s| {
+            let _ = s.sys.objects.close(&poly_ntobj::Caller::user(pid, caller), handle);
+        });
+        return Err(e);
+    }
     Ok(created)
+}
+
+/// NT process `pid`'s kernel process: the running one, or the one whose first thread waits to
+/// start (created suspended; it is in the process table only once a thread has run).
+fn process_arc(pid: ProcessId) -> Option<Arc<Process>> {
+    find(pid).or_else(|| {
+        with(|s| {
+            let p = s.processes.get(&pid)?;
+            p.threads.iter().find_map(|t| s.ctl.get(&t.thread)?.deferred_process.as_ref().map(|(p, _)| Arc::clone(p)))
+        })
+    })
+}
+
+/// NT process `pid`'s memory map, `fallback` if it has none registered.
+fn memory_for(pid: ProcessId, fallback: &Arc<Memory>) -> Arc<Memory> {
+    super::io::memory_of(pid.0).unwrap_or_else(|| Arc::clone(fallback))
 }
 
 /// Actually start a prepared NT thread in ring 3 and register its flags.
@@ -405,7 +463,8 @@ fn spawn(
 /// `NtTerminateThread` of a thread that is not the caller: make it end at
 /// its next return to user mode.
 pub fn terminate_other(pid: ProcessId, thread: ThreadRef, status: NtStatus) -> Result<(), NtStatus> {
-    let process = find(pid).ok_or(STATUS_UNSUCCESSFUL)?;
+    // The thread may be one of another process (a remote thread).
+    let process = find(owner_of(pid, thread)).ok_or(STATUS_UNSUCCESSFUL)?;
     let tid_u32 = thread.0 as u32;
     let Some(flags) = process.thread_flags(tid_u32) else { return Ok(()) };
     with(|s| s.ctl.entry(thread).or_default().exit_status = Some(status));
@@ -438,9 +497,18 @@ pub fn terminate_process_by_id(target: ProcessId, status: NtStatus) -> Result<()
         }
         (threads, deferred)
     });
-    if let Some((_process, memory)) = deferred {
-        super::process_exit(target.0, &memory);
-        return Ok(());
+    if let Some((process, memory)) = deferred {
+        // Its first thread will not start now: the hold it kept goes. Threads another process
+        // made in it end it as they leave; with none left it ends here.
+        if process.live_thread_ids().is_empty() {
+            let ended = process.drop_holds();
+            super::process_exit(target.0, &memory);
+            if ended.is_some() {
+                process.ended();
+            }
+            return Ok(());
+        }
+        let _ = process.drop_holds();
     }
     for t in threads {
         terminate_other(target, t, status)?;
@@ -454,6 +522,21 @@ pub fn terminate_process_by_id(target: ProcessId, status: NtStatus) -> Result<()
 /// process's memory alive for ever.
 pub fn terminate_siblings(pid: ProcessId, self_tid: ThreadRef, status: NtStatus) {
     let Some(process) = find(pid) else { return };
+    // A first thread that waits to start (the caller is a thread another process made here)
+    // never will.
+    let unstarted = with(|s| {
+        let ts: Vec<ThreadRef> = s.processes.get(&pid).map(|p| p.threads.iter().map(|t| t.thread).collect())?;
+        ts.iter().find_map(|t| {
+            let c = s.ctl.get_mut(t)?;
+            let d = c.deferred_process.take()?;
+            c.deferred_start = None;
+            Some(d)
+        })
+    });
+    if unstarted.is_some() {
+        let _ = process.drop_holds();
+    }
+    drop(unstarted);
     for tid in process.live_thread_ids() {
         let t = ThreadRef(u64::from(tid));
         if t != self_tid {
@@ -535,17 +618,21 @@ pub fn resume(pid: ProcessId, memory: &Arc<Memory>, thread: ThreadRef) -> Result
     if prev > 0 && now == 0 {
         // A new process's first thread, created suspended (ADR 0089).
         if let (Some((entry, teb)), Some((process, child_memory))) = (deferred, &child) {
-            return super::start_first_thread(
-                process,
-                child_memory,
-                &super::Start { entry, teb, tid: thread.0 as u32 },
-            )
-            .map(|()| prev);
+            let started =
+                super::start_first_thread(process, child_memory, &super::Start { entry, teb, tid: thread.0 as u32 });
+            // The hold `create_process` took while it waited. If it could not start and the
+            // threads other processes made in it have gone, the process ends here.
+            if process.release().is_some() {
+                process.ended();
+            }
+            return started.map(|()| prev);
         }
-        let process = find(owner_of(pid, thread));
+        // The thread may be one another process made in its owner (a remote thread).
+        let owner = owner_of(pid, thread);
+        let process = process_arc(owner);
         if let Some((entry, teb)) = deferred {
             if let Some(process) = &process {
-                spawn(process, memory, thread, entry, teb)?;
+                spawn(process, &memory_for(owner, memory), thread, entry, teb)?;
             }
         } else if let Some(process) = &process
             && let Some(f) = process.thread_flags(thread.0 as u32)

@@ -283,6 +283,34 @@ process id, so its process could not be opened.
 - **The Windows test runner keeps a test's file name**: `C:\PolyTests\<name>.exe`, no longer
   `test-binary.exe`. A child's report of its parent's image name is then the recording's.
 
+**An interactive user is logged on in every boot.** The `ShellDispatch.ShellExecute` test
+`sde_start_ssh` runs in the SSH logon (session 0), yet the chain reaches the Explorer of the
+interactive session. On the oracle a user is logged on at the console whatever the SSH session does.
+
+- The kernel now starts the stand-in in every boot, the `admin` logon of the older recordings
+  included. It runs as that interactive user's shell: session 1, their filtered token
+  (`Token::uac_filtered`), whatever logon the boot's own programs have. Before, it started only for
+  the standard and elevated logons (ADR 0235).
+- That is one more idle process per boot.
+- A session-0 caller has no shell window, so the chain looks for an `explorer.exe` whose session
+  (`ProcessIdToSessionId`) is not 0.
+- `ProcessIdToSessionId` used to answer the caller's own session for any process id, and so did
+  `NtQueryInformationProcess` class 24 (it read the caller's PEB whatever the handle named). Both now
+  answer for the process asked about:
+  - the caller's own from its PEB;
+  - another process's from class 24, which gives that process's primary token's session (the value
+    its PEB was written from);
+  - an unused id fails with `OpenProcess`'s `ERROR_INVALID_PARAMETER`.
+
+  The rules are in WTSGetActiveConsoleSessionId.yaml (`child`, `bad_pid`) and
+  NtQueryInformationProcess.yaml (`session`).
+
+**Known gap, deferred:** `CreateProcessWithTokenW` `cpwt_ssh_session0`. On Windows, programs of the
+SSH logon (session 0) live on their logon's own window station (`Service-0x…$`). Poly puts every
+session-0 program on `WinSta0`, so a child started without `lpDesktop` reports `WinSta0\Default`
+instead of another station's name. Changing the session-0 window-station model touches every
+session-0 test, so it is left for a change of its own.
+
 Still open (not this change):
 - `ShellDispatch.ShellExecute` `sde_start_ssh` needs a shell process in the `admin` logon (on Windows
   the user's Explorer runs in session 1 whatever the SSH session does). Today only the standard and
@@ -290,3 +318,30 @@ Still open (not this change):
 - `CreateProcessWithTokenW` `cpwt_ssh_session0` needs session-0 programs to live on their logon's
   own window station (`Service-0x…$`), not on `WinSta0`. Then the child's desktop name is not
   `WinSta0\Default`.
+
+## Addendum: B0's held-out fixes (2026-11-20)
+
+The re-green round left four B0 entries whose visible tests pass and whose held-out test fails.
+Re-reading their sheets against probes of my own on Poly (the held-out tests were not used):
+
+- **`VirtualLock` and `VirtualUnlock`** were fail-only exports, so the `lock` rule of
+  `K32QueryWorkingSetEx` could not hold. `kernelbase` now keeps the process's locked pages
+  (`poly_kernelbase::workingset::LockedPages`):
+  - `VirtualLock` touches each page, which makes it valid, and records it.
+  - `K32QueryWorkingSetEx` sets bit 22 for the caller's own valid locked pages.
+  - `VirtualUnlock` fails with `ERROR_NOT_LOCKED` for a page that was not locked (Learn).
+  - `VirtualFree` forgets freed pages.
+  - Poly keeps every page in memory anyway, so locking changes nothing else.
+- **`ProcessIdToSessionId`** answered every process id with the caller's own session. The previous
+  addendum's change fixed this on `main` at the same time (an unused id fails with
+  `ERROR_INVALID_PARAMETER`, `WTSGetActiveConsoleSessionId.yaml` `bad_pid`); this branch kept that
+  version.
+- **`ShellExecuteExW`** looks a bare program name that is not found up in
+  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\<name>`, never in the user's key
+  (`AssocQueryStringW.yaml`, `shellexecute_app_paths`).
+- **The 32-bit `cmd.exe`:** `cargo xtask wow64` builds `cmd.exe` for i686 too (`SYSTEM_PROGRAMS`),
+  and the layout installs it in `SysWOW64` with the 32-bit DLLs. The same rule starts
+  `C:\Windows\SysWOW64\cmd.exe` by its full path.
+- **`CreateProcessAsUserW`:** every rule the visible tests do not cover was probed and matches the
+  sheet: names, environment, errors, suspended, process information, inheritance and handle
+  lists, the job broker and breakaway. No change.

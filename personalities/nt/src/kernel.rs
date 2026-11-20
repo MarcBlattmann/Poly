@@ -74,17 +74,29 @@ pub struct Apc {
     pub arg3: u64,
 }
 
-/// A request to create a thread in the calling process
-/// (`NtCreateThreadEx`), once the service has decoded its arguments.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A request to create a thread (`NtCreateThreadEx`), once the service has decoded its
+/// arguments.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ThreadCreate {
+    /// The process the thread is made in: `None` for the caller's own, else another process
+    /// (`CreateRemoteThread`, specs/windows/ntdll.dll/NtCreateThreadEx.yaml). The thread's stack
+    /// and TEB are that process's; the handle is the caller's.
+    pub process: Option<ProcessId>,
     /// The user routine the thread runs, called as `routine(argument)`.
     pub start_routine: u64,
     pub argument: u64,
-    /// Requested stack reserve (0: the image default).
+    /// `MaximumStackSize`: the stack reserve asked for (0: the image default; see
+    /// [`crate::exec::stack_sizes`]).
     pub stack_reserve: u64,
-    /// Requested stack commit (0: the image default).
+    /// `StackSize`: the initial commit asked for (0: the image default).
     pub stack_commit: u64,
+    /// `THREAD_CREATE_FLAGS_SKIP_THREAD_ATTACH`: the loader does not tell the DLLs about this
+    /// thread (no `DLL_THREAD_ATTACH`, no `DLL_THREAD_DETACH`).
+    pub skip_attach: bool,
+    /// `THREAD_CREATE_FLAGS_HIDE_FROM_DEBUGGER`: `ThreadHideFromDebugger` reports 1.
+    pub hide_from_debugger: bool,
+    /// The caller's handle is inheritable (`OBJ_INHERIT` in the object attributes).
+    pub inherit: bool,
     /// Start the thread suspended (`THREAD_CREATE_FLAGS_CREATE_SUSPENDED`).
     pub suspended: bool,
     /// The access mask the new thread handle is opened with.
@@ -186,10 +198,11 @@ pub trait NtKernel {
     /// the process ends with that status.
     fn terminate_current_thread(&mut self, status: NtStatus);
 
-    /// Create a thread in the calling process (`NtCreateThreadEx`). The
-    /// kernel allocates a thread id and its stack and TEB, creates the thread
-    /// object, starts it in ring 3 (suspended if asked) and returns a handle
-    /// to it. Cross-process creation is `STATUS_NOT_IMPLEMENTED` for now.
+    /// Create a thread in the calling process or, with `req.process`, in another one
+    /// (`NtCreateThreadEx`). The kernel allocates a thread id and its stack and TEB in that
+    /// process, creates the thread object, starts it in ring 3 (suspended if asked) and returns a
+    /// handle to it in the caller's table. A process that has ended or is ending is
+    /// `STATUS_PROCESS_IS_TERMINATING`.
     fn create_thread(&mut self, req: ThreadCreate) -> Result<ThreadCreated, NtStatus>;
 
     /// Create a process running `req.image` (`NtCreateUserProcess`): a new

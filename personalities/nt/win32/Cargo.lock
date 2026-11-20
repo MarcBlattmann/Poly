@@ -386,6 +386,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "poly-audio"
+version = "0.0.1"
+
+[[package]]
 name = "poly-cmd"
 version = "0.0.1"
 
@@ -471,6 +475,7 @@ version = "0.0.1"
 name = "poly-kernelbase"
 version = "0.0.1"
 dependencies = [
+ "poly-audio",
  "poly-nls",
  "poly-ntobj",
  "poly-pe",
@@ -837,6 +842,7 @@ dependencies = [
 name = "winmm"
 version = "0.0.1"
 dependencies = [
+ "poly-audio",
  "poly-kernelbase",
  "poly-win32-rt",
 ]
