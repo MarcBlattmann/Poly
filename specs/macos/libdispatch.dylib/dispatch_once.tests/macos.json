@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 11:13:05",
+  "tests": [
+    {
+      "name": "dispatch_once_basic",
+      "source_sha256": "703d6704eb82b700ae661477a04fbe71b1091c840693b1cf42e0f243f7c0565c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0270e354dbbb08d6f6832620dbb38939ba6e4335537e367888d4ffee481ba51e",
+          "exit_code": 0,
+          "stdout": "ok the predicate starts as 0 (static storage)\nok the block ran exactly once for 8 racing threads\nok no caller returned before it had finished\nok the predicate is nonzero afterwards\nok a later call runs nothing\nok another predicate runs its block\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bb780f23bf2a78a9fb804dc51dd5e4af1d489555a7e7450fcce9f75ddab15b82",
+          "exit_code": 0,
+          "stdout": "ok the predicate starts as 0 (static storage)\nok the block ran exactly once for 8 racing threads\nok no caller returned before it had finished\nok the predicate is nonzero afterwards\nok a later call runs nothing\nok another predicate runs its block\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "dispatch_once_nested",
+      "source_sha256": "e1be3b706842e4b7fad8935d366a1aad4973cba4beff246cdcc532c0af17ccd0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0fca9563f55e6a81749ed134619d9f0f2869f61544c4cf81d69f6bb4ca441fdc",
+          "exit_code": 0,
+          "stdout": "ok inner ran inside outer\nok nothing runs twice\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f8ae535972970ef266dc5cf20aebfa9d5c87fc42e4bf39b513e335e786865f5d",
+          "exit_code": 0,
+          "stdout": "ok inner ran inside outer\nok nothing runs twice\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

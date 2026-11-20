@@ -175,7 +175,10 @@ static inline int is_child(const char *mode) {
 
 int test_main(void);
 
+extern unsigned int alarm(unsigned int);
+
 int main(int argc, char **argv, char **envp) {
+    alarm(30); /* a test that hangs is killed by SIGALRM and fails */
     poly_argc = argc;
     poly_argv = argv;
     poly_envp = envp;

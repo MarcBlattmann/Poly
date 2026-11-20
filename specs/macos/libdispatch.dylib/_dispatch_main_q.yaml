@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libdispatch.dylib/_dispatch_main_q.yaml. Observed with C programs that call libdispatch through
+# libSystem (tests/macos/include/poly_mlibc.h and poly_mgcd.h, marked `poly-mac: libsystem`, ADR 0182);
+# results per architecture in _dispatch_main_q.tests/macos.json. Only what the outputs showed is stated; times
+# are given as lower bounds, never as exact values.
+id: macos/api/libdispatch.dylib/_dispatch_main_q
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; differences are listed in the summary). Output of the tests is written with raw system calls, never through the function under test"
+  observed_by: spec-macos-dispatch
+  date: 2026-11-20
+summary: >
+  The main queue (the data symbol _dispatch_main_q; dispatch_get_main_queue() returns its address, every time) is a serial queue with
+  the label "com.apple.main-thread" and QoS class 33 (user-interactive), different from every global queue. Blocks submitted to it,
+  from any thread, do not run until the main thread drains it: after 100 ms nothing had run. A CFRunLoop on the main thread
+  drains it: CFRunLoopRun() ran the blocks in submission order (two from the main thread, two from a worker thread), all on the main
+  thread, and CFRunLoopStop(CFRunLoopGetMain()) called from a block ended the run. CFRunLoopRunInMode(default mode, 1.0, returnAfterSourceHandled) returned
+  after a block ran with kCFRunLoopRunHandledSource (4); a pass with nothing to do and a timeout returned kCFRunLoopRunTimedOut (3). dispatch_sync from a worker thread into the main
+  queue is run by the main thread's run loop and returns after the block has run; 100 blocks plus a stopping block all ran before CFRunLoopRun
+  returned. Aiming a queue at the main queue (dispatch_queue_create_with_target) or a group notify at it needs the same drain. Same on both architectures.
+returns:
+  "queue": "the main queue object"
+errors:
+  "none": "no error result"
+side_effects: "none"
+threading: "the main thread drains it through its run loop or dispatch_main"
+ordering: []
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
