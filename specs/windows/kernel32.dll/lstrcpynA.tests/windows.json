@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "lna_trunc",
+      "exe_sha256": "a4acf1c11dca73048bfb71ab78cc445f27bfcf22cf98bd7bb535b4d098068f1b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "biAwOiByZXR1cm5zIGRlc3RpbmF0aW9uIGJ5dGVzIDc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3NzcKbiAxOiByZXR1cm5zIGRlc3RpbmF0aW9uIGJ5dGVzIDAwNzc3Nzc3Nzc3Nzc3Nzc3Nzc3NzcKbiAyOiByZXR1cm5zIGRlc3RpbmF0aW9uIGJ5dGVzIDYxMDA3Nzc3Nzc3Nzc3Nzc3Nzc3NzcKbiAzOiByZXR1cm5zIGRlc3RpbmF0aW9uIGJ5dGVzIDYxNjIwMDc3Nzc3Nzc3Nzc3Nzc3NzcKbiA4OiByZXR1cm5zIGRlc3RpbmF0aW9uIGJ5dGVzIDYxNjI2MzY0NjU2NjY3MDA3Nzc3NzcKbiA5OiByZXR1cm5zIGRlc3RpbmF0aW9uIGJ5dGVzIDYxNjI2MzY0NjU2NjY3NjgwMDc3NzcKbiAxMDogcmV0dXJucyBkZXN0aW5hdGlvbiBieXRlcyA2MTYyNjM2NDY1NjY2NzY4MDA3Nzc3Cm4gMTI6IHJldHVybnMgZGVzdGluYXRpb24gYnl0ZXMgNjE2MjYzNjQ2NTY2Njc2ODAwNzc3NwpuIC0xOiByZXR1cm5zIGRlc3RpbmF0aW9uIGJ5dGVzIDYxNjI2MzY0NjU2NjY3NjgwMDc3NzcKbiAtMjE0NzQ4MzY0ODogcmV0dXJucyBkZXN0aW5hdGlvbiBieXRlcyA2MTYyNjM2NDY1NjY2NzY4MDA3Nzc3CmVtcHR5IHNvdXJjZSBuIDQ6IHJldHVybnMgZGVzdGluYXRpb24gdHJ1ZSBieXRlcyAwMDc3Nzc3NwpoaWdoIGJ5dGVzIG4gNDogZTllOGU3MDAwMDAwMDAwMApzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "n 0: returns destination bytes 7777777777777777777777\nn 1: returns destination bytes 0077777777777777777777\nn 2: returns destination bytes 6100777777777777777777\nn 3: returns destination bytes 6162007777777777777777\nn 8: returns destination bytes 6162636465666700777777\nn 9: returns destination bytes 6162636465666768007777\nn 10: returns destination bytes 6162636465666768007777\nn 12: returns destination bytes 6162636465666768007777\nn -1: returns destination bytes 6162636465666768007777\nn -2147483648: returns destination bytes 6162636465666768007777\nempty source n 4: returns destination true bytes 00777777\nhigh bytes n 4: e9e8e70000000000\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 46
+    }
+  ]
+}
