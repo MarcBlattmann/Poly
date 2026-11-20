@@ -183,3 +183,23 @@ told apart by that first line).
   The tone page's `AudioContext` runs (44.1 kHz, output latency 32 ms) into nothing: QEMU's recording stays empty.
   Starting Chrome with `--force-wave-audio` (it reached the browser, per `chrome://version`) changes nothing. **Chrome
   needs W2 (WASAPI shared mode)**; W1 serves programs that use `waveOut` themselves.
+
+## 7. W2 status: the WASAPI shared-mode render path (spec-win-wasapi, 2026-11-20)
+
+The oracle trace first ([wasapi-trace.md](wasapi-trace.md), `specs/windows/apps/chrome/traces/s6-audio.trace.json`): Chrome's
+audio service was **not seen calling `ActivateAudioInterfaceAsync`** (and `chrome.dll` has no `avrt` import): it creates `CLSID_MMDeviceEnumerator`, takes
+the default render endpoint, `Activate`s an `IAudioClient` (`CLSCTX_INPROC_SERVER`), asks the mix format (48000 Hz, 2 channels,
+32-bit float, extensible) and `IAudioClient3::GetSharedModeEnginePeriod` (480 frames), then
+`Initialize(SHARED, EVENTCALLBACK, 0, 0, mix format, NULL)`, `SetEventHandle`, `GetService` for `IAudioRenderClient`,
+`IAudioClock` and `IAudioSessionControl` (+ `RegisterAudioSessionNotification`), prefills the 1056-frame buffer as silence,
+`Start`, and renders one 480-frame buffer per event (`GetCurrentPadding`, `IAudioClock::GetPosition`, `GetBuffer`,
+`ReleaseBuffer`). `suspend()` is `Stop` + `Reset`, `resume()` the same client again.
+
+12 entries under `specs/windows/mmdevapi.dll/` (`CLSID_MMDeviceEnumerator`, `IMMDeviceEnumerator`, `IMMDeviceCollection`, `IMMDevice`,
+`IMMNotificationClient`, `IAudioClient.Format`, `.Initialize`, `.Stream`, `.Events`, `IAudioRenderClient`, `IAudioClock`,
+`IAudioSessionControl`) and their recorded tests. What the sheets fix beyond Chrome's calls: the result codes of every misuse
+(not initialised, already initialised, wrong format, out of order, buffer too large, wrong flags, event handle not set or not
+expected), the buffer-size and period arithmetic (`2 * rate / 100 + 96` frames at the minimum, the duration at the rate above
+it), padding, the clock counting bytes (frequency 384000, position equal to the bytes written when played out), the event rate
+(one per 10 ms) and the session state notifications. Device removal under a running stream was observed once, by restarting
+the Windows Audio service: `AUDCLNT_E_DEVICE_INVALIDATED` everywhere (in the sheet of `IAudioClient.Stream`, no test).

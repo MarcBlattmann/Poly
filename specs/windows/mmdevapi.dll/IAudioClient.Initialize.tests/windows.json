@@ -1,0 +1,56 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_init_chrome",
+      "exe_sha256": "625e9fe205e0da208805ea3ea58287081e13e450ecd99a468f2eda86f26f9d46",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "R2V0TWl4Rm9ybWF0ID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0TWl4Rm9ybWF0CkluaXRpYWxpemUoU0hBUkVELCBFVkVOVENBTExCQUNLLCAwLCAwLCBtaXggZm9ybWF0KSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEluaXRpYWxpemUoU0hBUkVELCBFVkVOVENBTExCQUNLLCAwLCAwLCBtaXggZm9ybWF0KQpHZXRCdWZmZXJTaXplID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0QnVmZmVyU2l6ZQpidWZmZXIgc2l6ZSAxMDU2IGZyYW1lcwpvayBidWZmZXIgc2l6ZTogdHdvIHBlcmlvZHMgYW5kIDk2IGZyYW1lcwpHZXRTdHJlYW1MYXRlbmN5ID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0U3RyZWFtTGF0ZW5jeQpvayBzdHJlYW0gbGF0ZW5jeQpHZXRDdXJyZW50UGFkZGluZyA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldEN1cnJlbnRQYWRkaW5nCm9rIHBhZGRpbmcKR2V0RGV2aWNlUGVyaW9kID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0RGV2aWNlUGVyaW9kCm9rIGRlZmF1bHQgcGVyaW9kCm9rIG1pbmltdW0gcGVyaW9kClNldEV2ZW50SGFuZGxlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgU2V0RXZlbnRIYW5kbGUKSW5pdGlhbGl6ZSBhZ2FpbiA9IEFVRENMTlRfRV9BTFJFQURZX0lOSVRJQUxJWkVEICgweDg4ODkwMDAyKQpvayBJbml0aWFsaXplIGFnYWluCkluaXRpYWxpemUgYWdhaW4gd2l0aCBvdGhlciBmbGFncyA9IEFVRENMTlRfRV9BTFJFQURZX0lOSVRJQUxJWkVEICgweDg4ODkwMDAyKQpvayBJbml0aWFsaXplIGFnYWluIHdpdGggb3RoZXIgZmxhZ3MKb2sgdGhlIGJ1ZmZlciBzaXplIGlzIHVuY2hhbmdlZApzdW1tYXJ5IDE1IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "GetMixFormat = S_OK (0x00000000)\nok GetMixFormat\nInitialize(SHARED, EVENTCALLBACK, 0, 0, mix format) = S_OK (0x00000000)\nok Initialize(SHARED, EVENTCALLBACK, 0, 0, mix format)\nGetBufferSize = S_OK (0x00000000)\nok GetBufferSize\nbuffer size 1056 frames\nok buffer size: two periods and 96 frames\nGetStreamLatency = S_OK (0x00000000)\nok GetStreamLatency\nok stream latency\nGetCurrentPadding = S_OK (0x00000000)\nok GetCurrentPadding\nok padding\nGetDevicePeriod = S_OK (0x00000000)\nok GetDevicePeriod\nok default period\nok minimum period\nSetEventHandle = S_OK (0x00000000)\nok SetEventHandle\nInitialize again = AUDCLNT_E_ALREADY_INITIALIZED (0x88890002)\nok Initialize again\nInitialize again with other flags = AUDCLNT_E_ALREADY_INITIALIZED (0x88890002)\nok Initialize again with other flags\nok the buffer size is unchanged\nsummary 15 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 164
+    },
+    {
+      "name": "ws_init_client3",
+      "exe_sha256": "7a410ed3bb6e3f7cb975c640f2104432760fb56163cb689940a7b8ef29d89198",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "SW5pdGlhbGl6ZVNoYXJlZEF1ZGlvU3RyZWFtKDAsIDQ4MCkgPSBTX09LICgweDAwMDAwMDAwKQpvayBJbml0aWFsaXplU2hhcmVkQXVkaW9TdHJlYW0oMCwgNDgwKQpvayBidWZmZXIgc2l6ZQpHZXRDdXJyZW50U2hhcmVkTW9kZUVuZ2luZVBlcmlvZCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldEN1cnJlbnRTaGFyZWRNb2RlRW5naW5lUGVyaW9kCm9rIGN1cnJlbnQgcGVyaW9kCkluaXRpYWxpemVTaGFyZWRBdWRpb1N0cmVhbSBhZ2FpbiA9IEFVRENMTlRfRV9BTFJFQURZX0lOSVRJQUxJWkVEICgweDg4ODkwMDAyKQpvayBJbml0aWFsaXplU2hhcmVkQXVkaW9TdHJlYW0gYWdhaW4KSW5pdGlhbGl6ZSBhZnRlciBpdCA9IEFVRENMTlRfRV9BTFJFQURZX0lOSVRJQUxJWkVEICgweDg4ODkwMDAyKQpvayBJbml0aWFsaXplIGFmdGVyIGl0CkluaXRpYWxpemVTaGFyZWRBdWRpb1N0cmVhbSgwLCAyNDApID0gQVVEQ0xOVF9FX0lOVkFMSURfREVWSUNFX1BFUklPRCAoMHg4ODg5MDAyMCkKb2sgSW5pdGlhbGl6ZVNoYXJlZEF1ZGlvU3RyZWFtKDAsIDI0MCkKc3RpbGwgbm90IGluaXRpYWxpc2VkID0gQVVEQ0xOVF9FX05PVF9JTklUSUFMSVpFRCAoMHg4ODg5MDAwMSkKb2sgc3RpbGwgbm90IGluaXRpYWxpc2VkCkluaXRpYWxpemVTaGFyZWRBdWRpb1N0cmVhbShFVkVOVENBTExCQUNLLCA0ODApID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgSW5pdGlhbGl6ZVNoYXJlZEF1ZGlvU3RyZWFtKEVWRU5UQ0FMTEJBQ0ssIDQ4MCkKU2V0RXZlbnRIYW5kbGUgPSBTX09LICgweDAwMDAwMDAwKQpvayBTZXRFdmVudEhhbmRsZQpzdW1tYXJ5IDEwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "InitializeSharedAudioStream(0, 480) = S_OK (0x00000000)\nok InitializeSharedAudioStream(0, 480)\nok buffer size\nGetCurrentSharedModeEnginePeriod = S_OK (0x00000000)\nok GetCurrentSharedModeEnginePeriod\nok current period\nInitializeSharedAudioStream again = AUDCLNT_E_ALREADY_INITIALIZED (0x88890002)\nok InitializeSharedAudioStream again\nInitialize after it = AUDCLNT_E_ALREADY_INITIALIZED (0x88890002)\nok Initialize after it\nInitializeSharedAudioStream(0, 240) = AUDCLNT_E_INVALID_DEVICE_PERIOD (0x88890020)\nok InitializeSharedAudioStream(0, 240)\nstill not initialised = AUDCLNT_E_NOT_INITIALIZED (0x88890001)\nok still not initialised\nInitializeSharedAudioStream(EVENTCALLBACK, 480) = S_OK (0x00000000)\nok InitializeSharedAudioStream(EVENTCALLBACK, 480)\nSetEventHandle = S_OK (0x00000000)\nok SetEventHandle\nsummary 10 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 314
+    },
+    {
+      "name": "ws_init_convert",
+      "exe_sha256": "4c997729a492db72f3cfe08d43669c96649d688f98689f465dcaee77b125891b",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "ZmxvYXQgNDQxMDAgc3RlcmVvID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgZmxvYXQgNDQxMDAgc3RlcmVvCkdldEJ1ZmZlclNpemUgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRCdWZmZXJTaXplCm9rIGEgYnVmZmVyIG9mIGF0IGxlYXN0IDQ0MSBmcmFtZXMgKDEwIG1zKQpvayBwYWRkaW5nIDAKR2V0U2VydmljZShJQXVkaW9SZW5kZXJDbGllbnQpID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0U2VydmljZShJQXVkaW9SZW5kZXJDbGllbnQpCndyaXRlIDQ0MSBmcmFtZXMgb2Ygc2lsZW5jZSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIHdyaXRlIDQ0MSBmcmFtZXMgb2Ygc2lsZW5jZQpvayBwYWRkaW5nIGlzIHdoYXQgd2FzIHdyaXR0ZW4KUENNIDE2IDQ0MTAwIHN0ZXJlbyA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFBDTSAxNiA0NDEwMCBzdGVyZW8KR2V0QnVmZmVyU2l6ZSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldEJ1ZmZlclNpemUKb2sgYSBidWZmZXIgb2YgYXQgbGVhc3QgNDQxIGZyYW1lcyAoMTAgbXMpCm9rIHBhZGRpbmcgMApHZXRTZXJ2aWNlKElBdWRpb1JlbmRlckNsaWVudCkgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRTZXJ2aWNlKElBdWRpb1JlbmRlckNsaWVudCkKd3JpdGUgNDQxIGZyYW1lcyBvZiBzaWxlbmNlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgd3JpdGUgNDQxIGZyYW1lcyBvZiBzaWxlbmNlCm9rIHBhZGRpbmcgaXMgd2hhdCB3YXMgd3JpdHRlbgpQQ00gMTYgNDQxMDAgc3RlcmVvLCBldmVudCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFBDTSAxNiA0NDEwMCBzdGVyZW8sIGV2ZW50CkdldEJ1ZmZlclNpemUgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRCdWZmZXJTaXplCm9rIGEgYnVmZmVyIG9mIGF0IGxlYXN0IDQ0MSBmcmFtZXMgKDEwIG1zKQpvayBwYWRkaW5nIDAKR2V0U2VydmljZShJQXVkaW9SZW5kZXJDbGllbnQpID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0U2VydmljZShJQXVkaW9SZW5kZXJDbGllbnQpCndyaXRlIDQ0MSBmcmFtZXMgb2Ygc2lsZW5jZSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIHdyaXRlIDQ0MSBmcmFtZXMgb2Ygc2lsZW5jZQpvayBwYWRkaW5nIGlzIHdoYXQgd2FzIHdyaXR0ZW4KUENNIDE2IDQ0MTAwIG1vbm8gPSBTX09LICgweDAwMDAwMDAwKQpvayBQQ00gMTYgNDQxMDAgbW9ubwpHZXRCdWZmZXJTaXplID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0QnVmZmVyU2l6ZQpvayBhIGJ1ZmZlciBvZiBhdCBsZWFzdCA0NDEgZnJhbWVzICgxMCBtcykKb2sgcGFkZGluZyAwCkdldFNlcnZpY2UoSUF1ZGlvUmVuZGVyQ2xpZW50KSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldFNlcnZpY2UoSUF1ZGlvUmVuZGVyQ2xpZW50KQp3cml0ZSA0NDEgZnJhbWVzIG9mIHNpbGVuY2UgPSBTX09LICgweDAwMDAwMDAwKQpvayB3cml0ZSA0NDEgZnJhbWVzIG9mIHNpbGVuY2UKb2sgcGFkZGluZyBpcyB3aGF0IHdhcyB3cml0dGVuClBDTSAxNiA0NDEwMCBtb25vLCBldmVudCA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFBDTSAxNiA0NDEwMCBtb25vLCBldmVudApHZXRCdWZmZXJTaXplID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0QnVmZmVyU2l6ZQpvayBhIGJ1ZmZlciBvZiBhdCBsZWFzdCA0NDEgZnJhbWVzICgxMCBtcykKb2sgcGFkZGluZyAwCkdldFNlcnZpY2UoSUF1ZGlvUmVuZGVyQ2xpZW50KSA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIEdldFNlcnZpY2UoSUF1ZGlvUmVuZGVyQ2xpZW50KQp3cml0ZSA0NDEgZnJhbWVzIG9mIHNpbGVuY2UgPSBTX09LICgweDAwMDAwMDAwKQpvayB3cml0ZSA0NDEgZnJhbWVzIG9mIHNpbGVuY2UKb2sgcGFkZGluZyBpcyB3aGF0IHdhcyB3cml0dGVuClBDTSAxNiBzdGVyZW8gYXQgdGhlIG1peCByYXRlIHdpdGhvdXQgY29udmVyc2lvbiA9IFNfT0sgKDB4MDAwMDAwMDApCm9rIFBDTSAxNiBzdGVyZW8gYXQgdGhlIG1peCByYXRlIHdpdGhvdXQgY29udmVyc2lvbgp3cml0ZSA0ODAgZnJhbWVzIG9mIHNpbGVuY2UgPSBTX09LICgweDAwMDAwMDAwKQpvayB3cml0ZSA0ODAgZnJhbWVzIG9mIHNpbGVuY2UKb2sgcGFkZGluZwpzdW1tYXJ5IDM4IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "float 44100 stereo = S_OK (0x00000000)\nok float 44100 stereo\nGetBufferSize = S_OK (0x00000000)\nok GetBufferSize\nok a buffer of at least 441 frames (10 ms)\nok padding 0\nGetService(IAudioRenderClient) = S_OK (0x00000000)\nok GetService(IAudioRenderClient)\nwrite 441 frames of silence = S_OK (0x00000000)\nok write 441 frames of silence\nok padding is what was written\nPCM 16 44100 stereo = S_OK (0x00000000)\nok PCM 16 44100 stereo\nGetBufferSize = S_OK (0x00000000)\nok GetBufferSize\nok a buffer of at least 441 frames (10 ms)\nok padding 0\nGetService(IAudioRenderClient) = S_OK (0x00000000)\nok GetService(IAudioRenderClient)\nwrite 441 frames of silence = S_OK (0x00000000)\nok write 441 frames of silence\nok padding is what was written\nPCM 16 44100 stereo, event = S_OK (0x00000000)\nok PCM 16 44100 stereo, event\nGetBufferSize = S_OK (0x00000000)\nok GetBufferSize\nok a buffer of at least 441 frames (10 ms)\nok padding 0\nGetService(IAudioRenderClient) = S_OK (0x00000000)\nok GetService(IAudioRenderClient)\nwrite 441 frames of silence = S_OK (0x00000000)\nok write 441 frames of silence\nok padding is what was written\nPCM 16 44100 mono = S_OK (0x00000000)\nok PCM 16 44100 mono\nGetBufferSize = S_OK (0x00000000)\nok GetBufferSize\nok a buffer of at least 441 frames (10 ms)\nok padding 0\nGetService(IAudioRenderClient) = S_OK (0x00000000)\nok GetService(IAudioRenderClient)\nwrite 441 frames of silence = S_OK (0x00000000)\nok write 441 frames of silence\nok padding is what was written\nPCM 16 44100 mono, event = S_OK (0x00000000)\nok PCM 16 44100 mono, event\nGetBufferSize = S_OK (0x00000000)\nok GetBufferSize\nok a buffer of at least 441 frames (10 ms)\nok padding 0\nGetService(IAudioRenderClient) = S_OK (0x00000000)\nok GetService(IAudioRenderClient)\nwrite 441 frames of silence = S_OK (0x00000000)\nok write 441 frames of silence\nok padding is what was written\nPCM 16 stereo at the mix rate without conversion = S_OK (0x00000000)\nok PCM 16 stereo at the mix rate without conversion\nwrite 480 frames of silence = S_OK (0x00000000)\nok write 480 frames of silence\nok padding\nsummary 38 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 178
+    }
+  ]
+}
