@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "merged",
+  "runner": "poly-oracle.ps1",
+  "started": null,
+  "tests": [
+    {
+      "name": "ws_enum_endpoints",
+      "exe_sha256": "abe56c1ec76b89a0f754e7c219036c5c0d6a09db8659d155a9c9851d03e14a29",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgY3JlYXRlCnJlbmRlciwgYWN0aXZlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgcmVuZGVyLCBhY3RpdmUKR2V0Q291bnQgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRDb3VudAphY3RpdmUgcmVuZGVyIGVuZHBvaW50cyA9IDEKb2sgb25lIGFjdGl2ZSByZW5kZXIgZW5kcG9pbnQKYWxsIGZsb3dzLCBhY3RpdmUgPSBTX09LICgweDAwMDAwMDAwKQpvayBhbGwgZmxvd3MsIGFjdGl2ZQpvayBpbmNsdWRlcyB0aGUgcmVuZGVyIGVuZHBvaW50CnJlbmRlciwgYWN0aXZlfGRpc2FibGVkID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgcmVuZGVyLCBhY3RpdmV8ZGlzYWJsZWQKb2sgYXQgbGVhc3QgdGhlIGFjdGl2ZSBvbmUKc3RhdGUgbWFzayAwID0gRV9JTlZBTElEQVJHICgweDgwMDcwMDU3KQpvayBzdGF0ZSBtYXNrIDAKb2sgbm8gY29sbGVjdGlvbgpzdGF0ZSBtYXNrIDB4MTAgPSBFX0lOVkFMSURBUkcgKDB4ODAwNzAwNTcpCm9rIHN0YXRlIG1hc2sgMHgxMApvayBubyBjb2xsZWN0aW9uCmRhdGEgZmxvdyAzID0gRV9JTlZBTElEQVJHICgweDgwMDcwMDU3KQpvayBkYXRhIGZsb3cgMwpvayBubyBjb2xsZWN0aW9uCk5VTEwgb3V0cHV0IHBvaW50ZXIgPSBFX1BPSU5URVIgKDB4ODAwMDQwMDMpCm9rIE5VTEwgb3V0cHV0IHBvaW50ZXIKc3VtbWFyeSAxNSBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create = S_OK (0x00000000)\nok create\nrender, active = S_OK (0x00000000)\nok render, active\nGetCount = S_OK (0x00000000)\nok GetCount\nactive render endpoints = 1\nok one active render endpoint\nall flows, active = S_OK (0x00000000)\nok all flows, active\nok includes the render endpoint\nrender, active|disabled = S_OK (0x00000000)\nok render, active|disabled\nok at least the active one\nstate mask 0 = E_INVALIDARG (0x80070057)\nok state mask 0\nok no collection\nstate mask 0x10 = E_INVALIDARG (0x80070057)\nok state mask 0x10\nok no collection\ndata flow 3 = E_INVALIDARG (0x80070057)\nok data flow 3\nok no collection\nNULL output pointer = E_POINTER (0x80004003)\nok NULL output pointer\nsummary 15 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 52
+    },
+    {
+      "name": "ws_enum_getdevice",
+      "exe_sha256": "4d660629a669a14fc17d2623937e9c7caeb87469a48c7b7b5fc22baf2b860be3",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Y3JlYXRlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgY3JlYXRlCmRlZmF1bHQgZGV2aWNlID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgZGVmYXVsdCBkZXZpY2UKR2V0SWQgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRJZApHZXREZXZpY2UoaWQpID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0RGV2aWNlKGlkKQpvayBhbiBvYmplY3QKR2V0SWQgb2YgdGhhdCBkZXZpY2UgPSBTX09LICgweDAwMDAwMDAwKQpvayBHZXRJZCBvZiB0aGF0IGRldmljZQpvayBzYW1lIGlkCm9rIGFjdGl2ZQpHZXREZXZpY2UoaWQpIGFnYWluID0gU19PSyAoMHgwMDAwMDAwMCkKb2sgR2V0RGV2aWNlKGlkKSBhZ2FpbgpHZXREZXZpY2UoInh5IikgPSBFX0lOVkFMSURBUkcgKDB4ODAwNzAwNTcpCm9rIEdldERldmljZSgieHkiKQpvayBubyBkZXZpY2UKR2V0RGV2aWNlKG5vIHN1Y2ggZW5kcG9pbnQpID0gRV9OT1RGT1VORCAoMHg4MDA3MDQ5MCkKb2sgZmFpbHMKb2sgbm8gZGV2aWNlCkdldERldmljZSgiIikgPSBFX0lOVkFMSURBUkcgKDB4ODAwNzAwNTcpCm9rIEdldERldmljZSgiIikKR2V0RGV2aWNlKE5VTEwpID0gRV9QT0lOVEVSICgweDgwMDA0MDAzKQpvayBHZXREZXZpY2UoTlVMTCkKTlVMTCBvdXRwdXQgcG9pbnRlciA9IEVfUE9JTlRFUiAoMHg4MDAwNDAwMykKb2sgTlVMTCBvdXRwdXQgcG9pbnRlcgpzdW1tYXJ5IDE2IHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "create = S_OK (0x00000000)\nok create\ndefault device = S_OK (0x00000000)\nok default device\nGetId = S_OK (0x00000000)\nok GetId\nGetDevice(id) = S_OK (0x00000000)\nok GetDevice(id)\nok an object\nGetId of that device = S_OK (0x00000000)\nok GetId of that device\nok same id\nok active\nGetDevice(id) again = S_OK (0x00000000)\nok GetDevice(id) again\nGetDevice(\"xy\") = E_INVALIDARG (0x80070057)\nok GetDevice(\"xy\")\nok no device\nGetDevice(no such endpoint) = E_NOTFOUND (0x80070490)\nok fails\nok no device\nGetDevice(\"\") = E_INVALIDARG (0x80070057)\nok GetDevice(\"\")\nGetDevice(NULL) = E_POINTER (0x80004003)\nok GetDevice(NULL)\nNULL output pointer = E_POINTER (0x80004003)\nok NULL output pointer\nsummary 16 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    }
+  ]
+}

@@ -12,7 +12,6 @@ poly_win32_rt::fail_exports!(
         EnumerateLoadedModulesW64,
         FindExecutableImageExW,
         ImageDirectoryEntryToData,
-        ImageNtHeader,
         ImagehlpApiVersionEx,
         SymFromAddrW,
         SymGetModuleInfoW64,
