@@ -138,6 +138,26 @@ impl PageFlags {
         PageFlags(0)
     }
 
+    /// Whether a leaf going from `self` to `new` only gains rights: present, writable and user
+    /// stay where they were set, no-execute is not added, the accessed and dirty bits are not
+    /// cleared and the caching bits are the same; bits the CPU ignores may change. Then a TLB
+    /// entry another CPU holds for the old leaf allows less, never more: an access it refuses
+    /// faults, and that CPU flushes the entry itself (SDM Vol. 3A §4.10.4.3, "Optional
+    /// Invalidation": a translation that only gained rights need not be invalidated elsewhere).
+    pub const fn only_adds_rights(self, new: PageFlags) -> bool {
+        const KEPT: u64 = PageFlags::PRESENT.0
+            | PageFlags::WRITABLE.0
+            | PageFlags::USER.0
+            | PageFlags::ACCESSED.0
+            | PageFlags::DIRTY.0;
+        const SAME: u64 =
+            PageFlags::WRITE_THROUGH.0 | PageFlags::CACHE_DISABLE.0 | PageFlags::HUGE.0 | PageFlags::GLOBAL.0;
+        let kept = self.0 & KEPT & !new.0 == 0;
+        let no_new_nx = new.0 & PageFlags::NO_EXECUTE.0 == 0 || self.0 & PageFlags::NO_EXECUTE.0 != 0;
+        let same = (self.0 ^ new.0) & SAME == 0;
+        kept && no_new_nx && same
+    }
+
     /// Flags from raw entry bits; address bits are dropped.
     pub const fn from_bits(bits: u64) -> PageFlags {
         PageFlags(bits & !ADDR_MASK)

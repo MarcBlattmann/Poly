@@ -868,8 +868,8 @@ impl Memory {
                     }
                     rights = m.rights(prot);
                 }
-                // Also the fix for a stale TLB entry: `protect` flushes.
-                self.space.protect(page, PAGE_SIZE, page_prot(rights)).map_err(map_error)
+                // Also the fix for a stale TLB entry: `grant` flushes this CPU's.
+                self.space.grant(page, page_prot(rights)).map_err(map_error)
             }
             FaultAction::CopyOnWrite { page, prot } if inner.shared.contains_key(&page) => {
                 self.copy_shared(inner, page, prot)

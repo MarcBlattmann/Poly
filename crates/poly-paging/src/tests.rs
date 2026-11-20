@@ -843,3 +843,23 @@ fn mapped_walks_present_leaves_in_order() {
     assert_eq!(flags, [tr(&pt, 0x40_0000).flags]);
     pt.mapped(0x50_0000, 0x40_0000, |_, _| panic!("an empty range visits nothing"));
 }
+
+#[test]
+fn only_gaining_rights_is_told_apart_from_losing_any() {
+    let p = PageFlags::PRESENT | PageFlags::USER;
+    let nx = PageFlags::NO_EXECUTE;
+    // Read-only to read-write, also with software bits changing and no-execute dropped.
+    assert!((p | nx).only_adds_rights(p | RW | nx));
+    assert!((p | nx).only_adds_rights(p | RW | PageFlags::SOFTWARE_9));
+    assert!((p | PageFlags::ACCESSED).only_adds_rights(p | RW | PageFlags::ACCESSED | PageFlags::DIRTY));
+    assert!(p.only_adds_rights(p));
+    // Losing write, user or presence, gaining no-execute, clearing accessed or dirty, or a caching
+    // change all need the other CPUs flushed.
+    assert!(!(p | RW).only_adds_rights(p));
+    assert!(!p.only_adds_rights(PageFlags::PRESENT));
+    assert!(!p.only_adds_rights(PageFlags::USER));
+    assert!(!p.only_adds_rights(p | nx));
+    assert!(!(p | PageFlags::DIRTY).only_adds_rights(p | RW));
+    assert!(!(p | PageFlags::ACCESSED).only_adds_rights(p | RW));
+    assert!(!p.only_adds_rights(p | PageFlags::CACHE_DISABLE));
+}
