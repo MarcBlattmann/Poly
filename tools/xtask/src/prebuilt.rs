@@ -148,10 +148,10 @@ pub fn command(args: &[String]) -> Result {
     Ok(())
 }
 
-/// The native programs' files (`native::PROGRAMS`).
+/// The native programs' files (`native::PROGRAMS` and `native::RUNTIMES`).
 fn native_files() -> Vec<PathBuf> {
     let dir = root().join("target/native/x86_64-unknown-poly/release");
-    crate::native::PROGRAMS.iter().map(|n| dir.join(n)).collect()
+    crate::native::PROGRAMS.iter().chain(crate::native::RUNTIMES.iter().map(|(n, _)| n)).map(|n| dir.join(n)).collect()
 }
 
 /// The kernel part: the kernel alone (the native programs are the tools

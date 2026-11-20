@@ -1,0 +1,23 @@
+[package]
+name = "poly-a64-runtime"
+description = "The runtime of translated arm64 XNU processes: runs an arm64 Mach-O program with the a64 interpreter and block JIT, its system calls going to the XNU personality (ADR 0257)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "poly-a64"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+poly-a64 = { path = "../../../crates/poly-a64" }
+poly-a64-jit = { path = "../../../crates/poly-a64-jit" }
+poly-a64-xnu = { path = "../../../crates/poly-a64-xnu" }
+poly-abi = { path = "../../../crates/poly-abi" }
+poly-heap = { path = "../../../crates/poly-heap" }
+
+[lints]
+workspace = true
