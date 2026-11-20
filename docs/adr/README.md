@@ -218,6 +218,7 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0242](0242-user-mode-locks-wake-and-compete.md) | User-mode locks wake a waiter and let it compete (no convoys) | Accepted |
 | [0243](0243-a-page-flip-copies-nothing-in-the-guest-and-does-not-wait-for-the-device.md) | A page flip copies nothing in the guest and does not wait for the device | Accepted |
 | [0244](0244-the-windows-side-reaches-the-mixer-through-a-poly-audio-device.md) | The Windows side reaches the mixer through a Poly audio device | Accepted |
+| [0245](0245-input-idle-is-the-first-wait-for-messages.md) | Input idle is the first wait for messages | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions
