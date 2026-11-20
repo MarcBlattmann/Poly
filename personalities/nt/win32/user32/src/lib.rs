@@ -30,6 +30,7 @@ mod menutrack;
 mod msgbox;
 mod paintctl;
 mod s3;
+mod scroll;
 mod strings;
 mod winsta;
 
@@ -1109,7 +1110,9 @@ fn make_ime_window(hwnd: H) {
 
 #[unsafe(no_mangle)]
 pub extern "system" fn DestroyWindow(hwnd: H) -> i32 {
-    i32::from(u::destroy_window(&SYS, hwnd as u64))
+    let r = i32::from(u::destroy_window(&SYS, hwnd as u64));
+    scroll::forget_gone();
+    r
 }
 
 #[unsafe(no_mangle)]
