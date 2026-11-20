@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d45892328ab7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:26:42Z",
+  "tests": [
+    {
+      "name": "cnet_free",
+      "exe_sha256": "7dd27a0474a1245051704887333a554979eadb67da564c21d628393ddbbd7b36",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Z2V0YWRkcmluZm8oMTI3LjAuMC4xLCA0NDMpOiAwLCBhIGxpc3QgeWVzCmZyZWVhZGRyaW5mbyhOVUxMKTogcmV0dXJuZWQsIFdTQUdldExhc3RFcnJvciAwCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "getaddrinfo(127.0.0.1, 443): 0, a list yes\nfreeaddrinfo(NULL): returned, WSAGetLastError 0\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 53
+    },
+    {
+      "name": "cnet_free_b",
+      "exe_sha256": "547d980d3eb4d61e1d327d4e33e00e3bd474c08eb1969309576488fb680cb106",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "Zmlyc3QgZW50cnk6IGFkZHJlc3MgbGVuZ3RoIDE2LCBmYW1pbHkgMiwgc29ja3R5cGUgMSwgcG9ydCA0NDMKZ2V0YWRkcmluZm8gb2YgYSBuYW1lIHRoYXQgZG9lcyBub3QgZXhpc3Q6IDExMDAxLCB0aGUgcmVzdWx0IHBvaW50ZXIgaXMgTlVMTCB5ZXMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "first entry: address length 16, family 2, socktype 1, port 443\ngetaddrinfo of a name that does not exist: 11001, the result pointer is NULL yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 55
+    }
+  ]
+}
