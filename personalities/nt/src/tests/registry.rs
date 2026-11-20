@@ -587,6 +587,13 @@ fn a_32_bit_process_makes_keys_in_the_view_of_the_open_key() {
     let (cl, name) = n(&mut f, sw, "Classes", KEY_ALL_ACCESS);
     assert_eq!(name, classes_n);
     assert_eq!(n(&mut f, cl, "CLSID", KEY_ALL_ACCESS).1, clsid_x);
+    // AppID is shared: the walk and the one-call path reach the same key (`shared_keys`).
+    let (appid, _) = n(&mut f, cl, "AppID", KEY_ALL_ACCESS);
+    let (_, name) = n(&mut f, appid, "{A}", KEY_ALL_ACCESS);
+    assert_eq!(name, "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\AppID\\{A}");
+    let (s, h) = open_key(&mut f, machine, "SOFTWARE\\Classes\\AppID\\{A}", KEY_READ);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, h), name);
     // A vendor key below it stays in the 32-bit view with 64.
     let vendor = n(&mut f, sw, "Vendor", KEY_ALL_ACCESS | KEY_WOW64_64KEY).1;
     assert_eq!(vendor, "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Vendor");
@@ -594,6 +601,29 @@ fn a_32_bit_process_makes_keys_in_the_view_of_the_open_key() {
     let (sw64, _) = n(&mut f, machine, "SOFTWARE", KEY_ALL_ACCESS | KEY_WOW64_64KEY);
     assert_eq!(n(&mut f, sw64, "Vendor", KEY_ALL_ACCESS).1, "\\REGISTRY\\MACHINE\\SOFTWARE\\Vendor");
     assert_eq!(n(&mut f, sw64, "Vendor", KEY_ALL_ACCESS | KEY_WOW64_32KEY).1, vendor);
+}
+
+/// The default COM marshalling registrations exist in the 32-bit view too (ADR 0186 addendum):
+/// a 32-bit process finds `IDispatch`'s proxy/stub class and `PSOAInterface`'s server.
+#[test]
+fn a_32_bit_process_finds_the_default_com_registrations() {
+    let mut f = Fake::new();
+    f.proc.wow64 = true;
+    let classes = "\\Registry\\Machine\\SOFTWARE\\Classes";
+    for (path, physical) in [
+        (
+            "Interface\\{00020400-0000-0000-C000-000000000046}\\ProxyStubClsid32",
+            "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\Interface\\{00020400-0000-0000-C000-000000000046}\\ProxyStubClsid32",
+        ),
+        (
+            "CLSID\\{00020424-0000-0000-C000-000000000046}\\InprocServer32",
+            "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\CLSID\\{00020424-0000-0000-C000-000000000046}\\InprocServer32",
+        ),
+    ] {
+        let (s, h) = open_key(&mut f, 0, &alloc::format!("{classes}\\{path}"), KEY_READ);
+        assert_eq!(s, STATUS_SUCCESS, "{path}");
+        assert_eq!(key_name(&mut f, h), physical);
+    }
 }
 
 #[test]

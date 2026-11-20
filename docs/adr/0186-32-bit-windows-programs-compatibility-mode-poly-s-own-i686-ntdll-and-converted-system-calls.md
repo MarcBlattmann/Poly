@@ -642,7 +642,13 @@ put the two on different keys (`SOFTWARE\Wow6432Node\Classes\CLSID\...` and
 - **The node is spelled `WOW6432Node`**, as Windows stores it (`NtQueryKey.yaml`), and the
   default software hive also has `Classes\WOW6432Node` with the five redirected subkeys (a
   32-bit `CLSID` exists on Windows: `RegCreateKeyExW.yaml` `level_by_level`). A hive file made
-  before keeps its old spelling (names match without regard to case).
+  before keeps its old spelling (names match without regard to case). The default registrations
+  below `Classes\CLSID` and `Classes\Interface` (COM marshalling: `PSOAInterface`, `PSDispatch`,
+  `IDispatch`'s and the other system interfaces' proxy/stub classes) are made in the 32-bit view
+  as well, as a Windows install has them for its 32-bit programs (Learn: "Registry Keys Affected
+  by WOW64": `CLSID` and `Interface` are redirected; `TypeLib` and `AppID` are shared and need no
+  copy); their servers are named without a path, so each process loads its own `oleaut32.dll`.
+  A hive loaded from an older file gets the keys it lacks; a key it has keeps its values.
 - **`kernelbase`**: `RegCreateKeyExW` makes the levels on the way with `MAXIMUM_ALLOWED` and the
   call's view bits (`poly_kernelbase::registry::level_access`), so every level is in the same
   view. Below `HKEY_CLASSES_ROOT`, Windows makes a 32-bit process's keys in the 32-bit view
