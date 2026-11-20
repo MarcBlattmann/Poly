@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/gdi32.dll/GetCharWidthFloatW.yaml
+id: windows/api/gdi32.dll/GetCharWidthFloatW
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, a non-interactive window station, 96 dpi) as the local account \"server\" (member of Administrators); every test ran at least twice with identical output and two complete recordings agreed byte for byte, each run in a fresh scratch directory; the test programs carry no manifest (the icon tests carry the manifest that asks for comctl32 version 6). The fonts the tests use are the test's own TrueType font (added with AddFontMemResourceEx) and DejaVu Sans 2.37 (the file C:\\Windows\\Fonts\\DejaVuSans.ttf, copied there for the recording and removed afterwards, added with AddFontResourceExW and FR_PRIVATE); no Microsoft font is used"
+  observed_by: spec-win-glyphs
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). The fonts are free: a TrueType font the test writes itself (units per em 1024, every outline coordinate a multiple of 64 units, so that at 16 pixels per em every point lies on a whole pixel) and DejaVu Sans 2.37 (Bitstream Vera licence, shipped with Poly); where a number would depend on hinting, the test asks for 2048 pixels per em, the font's units per em, so that one pixel is one font unit and the outline is the file's. Microsoft Learn reference pages of the functions and structures named here and the public headers wingdi.h, winuser.h, winbase.h, shlwapi.h, dbghelp.h, commctrl.h, winerror.h and the TrueType and OpenType font file format documents for table layouts. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Advance widths of a range of code points as floating-point numbers. Observed quirk: the float is the integer width divided by 16, not the width in pixels (the test font's 'A' at 16 pixels is 0.75 where GetCharWidth32W says 12). Observed with the test font 'PolyGlyph Sans': units per em 1024, hhea and OS/2 ascent 768, descent 256, line gap 128; glyphs (index: character, advance in units, ink): 0 .notdef (frame 64..576 x 0..768 with a hole), 1 space 384 (no ink), 2 'A' 768 (box 128..640 x 0..768), 3 'B' 512 (64..448 x 0..512), 4 'H' 768 (64..704 x 0..704), 5 'M' 768 (triangle 0,0 384,768 768,0), 6 'O' 640 (box with two quadratic curves on top), 7 'Q' 640 (like 'O' with two consecutive off-curve points), 8 'g' 640 (64..576 x -256..384), 9 'i' 256 (two contours), 10 'j' 256 (-128..128 x -256..768), 11 'k' 320 (ink 64..448: wider than the advance), 12 'x' 512, 13 and 14 parts of the composite, 15 U+00E9 704 (composite of 13 and 14), 16 U+20AC 896, 17 U+0301 advance 0 (ink -192..0), 18 'W' 1024 and DejaVu Sans.
+interface:
+  signature: "BOOL GetCharWidthFloatW(HDC hdc, UINT iFirst, UINT iLast, PFLOAT lpBuffer)"
+rules:
+  value: "Each float is the integer advance (the value GetCharWidth32W returns for the size) divided by 16: at -16 'A' 0.75, 'B' 0.5, space 0.375, 'i' 0.25, 'k' 0.3125, 'W' 1, U+0301 0; at -13 'A' 0.625, 'B' 0.4375, space 0.3125, 'W' 0.8125; at -7 'A' 0.3125; at -100 'A' 4.6875 (75 / 16) and 'W' 6.25; at -1024 'A' 48 and 'W' 64; at +14 'A' 0.6875. DejaVu Sans at -2048: space 40.6875 (651/16), 'A' 87.5625 (1401/16), 'g' 81.25, U+00E9 78.75, U+20AC 81.4375, U+03B1 84.375; at -1000 the integer advance of 'A' is 684 and the float 42.75."
+  range: "One float per code point from iFirst to iLast ('A'..'D' at 16: 0.75, 0.5, 0.625, 0.625)."
+  missing_characters: "A character the font does not have gets the .notdef width (0.625 = 10/16 at 16 pixels)."
+  bitmap_fonts: "The stock bitmap fonts succeed (TRUE); OEM_FIXED_FONT and SYSTEM_FONT give 0.5 here (8 pixels / 16), a value that depends on the installed font."
+errors:
+  reversed_range: "iFirst > iLast: FALSE with ERROR_INVALID_PARAMETER (87); the buffer is untouched."
+  beyond_bmp: "A range beyond U+FFFF (0x10000..0x10001) or reaching it (U+FFFF..U+10000): FALSE with ERROR_INVALID_PARAMETER (87); U+FFFF alone works (width of .notdef, 0.625)."
+  null_buffer: "A NULL buffer: FALSE with ERROR_INVALID_PARAMETER (87)."
+  bad_dc: "A NULL DC, a made-up handle and a deleted DC all give FALSE with ERROR_INVALID_PARAMETER (87), not ERROR_INVALID_HANDLE."
+side_effects: "none beyond the rules above"
+threading: "a DC, a font and a font resource belong to the process; fonts added with FR_PRIVATE or from memory are visible to the adding process only; the tests use one thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle (the 757 KB whole-font copies of DejaVu Sans a few milliseconds)"
+  guarantees: none
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations and its own TrueType writer. Run in the SSH session (session 0) by poly-oracle.ps1 (see docs/AGENT_PIPELINE.md), built through polyd. Observations print results, error codes, sizes, glyph metrics, outline records and hashes of long data (the first 8 bytes of a SHA-256); no line holds a handle, an address or a machine, user or time. "err unchanged" in a line means the call left the last error as the test had set it before (a marker), "err N" the value after a failing result; the last error after a succeeding call is not printed. A test that uses DejaVu Sans reads C:\Windows\Fonts\DejaVuSans.ttf: on Poly the DejaVu fonts are in that folder (ADR 0170, `cargo xtask fonts fetch`), on the oracle the same file (757076 bytes, SHA-256 7da195a74c55bef988d0d48f9508bd5d849425c1770dba5d7bfc6ce9ed848954) was copied there for the recording.
+not_covered: >
+  Whether the division by 16 holds in other mapping modes or with a world transform, bitmap font widths, DejaVu Sans at small sizes.

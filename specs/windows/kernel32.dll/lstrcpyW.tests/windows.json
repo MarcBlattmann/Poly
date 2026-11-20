@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "5e5e04cef8e0",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T07:47:39Z",
+  "tests": [
+    {
+      "name": "lcw_bad",
+      "exe_sha256": "c69ac50ac528456f28f54aa6365e90c05032d222c1cf9335661494e1ef097c23",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "TlVMTCBzb3VyY2U6IE5VTEwgZmlyc3QgdW5pdCAweDU1NTUgZXJyIHVuY2hhbmdlZApzb3VyY2UgMHg4OiBOVUxMIGZpcnN0IHVuaXQgMHg1NTU1IGVyciB1bmNoYW5nZWQKTlVMTCBkZXN0aW5hdGlvbjogTlVMTCBlcnIgdW5jaGFuZ2VkCmRlc3RpbmF0aW9uIDB4ODogTlVMTAo5IHVuaXRzIGludG8gMyB1bml0cyBiZWZvcmUgYW4gaW5hY2Nlc3NpYmxlIHBhZ2U6IE5VTEwgdGhlIHRocmVlIHVuaXRzIFs2MSwgNjIsIDYzXQozIHVuaXRzICh3aXRoIHRoZSBOVUwpIGludG8gdGhlIGxhc3QgMyB1bml0cyBvZiB0aGUgcGFnZTogcG9pbnRlciB0aGUgdGhyZWUgdW5pdHMgWzYxLCA2MiwgMF0KaW50byBhIHJlYWQtb25seSBwYWdlOiBOVUxMCmEgc291cmNlIHdpdGggbm8gdGVybWluYXRvciBiZWZvcmUgYW4gaW5hY2Nlc3NpYmxlIHBhZ2U6IE5VTEwgdW5pdHMgWzcxLCA3MSwgNzEsIDU1NTUsIDU1NTVdCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "NULL source: NULL first unit 0x5555 err unchanged\nsource 0x8: NULL first unit 0x5555 err unchanged\nNULL destination: NULL err unchanged\ndestination 0x8: NULL\n9 units into 3 units before an inaccessible page: NULL the three units [61, 62, 63]\n3 units (with the NUL) into the last 3 units of the page: pointer the three units [61, 62, 0]\ninto a read-only page: NULL\na source with no terminator before an inaccessible page: NULL units [71, 71, 71, 5555, 5555]\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 45
+    }
+  ]
+}
