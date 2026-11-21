@@ -23,7 +23,9 @@ use crate::kernel::NtKernel;
 use crate::objects::return_handle;
 use crate::threads::{process_of, process_of_any};
 use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU64, Ordering};
 use poly_abi::SyscallRegs;
 use poly_ntobj::access::*;
 use poly_ntobj::status::*;
@@ -477,6 +479,9 @@ pub struct Jobs {
     /// not resumed): their end posts no exit message
     /// (specs/windows/ntdll.dll/NtSetInformationJobObject.yaml: `completion_port`).
     unstarted: BTreeSet<ProcessId>,
+    /// Each process's commit limit from its jobs ([`Jobs::commit_limit_of`]), kept up to date for
+    /// its own memory calls, which read it under the process's lock alone (ADR 0262).
+    commit_cells: BTreeMap<ProcessId, Arc<AtomicU64>>,
 }
 
 impl Jobs {
@@ -593,6 +598,7 @@ impl Jobs {
         for &c in &join {
             self.post(io, om, c, MSG_NEW_PROCESS, u64::from(pid.0));
         }
+        self.refresh_commit_cells([pid]);
         Ok(())
     }
 
@@ -690,6 +696,41 @@ impl Jobs {
     /// The process object of `pid` was deleted: forget its membership.
     pub fn process_forgotten(&mut self, pid: ProcessId) {
         self.member_of.remove(&pid);
+        self.commit_cells.remove(&pid);
+    }
+
+    /// The most private memory `pid` may have committed by its jobs' limits
+    /// (`JOBOBJECT_EXTENDED_LIMIT_INFORMATION`'s `ProcessMemoryLimit` and `JobMemoryLimit`, which
+    /// count the committed private bytes; a job's limit counts this process alone here), or
+    /// `u64::MAX` if no job limits it.
+    pub fn commit_limit_of(&self, pid: ProcessId) -> u64 {
+        let mut limit = u64::MAX;
+        for job in self.jobs_of(pid).iter().filter_map(|c| self.jobs.get(c)) {
+            let at = |from: usize| u64::from_le_bytes(job.extended_tail[from..from + 8].try_into().expect("8 bytes"));
+            let flags = job.limit_flags();
+            if flags & LIMIT_PROCESS_MEMORY != 0 {
+                limit = limit.min(at(48));
+            }
+            if flags & LIMIT_JOB_MEMORY != 0 {
+                limit = limit.min(at(56));
+            }
+        }
+        limit
+    }
+
+    /// Keep `cell` at `pid`'s [`commit_limit_of`](Self::commit_limit_of) from now on.
+    pub fn register_commit_cell(&mut self, pid: ProcessId, cell: Arc<AtomicU64>) {
+        cell.store(self.commit_limit_of(pid), Ordering::Relaxed);
+        self.commit_cells.insert(pid, cell);
+    }
+
+    /// Bring the commit cells of `pids` up to date (they joined a job, or its limits changed).
+    fn refresh_commit_cells(&self, pids: impl IntoIterator<Item = ProcessId>) {
+        for pid in pids {
+            if let Some(cell) = self.commit_cells.get(&pid) {
+                cell.store(self.commit_limit_of(pid), Ordering::Relaxed);
+            }
+        }
     }
 
     /// `NtTerminateJobObject`: every member still running is to end, and the
@@ -912,6 +953,9 @@ pub fn set_information_job_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) ->
                 if let Some(t) = tail {
                     j.extended_tail = t;
                 }
+                // Every process's: a job's limits bind the processes of the jobs nested in it too.
+                let all: Vec<ProcessId> = sys.jobs.commit_cells.keys().copied().collect();
+                sys.jobs.refresh_commit_cells(all);
                 Ok(())
             }
             SetOp::Ui(v) => {

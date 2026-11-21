@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsview_initwithframe_defaults",
+      "source_sha256": "b1700422b4582c2dfed33b3f8936d20b1ce3f0af335b391ea2abdb6af52301df",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2ca9a693677354449822bcb17d785c7d76da7d84798a71a53b017dd0932dc2e5",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(v.frame, NSMakeRect(10, 20, 100, 50))\nok NSEqualRects(v.bounds, NSMakeRect(0, 0, 100, 50))\nok !v.isFlipped && !v.isHidden\nok v.alphaValue is 1\nok v.autoresizingMask == NSViewNotSizable && NSViewNotSizable == 0\nok v.translatesAutoresizingMaskIntoConstraints\nok !v.needsDisplay && !v.wantsLayer && v.layer == nil\nok !v.isOpaque && !v.acceptsFirstResponder\nok v.tag == -1\nok v.superview == nil && v.window == nil && v.subviews.count == 0\nok v.layerContentsRedrawPolicy == NSViewLayerContentsRedrawOnSetNeedsDisplay\nok !v.clipsToBounds && v.wantsUpdateLayer\nok NSEqualRects(f.frame, NSMakeRect(-3.5, 0.25, 7.75, 1.5))\nok NSEqualRects(f.bounds, NSMakeRect(0, 0, 7.75, 1.5))\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "392599a6230e1403c616994aa86e4f44dc23c6bf86ece21195bba7ff10dcdcce",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(v.frame, NSMakeRect(10, 20, 100, 50))\nok NSEqualRects(v.bounds, NSMakeRect(0, 0, 100, 50))\nok !v.isFlipped && !v.isHidden\nok v.alphaValue is 1\nok v.autoresizingMask == NSViewNotSizable && NSViewNotSizable == 0\nok v.translatesAutoresizingMaskIntoConstraints\nok !v.needsDisplay && !v.wantsLayer && v.layer == nil\nok !v.isOpaque && !v.acceptsFirstResponder\nok v.tag == -1\nok v.superview == nil && v.window == nil && v.subviews.count == 0\nok v.layerContentsRedrawPolicy == NSViewLayerContentsRedrawOnSetNeedsDisplay\nok !v.clipsToBounds && v.wantsUpdateLayer\nok NSEqualRects(f.frame, NSMakeRect(-3.5, 0.25, 7.75, 1.5))\nok NSEqualRects(f.bounds, NSMakeRect(0, 0, 7.75, 1.5))\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsview_initwithframe_init_and_copy",
+      "source_sha256": "04feadbc60dc15c772680a9b9ddfa651889bb790b9ab2a6330a89f495c62cee5",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8986ef8ff2dfdd02074d1d2646c811a6c3b97e0fa2ca86330aed03dda8eb9487",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(z.frame, NSZeroRect) && NSEqualRects(z.bounds, NSZeroRect)\nok ![a isEqual:b] && [a isEqual:a]\nok NSEqualRects(n.frame, NSMakeRect(-5, -13, 10, 20))\nok NSEqualRects(n.bounds, NSMakeRect(0, 0, 10, 20))\nok NSEqualRects(zs.frame, NSMakeRect(5, 6, 0, 0))\nok a.tag == -1\nok [a viewWithTag:-1] == a\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "481f13ca70197598a57e165d6b6dd23fe772d520041fce6c737a37ee3c6f6cfe",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(z.frame, NSZeroRect) && NSEqualRects(z.bounds, NSZeroRect)\nok ![a isEqual:b] && [a isEqual:a]\nok NSEqualRects(n.frame, NSMakeRect(-5, -13, 10, 20))\nok NSEqualRects(n.bounds, NSMakeRect(0, 0, 10, 20))\nok NSEqualRects(zs.frame, NSMakeRect(5, 6, 0, 0))\nok a.tag == -1\nok [a viewWithTag:-1] == a\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

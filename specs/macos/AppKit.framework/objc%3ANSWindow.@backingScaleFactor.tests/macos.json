@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nswindow_backingscalefactor_screen",
+      "source_sha256": "0dc4fb07be4e30a04c0823efae2d2dc47f2fafc3a7434cce02af8ed71622a897",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d8a6345c97886a5d856a2297bb45854dc31c6d9e4434fd2c29c1937d13aab3d3",
+          "exit_code": 0,
+          "stdout": "ok w.screen != nil\nok w.screen != nil\nok w.screen.frame.size.width > 0 && w.screen.frame.size.height > 0\nok NSContainsRect(f, v)\nok NSScreen.screens.count >= 1\nok NSScreen.screens[0] == NSScreen.mainScreen || NSScreen.mainScreen != nil\nok w.colorSpace != nil\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4f610cd47e4458787b42b8a687178bc2dc03be354079f238710743604c5549a6",
+          "exit_code": 0,
+          "stdout": "ok w.screen != nil\nok w.screen != nil\nok w.screen.frame.size.width > 0 && w.screen.frame.size.height > 0\nok NSContainsRect(f, v)\nok NSScreen.screens.count >= 1\nok NSScreen.screens[0] == NSScreen.mainScreen || NSScreen.mainScreen != nil\nok w.colorSpace != nil\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nswindow_backingscalefactor_value",
+      "source_sha256": "7afc9e175d308b0167165371639258eaaf4d16b0b875ca7ddbea76e35a7f624d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ffb37c88a2ea48be25a207aa362924d8147181bd29779347d1664d0bb42291f2",
+          "exit_code": 0,
+          "stdout": "ok f == 1.0 || f == 2.0 || f == 3.0\nvalue sys_scale 2.00\nok w.contentView.window.backingScaleFactor is f\nok r.size.width is 10 * f\nok NSScreen.mainScreen.backingScaleFactor is f\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2fc27033067f407e7ca4a4069e5574af565a13c2d915d4eb1cb78f642571680a",
+          "exit_code": 0,
+          "stdout": "ok f == 1.0 || f == 2.0 || f == 3.0\nvalue sys_scale 2.00\nok w.contentView.window.backingScaleFactor is f\nok r.size.width is 10 * f\nok NSScreen.mainScreen.backingScaleFactor is f\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

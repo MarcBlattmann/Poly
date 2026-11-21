@@ -2025,8 +2025,10 @@ pub fn def_window_proc<E: Env + ?Sized>(env: &E, hwnd: u64, msg: u32, w: u64, l:
         WM_SYSKEYDOWN | WM_SYSKEYUP | WM_SYSCHAR => u64::from(env.menu_sys_key(hwnd as u32, msg, w, l)),
         0x00A0 => {
             // WM_NCMOUSEMOVE: DefWindowProc tracks the non-client area
-            // until the cursor leaves it (WM_NCMOUSELEAVE).
+            // until the cursor leaves it (WM_NCMOUSELEAVE), also when the
+            // window under the pointer changes (WM_NCMOUSELEAVE.yaml `covered`).
             input::NC_TRACK.store(hwnd as u32, core::sync::atomic::Ordering::Relaxed);
+            env.call(Request::TrackMouse { hwnd: hwnd as u32, flags: crate::wm::pointer::TRACK_NC_IMPLICIT, hover: 0 });
             0
         }
         WM_NCCALCSIZE => {

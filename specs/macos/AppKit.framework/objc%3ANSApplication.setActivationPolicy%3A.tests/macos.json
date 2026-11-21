@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 13:39:53",
+  "tests": [
+    {
+      "name": "nsapplication_setactivationpolicy_effects",
+      "source_sha256": "069bd0cbc62a8f975a2d6d364cee86eda551890dc1d49f47ffc9d5a4e861902f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "963829a69ec9b65f47b4f17c23606c35f9bd631458cdbec7b85fc82adc0c6e7c",
+          "exit_code": 0,
+          "stdout": "ok [a setActivationPolicy:ps[i]]\nok !a.isActive && a.keyWindow == nil && a.windows.count == 1\nok [a setActivationPolicy:ps[i]]\nok !a.isActive && a.keyWindow == nil && a.windows.count == 1\nok [a setActivationPolicy:ps[i]]\nok !a.isActive && a.keyWindow == nil && a.windows.count == 1\nok [a setActivationPolicy:NSApplicationActivationPolicyAccessory]\nok w.isVisible\nok !a.isActive\nok !w.isVisible\nok [a setActivationPolicy:NSApplicationActivationPolicyProhibited]\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5a10c8d614b8dc29724875cf8525c0b97832c43dac7b210fc97b0492588fa0da",
+          "exit_code": 0,
+          "stdout": "ok [a setActivationPolicy:ps[i]]\nok !a.isActive && a.keyWindow == nil && a.windows.count == 1\nok [a setActivationPolicy:ps[i]]\nok !a.isActive && a.keyWindow == nil && a.windows.count == 1\nok [a setActivationPolicy:ps[i]]\nok !a.isActive && a.keyWindow == nil && a.windows.count == 1\nok [a setActivationPolicy:NSApplicationActivationPolicyAccessory]\nok w.isVisible\nok !a.isActive\nok !w.isVisible\nok [a setActivationPolicy:NSApplicationActivationPolicyProhibited]\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsapplication_setactivationpolicy_invalid",
+      "source_sha256": "2f98589b4658a3c94a2ac57bf053cbb6d7740dcff0fd18b6ba32952081324b2b",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "cb252f45c35c0a3fbda5c9e22742cf39aea466ad0911465003c326cd9166ae9e",
+          "exit_code": 0,
+          "stdout": "ok ![a setActivationPolicy:(NSApplicationActivationPolicy)99]\nok a.activationPolicy == NSApplicationActivationPolicyProhibited\nok ![a setActivationPolicy:(NSApplicationActivationPolicy)-1]\nok a.activationPolicy == NSApplicationActivationPolicyProhibited\nok [a setActivationPolicy:NSApplicationActivationPolicyAccessory]\nok ![a setActivationPolicy:(NSApplicationActivationPolicy)3]\nok a.activationPolicy == NSApplicationActivationPolicyAccessory\nok [a setActivationPolicy:NSApplicationActivationPolicyProhibited]\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fac849ecdc0838fc2774d595a8cd64e818497e4a80b851c4f98cfe155ca51ea4",
+          "exit_code": 0,
+          "stdout": "ok ![a setActivationPolicy:(NSApplicationActivationPolicy)99]\nok a.activationPolicy == NSApplicationActivationPolicyProhibited\nok ![a setActivationPolicy:(NSApplicationActivationPolicy)-1]\nok a.activationPolicy == NSApplicationActivationPolicyProhibited\nok [a setActivationPolicy:NSApplicationActivationPolicyAccessory]\nok ![a setActivationPolicy:(NSApplicationActivationPolicy)3]\nok a.activationPolicy == NSApplicationActivationPolicyAccessory\nok [a setActivationPolicy:NSApplicationActivationPolicyProhibited]\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsapplication_setactivationpolicy_prohibited_windows",
+      "source_sha256": "4323a5acb8c1b5ef6079a9713185021bc72756a93f86376e91cebb30c251f1b3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "48149b2877dba537a975e6fa21f34f1d4de85d19eb61cec025d1bf17a7958f22",
+          "exit_code": 0,
+          "stdout": "ok a.activationPolicy == NSApplicationActivationPolicyProhibited\nok t.canBecomeKeyWindow && !b.canBecomeKeyWindow\nok t.isVisible && b.isVisible\nok !t.isKeyWindow && !t.isMainWindow && !b.isKeyWindow\nok !a.isActive && a.keyWindow == nil && a.mainWindow == nil\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4951486410a85d99677185359a75f500a20aa83228d9847545c8dbba43bd9f2d",
+          "exit_code": 0,
+          "stdout": "ok a.activationPolicy == NSApplicationActivationPolicyProhibited\nok t.canBecomeKeyWindow && !b.canBecomeKeyWindow\nok t.isVisible && b.isVisible\nok !t.isKeyWindow && !t.isMainWindow && !b.isKeyWindow\nok !a.isActive && a.keyWindow == nil && a.mainWindow == nil\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

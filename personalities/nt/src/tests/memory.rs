@@ -159,7 +159,9 @@ fn argument_errors() {
 fn other_process(f: &mut Fake) -> u64 {
     use poly_ntobj::{NewObject, ObjectType};
     let pid = poly_ntobj::ProcessId(90);
-    f.children.push((crate::system::NtProcess::new(pid), Mem::default()));
+    let mut child = crate::system::NtProcess::new(pid);
+    f.sys.adopt(&mut child);
+    f.children.push((child, Mem::default()));
     let caller = f.caller();
     let new = NewObject::Opaque { kind: ObjectType::Process, cookie: u64::from(pid.0), signaled: None, parse: false };
     let id = f.sys.objects.new_object(new, TID).unwrap();
@@ -189,26 +191,105 @@ fn sizes_the_address_space_cannot_hold_and_the_commit_limit() {
 fn the_system_commit_charge_and_its_limit() {
     let mut f = Fake::new();
     let rw = PAGE_READWRITE;
-    f.sys.commit_limit = 0x10_0000;
+    f.sys.commit.set_limit(0x10_0000);
     // A reservation charges nothing; committing part of it charges that part.
     let (st, base, _) = allocate(&mut f, 0, 0x8_0000, MEM_RESERVE, rw);
-    assert_eq!((st, f.sys.commit_total), (STATUS_SUCCESS, 0));
+    assert_eq!((st, f.sys.commit.total()), (STATUS_SUCCESS, 0));
     assert_eq!(allocate(&mut f, base, 0x4000, MEM_COMMIT, rw).0, STATUS_SUCCESS);
-    assert_eq!((f.sys.commit_total, f.proc.commit_charged), (0x4000, 0x4000));
+    assert_eq!((f.sys.commit.total(), f.proc.commit_charged), (0x4000, 0x4000));
     // Committing it again charges nothing more.
     assert_eq!(allocate(&mut f, base, 0x8000, MEM_COMMIT, rw).0, STATUS_SUCCESS);
-    assert_eq!(f.sys.commit_total, 0x8000);
+    assert_eq!(f.sys.commit.total(), 0x8000);
     // Past the limit: refused, and nothing is charged.
     assert_eq!(allocate(&mut f, 0, 0x10_0000, MEM_RESERVE | MEM_COMMIT, rw).0, STATUS_COMMITMENT_LIMIT);
-    assert_eq!(f.sys.commit_total, 0x8000);
+    assert_eq!(f.sys.commit.total(), 0x8000);
     // A decommit gives its committed pages back, a release the rest.
     assert_eq!(free(&mut f, base, 0x2000, MEM_DECOMMIT).0, STATUS_SUCCESS);
-    assert_eq!(f.sys.commit_total, 0x6000);
+    assert_eq!(f.sys.commit.total(), 0x6000);
     assert_eq!(free(&mut f, base, 0, MEM_RELEASE).0, STATUS_SUCCESS);
-    assert_eq!((f.sys.commit_total, f.proc.commit_charged), (0, 0));
+    assert_eq!((f.sys.commit.total(), f.proc.commit_charged), (0, 0));
     // Up to the limit works again.
     assert_eq!(allocate(&mut f, 0, 0x10_0000, MEM_RESERVE | MEM_COMMIT, rw).0, STATUS_SUCCESS);
-    assert_eq!(f.sys.commit_total, 0x10_0000);
+    assert_eq!(f.sys.commit.total(), 0x10_0000);
+}
+
+/// A process's calls on its own private memory run under its own lock alone (ADR 0262): they
+/// charge the system's commit charge all the same, and its jobs' memory limits bind them, kept up
+/// to date as the job changes.
+#[test]
+fn own_private_memory_is_charged_and_bound_by_job_limits_on_the_process_lock_alone() {
+    let mut f = Fake::new();
+    let rw = PAGE_READWRITE;
+    let calls = f.own_vm_calls;
+    let (st, base, _) = allocate(&mut f, 0, 0x4000, MEM_RESERVE | MEM_COMMIT, rw);
+    assert_eq!(st, STATUS_SUCCESS);
+    assert_eq!(f.own_vm_calls, calls + 1);
+    assert_eq!((f.sys.commit.total(), f.proc.commit_charged), (0x4000, 0x4000));
+    // Protect and query are the process's own too.
+    let old = f.alloc(4);
+    let (b, s) = (f.put_u64(base), f.put_u64(0x1000));
+    let st = f.call(Service::ProtectVirtualMemory, &[SELF, b, s, u64::from(PAGE_READONLY), old]);
+    assert_eq!(st, STATUS_SUCCESS);
+    assert_eq!(query(&mut f, base).protect, PAGE_READONLY);
+    assert_eq!(f.own_vm_calls, calls + 3);
+    assert_eq!(free(&mut f, base, 0, MEM_RELEASE).0, STATUS_SUCCESS);
+    assert_eq!((f.sys.commit.total(), f.proc.commit_charged), (0, 0));
+    // A job that lets the process commit 1 MiB at most.
+    let out = f.alloc(8);
+    let name = f.attrs(r"\BaseNamedObjects\PolyJobMemory", 0);
+    assert_eq!(f.call(Service::CreateJobObject, &[out, 0x1F_001F, name]), STATUS_SUCCESS);
+    let job = f.u64_at(out);
+    assert_eq!(f.call(Service::AssignProcessToJobObject, &[job, SELF]), STATUS_SUCCESS);
+    // JOBOBJECT_EXTENDED_LIMIT_INFORMATION (`winnt.h`): LimitFlags at 16, ProcessMemoryLimit at
+    // 112; JOB_OBJECT_LIMIT_PROCESS_MEMORY.
+    let limit = |f: &mut Fake, bytes: u64| {
+        let mut info = [0u8; 144];
+        info[16..20].copy_from_slice(&0x100u32.to_le_bytes());
+        info[112..120].copy_from_slice(&bytes.to_le_bytes());
+        let buf = f.put(&info);
+        f.call(Service::SetInformationJobObject, &[job, 9, buf, 144])
+    };
+    assert_eq!(limit(&mut f, 0x10_0000), STATUS_SUCCESS);
+    let used = f.proc.vm.private_committed_bytes();
+    let (st, small, _) = allocate(&mut f, 0, 0x8_0000, MEM_RESERVE | MEM_COMMIT, rw);
+    assert_eq!(st, STATUS_SUCCESS);
+    let over = 0x10_0000 - used - 0x8_0000 + 0x1000;
+    assert_eq!(allocate(&mut f, 0, over, MEM_RESERVE | MEM_COMMIT, rw).0, STATUS_COMMITMENT_LIMIT);
+    // A larger limit lets it through.
+    assert_eq!(limit(&mut f, 0x40_0000), STATUS_SUCCESS);
+    let (st, big, _) = allocate(&mut f, 0, over, MEM_RESERVE | MEM_COMMIT, rw);
+    assert_eq!(st, STATUS_SUCCESS);
+    for a in [small, big] {
+        assert_eq!(free(&mut f, a, 0, MEM_RELEASE).0, STATUS_SUCCESS);
+    }
+    assert_eq!(f.sys.commit.total(), 0);
+}
+
+/// The kernel runs a process's memory calls on its own memory without the end-of-call work
+/// (ADR 0262, [`crate::dispatch_own_memory`]): those four calls on `NtCurrentProcess()`, and no
+/// other call.
+#[test]
+fn own_memory_calls_are_the_ones_without_end_of_call_work() {
+    let mut f = Fake::new();
+    let rw = u64::from(PAGE_READWRITE);
+    let kind = u64::from(MEM_RESERVE | MEM_COMMIT);
+    let (b, s) = (f.put_u64(0), f.put_u64(0x2000));
+    let st = f.call_own_memory(Service::AllocateVirtualMemory, &[SELF, b, 0, s, kind, rw]);
+    assert_eq!(st, Some(STATUS_SUCCESS));
+    let base = f.u64_at(b);
+    let info = f.alloc(48);
+    let st = f.call_own_memory(Service::QueryVirtualMemory, &[SELF, base, 0, info, 48, 0]);
+    assert_eq!(st, Some(STATUS_SUCCESS));
+    // Another information class, another process, another call: the full path.
+    assert_eq!(f.call_own_memory(Service::QueryVirtualMemory, &[SELF, base, 2, info, 48, 0]), None);
+    let h = other_process(&mut f);
+    let (b2, s2) = (f.put_u64(0), f.put_u64(0x1000));
+    assert_eq!(f.call_own_memory(Service::AllocateVirtualMemory, &[h, b2, 0, s2, kind, rw]), None);
+    assert_eq!(f.call_own_memory(Service::Close, &[h]), None);
+    let z = f.put_u64(0);
+    let st = f.call_own_memory(Service::FreeVirtualMemory, &[SELF, b, z, u64::from(MEM_RELEASE)]);
+    assert_eq!(st, Some(STATUS_SUCCESS));
+    assert_eq!(query(&mut f, base).state, MEM_FREE);
 }
 
 #[test]

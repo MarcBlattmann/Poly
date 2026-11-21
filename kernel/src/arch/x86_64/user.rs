@@ -75,7 +75,7 @@ pub unsafe fn init() {
     // SAFETY: once, on the boot CPU, with the kernel PML4 (PCID 0) loaded,
     // before any user thread: forwarded from the caller.
     unsafe {
-        if f.pcid {
+        if f.pcid && addrspace::USE_PCIDS {
             addrspace::enable_pcid();
         }
         fpu::init();
@@ -86,7 +86,7 @@ pub unsafe fn init() {
     let (how, xcr0) = if fpu.xsave { ("XSAVE", fpu.xcr0) } else { ("FXSAVE", 0) };
     crate::kprintln!(
         "user: syscall/sysret on; PCID: {}, SMEP: {}, SMAP: {}; FPU state: {how}, {} bytes, XCR0 {xcr0:#x}",
-        yes_no(f.pcid),
+        if f.pcid && !addrspace::USE_PCIDS { "there, unused" } else { yes_no(f.pcid) },
         yes_no(f.smep),
         yes_no(f.smap),
         fpu.area_size

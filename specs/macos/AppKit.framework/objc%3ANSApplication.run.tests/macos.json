@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 13:39:53",
+  "tests": [
+    {
+      "name": "nsapplication_run_timers_and_events",
+      "source_sha256": "a28d0808cf26e39359ba18938088a568052eec903f3b539ad337b3fe5e8c8127",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5865597f070bdb8462a63b7169fdfe97c80e6a16b6e3641b28262982e47cc3b3",
+          "exit_code": 0,
+          "stdout": "ok d >= 0.45 && d < 3.0\nok once == 1\nok rep >= 5 && rep <= 12\nok !a.isRunning\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bb5f66220bb04ea3767f34ee929a7c566e7f37b83907fefae82b2e9a3e16fdb6",
+          "exit_code": 0,
+          "stdout": "ok d >= 0.45 && d < 3.0\nok once == 1\nok rep >= 5 && rep <= 12\nok !a.isRunning\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsapplication_run_twice",
+      "source_sha256": "088523d8e719b6cd5ef103711fa783c75beff31e6dfe81ca81c1ab9b89b53f27",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "87dac9dfe04216f7c8274d43c5bc9f29cbd1766f93e4e43c670aaea482e9d116",
+          "exit_code": 0,
+          "stdout": "ok will == 1 && did == 1 && !a.isRunning\nok in_second == 1\nok !a.isRunning\nok will == 1 && did == 1\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5714c551b004779e0d9cbe37c4e82c8a01bfdef43b534b655430a220592226f0",
+          "exit_code": 0,
+          "stdout": "ok will == 1 && did == 1 && !a.isRunning\nok in_second == 1\nok !a.isRunning\nok will == 1 && did == 1\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

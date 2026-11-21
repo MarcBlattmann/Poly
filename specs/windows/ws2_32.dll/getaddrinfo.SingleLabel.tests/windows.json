@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7da3bb96eb5b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T13:48:18Z",
+  "tests": [
+    {
+      "name": "dns_wpad",
+      "exe_sha256": "a41339f1ab6b81c13b3ee46480eb3553110507f6b83cf82e91a4e5dcd0bceca5",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "PT0gd3BhZCB0aHJlZSB0aW1lcywgaGludHMge0FJX0ROU19PTkxZLCBBRl9VTlNQRUMsIFNPQ0tfU1RSRUFNfSAodGhlIGFuc3dlciBkZXBlbmRzIG9uIHRoZSBuZXR3b3JrOiAwIG9yIDExMDAxKQogIGxvb2t1cCAxOiBjb2RlIGlzIDAgb3IgMTEwMDE6IHRydWU7IHRoZSBsYXN0IGVycm9yIGVxdWFscyB0aGUgY29kZTogdHJ1ZTsgdW5kZXIgNTAwIG1zOiB0cnVlCiAgbG9va3VwIDI6IGNvZGUgaXMgMCBvciAxMTAwMTogdHJ1ZTsgdGhlIGxhc3QgZXJyb3IgZXF1YWxzIHRoZSBjb2RlOiB0cnVlOyB1bmRlciA1MDAgbXM6IHRydWUKICBsb29rdXAgMzogY29kZSBpcyAwIG9yIDExMDAxOiB0cnVlOyB0aGUgbGFzdCBlcnJvciBlcXVhbHMgdGhlIGNvZGU6IHRydWU7IHVuZGVyIDUwMCBtczogdHJ1ZQogIGFsbCB0aHJlZSBnaXZlIHRoZSBzYW1lIGNvZGU6IHRydWUKICBlbnRyaWVzIGFyZSByZXR1cm5lZCBleGFjdGx5IHdoZW4gdGhlIGNvZGUgaXMgMDogdHJ1ZQo9PSB3cGFkIHdpdGggaGludHMgZmxhZ3MgMCwgd2l0aCBhIHRyYWlsaW5nIGRvdCwgd2l0aCBHZXRBZGRySW5mb1csIHdpdGggQUZfSU5FVAogIGZsYWdzIDA6IGNvZGUgaXMgMCBvciAxMTAwMTogdHJ1ZTsgdW5kZXIgNDAwMCBtczogdHJ1ZQogICJ3cGFkLiIgQUlfRE5TX09OTFk6IGNvZGUgaXMgMCBvciAxMTAwMTogdHJ1ZTsgdW5kZXIgNTAwIG1zOiB0cnVlCiAgR2V0QWRkckluZm9XIEFJX0ROU19PTkxZOiBjb2RlIGlzIDAgb3IgMTEwMDE6IHRydWU7IHVuZGVyIDUwMCBtczogdHJ1ZQogIEFGX0lORVQgQUlfRE5TX09OTFk6IGNvZGUgaXMgMCBvciAxMTAwMTogdHJ1ZTsgdW5kZXIgNTAwIG1zOiB0cnVlCnN1bW1hcnkgMCBwYXNzZWQsIDAgZmFpbGVkCg==",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "== wpad three times, hints {AI_DNS_ONLY, AF_UNSPEC, SOCK_STREAM} (the answer depends on the network: 0 or 11001)\n  lookup 1: code is 0 or 11001: true; the last error equals the code: true; under 500 ms: true\n  lookup 2: code is 0 or 11001: true; the last error equals the code: true; under 500 ms: true\n  lookup 3: code is 0 or 11001: true; the last error equals the code: true; under 500 ms: true\n  all three give the same code: true\n  entries are returned exactly when the code is 0: true\n== wpad with hints flags 0, with a trailing dot, with GetAddrInfoW, with AF_INET\n  flags 0: code is 0 or 11001: true; under 4000 ms: true\n  \"wpad.\" AI_DNS_ONLY: code is 0 or 11001: true; under 500 ms: true\n  GetAddrInfoW AI_DNS_ONLY: code is 0 or 11001: true; under 500 ms: true\n  AF_INET AI_DNS_ONLY: code is 0 or 11001: true; under 500 ms: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 74
+    }
+  ]
+}

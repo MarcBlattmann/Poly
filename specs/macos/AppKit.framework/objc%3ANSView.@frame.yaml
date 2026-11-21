@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/AppKit.framework/objc%3ANSView.@frame.yaml. Observed with Objective-C test programs linked against AppKit
+# (tests/macos/include/poly_mak.h, ADR 0182); results per architecture in objc%3ANSView.@frame.tests/macos.json.
+id: "macos/api/AppKit.framework/objc:NSView.@frame"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the AppKit, Foundation, CoreGraphics and QuartzCore of that release, SIP on, the owner's logged-in graphical session (the window server is needed), the display a 1512 x 982 point built-in one at scale 2, the system appearance set to dark (tests always set the appearance they need); tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: appkit`, tests/macos/include/poly_mak.h): the program is not in an application bundle, so its activation policy is Prohibited, it is never the active application and no window is ever key or main; its windows are invisible (alpha 0, mouse clicks pass through) and are closed or ordered out before the test ends, and a watchdog ends a test after 12 seconds; pixels are drawn into bitmaps the test makes (tagged sRGB) so that colours do not depend on the display; values that depend on this macOS release or this Mac (sizes of system controls, system colours and fonts, the display) are printed with the name prefix sys_ and are described as SYSTEM-DEPENDENT; NSTextAlignment's numbers differ between the two architectures in the SDK (tests compare with the named constants), and the pixels of system controls differ by one step between them (each architecture is recorded on its own); results and output go through raw system calls"
+  observed_by: spec-macos-appkit-basics
+  date: 2026-11-20
+summary: >
+  NSView frame and bounds are linked: setFrameSize: sets the bounds size to the same size (the bounds
+  origin stays); setFrameOrigin: does not touch the bounds; after setBoundsSize: the bounds are as set
+  and the frame is unchanged: the view is scaled, a bounds point converts to the superview by the
+  factor frame size over bounds size (frame 200 x 100 with bounds 100 x 50: (10,10) is 20 points right
+  and up of the origin), and a later setFrameSize: keeps the scale (bounds 200 x 100 for frame 400 x
+  200). setBoundsOrigin: moves the coordinate system: a point of the view converts to the superview by
+  frame origin minus bounds origin plus the point (bounds origin (5,5) in a frame at (50,60): the
+  view's (0,0) is at (45,55), its (5,5) at (50,60), subviews follow), the frame does not change;
+  setBounds: sets origin and size. Autoresizing masks: MinXMargin 1, WidthSizable 2, MaxXMargin 4,
+  MinYMargin 8, HeightSizable 16, MaxYMargin 32; when the superview's size changes by (dx,dy) a width
+  and height sizable subview grows by (dx,dy), a MinXMargin one moves right by dx, a MinYMargin one
+  moves up by dy, a MaxYMargin one and one with no mask stay, and a width-sizable one with a flexible
+  left margin splits the change (printed).
+returns:
+  success: "the property values"
+errors: {}
+side_effects: "none beyond what the summary says"
+threading: "AppKit objects are used on the main thread only; the tests use them there (a watchdog thread only ends the process)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds; drawing, ordering and notifications settle within a run-loop turn (tests spin the loop for 0.05 to 0.3 s)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

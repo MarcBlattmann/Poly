@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7da3bb96eb5b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T13:48:18Z",
+  "tests": [
+    {
+      "name": "dns_odd_names",
+      "exe_sha256": "45da611310ea484f1a3bf662309adec221d915f1117e97956bbed7b15ee74b90",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "dGhlIGVtcHR5IG5hbWU6IGNvZGUgMDsgZW50cmllcyA+IDA6IHRydWU7IGV2ZXJ5IGVudHJ5IGlzIElQdjQgb3IgSVB2NjogdHJ1ZTsgdW5kZXIgNTAwIG1zOiB0cnVlCmEgbGFiZWwgb2YgNjQgY2hhcmFjdGVyczogY29kZSAxMTAwMSBsYXN0IGVycm9yIDExMDAxIGVudHJpZXMgMDsgdW5kZXIgNTAwIG1zOiB0cnVlCmEgbGFiZWwgb2YgNjMgY2hhcmFjdGVyczogY29kZSAxMTAwMSBsYXN0IGVycm9yIDExMDAxIGVudHJpZXMgMDsgdW5kZXIgNTAwIG1zOiB0cnVlCmEgc3BhY2UgaW5zaWRlOiBjb2RlIDExMDAxIGxhc3QgZXJyb3IgMTEwMDEgZW50cmllcyAwOyB1bmRlciA1MDAgbXM6IHRydWUKb25seSBhIGRvdDogY29kZSAxMTAwMSBsYXN0IGVycm9yIDExMDAxIGVudHJpZXMgMDsgdW5kZXIgNTAwIG1zOiB0cnVlCmEgbGVhZGluZyB1bmRlcnNjb3JlOiBjb2RlIDExMDAxIGxhc3QgZXJyb3IgMTEwMDEgZW50cmllcyAwOyB1bmRlciA1MDAgbXM6IHRydWUKYSBuYW1lIHVuZGVyIC50ZXN0OiBjb2RlIDExMDAxIGxhc3QgZXJyb3IgMTEwMDEgZW50cmllcyAwOyB1bmRlciA1MDAgbXM6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "the empty name: code 0; entries > 0: true; every entry is IPv4 or IPv6: true; under 500 ms: true\na label of 64 characters: code 11001 last error 11001 entries 0; under 500 ms: true\na label of 63 characters: code 11001 last error 11001 entries 0; under 500 ms: true\na space inside: code 11001 last error 11001 entries 0; under 500 ms: true\nonly a dot: code 11001 last error 11001 entries 0; under 500 ms: true\na leading underscore: code 11001 last error 11001 entries 0; under 500 ms: true\na name under .test: code 11001 last error 11001 entries 0; under 500 ms: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 87
+    }
+  ]
+}

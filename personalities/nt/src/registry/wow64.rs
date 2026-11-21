@@ -150,13 +150,16 @@ fn node() -> Vec<u16> {
 }
 
 /// The physical key of the 32-bit view of `rest` (components below `HKLM\SOFTWARE`), or `None`
-/// if it is the key itself, unchanged.
-fn machine_software(rest: &[&[u16]]) -> Option<Vec<Vec<u16>>> {
+/// if it is the key itself, unchanged. With `named_physical`, a leading `Wow6432Node` names the
+/// physical place; without it (a path [`without_node`] already took the view's node out of), it
+/// is an ordinary key name of the 32-bit view (`SOFTWARE\Wow6432Node\Wow6432Node` does not exist:
+/// `RegistryDefaults.Wow6432Node.yaml` `software_32`).
+fn machine_software(rest: &[&[u16]], named_physical: bool) -> Option<Vec<Vec<u16>>> {
     let own = |parts: &[&[u16]]| parts.iter().map(|p| p.to_vec()).collect::<Vec<_>>();
-    if rest.first().is_some_and(|c| eq(c, WOW6432_NODE)) {
+    if named_physical && rest.first().is_some_and(|c| eq(c, WOW6432_NODE)) {
         // Already physical; a shared key below it is the shared one.
         let below = &rest[1..];
-        // (`Wow6432Node\Classes` is Learn's compatibility link to `Classes\Wow6432Node`, not made.)
+        // (`Wow6432Node\Classes` is a link to `Classes\Wow6432Node` in the default hive.)
         if !below.is_empty() && !eq(below[0], "Classes") && is_shared(below) {
             return Some(own(below));
         }
@@ -204,7 +207,9 @@ fn user_classes(rest: &[&[u16]]) -> Option<Vec<Vec<u16>>> {
 /// - `HKCU\SOFTWARE` is shared; its `Classes` subkeys of [`CLASSES_REDIRECTED`] move under
 ///   `Classes\Wow6432Node` (the user's classes are `\REGISTRY\USER\<sid>\Software\Classes`, or the
 ///   `\REGISTRY\USER\<sid>_Classes` hive that Windows links there).
-/// - Symbolic links Learn lists for programs with hard-coded `Wow6432Node` paths are not made.
+/// - The physical registry's own names for one key (`SOFTWARE\Wow6432Node\Classes` is
+///   `SOFTWARE\Classes\Wow6432Node`; below it `TypeLib` and `AppID` are the shared ones) are
+///   symbolic links of the default hive (`poly_registry::defaults::volatile_keys`).
 pub fn wow64_view(path: &[u16], wow64: bool, access: u64) -> Option<Vec<u16>> {
     if view_of(wow64, access) != View::X86 {
         return None;
@@ -243,18 +248,22 @@ pub fn without_node(path: &[u16]) -> Vec<u16> {
 /// for a 32-bit caller, whose redirected subkeys go below `Classes\Wow6432Node`).
 pub fn x86_target(path: &[u16]) -> Vec<u16> {
     let logical = without_node(path);
-    redirect(&logical).unwrap_or(logical)
+    redirect_in(&logical, false).unwrap_or(logical)
 }
 
 /// The physical key of the 32-bit view of `path` ([`wow64_view`] for a call in that view); `None`
-/// when it is `path` itself.
+/// when it is `path` itself. A `Wow6432Node` right below `SOFTWARE` names the physical place.
 pub fn redirect(path: &[u16]) -> Option<Vec<u16>> {
+    redirect_in(path, true)
+}
+
+fn redirect_in(path: &[u16], named_physical: bool) -> Option<Vec<u16>> {
     let parts: Vec<&[u16]> = path.split(|&c| c == u16::from(b'\\')).filter(|c| !c.is_empty()).collect();
     if parts.len() < 2 || !eq(parts[0], "REGISTRY") {
         return None;
     }
     let physical: Vec<Vec<u16>> = if eq(parts[1], "MACHINE") && parts.get(2).is_some_and(|c| eq(c, "SOFTWARE")) {
-        let below = machine_software(&parts[3..])?;
+        let below = machine_software(&parts[3..], named_physical)?;
         let mut out: Vec<Vec<u16>> = parts[..3].iter().map(|p| p.to_vec()).collect();
         out.extend(below);
         out

@@ -277,10 +277,21 @@ fn mix_block() -> *mut u8 {
 /// Set the client up: the stream's rules, the engine's PolyAudio stream and thread.
 fn setup(sh: &Arc<Shared>, f: StreamFormat, flags: u32, duration: i64) -> Hresult {
     let stream = Stream::new(&f, flags, duration);
-    let frames = stream.buffer.max(f.format.rate / 10);
+    // The engine's PolyAudio stream holds only its lead (two periods, at most
+    // [`MAX_QUEUED_PERIODS`] before it skips), not the client's buffer, which may be
+    // seconds long (`IAudioClient.Initialize.yaml`, `buffer_duration`: no upper limit seen):
+    // 100 ms, ten engine periods.
+    let frames = f.format.rate / 10;
+    // The client's buffer is the application's size: refused, not aborted, when it does not fit.
+    let len = stream.buffer as usize * stream.block as usize;
+    let mut scratch = Vec::new();
+    if scratch.try_reserve_exact(len).is_err() {
+        return E_OUTOFMEMORY;
+    }
+    scratch.resize(len, 0);
     let Some(kernel) = polyaudio::open_stream(f.format, frames) else { return E_OUTOFMEMORY };
     sh.state.with(|st| {
-        st.scratch = vec![0u8; (stream.buffer * stream.block) as usize];
+        st.scratch = scratch;
         st.stream = Some(stream);
         st.format = Some(f);
         st.kernel = kernel;
@@ -636,13 +647,80 @@ static RENDER_VTBL: Vtbl<5> = Vtbl([
 ]);
 const CLOCK_IIDS: &[Guid] = &[IID_IUNKNOWN, IID_IAUDIO_CLOCK];
 static CLOCK_VTBL: Vtbl<6> = Vtbl([
-    query::<Arc<Shared>> as *const c_void,
+    clock_query as *const c_void,
     add_ref::<Arc<Shared>> as *const c_void,
     release::<Arc<Shared>> as *const c_void,
     clock_frequency as *const c_void,
     clock_position as *const c_void,
     clock_characteristics as *const c_void,
 ]);
+/// `IAudioClock2` on the clock: a tear-off (its slot 3 is not the clock's), which holds a
+/// reference on the clock and answers every other interface as the clock does, so the clock's
+/// `IUnknown` is the identity of both.
+struct Clock2 {
+    clock: *mut c_void,
+}
+
+impl Drop for Clock2 {
+    fn drop(&mut self) {
+        // SAFETY: the reference on the clock this tear-off held.
+        unsafe { release::<Arc<Shared>>(self.clock) };
+    }
+}
+
+const CLOCK2_IIDS: &[Guid] = &[IID_IAUDIO_CLOCK2];
+static CLOCK2_VTBL: Vtbl<4> = Vtbl([
+    clock2_query as *const c_void,
+    add_ref::<Clock2> as *const c_void,
+    release::<Clock2> as *const c_void,
+    clock2_device_position as *const c_void,
+]);
+
+/// The clock's `QueryInterface`: its own interfaces, and `IAudioClock2` as a new tear-off.
+unsafe extern "system" fn clock_query(p: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    // SAFETY: the caller's pointers (checked like `query` does); `p` is our clock.
+    unsafe {
+        if !out.is_null() && !iid.is_null() && iid.read_unaligned() == IID_IAUDIO_CLOCK2 {
+            add_ref::<Arc<Shared>>(p);
+            *out = new_object(&CLOCK2_VTBL, CLOCK2_IIDS, Clock2 { clock: p });
+            return S_OK;
+        }
+        query::<Arc<Shared>>(p, iid, out)
+    }
+}
+
+unsafe extern "system" fn clock2_query(p: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    // SAFETY: the caller's pointers; `p` is our tear-off.
+    unsafe {
+        if !out.is_null() && !iid.is_null() && iid.read_unaligned() == IID_IAUDIO_CLOCK2 {
+            return query::<Clock2>(p, iid, out);
+        }
+        clock_query(data::<Clock2>(p).clock, iid, out)
+    }
+}
+
+/// `IAudioClock2::GetDevicePosition` (Learn): the device position in frames (no sheet: here the
+/// clock's position in the stream's frames) and the performance counter of it in 100 ns units.
+unsafe extern "system" fn clock2_device_position(p: *mut c_void, position: *mut u64, qpc: *mut u64) -> Hresult {
+    if position.is_null() {
+        return E_POINTER;
+    }
+    // SAFETY: our tear-off; its clock's data is the client's.
+    let sh = unsafe { service_shared(data::<Clock2>(p).clock) };
+    let frames = sh.state.with(|st| {
+        let block = st.format.map_or(0, |f| u64::from(f.block));
+        st.stream.as_ref().map_or(0, |s| if block == 0 { 0 } else { s.position() / block })
+    });
+    // SAFETY: the caller's out parameters.
+    unsafe {
+        *position = frames;
+        if !qpc.is_null() {
+            *qpc = qpc_hns();
+        }
+    }
+    S_OK
+}
+
 const SESSION_IIDS: &[Guid] = &[IID_IUNKNOWN, IID_IAUDIO_SESSION_CONTROL];
 static SESSION_VTBL: Vtbl<12> = Vtbl([
     query::<Arc<Shared>> as *const c_void,
@@ -683,9 +761,9 @@ fn new_service(index: usize, sh: Arc<Shared>) -> *mut c_void {
 
 /// # Safety
 /// `o` is our service object of kind `index`; the caller's pointers.
-unsafe fn service_query(_index: usize, o: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
-    // SAFETY: (caller) every service's data is an `Arc<Shared>`.
-    unsafe { query::<Arc<Shared>>(o, iid, out) }
+unsafe fn service_query(index: usize, o: *mut c_void, iid: *const Guid, out: *mut *mut c_void) -> Hresult {
+    // SAFETY: (caller) every service's data is an `Arc<Shared>`; index 1 is the clock.
+    unsafe { if index == 1 { clock_query(o, iid, out) } else { query::<Arc<Shared>>(o, iid, out) } }
 }
 
 /// # Safety

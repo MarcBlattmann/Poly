@@ -100,6 +100,8 @@
 //!                       build Poly's libSystem.B.dylib and its sub-libraries (or take them from
 //!                       the content-hash cache), verify them, optionally copy them into <dir>/usr/lib
 //!                       (libsystem.rs, ADR 0258)
+//!   libobjc [--out <dir>] build Poly's libobjc.A.dylib (or take it from the content-hash cache),
+//!                       verify it, optionally copy it into <dir>/usr/lib (libobjc.rs, ADR 0261)
 //!   ntdll [--out <file>] build our ntdll.dll (or take it from the content-hash
 //!                       cache every kernel build uses) and verify its exports (ntdll.rs);
 //!                       --cache-key: print the name it is cached under
@@ -165,6 +167,7 @@ mod input;
 mod installer;
 mod installer2;
 mod ktest;
+mod libobjc;
 mod libsearch;
 mod libsystem;
 mod linuxchrome;
@@ -295,6 +298,7 @@ const COMMANDS: &[&str] = &[
     "nls-tables",
     "system-messages",
     "libsystem",
+    "libobjc",
     "corefoundation",
     "ntdll",
     "win32",
@@ -337,6 +341,7 @@ fn dispatch(args: &[String]) -> Result {
         Some("fonts") => fonts::command(rest),
         Some("wayland") => wayland::run(&root(), rest),
         Some("libsystem") => libsystem::command(rest),
+        Some("libobjc") => libobjc::command(rest),
         Some("corefoundation") => corefoundation::command(rest),
         Some("ntdll") => ntdll::command(rest),
         Some("win32") => win32::command(rest),
@@ -1719,6 +1724,11 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // An SDK-linked C program with Poly's own libSystem.B.dylib (libsystem.rs,
     // ADR 0258).
     ("libsystem", libsystem::boot_test),
+    // An Objective-C program with Poly's own libobjc.A.dylib (libobjc.rs,
+    // ADR 0261).
+    ("objc", libobjc::boot_test),
+    // The libobjc visible spec tests on Poly in one boot (libobjc.rs, ADR 0261).
+    ("objc-spec", libobjc::spec_boot_test),
     // CoreFoundation's spec tests and a C program with Poly's own
     // CoreFoundation.framework (corefoundation.rs, ADR 0260).
     ("corefoundation", corefoundation::boot_test),
@@ -1887,6 +1897,8 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "macho-specs",
             "macho-a64",
             "libsystem",
+            "objc",
+            "objc-spec",
             "corefoundation",
             "busybox",
             "rootdisk",
@@ -2237,6 +2249,14 @@ fn fmt_checks(plan: &quicklint::Plan) -> Result {
                 .arg(root().join("personalities/xnu/libsystem/Cargo.toml")),
         )?;
     }
+    if plan.libobjc {
+        step(
+            "fmt (libobjc)",
+            cargo()
+                .args(["fmt", "--check", "--manifest-path"])
+                .arg(root().join("personalities/xnu/libobjc/Cargo.toml")),
+        )?;
+    }
     if plan.corefoundation {
         step(
             "fmt (corefoundation)",
@@ -2367,6 +2387,10 @@ fn lint_units(plan: &quicklint::Plan) -> Result {
     // Poly's libSystem, for its Darwin target (ADR 0258).
     if plan.libsystem {
         libsystem::lint()?;
+    }
+    // Poly's libobjc, for its Darwin target (ADR 0261).
+    if plan.libobjc {
+        libobjc::lint()?;
     }
     // Poly's CoreFoundation, for its Darwin target (ADR 0260).
     if plan.corefoundation {

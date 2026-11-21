@@ -3222,7 +3222,9 @@ pub unsafe extern "system" fn TrackMouseEvent(tme: *mut u8) -> i32 {
     }
     // SAFETY: the caller's TRACKMOUSEEVENT.
     let t = unsafe { (tme as *const cstructs::TrackMouseEvent).read_unaligned() };
-    let (size, flags, hwnd, hover) = (t.size, t.flags, t.hwnd as u64, t.hover);
+    // The window manager's own bits are not a program's to set.
+    let flags = t.flags & !poly_win32k::wm::pointer::TRACK_PRIVATE;
+    let (size, hwnd, hover) = (t.size, t.hwnd as u64, t.hover);
     if size as usize != core::mem::size_of::<cstructs::TrackMouseEvent>() {
         set_last_error(ERROR_INVALID_PARAMETER);
         return 0;

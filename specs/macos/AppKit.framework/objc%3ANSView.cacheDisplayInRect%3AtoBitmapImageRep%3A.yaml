@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/AppKit.framework/objc%3ANSView.cacheDisplayInRect%3AtoBitmapImageRep%3A.yaml. Observed with Objective-C test programs linked against AppKit
+# (tests/macos/include/poly_mak.h, ADR 0182); results per architecture in objc%3ANSView.cacheDisplayInRect%3AtoBitmapImageRep%3A.tests/macos.json.
+id: "macos/api/AppKit.framework/objc:NSView.cacheDisplayInRect:toBitmapImageRep:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the AppKit, Foundation, CoreGraphics and QuartzCore of that release, SIP on, the owner's logged-in graphical session (the window server is needed), the display a 1512 x 982 point built-in one at scale 2, the system appearance set to dark (tests always set the appearance they need); tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: appkit`, tests/macos/include/poly_mak.h): the program is not in an application bundle, so its activation policy is Prohibited, it is never the active application and no window is ever key or main; its windows are invisible (alpha 0, mouse clicks pass through) and are closed or ordered out before the test ends, and a watchdog ends a test after 12 seconds; pixels are drawn into bitmaps the test makes (tagged sRGB) so that colours do not depend on the display; values that depend on this macOS release or this Mac (sizes of system controls, system colours and fonts, the display) are printed with the name prefix sys_ and are described as SYSTEM-DEPENDENT; NSTextAlignment's numbers differ between the two architectures in the SDK (tests compare with the named constants), and the pixels of system controls differ by one step between them (each architecture is recorded on its own); results and output go through raw system calls"
+  observed_by: spec-macos-appkit-basics
+  date: 2026-11-20
+summary: >
+  -[NSView cacheDisplayInRect:toBitmapImageRep:] draws the view at once into a bitmap that
+  bitmapImageRepForCachingDisplayInRect: made: for a 10 x 8 point view in a window on a display of
+  scale 2 it is 20 x 16 pixels (SYSTEM-DEPENDENT scale) with size 10 x 8 points, 32 bits per pixel, 4
+  samples, alpha, not planar, bytesPerRow 96 (SYSTEM-DEPENDENT) and all zero before drawing; its
+  colour space is the display's profile ('Color LCD' here, SYSTEM-DEPENDENT), not sRGB; for a view in
+  no window the scale is the main screen's (20 x 16) and the colour space 'Generic RGB'; a
+  sub-rectangle (1,1,4,2) gives 8 x 4 pixels and drawRect: gets (1,1,4,2) as the dirty rectangle. Row
+  0 is the top of the view, untouched pixels stay 0, a fill is opaque (alpha 0xff) with all pixels
+  equal inside it, and the colours are CONVERTED into the display profile: sRGB (255,0,0) becomes
+  0xea3323 and sRGB (0.2,0.4,0.6) 0x406595 (SYSTEM-DEPENDENT, printed); the same view under the dark
+  appearance gives the same bytes when its colours are fixed.
+returns:
+  success: "void; the bitmap is filled"
+errors: {}
+side_effects: "none beyond what the summary says"
+threading: "AppKit objects are used on the main thread only; the tests use them there (a watchdog thread only ends the process)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds; drawing, ordering and notifications settle within a run-loop turn (tests spin the loop for 0.05 to 0.3 s)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nswindow_close_basics",
+      "source_sha256": "a1c171c49eeb066b3dd3f11c7d49748d5c9265790afdb42f9406e49bc66c2b82",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "00ba9f6176b4ef4eb69734c2f83d4736bd3ac39f29001e0849fe2809cc41ed50",
+          "exit_code": 0,
+          "stdout": "ok w.isVisible\nok !w.isVisible\nok closes == 1\nok [w.title isEqualToString:@\"keep\"]\nok closes == 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2ba523e667786433b699d11b0df5920c0bfe0910f69b574c88a9f0c322107ea9",
+          "exit_code": 0,
+          "stdout": "ok w.isVisible\nok !w.isVisible\nok closes == 1\nok [w.title isEqualToString:@\"keep\"]\nok closes == 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nswindow_close_releasedwhenclosed",
+      "source_sha256": "1da5a9eb4ac7571e0fc962ec0547fd87c8270639c2caaa97ce73b360777679f2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "67fe2296baed2feee4ae6c9d7557e5920a79cc361a8775feeeb6f101c3266677",
+          "exit_code": 0,
+          "stdout": "value isReleasedWhenClosed (default) 1\nok !w.isReleasedWhenClosed\nok !w.isVisible\nok w.isVisible\nok w.contentView == cv && [w.title isEqualToString:@\"again\"]\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3486d5d7434680fb6cd3a3e545e4964180bb364d484fee1f1d5822bc2da015c2",
+          "exit_code": 0,
+          "stdout": "value isReleasedWhenClosed (default) 1\nok !w.isReleasedWhenClosed\nok !w.isVisible\nok w.isVisible\nok w.contentView == cv && [w.title isEqualToString:@\"again\"]\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsview_drawrect_graphics_context",
+      "source_sha256": "cfaa67e090357b8088bbf75de4f1ea08ac12cd6d36025da55ade2a0d5c8d5d6e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3d01f78beb319e784291b1b70a0afa4731731c33549d953a47ff69e78ff1424a",
+          "exit_code": 0,
+          "stdout": "ok g_n >= 1\nok g_ctx && g_flip && g_cg\nok g_screen\nok g_need_in && !g_need_out\nok g_n >= 1\nok g_ctx && g_flip && g_cg\nok g_screen\nok g_need_in && !g_need_out\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "77724546692c9afbdc7202b03196965f3a07b0c88e0aae1c9510417e3f640113",
+          "exit_code": 0,
+          "stdout": "ok g_n >= 1\nok g_ctx && g_flip && g_cg\nok g_screen\nok g_need_in && !g_need_out\nok g_n >= 1\nok g_ctx && g_flip && g_cg\nok g_screen\nok g_need_in && !g_need_out\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsview_drawrect_subview_order",
+      "source_sha256": "47cf782ae38029464364b8912cd23fd94368cec2d50d16572923ed8a629997bb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0690fccad82b667ae786d187f53f89b6c287366a9f1c20f3534acd923dca6914",
+          "exit_code": 0,
+          "stdout": "value log root(0,0,100,100);b(-50,-10,100,100);a(-10,-10,100,100);a1(-15,-15,100,100);\nok [g_log hasPrefix:@\"root(0,0,100,100);\"]\nok count(@\"a(\") == 1 && count(@\"b(\") == 1 && count(@\"a1(\") == 1 && count(@\"root(\") == 1\nok count(@\"h(\") == 0\nok [g_log rangeOfString:@\"a(-10,-10,100,100);\"].location != NSNotFound\nok [g_log rangeOfString:@\"a1(-15,-15,100,100);\"].location != NSNotFound\nok [g_log rangeOfString:@\"b(-50,-10,100,100);\"].location != NSNotFound\nok i1 > ia\nok ib < ia\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "aecb7cb6b1bbae0b96a2bbfd9353102d7bd16c2b2cb25e925241bc51e6f346ee",
+          "exit_code": 0,
+          "stdout": "value log root(0,0,100,100);b(-50,-10,100,100);a(-10,-10,100,100);a1(-15,-15,100,100);\nok [g_log hasPrefix:@\"root(0,0,100,100);\"]\nok count(@\"a(\") == 1 && count(@\"b(\") == 1 && count(@\"a1(\") == 1 && count(@\"root(\") == 1\nok count(@\"h(\") == 0\nok [g_log rangeOfString:@\"a(-10,-10,100,100);\"].location != NSNotFound\nok [g_log rangeOfString:@\"a1(-15,-15,100,100);\"].location != NSNotFound\nok [g_log rangeOfString:@\"b(-50,-10,100,100);\"].location != NSNotFound\nok i1 > ia\nok ib < ia\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

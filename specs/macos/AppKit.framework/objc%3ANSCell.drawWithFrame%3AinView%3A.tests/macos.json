@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsbutton_drawrect_dark",
+      "source_sha256": "751cc16d88ea2f37e3820828fc4462ba0eed0c10a2e4bd347ed5d6b4d3727c21",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6b4d6c393932c1a6d3213d3ee877822da1447385198f1a291d98f3689e265038",
+          "exit_code": 0,
+          "stdout": "ok r.pixelsWide == 120 && r.pixelsHigh == 48\nok opaque\nok ak_px(r, 0, 0) == 0x1e1e1eff\nok ((body >> 24) & 255) > 30 && ((body >> 24) & 255) < 90\nok lightest > (int)(body >> 24) + 80\nok ak_hash(l) != ak_hash(r)\nok ak_hash(r) == ak_hash(draw(ak_dark(), 30 / 255.0))\nvalue sys_body 808464639\nvalue sys_lightest_label_gray 223\nvalue sys_top.00 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 202020ff 252525ff 282828ff \nvalue sys_row2.02 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 252525ff 2f2f2fff 303030ff 303030ff 303030ff 303030ff \nvalue sys_mid_left.24 303030ff 303030ff 303030ff 303030ff 303030ff 303030ff 303030ff 303030ff 303030ff 303030ff \nvalue sys_mid_label.24 303030ff 303030ff 303030ff 303030ff 303030ff 303030ff 303030ff 666666ff dfdfdfff dfdfdfff b1b1b1ff 303030ff \nvalue sys_hash 1771457788\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0a9c460e2e126ab01509d516b57a34566e02e8eab1052c3beaea129e8deb2e9f",
+          "exit_code": 0,
+          "stdout": "ok r.pixelsWide == 120 && r.pixelsHigh == 48\nok opaque\nok ak_px(r, 0, 0) == 0x1e1e1eff\nok ((body >> 24) & 255) > 30 && ((body >> 24) & 255) < 90\nok lightest > (int)(body >> 24) + 80\nok ak_hash(l) != ak_hash(r)\nok ak_hash(r) == ak_hash(draw(ak_dark(), 30 / 255.0))\nvalue sys_body 774778623\nvalue sys_lightest_label_gray 223\nvalue sys_top.00 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 232323ff 272727ff \nvalue sys_row2.02 1e1e1eff 1e1e1eff 1e1e1eff 1e1e1eff 232323ff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff \nvalue sys_mid_left.24 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff \nvalue sys_mid_label.24 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 2e2e2eff 646464ff dfdfdfff dfdfdfff b0b0b0ff 2e2e2eff \nvalue sys_hash 213432994\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsbutton_drawrect_light",
+      "source_sha256": "ce4a5b83589156bd1062264e11cf4d212c04915c9b7f600c253dd8a8937bf521",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a7ac005c0ec152b35175d5358267895108e631acf77dde85b2c3bda886f009db",
+          "exit_code": 0,
+          "stdout": "ok r.pixelsWide == 120 && r.pixelsHigh == 48\nok opaque\nok ak_px(r, 0, 0) == 0xecececff\nok ((body >> 24) & 255) < 236 && ((body >> 24) & 255) > 200\nok ak_px(r, 20, 24) == ak_px(r, 100, 24) && ak_px(r, 20, 10) == body\nok darkest < (int)(body >> 24) - 80\nok mirror\nok ak_hash(r) == ak_hash(draw())\nvalue sys_body 3671775999\nvalue sys_darkest_label_gray 33\nvalue sys_top.00 ecececff ecececff ecececff ecececff ecececff ecececff ecececff eaeaeaff e5e5e5ff e1e1e1ff \nvalue sys_row2.02 ecececff ecececff ecececff ecececff e5e5e5ff dbdbdbff dadadaff dadadaff dadadaff dadadaff \nvalue sys_mid_left.24 dadadaff dadadaff dadadaff dadadaff dadadaff dadadaff dadadaff dadadaff dadadaff dadadaff \nvalue sys_mid_label.24 dadadaff dadadaff dadadaff dadadaff dadadaff dadadaff dadadaff c2c2c2ff 212121ff 212121ff 707070ff dadadaff \nvalue sys_hash 1648647177\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c6d1cfead396334cfb0df5ee42897dde0204b028deb55011e3459cd1b8b9d677",
+          "exit_code": 0,
+          "stdout": "ok r.pixelsWide == 120 && r.pixelsHigh == 48\nok opaque\nok ak_px(r, 0, 0) == 0xecececff\nok ((body >> 24) & 255) < 236 && ((body >> 24) & 255) > 200\nok ak_px(r, 20, 24) == ak_px(r, 100, 24) && ak_px(r, 20, 10) == body\nok darkest < (int)(body >> 24) - 80\nok mirror\nok ak_hash(r) == ak_hash(draw())\nvalue sys_body 3638089983\nvalue sys_darkest_label_gray 33\nvalue sys_top.00 ecececff ecececff ecececff ecececff ecececff ecececff ecececff ecececff e7e7e7ff e2e2e2ff \nvalue sys_row2.02 ecececff ecececff ecececff ecececff e6e6e6ff dadadaff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff \nvalue sys_mid_left.24 d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff \nvalue sys_mid_label.24 d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff d8d8d8ff c0c0c0ff 212121ff 212121ff 6f6f6fff d8d8d8ff \nvalue sys_hash 339426982\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -32,6 +32,7 @@ use crate::consts::*;
 use crate::imageshare::FileIdentity;
 use crate::protect::Protection;
 use crate::vm::{PAGE_SIZE, page_up};
+use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -265,13 +266,48 @@ struct Block {
     count: u32,
 }
 
+/// The checked relocation blocks of big image files, by file (ADR 0262): a view of a relocated
+/// image (Chrome's DLLs move in every process) reuses its file's instead of reading and checking
+/// the whole table again, which took milliseconds for `chrome.dll` under the NT state's lock.
+#[derive(Debug, Default)]
+pub struct RelocTables {
+    map: BTreeMap<FileIdentity, Arc<[Block]>>,
+}
+
+/// How many files' tables [`RelocTables`] keeps (any one goes when it is full).
+const RELOC_TABLES_MAX: usize = 256;
+
+impl RelocTables {
+    fn get(&self, key: &FileIdentity) -> Option<Arc<[Block]>> {
+        self.map.get(key).cloned()
+    }
+
+    fn put(&mut self, key: FileIdentity, blocks: Arc<[Block]>) {
+        if self.map.len() >= RELOC_TABLES_MAX
+            && let Some(any) = self.map.keys().next().copied()
+        {
+            self.map.remove(&any);
+        }
+        self.map.insert(key, blocks);
+    }
+
+    /// How many files' tables are kept.
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+}
+
 /// A relocated view's fix-ups.
 #[derive(Debug)]
 struct Fixups {
     /// Added to every relocated value: the new base minus the preferred one.
     delta: u64,
     /// Sorted by `page_rva`.
-    blocks: Vec<Block>,
+    blocks: Arc<[Block]>,
     /// Where the header keeps `ImageBase`, and the base stored there.
     base_field: u64,
     new_base: u64,
@@ -357,6 +393,17 @@ impl Lazy {
     /// applied lazily. `STATUS_INVALID_IMAGE_FORMAT` if the table is
     /// malformed (it is checked whole, as `poly_pe::relocate` does).
     pub fn with_relocation(&self, info: &ImageInfo, base: u64) -> Result<Lazy, NtStatus> {
+        self.with_relocation_from(info, base, &mut RelocTables::default())
+    }
+
+    /// [`with_relocation`](Self::with_relocation), with the checked table taken from `tables` if
+    /// the file's is there, and put there once checked.
+    pub fn with_relocation_from(
+        &self,
+        info: &ImageInfo,
+        base: u64,
+        tables: &mut RelocTables,
+    ) -> Result<Lazy, NtStatus> {
         let delta = base.wrapping_sub(info.image_base());
         if info.relocs_stripped() && delta != 0 {
             return Err(STATUS_INVALID_IMAGE_FORMAT);
@@ -364,6 +411,28 @@ impl Lazy {
         // `ImageBase` of the PE32+ optional header, after the signature,
         // the file header (20 bytes) and 24 bytes of fields.
         let base_field = u64::from(info.nt_offset) + 4 + 20 + 24;
+        let key = self.file.identity();
+        let blocks = match key.and_then(|k| tables.get(&k)) {
+            Some(blocks) => blocks,
+            None => {
+                let blocks: Arc<[Block]> = self.checked_blocks()?.into();
+                if let Some(k) = key {
+                    tables.put(k, Arc::clone(&blocks));
+                }
+                blocks
+            }
+        };
+        Ok(Lazy {
+            file: Arc::clone(&self.file),
+            parts: self.parts.clone(),
+            size: self.size,
+            fixups: Some(Arc::new(Fixups { delta, blocks, base_field, new_base: base })),
+            reloc_dir: self.reloc_dir,
+        })
+    }
+
+    /// The relocation table's blocks, sorted by page, once the whole table is checked.
+    fn checked_blocks(&self) -> Result<Vec<Block>, NtStatus> {
         let mut blocks = Vec::new();
         if let Some((rva, size)) = self.reloc_dir {
             let mut pos = 0u64;
@@ -397,13 +466,7 @@ impl Lazy {
             }
         }
         blocks.sort_by_key(|b| b.page_rva);
-        Ok(Lazy {
-            file: Arc::clone(&self.file),
-            parts: self.parts.clone(),
-            size: self.size,
-            fixups: Some(Arc::new(Fixups { delta, blocks, base_field, new_base: base })),
-            reloc_dir: self.reloc_dir,
-        })
+        Ok(blocks)
     }
 }
 
@@ -547,8 +610,14 @@ impl ImageSection {
     /// validates the whole table before writing; a lazy image checks the
     /// table whole and fixes pages as they are made).
     pub fn relocated(&self, base: u64) -> Result<Arc<dyn ImageBytes>, NtStatus> {
+        self.relocated_from(base, &mut RelocTables::default())
+    }
+
+    /// [`relocated`](Self::relocated), a big image's checked relocation table taken from (and
+    /// kept in) `tables` (ADR 0262).
+    pub fn relocated_from(&self, base: u64, tables: &mut RelocTables) -> Result<Arc<dyn ImageBytes>, NtStatus> {
         if let Some(lazy) = &self.lazy {
-            return Ok(Arc::new(lazy.with_relocation(&self.info, base)?));
+            return Ok(Arc::new(lazy.with_relocation_from(&self.info, base, tables)?));
         }
         let held = self.image.held().ok_or(STATUS_INVALID_IMAGE_FORMAT)?;
         let mut copy = Vec::new();

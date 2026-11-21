@@ -234,6 +234,8 @@ every merge (ADR 0213): add the ADR file, not a row. Do not edit the table.
 | [0259](0259-32-bit-windows-test-programs-in-the-pipeline.md) | 32-bit Windows test programs in the pipeline | Accepted |
 | [0259](0259-wasapi-an-engine-per-client-on-10-ms-device-periods.md) | WASAPI: an engine per client, on 10 ms device periods | Accepted |
 | [0260](0260-polys-own-corefoundation.md) | Poly's own CoreFoundation.framework, v0 | Accepted |
+| [0261](0261-polys-own-objective-c-runtime-libobjc.md) | Poly's own Objective-C runtime, `libobjc.A.dylib` | Accepted |
+| [0262](0262-a-lock-per-nt-process-for-its-own-memory-calls.md) | A lock per NT process for its own memory calls | Accepted |
 <!-- adr-index:end -->
 
 ## Open decisions

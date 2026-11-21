@@ -20,7 +20,6 @@ use crate::sync::Mutex;
 use crate::thread::WaitQueue as ThreadQueue;
 use alloc::collections::VecDeque;
 use alloc::sync::{Arc, Weak};
-use alloc::vec;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
 use poly_audio::nt::{DeviceInfo, Ring, StreamInfo};
@@ -67,7 +66,12 @@ pub fn open(format: Format, frames: u32) -> Result<Arc<NtStream>, NtStatus> {
     let mut g = card.inner.lock();
     let hw = g.hw.output().ok_or(STATUS_NO_SUCH_DEVICE)?;
     let conv = Converter::new(format, hw.format).ok_or(poly_ntobj::status::STATUS_INVALID_PARAMETER)?;
-    let bytes = vec![0u8; frames as usize * format.frame_bytes()];
+    // The request's size is the caller's: out of memory fails the open
+    // instead of panicking (ADR 0250).
+    let len = frames as usize * format.frame_bytes();
+    let mut bytes = Vec::new();
+    bytes.try_reserve_exact(len).map_err(|_| poly_ntobj::status::STATUS_INSUFFICIENT_RESOURCES)?;
+    bytes.resize(len, 0);
     // The periods already in flight carry none of its frames.
     let in_flight = core::iter::repeat_n(0, g.out.in_flight as usize).collect();
     let state = State { ring: Ring::new(frames), bytes, gains: [UNITY; MAX_CHANNELS], conv, in_flight };

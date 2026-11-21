@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsview_isflipped_subviews",
+      "source_sha256": "166d7cbd66728a43c5e0c0d52c8684d656afd1b3337d98a6975183c9f97c30c0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d854545a92ef6d8ce1770e3e2b3d20bbb356beb6fdffada6cdcdf5124fc3a31c",
+          "exit_code": 0,
+          "stdout": "ok !su.isFlipped && sf.isFlipped\nok p.x is 5\nok p.y is 30\nok p.x is 5\nok p.y is 10\nok p.y is 10\nok !su2.isFlipped\nvalue flipped sup point in unflipped sub .y 20.00\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "04a8266a6f96fce5bad9666b3bd7a4db7245945190890a3d22742f6daef124e2",
+          "exit_code": 0,
+          "stdout": "ok !su.isFlipped && sf.isFlipped\nok p.x is 5\nok p.y is 30\nok p.x is 5\nok p.y is 10\nok p.y is 10\nok !su2.isFlipped\nvalue flipped sup point in unflipped sub .y 20.00\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsview_isflipped_window_coordinates",
+      "source_sha256": "f996cf53ca1b7690d2a3fa55379df4117f04d43f6d418b89049ef902939b6d46",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "baf943c5f40acdd3e07ac80e26eda62b434b6e5ca6730ada64d514e5360b3ada",
+          "exit_code": 0,
+          "stdout": "ok a.x is 10\nok a.y is 10\nok b.x is 10\nok b.y is 30\nok c.y is 10\nok d.x is 0\nok d.y is 0\nok e.x is 0\nok e.y is 0\nok NSEqualRects([f convertRect:f.bounds toView:nil], NSMakeRect(10, 10, 50, 20))\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "aa3796f2126f426b5deb10802908a2b1abf272f9914f1b3b12d299ea38e41357",
+          "exit_code": 0,
+          "stdout": "ok a.x is 10\nok a.y is 10\nok b.x is 10\nok b.y is 30\nok c.y is 10\nok d.x is 0\nok d.y is 0\nok e.x is 0\nok e.y is 0\nok NSEqualRects([f convertRect:f.bounds toView:nil], NSMakeRect(10, 10, 50, 20))\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

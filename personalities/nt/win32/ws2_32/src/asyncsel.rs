@@ -6,6 +6,7 @@
 //! `wParam` and `WSAMAKESELECTREPLY(event, error)` as `lParam` (`winsock2.h`: the event in the low word, the
 //! error in the high word).
 
+use crate::lock::Locked;
 use crate::sock::Socket;
 use crate::{Handle, check_started, fail};
 use alloc::vec::Vec;
@@ -41,27 +42,13 @@ struct Selected {
     message: u32,
 }
 
-struct Table {
-    locked: AtomicBool,
-    list: core::cell::UnsafeCell<Vec<Selected>>,
-}
-
-// SAFETY: access to `list` is serialised by `locked`.
-unsafe impl Sync for Table {}
-
-static TABLE: Table = Table { locked: AtomicBool::new(false), list: core::cell::UnsafeCell::new(Vec::new()) };
+static TABLE: Locked<Vec<Selected>> = Locked::new(Vec::new());
 static HELPER_STARTED: AtomicBool = AtomicBool::new(false);
 /// An event of ours the helper also waits on, set when the table changes (so it reads it again).
 static WAKE: AtomicIsize = AtomicIsize::new(0);
 
 fn with_table<R>(f: impl FnOnce(&mut Vec<Selected>) -> R) -> R {
-    while TABLE.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-        core::hint::spin_loop();
-    }
-    // SAFETY: the lock is held.
-    let r = f(unsafe { &mut *TABLE.list.get() });
-    TABLE.locked.store(false, Ordering::Release);
-    r
+    TABLE.with(f)
 }
 
 fn wake() {
