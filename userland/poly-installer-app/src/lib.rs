@@ -52,6 +52,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use poly_pkg::installer::Installer;
 use poly_pkg::windows::apps::{self as winapps, Seen, Uninstall};
+use poly_pkg::windows::msi;
 use poly_pkg::windows::program;
 use poly_pkg::{apt, deb, dpkgdb, format};
 use poly_rt::fs::File;
@@ -218,13 +219,23 @@ fn read_windows(path: &str) -> Result<program::Program, poly_pkg::Error> {
     program::read_program(path, size, &mut read)
 }
 
+/// What the Windows Installer package (`.msi`) at `path` says about itself.
+fn read_msi(path: &str) -> Result<msi::MsiInfo, poly_pkg::Error> {
+    let size = poly_rt::fs::metadata(path).map_err(|_| poly_pkg::Error::Truncated)?.len();
+    let mut read = reader_of(path).ok_or(poly_pkg::Error::Truncated)?;
+    msi::inspect(path, size, &mut read)
+}
+
 /// The installer for `path`, with what the base root has.
 fn model_for(path: &str) -> Installer {
     if let Ok((head, _)) = read_package(path) {
         match format::detect(&head) {
             Some(format::Format::AppImage) => return Installer::for_image(path, read_image(path, &head)),
             Some(format::Format::WindowsProgram) => return Installer::for_windows(path, read_windows(path)),
-            Some(format::Format::WindowsInstaller) if !reader_of(path).is_some_and(|mut r| program::is_msi(&mut r)) => {
+            Some(format::Format::WindowsInstaller) => {
+                if reader_of(path).is_some_and(|mut r| program::is_msi(&mut r)) {
+                    return Installer::for_msi(path, read_msi(path));
+                }
                 return Installer::new(path, Ok(b""), None);
             }
             _ => {}
@@ -854,6 +865,187 @@ impl view::Host for Native {
         left
     }
 
+    fn install_msi(
+        &mut self,
+        path: &str,
+        info: &msi::MsiInfo,
+    ) -> Result<Vec<(String, String, Option<String>)>, String> {
+        let mut read = reader_of(path).ok_or_else(|| alloc::format!("{path}: cannot open"))?;
+        let db = msi::MsiDatabase::open(&mut read).map_err(|e| e.describe().to_string())?;
+        let plan = db.plan_install().map_err(|e| e.describe().to_string())?;
+        let msi_dir = path.rsplit_once('/').map_or("/", |(d, _)| d);
+
+        let mut created_dirs: BTreeSet<String> = BTreeSet::new();
+        let mut installed_files: Vec<String> = Vec::new();
+        let mut total_written: u64 = 0;
+
+        let mut io_err: Option<String> = None;
+        let extracted = db.extract_files(
+            &plan,
+            &mut read,
+            |rel| {
+                if rel.contains("..") || rel.starts_with('/') || rel.contains('\0') {
+                    return None;
+                }
+                let full = alloc::format!("{}/{rel}", msi_dir.trim_end_matches('/'));
+                poly_rt::fs::read(&full).ok()
+            },
+            |vfs_path, bytes| {
+                if !msi::is_safe_install_path(vfs_path) {
+                    io_err = Some(alloc::format!("{vfs_path}: unsafe install path"));
+                    return Err(poly_pkg::Error::Corrupt);
+                }
+                if let Some((parent, _)) = vfs_path.rsplit_once('/') {
+                    // Record each missing ancestor under C: before creating it so
+                    // uninstall can remove directories created for this package.
+                    let mut anc = Vec::new();
+                    let mut cur = parent;
+                    while cur.starts_with(winapps::C_ROOT) && cur.len() > winapps::C_ROOT.len() {
+                        if !poly_rt::fs::exists(cur) && msi::is_removable_dir(cur) {
+                            anc.push(cur.to_string());
+                        }
+                        let Some((p, _)) = cur.rsplit_once('/') else { break };
+                        cur = p;
+                    }
+                    if let Err(e) = poly_rt::fs::create_dir_all(parent) {
+                        io_err = Some(alloc::format!("{parent}: {e}"));
+                        return Err(poly_pkg::Error::Corrupt);
+                    }
+                    for d in anc {
+                        created_dirs.insert(d);
+                    }
+                }
+                if let Err(e) = poly_rt::fs::write(vfs_path, bytes) {
+                    io_err = Some(alloc::format!("{vfs_path}: {e}"));
+                    return Err(poly_pkg::Error::Corrupt);
+                }
+                if vfs_path.len() > 4
+                    && vfs_path.is_char_boundary(vfs_path.len() - 4)
+                    && vfs_path[vfs_path.len() - 4..].eq_ignore_ascii_case(".exe")
+                    && let Err(why) = make_executable(vfs_path)
+                {
+                    io_err = Some(why);
+                    return Err(poly_pkg::Error::Corrupt);
+                }
+                total_written = total_written.saturating_add(bytes.len() as u64);
+                installed_files.push(vfs_path.to_string());
+                Ok(())
+            },
+        );
+        if let Some(why) = io_err {
+            return Err(why);
+        }
+        extracted.map_err(|e| e.describe().to_string())?;
+
+        // Choose a safe unique manifest slug for this MSI package.
+        let msi_slug = poly_pkg::appimage::slug(&info.name);
+        let apps_dir = poly_pkg::appimage::applications_dir(&data_home());
+        let mut desktop_ids = Vec::new();
+        let mut icon_paths = Vec::new();
+        let mut out = Vec::new();
+
+        for sc in &plan.shortcuts {
+            let icon_png = sc
+                .icon_name
+                .as_deref()
+                .and_then(|name| db.read_icon_png(name, sc.icon_index, &mut read))
+                .or_else(|| {
+                    let mut exe_read = reader_of(&sc.target_vfs)?;
+                    let mut img = program::Image::open(&mut exe_read).ok()?;
+                    img.icon(sc.icon_index)
+                })
+                .or_else(|| info.icon.clone());
+
+            let icon_file = icon_png.and_then(|png| {
+                let p = winapps::icon_path(&data_home(), &sc.id);
+                let dir = p.rsplit_once('/').map_or("/", |(d, _)| d);
+                poly_rt::fs::create_dir_all(dir).ok()?;
+                poly_rt::fs::write(&p, &png).ok()?;
+                Some(p)
+            });
+
+            let text = msi::desktop_file(sc, icon_file.as_deref(), &msi_slug, info);
+            let desktop_path = alloc::format!("{apps_dir}/{}", sc.id);
+            poly_rt::fs::create_dir_all(&apps_dir)
+                .and_then(|()| poly_rt::fs::write(&desktop_path, text.as_bytes()))
+                .map_err(|e| alloc::format!("{desktop_path}: {e}"))?;
+            self.report(&alloc::format!("launcher entry {} for {}", sc.id, sc.target_dos));
+            desktop_ids.push(sc.id.clone());
+            if let Some(ic) = &icon_file {
+                icon_paths.push(ic.clone());
+            }
+            out.push((sc.id.clone(), sc.name.clone(), icon_file));
+        }
+
+        // Persist the uninstall manifest.
+        let mut dirs: Vec<String> = created_dirs.into_iter().collect();
+        // Deepest paths first so uninstall can remove empty child folders before parents.
+        dirs.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        let manifest = msi::MsiManifest {
+            name: info.name.clone(),
+            version: info.version.clone(),
+            publisher: info.manufacturer.clone(),
+            product_code: info.product_code.clone(),
+            size: total_written,
+            desktops: desktop_ids,
+            icons: icon_paths,
+            files: installed_files,
+            dirs,
+        };
+        let mpath = msi::manifest_path(&data_home(), &msi_slug);
+        let mdir = mpath.rsplit_once('/').map_or("/", |(d, _)| d);
+        poly_rt::fs::create_dir_all(mdir)
+            .and_then(|()| poly_rt::fs::write(&mpath, manifest.encode().as_bytes()))
+            .map_err(|e| alloc::format!("{mpath}: {e}"))?;
+
+        Ok(out)
+    }
+
+    fn delete_msi(&mut self, slug: &str) -> Result<(), String> {
+        if !poly_pkg::appimage::is_slug(slug) {
+            return Err(alloc::format!("{slug}: not an MSI package of Poly's installer"));
+        }
+        let mpath = msi::manifest_path(&data_home(), slug);
+        let text = poly_rt::fs::read_to_string(&mpath).map_err(|e| alloc::format!("{mpath}: {e}"))?;
+        let manifest = msi::MsiManifest::parse(&text).ok_or_else(|| alloc::format!("{mpath}: damaged manifest"))?;
+        let apps_dir = poly_pkg::appimage::applications_dir(&data_home());
+
+        // Remove launcher desktop files and icons first so the app disappears cleanly.
+        for id in &manifest.desktops {
+            let p = alloc::format!("{apps_dir}/{id}");
+            match poly_rt::fs::remove_file(&p) {
+                Ok(()) | Err(poly_rt::Error::NotFound) => {}
+                Err(e) => return Err(alloc::format!("{p}: {e}")),
+            }
+            let _ = poly_rt::fs::remove_file(&winapps::icon_path(&data_home(), id));
+        }
+        for ic in &manifest.icons {
+            let _ = poly_rt::fs::remove_file(ic);
+        }
+        // Remove recorded installed files under C:.
+        for file in &manifest.files {
+            if !msi::is_safe_install_path(file) {
+                continue;
+            }
+            match poly_rt::fs::remove_file(file) {
+                Ok(()) | Err(poly_rt::Error::NotFound) => {}
+                Err(e) => return Err(alloc::format!("{file}: {e}")),
+            }
+        }
+        // Remove created empty directories deepest-first.
+        let mut dirs = manifest.dirs;
+        dirs.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        for dir in dirs {
+            if msi::is_removable_dir(&dir) {
+                let _ = poly_rt::fs::remove_dir(&dir);
+            }
+        }
+        match poly_rt::fs::remove_file(&mpath) {
+            Ok(()) | Err(poly_rt::Error::NotFound) => Ok(()),
+            Err(e) => Err(alloc::format!("{mpath}: {e}")),
+        }
+    }
+
     fn run_program(&mut self, path: &str) -> Result<(), String> {
         let (argv, _) = opened(&[path.to_string()])?;
         // The desktop shows a busy pointer until the program has a window.
@@ -952,14 +1144,18 @@ pub fn main() -> i32 {
         }
     };
     model.status_fd = host.status_fd();
-    let version = match (&model.package, &model.program) {
-        (Some(p), _) => p.version.as_str(),
-        (None, Some(w)) => w.version.as_str(),
+    let version = match (&model.package, &model.program, &model.msi) {
+        (Some(p), _, _) => p.version.as_str(),
+        (None, Some(w), _) => w.version.as_str(),
+        (None, None, Some(m)) => m.version.as_str(),
         _ => "",
     };
     poly_rt::println!("poly-installer: {path}: {} {version} ({:?})", model.name(), model.phase);
     if let Some(w) = &model.program {
         poly_rt::println!("poly-installer: {path}: {}, {}", w.kind(), w.publisher_text());
+    }
+    if let Some(m) = &model.msi {
+        poly_rt::println!("poly-installer: {path}: {}, {}", m.kind(), m.manufacturer);
     }
     let mut app = view::InstallerApp::new(model, Box::new(host));
     app.set_icon_files(Box::new(Disk));

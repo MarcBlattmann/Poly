@@ -48,6 +48,11 @@ struct Fake {
     collected: Vec<(String, String, Option<String>)>,
     left: Vec<(String, String)>,
     forgot: Vec<Vec<(String, String)>>,
+    /// MSI packages installed (path, name) and uninstalled (slug).
+    msi_installed: Vec<(String, String)>,
+    msi_deleted: Vec<String>,
+    refuse_msi_install: bool,
+    refuse_msi_delete: bool,
 }
 
 struct FakeHost(Rc<RefCell<Fake>>);
@@ -117,6 +122,30 @@ impl Host for FakeHost {
         let mut f = self.0.borrow_mut();
         f.forgot.push(apps.to_vec());
         f.left.clone()
+    }
+
+    fn install_msi(
+        &mut self,
+        path: &str,
+        msi: &poly_pkg::windows::msi::MsiInfo,
+    ) -> Result<Vec<(String, String, Option<String>)>, String> {
+        let mut f = self.0.borrow_mut();
+        f.msi_installed.push((path.into(), msi.name.clone()));
+        if f.refuse_msi_install {
+            Err("corrupt cabinet".into())
+        } else {
+            Ok(alloc::vec![(
+                "poly-windows-widget-studio.desktop".into(),
+                msi.name.clone(),
+                Some("/h/widget.png".into()),
+            )])
+        }
+    }
+
+    fn delete_msi(&mut self, slug: &str) -> Result<(), String> {
+        let mut f = self.0.borrow_mut();
+        f.msi_deleted.push(slug.into());
+        if f.refuse_msi_delete { Err("cannot remove file".into()) } else { Ok(()) }
     }
 
     fn run_program(&mut self, path: &str) -> Result<(), String> {
@@ -660,4 +689,87 @@ fn a_windows_app_is_uninstalled_by_its_uninstaller_and_its_entries_go() {
     fake.borrow_mut().script.push(Pumped { ended: Some(false), ..Pumped::default() });
     app.tick(&mut cx);
     assert!(matches!(&app.model.phase, Phase::Failed(why) if why.contains("still installed")));
+}
+
+fn msi_app() -> (InstallerApp, Rc<RefCell<Fake>>) {
+    let info = poly_pkg::windows::msi::MsiInfo {
+        name: "Widget Studio".into(),
+        version: "2.4.0".into(),
+        manufacturer: "Widget Corp".into(),
+        summary: "Design widgets".into(),
+        product_code: "{11111111-2222-3333-4444-555555555555}".into(),
+        size: 120_000,
+        installed_size: 450_000,
+        file_count: 3,
+        bits: Some(64),
+        icon: None,
+    };
+    let model = Installer::for_msi("/home/poly/Downloads/widget.msi", Ok(info));
+    let fake = Rc::new(RefCell::new(Fake::default()));
+    (InstallerApp::new(model, Box::new(FakeHost(Rc::clone(&fake)))), fake)
+}
+
+#[test]
+fn an_msi_package_installs_on_click_and_notifies_the_desktop() {
+    let (mut app, fake) = msi_app();
+    assert_eq!(app.title(), "Install Widget Studio");
+    assert_eq!(app.model.buttons(), [("Cancel", Action::Close), ("Install", Action::Install)]);
+    click(&mut app, Action::Install);
+    assert_eq!(app.model.phase, Phase::Working(Step::Place));
+    assert!(fake.borrow().msi_installed.is_empty());
+    let mut cx = Cx::default();
+    app.tick(&mut cx);
+    assert_eq!(
+        fake.borrow().msi_installed,
+        [("/home/poly/Downloads/widget.msi".to_string(), "Widget Studio".to_string())]
+    );
+    assert_eq!(app.model.phase, Phase::Done);
+    assert_eq!(fake.borrow().changed, 1);
+    assert_eq!(
+        fake.borrow().reports,
+        ["installed Widget Studio 2.4.0: Widget Studio (poly-windows-widget-studio.desktop)"]
+    );
+    assert_eq!(app.model.buttons(), [("Close", Action::Close), ("Open", Action::Open)]);
+    click(&mut app, Action::Open);
+    assert_eq!(fake.borrow().opened, ["poly-windows-widget-studio.desktop"]);
+
+    // Extraction failure is reported cleanly.
+    let (mut app, fake) = msi_app();
+    fake.borrow_mut().refuse_msi_install = true;
+    click(&mut app, Action::Install);
+    app.tick(&mut Cx::default());
+    assert_eq!(app.model.phase, Phase::Failed("The app could not be installed: corrupt cabinet.".into()));
+    assert_eq!(fake.borrow().changed, 0);
+}
+
+#[test]
+fn an_msi_app_is_uninstalled_by_deleting_its_manifest_files() {
+    let plan = Plan {
+        app: "Widget Studio".into(),
+        removal: Removal::Msi {
+            slug: "widget-studio".into(),
+            publisher: "Widget Corp".into(),
+            version: "2.4.0".into(),
+            size: 450_000,
+        },
+        package: None,
+        apps: alloc::vec![("poly-windows-widget-studio.desktop".into(), "Widget Studio".into())],
+    };
+    let (mut app, fake) = uninstall_app(Ok(plan.clone()));
+    assert_eq!(app.title(), "Uninstall Widget Studio");
+    click(&mut app, Action::Uninstall);
+    assert_eq!(app.model.phase, Phase::Working(Step::Delete));
+    let mut cx = Cx::default();
+    app.tick(&mut cx);
+    assert_eq!(fake.borrow().msi_deleted, ["widget-studio"]);
+    assert_eq!(app.model.phase, Phase::Done);
+    assert_eq!(fake.borrow().changed, 1);
+
+    // Uninstall failure.
+    let (mut app, fake) = uninstall_app(Ok(plan));
+    fake.borrow_mut().refuse_msi_delete = true;
+    click(&mut app, Action::Uninstall);
+    app.tick(&mut cx);
+    assert_eq!(app.model.phase, Phase::Failed("The app's files could not be removed: cannot remove file.".into()));
+    assert_eq!(fake.borrow().changed, 0);
 }

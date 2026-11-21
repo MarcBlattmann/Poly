@@ -27,6 +27,7 @@ use crate::deb::Info;
 use crate::dpkgdb;
 use crate::installer::{Plan, Removal};
 use crate::windows::apps as winapps;
+use crate::windows::msi;
 use alloc::collections::BTreeSet;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -92,12 +93,14 @@ pub fn removable(disk: &dyn Disk, data_home: &str) -> Vec<String> {
     }
     let dir = appimage::applications_dir(data_home);
     for name in disk.list(&dir) {
-        // A Windows app is removable when it registered an uninstaller.
+        // A Windows app is removable when it registered an uninstaller or was
+        // installed from an `.msi` package by Poly's installer.
         let windows = || {
             winapps::is_windows_id(&name)
-                && disk
-                    .read(&alloc::format!("{dir}/{name}"))
-                    .is_some_and(|t| winapps::desktop_value(&t, winapps::UNINSTALL_KEY).is_some_and(|v| !v.is_empty()))
+                && disk.read(&alloc::format!("{dir}/{name}")).is_some_and(|t| {
+                    winapps::desktop_value(&t, winapps::UNINSTALL_KEY).is_some_and(|v| !v.is_empty())
+                        || winapps::desktop_value(&t, msi::MSI_ID_KEY).is_some_and(appimage::is_slug)
+                })
         };
         if appimage::slug_of_id(&name).is_some() || windows() {
             out.push(name);
@@ -203,6 +206,38 @@ fn windows_plan(id: &str, data_home: &str, disk: &dyn Disk) -> Result<Plan, Stri
     let dir = appimage::applications_dir(data_home);
     let text = disk.read(&alloc::format!("{dir}/{id}")).ok_or("This app is not installed.")?;
     let app = app_name(&text).unwrap_or_else(|| id.to_string());
+    if let Some(msi_slug) = winapps::desktop_value(&text, msi::MSI_ID_KEY).filter(|s| !s.is_empty()) {
+        if !appimage::is_slug(msi_slug) {
+            return Err("This app was not installed by Poly's installer, so Poly does not remove it.".to_string());
+        }
+        let manifest_text = disk
+            .read(&msi::manifest_path(data_home, msi_slug))
+            .ok_or_else(|| alloc::format!("{app}'s install record is missing, so Poly cannot remove it."))?;
+        let manifest = msi::MsiManifest::parse(&manifest_text)
+            .ok_or_else(|| alloc::format!("{app}'s install record is damaged, so Poly cannot remove it."))?;
+        let mut apps = Vec::new();
+        for desktop_id in &manifest.desktops {
+            let name = disk
+                .read(&alloc::format!("{dir}/{desktop_id}"))
+                .and_then(|t| app_name(&t))
+                .unwrap_or_else(|| manifest.name.clone());
+            apps.push((desktop_id.clone(), name));
+        }
+        if apps.is_empty() {
+            apps.push((id.to_string(), app.clone()));
+        }
+        return Ok(Plan {
+            app: if manifest.name.is_empty() { app } else { manifest.name },
+            removal: Removal::Msi {
+                slug: msi_slug.to_string(),
+                publisher: manifest.publisher,
+                version: manifest.version,
+                size: manifest.size,
+            },
+            package: None,
+            apps,
+        });
+    }
     let uninstall =
         winapps::desktop_value(&text, winapps::UNINSTALL_KEY).filter(|v| !v.is_empty()).ok_or_else(|| {
             alloc::format!("{app} did not register an uninstaller with Windows, so Poly cannot remove it.")

@@ -251,7 +251,7 @@ pub const INSTALLER_ID: &str = "poly-installer.desktop";
 /// snaps; ADR 0132); Windows programs, which it runs or installs, under the
 /// three names the shared MIME database, `file` and older databases give
 /// them, and Windows Installer packages (ADR 0230).
-pub const PACKAGE_MIME_TYPES: [&str; 9] = [
+pub const PACKAGE_MIME_TYPES: [&str; 10] = [
     "application/vnd.debian.binary-package",
     "application/vnd.appimage",
     "application/x-rpm",
@@ -261,6 +261,7 @@ pub const PACKAGE_MIME_TYPES: [&str; 9] = [
     "application/vnd.microsoft.portable-executable",
     "application/x-ms-dos-executable",
     "application/x-msi",
+    "application/vnd.ms-msi",
 ];
 
 /// The installer's desktop file: it opens the package types and is not

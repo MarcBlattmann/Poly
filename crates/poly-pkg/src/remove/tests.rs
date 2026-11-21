@@ -202,3 +202,39 @@ fn a_windows_app_is_uninstalled_by_its_own_uninstaller() {
     let why = super::plan("poly-windows-example-browser.desktop", home, &d).unwrap_err();
     assert!(why.contains("uninstaller is not there"), "{why}");
 }
+
+#[test]
+fn an_msi_app_is_planned_from_its_manifest() {
+    let mut d = disk();
+    let home = "/home/poly/.local/share";
+    let apps = alloc::format!("{home}/applications");
+    d.put(
+        &alloc::format!("{apps}/poly-windows-widget-studio.desktop"),
+        "[Desktop Entry]\nType=Application\nName=Widget Studio\nExec=/nt/c/Program Files/Widget/widget.exe\n\
+         X-Poly-Msi-Id=widget-studio\nX-Poly-Windows-Publisher=Widget Corp\nX-Poly-Windows-Version=2.4.1\n",
+    );
+    d.put(
+        &crate::windows::msi::manifest_path(home, "widget-studio"),
+        "Name=Widget Studio\nVersion=2.4.1\nPublisher=Widget Corp\nSize=450000\n\
+         Desktop=poly-windows-widget-studio.desktop\nFile=/nt/c/Program Files/Widget/widget.exe\n",
+    );
+    let rem = removable(&d, home);
+    assert!(rem.contains(&"poly-windows-widget-studio.desktop".to_string()));
+    let p = plan("poly-windows-widget-studio.desktop", home, &d).unwrap();
+    assert_eq!(p.app, "Widget Studio");
+    assert_eq!(
+        p.removal,
+        Removal::Msi {
+            slug: "widget-studio".into(),
+            publisher: "Widget Corp".into(),
+            version: "2.4.1".into(),
+            size: 450_000,
+        }
+    );
+    assert_eq!(p.apps, [("poly-windows-widget-studio.desktop".to_string(), "Widget Studio".to_string())]);
+
+    // Missing manifest is refused cleanly.
+    d.files.remove(&crate::windows::msi::manifest_path(home, "widget-studio"));
+    let why = super::plan("poly-windows-widget-studio.desktop", home, &d).unwrap_err();
+    assert!(why.contains("install record is missing"), "{why}");
+}

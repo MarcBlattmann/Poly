@@ -64,7 +64,7 @@ fn windows_programs_and_installer_packages_are_known_by_their_magic() {
     assert_eq!(format::detect(&far), None);
     assert_eq!(format::detect(&program::CFB_SIGNATURE), Some(Format::WindowsInstaller));
     assert_eq!(Format::WindowsProgram.not_yet(), None);
-    assert!(Format::WindowsInstaller.not_yet().unwrap().contains(".msi"));
+    assert_eq!(Format::WindowsInstaller.not_yet(), None);
     assert_eq!(Format::WindowsProgram.name(), "Windows program");
 }
 
