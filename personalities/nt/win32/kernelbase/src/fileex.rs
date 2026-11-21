@@ -451,9 +451,28 @@ pub(crate) fn list_basic(dir: &[u16]) -> Result<Vec<(Vec<u16>, u64)>, u32> {
 /// `FindExInfoBasic` searches (a standard search asks for these short names).
 struct FindLookup;
 
+/// Restores the thread's last error on drop so internal `FindFirstFileW` /
+/// `FindNextFileW` lookups do not clobber the caller's last error on success
+/// (e.g. `FindNextFileW` ending with `ERROR_NO_MORE_FILES` while building 8.3
+/// short names during `FindFirstFileW`).
+struct SaveLastError(u32);
+
+impl SaveLastError {
+    fn save() -> Self {
+        Self(last_error())
+    }
+}
+
+impl Drop for SaveLastError {
+    fn drop(&mut self) {
+        set_last_error(self.0);
+    }
+}
+
 impl poly_kernelbase::shortname::DirLookup for FindLookup {
     /// The name `dir` holds for `name`: a `FindFirstFileW` for exactly that name.
     fn find(&mut self, dir: &[u16], name: &[u16]) -> Result<Option<Vec<u16>>, u32> {
+        let _saved = SaveLastError::save();
         let mut pattern = dir.to_vec();
         pattern.extend_from_slice(name);
         pattern.push(0);
@@ -471,6 +490,7 @@ impl poly_kernelbase::shortname::DirLookup for FindLookup {
 
     /// Every entry of `dir` with its creation time.
     fn list(&mut self, dir: &[u16]) -> Result<Vec<(Vec<u16>, u64)>, u32> {
+        let _saved = SaveLastError::save();
         let mut pattern = dir.to_vec();
         pattern.push(u16::from(b'*'));
         pattern.push(0);
