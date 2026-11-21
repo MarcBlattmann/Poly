@@ -34,7 +34,7 @@ fn byte_range_locks_against_io_and_each_other() {
     assert_eq!(t.lock(a, 8, 2, 0, true, false), STATUS_SUCCESS);
     // The whole file, as LockFileEx(0, 0, MAXDWORD, MAXDWORD).
     assert_eq!(t.lock(a, 0, u64::MAX, 0, true, true), STATUS_LOCK_NOT_GRANTED);
-    assert_eq!(t.lock(a, 1, u64::MAX, 0, true, true), STATUS_INVALID_LOCK_RANGE);
+    assert_eq!(t.lock(a, 2, u64::MAX, 0, true, true), STATUS_INVALID_LOCK_RANGE);
     // Closing b drops its lock.
     t.close(b);
     assert_eq!(t.write(a, b"w", Some(12)).0, STATUS_SUCCESS);

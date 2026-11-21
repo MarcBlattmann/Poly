@@ -1141,6 +1141,9 @@ pub fn unlock_file<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatu
     let caller = k.caller();
     k.with_state(|sys, _, _| -> Result<()> {
         let (_, cookie) = file_handle(sys, &caller, Handle(h), 0)?;
+        // Like a lock, an unlock needs read or write access (sheet `UnlockFileEx` rule
+        // `handles`: a handle with only FILE_READ_ATTRIBUTES is ERROR_ACCESS_DENIED).
+        require_any(sys, &caller, Handle(h), FILE_READ_DATA | FILE_WRITE_DATA)?;
         let node = sys.io.file(cookie).and_then(|f| f.disk()).ok_or(STATUS_INVALID_DEVICE_REQUEST)?.key;
         let (offset, length) = locks::check_range(offset, length)?;
         sys.io.locks.unlock(node, LockOwner { file: cookie, key: key as u32 }, offset, length)?;

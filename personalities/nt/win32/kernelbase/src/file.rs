@@ -770,6 +770,10 @@ struct Find {
     streams: Option<VecDeque<[u8; FIND_STREAM_DATA_SIZE]>>,
     /// `FindExInfoBasic`: no short names.
     basic: bool,
+    /// The directory searched (a Win32 path ending in a separator), for the short names.
+    dir_path: Vec<u16>,
+    /// Each entry of the directory with its generated 8.3 name, made when first needed.
+    shorts: Option<Vec<(Vec<u16>, Vec<u16>)>>,
 }
 
 /// A buffer for several `FILE_BOTH_DIR_INFORMATION` entries.
@@ -807,14 +811,46 @@ impl Find {
         if self.entries.is_empty() { Err(nt::STATUS_NO_MORE_FILES) } else { Ok(()) }
     }
 
-    /// The next entry as `WIN32_FIND_DATAW`.
+    /// The next entry as `WIN32_FIND_DATAW`, with its short name unless the search is
+    /// `FindExInfoBasic`.
     fn next(&mut self) -> Result<[u8; find_data::SIZE], NtStatus> {
         if self.next >= self.entries.len() {
             self.fill(false)?;
         }
         let at = self.entries[self.next];
         self.next += 1;
-        file::to_find_data(&self.buf, at).ok_or(nt::STATUS_NO_MORE_FILES)
+        let mut d = file::to_find_data(&self.buf, at).ok_or(nt::STATUS_NO_MORE_FILES)?;
+        if self.basic {
+            poly_kernelbase::fileex::drop_alternate_name(&mut d);
+        } else {
+            self.set_short_name(&mut d);
+        }
+        Ok(d)
+    }
+
+    /// Fill `cAlternateFileName` (sheet `FindFirstFileExW` rule `short_name`): set for a name that
+    /// does not fit 8.3, empty for one that does. Poly's volumes store no short names, so it is the
+    /// name `GetShortPathNameW` gives ([`poly_kernelbase::shortname::short_names`] over the
+    /// directory's entries).
+    fn set_short_name(&mut self, d: &mut [u8; find_data::SIZE]) {
+        let name = crate::fileex::found_name(d);
+        let dots = name.len() <= 2 && name.iter().all(|&c| c == u16::from(b'.'));
+        if dots || poly_kernelbase::shortname::is_short_form(&name) || self.dir_path.is_empty() {
+            return;
+        }
+        if self.shorts.is_none() {
+            let entries = crate::fileex::list_basic(&self.dir_path).unwrap_or_default();
+            let shorts = poly_kernelbase::shortname::short_names(&entries);
+            self.shorts = Some(entries.into_iter().map(|(n, _)| n).zip(shorts).collect());
+        }
+        let short = self.shorts.as_ref().and_then(|v| v.iter().find(|(n, _)| *n == name)).map(|(_, s)| s.clone());
+        if let Some(short) = short.filter(|s| s.len() < 14) {
+            let at = find_data::ALTERNATE_FILE_NAME;
+            d[at..].fill(0);
+            for (i, c) in short.iter().enumerate() {
+                d[at + 2 * i..at + 2 * i + 2].copy_from_slice(&c.to_le_bytes());
+            }
+        }
     }
 }
 
@@ -840,17 +876,30 @@ pub(crate) unsafe fn find_first(pattern: *const u16, data: *mut u8, basic: bool)
         Ok(x) => x,
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
     };
+    let mut dir_path = dir.clone();
+    if !dir_path.last().is_some_and(|&c| c == u16::from(b'\\') || c == u16::from(b'/')) {
+        dir_path.push(u16::from(b'\\'));
+    }
     let dir = match open_for(&dir, FILE_LIST_DIRECTORY, FILE_DIRECTORY_FILE | FILE_OPEN_FOR_BACKUP_INTENT) {
         Ok(h) => h,
+        // The directory to search is missing (sheet `FindFirstFileExW` rule `no_match`).
+        Err(ERROR_FILE_NOT_FOUND) => return fail(ERROR_PATH_NOT_FOUND, INVALID_HANDLE_VALUE),
         Err(e) => return fail(e, INVALID_HANDLE_VALUE),
     };
-    let mut find = Box::new(Find { dir, mask, buf: Vec::new(), entries: Vec::new(), next: 0, streams: None, basic });
+    let mut find = Box::new(Find {
+        dir,
+        mask,
+        buf: Vec::new(),
+        entries: Vec::new(),
+        next: 0,
+        streams: None,
+        basic,
+        dir_path,
+        shorts: None,
+    });
     let first = find.fill(true).and_then(|()| find.next());
     match first {
-        Ok(mut d) => {
-            if basic {
-                poly_kernelbase::fileex::drop_alternate_name(&mut d);
-            }
+        Ok(d) => {
             // SAFETY: the caller's WIN32_FIND_DATAW.
             unsafe { core::ptr::copy_nonoverlapping(d.as_ptr(), data, d.len()) };
             // A success leaves the last error alone (ADR 0110's trace of
@@ -886,12 +935,8 @@ pub unsafe extern "system" fn FindNextFileW(handle: Handle, data: *mut u8) -> i3
     let Some(find) = find_of(handle).filter(|f| f.streams.is_none()) else {
         return fail(ERROR_INVALID_HANDLE, FALSE);
     };
-    let basic = find.basic;
     match find.next() {
-        Ok(mut d) => {
-            if basic {
-                poly_kernelbase::fileex::drop_alternate_name(&mut d);
-            }
+        Ok(d) => {
             // SAFETY: the caller's WIN32_FIND_DATAW.
             unsafe { core::ptr::copy_nonoverlapping(d.as_ptr(), data, d.len()) };
             TRUE
@@ -927,6 +972,8 @@ pub(crate) fn stream_find_handle(rest: VecDeque<[u8; FIND_STREAM_DATA_SIZE]>) ->
         next: 0,
         streams: Some(rest),
         basic: false,
+        dir_path: Vec::new(),
+        shorts: None,
     };
     Box::into_raw(Box::new(find)) as Handle
 }

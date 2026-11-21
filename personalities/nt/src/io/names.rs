@@ -23,8 +23,9 @@
 //! `< > : " / \ | ? *` or characters 1–31, and a component is at most 255
 //! characters (`MaximumComponentNameLength` of our volumes). NT paths are
 //! not normalised: a `.` or `..` component is `STATUS_OBJECT_NAME_INVALID`
-//! (Win32 removes them before calling `NtCreateFile`; to be confirmed by the
-//! spec agent). A named stream (`file:stream[:$DATA]`, ADR 0223) is split
+//! (Win32 removes them before calling `NtCreateFile`), but it is met where
+//! the walk reaches it: below a directory that does not exist the path is not
+//! found (sheet `GetFileAttributesExW` rule `forms`). A named stream (`file:stream[:$DATA]`, ADR 0223) is split
 //! off the last component first ([`split_stream`]); a colon anywhere else
 //! is an invalid name.
 

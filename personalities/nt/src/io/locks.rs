@@ -58,18 +58,26 @@ pub struct ByteLock {
 }
 
 impl ByteLock {
-    fn end(&self) -> u64 {
-        self.offset + self.length
+    /// The end of the range, which may be 2^64 itself (a lock of the last byte).
+    fn end(&self) -> u128 {
+        u128::from(self.offset) + u128::from(self.length)
     }
 
     fn overlaps(&self, offset: u64, length: u64) -> bool {
-        self.length != 0 && length != 0 && self.offset < offset + length && offset < self.end()
+        self.length != 0
+            && length != 0
+            && u128::from(self.offset) < u128::from(offset) + u128::from(length)
+            && u128::from(offset) < self.end()
     }
 }
 
-/// Check a lock range: offset + length must fit in 64 bits.
+/// Check a lock range: it may end at 2^64 at most (sheet `UnlockFileEx` rule `large`: offset
+/// 0xFFFFFFFFFFFFFFFF with length 1 is locked and unlocked; a range past 2^64 is
+/// `STATUS_INVALID_LOCK_RANGE`, error 307).
 pub fn check_range(offset: u64, length: u64) -> Result<(u64, u64), NtStatus> {
-    offset.checked_add(length).ok_or(STATUS_INVALID_LOCK_RANGE)?;
+    if u128::from(offset) + u128::from(length) > 1u128 << 64 {
+        return Err(STATUS_INVALID_LOCK_RANGE);
+    }
     Ok((offset, length))
 }
 
@@ -221,7 +229,10 @@ mod tests {
     fn ranges() {
         assert_eq!(check_range(0, 10), Ok((0, 10)));
         assert_eq!(check_range(0, u64::MAX), Ok((0, u64::MAX)));
-        assert_eq!(check_range(1, u64::MAX), Err(STATUS_INVALID_LOCK_RANGE));
+        assert_eq!(check_range(1, u64::MAX), Ok((1, u64::MAX)));
+        assert_eq!(check_range(u64::MAX, 1), Ok((u64::MAX, 1)));
+        assert_eq!(check_range(2, u64::MAX), Err(STATUS_INVALID_LOCK_RANGE));
+        assert_eq!(check_range(0xFFFF_FFFF_FFFF_FF00, 0x200), Err(STATUS_INVALID_LOCK_RANGE));
         assert_eq!(check_range(u64::MAX - 1, 1), Ok((u64::MAX - 1, 1)));
     }
 }
