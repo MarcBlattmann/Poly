@@ -203,8 +203,9 @@ impl Shared {
     /// other one, which owes those rectangles of the frame. False when win32k refused it.
     fn present(&mut self, t: &mut Tex, rects: &[[i32; 4]]) -> bool {
         self.settle(Some(rects));
-        // More than 64 rectangles are handed over as the whole buffer.
-        let shown: &[[i32; 4]] = if rects.len() > 64 { &[] } else { rects };
+        // The first frame of new/resized sections (and presents with more than 64 rectangles)
+        // are handed over as the whole buffer so the compositor paints the entire layer.
+        let shown: &[[i32; 4]] = if self.fresh || rects.len() > 64 { &[] } else { rects };
         let stride = self.width as usize * 4;
         let cur = &self.sections[self.current];
         // SAFETY: a system call reading `shown.len()` RECTs.
@@ -220,6 +221,7 @@ impl Shared {
             )
         };
         if status != 0 {
+            self.fresh = true;
             return false;
         }
         let next = 1 - self.current;

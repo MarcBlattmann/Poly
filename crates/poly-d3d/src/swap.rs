@@ -100,14 +100,17 @@ pub type Rect = [i32; 4];
 /// addendum), so a frame the app redraws whole (Chrome's scrolled page) is not copied at all.
 pub fn carry(owed: &[Rect], drawn: &[Rect], width: u32, height: u32) -> alloc::vec::Vec<Rect> {
     use alloc::vec::Vec;
+    if drawn.is_empty() {
+        return Vec::new();
+    }
     let (w, h) = (width.min(i32::MAX as u32) as i32, height.min(i32::MAX as u32) as i32);
     let clip = |r: &Rect| [r[0].clamp(0, w), r[1].clamp(0, h), r[2].clamp(0, w), r[3].clamp(0, h)];
     let owed: Vec<Rect> = owed.iter().map(clip).filter(|r| r[0] < r[2] && r[1] < r[3]).collect();
+    if owed.is_empty() {
+        return Vec::new();
+    }
     let drawn: Vec<Rect> = drawn.iter().map(clip).filter(|r| r[0] < r[2] && r[1] < r[3]).collect();
     let mut out = Vec::new();
-    if owed.is_empty() || drawn.is_empty() {
-        return out;
-    }
     // Bands of rows between the rectangles' edges: in each, the owed spans less the drawn ones.
     let mut ys: Vec<i32> = owed.iter().chain(&drawn).flat_map(|r| [r[1], r[3]]).collect();
     ys.sort_unstable();
@@ -180,6 +183,63 @@ mod tests {
         assert_eq!(r, alloc::vec![[0, 0, 10, 1], [20, 0, 30, 1], [40, 0, 100, 1]]);
         // Empty and reversed rectangles count for nothing.
         assert!(carry(&[[5, 5, 5, 9], [9, 9, 2, 2]], &[[0, 0, 1, 1]], 100, 50).is_empty());
+        // Non-empty drawn rects that clip to nothing mean nothing was redrawn (not the whole
+        // buffer), so everything owed is still carried.
+        assert_eq!(carry(&[all], &[[0, 0, 0, 0]], 100, 50), alloc::vec![all]);
+        assert_eq!(carry(&[all], &[[200, 200, 250, 250], [9, 9, 2, 2]], 100, 50), alloc::vec![all]);
+    }
+
+    #[test]
+    fn carry_keeps_double_buffered_frames_whole_across_presents() {
+        const W: usize = 8;
+        const H: usize = 6;
+        let all = [0, 0, W as i32, H as i32];
+        let mut bufs = [[0u8; W * H]; 2];
+        let mut cur = 0usize;
+        let mut owed: alloc::vec::Vec<Rect> = alloc::vec::Vec::new();
+        let mut fresh = true;
+        let mut expected = [0u8; W * H];
+
+        let paint = |buf: &mut [u8; W * H], rects: &[Rect], color: u8| {
+            let list = if rects.is_empty() { core::slice::from_ref(&all) } else { rects };
+            for r in list {
+                let (l, t) = (r[0].clamp(0, W as i32) as usize, r[1].clamp(0, H as i32) as usize);
+                let (rt, b) = (r[2].clamp(0, W as i32) as usize, r[3].clamp(0, H as i32) as usize);
+                for y in t..b {
+                    for x in l..rt {
+                        buf[y * W + x] = color;
+                    }
+                }
+            }
+        };
+
+        let frames: &[(&[Rect], u8)] = &[
+            (&[], 1),
+            (&[[1, 1, 4, 3]], 2),
+            (&[[3, 2, 7, 5]], 3),
+            (&[[0, 0, 0, 0]], 4),
+            (&[[0, 0, 2, 2], [6, 4, 8, 6]], 5),
+            (&[], 6),
+            (&[[2, 2, 5, 4]], 7),
+        ];
+
+        for &(rects, color) in frames {
+            paint(&mut bufs[cur], rects, color);
+            paint(&mut expected, rects, color);
+            let take = carry(&owed, rects, W as u32, H as u32);
+            let prev = bufs[1 - cur];
+            for r in take {
+                for y in r[1] as usize..r[3] as usize {
+                    for x in r[0] as usize..r[2] as usize {
+                        bufs[cur][y * W + x] = prev[y * W + x];
+                    }
+                }
+            }
+            assert_eq!(bufs[cur], expected, "frame color {color} with rects {rects:?}");
+            owed = if fresh || rects.is_empty() { alloc::vec![all] } else { rects.to_vec() };
+            fresh = false;
+            cur = 1 - cur;
+        }
     }
 
     fn d(effect: u32, buffers: u32) -> Desc1 {

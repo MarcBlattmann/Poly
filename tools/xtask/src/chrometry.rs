@@ -275,7 +275,7 @@ pub fn group_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Sym
 /// Chrome was still building) and exited without a window, at every start after.
 const MAX_STEPS: &str = concat!(
     "launch,sleep:50,click:143|103,sleep:3,click:143|103,sleep:70,waitpixel:200|400|008000|30,",
-    "dclick:600|52,sleep:8,shot:maximized,pixel:1200|600|008000,",
+    "dclick:600|52,sleep:8,shot:maximized,waitpixel:1200|600|008000|20,",
     "chord:ctrl+shift+w,wait:exited with status,sleep:5,shot:closed,",
     "launch,waitn:2|launch-to-window,sleep:25,shot:again,pixel:200|400|008000,pixel:1200|600|008000"
 );
