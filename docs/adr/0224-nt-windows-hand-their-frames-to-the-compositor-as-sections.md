@@ -89,3 +89,36 @@ compositor copies only the damaged rectangles of it into the scene: one copy.
 - Not done: DirectComposition surfaces (`IDCompositionSurface::BeginDraw`), visuals with offsets
   and clips of their own, and the newer DComp interfaces Chrome asks for (spec sheets first);
   scanning out a layer without composing it; formats other than `B8G8R8A8`.
+
+## Addendum (2026-11-20, chrome-win-damage-take): the back buffer is filled at its own present
+
+Decision 3 copied each presented frame's dirty rectangles into the other section right away. When
+Chrome scrolls, the dirty rectangle is the whole page (2.87 Mpx at 2560x1600), so every frame
+copied 11.5 MB that the app then drew over again.
+
+- **Filled when presented, not after the present before.** After a present the back buffer is
+  the other section, holding the frame before (or nothing, at first), as a flip-model back buffer
+  does (`IDXGISwapChain.Present.yaml` `contents_rotation`: buffer 0 reads zero after the first
+  present). The swap chain remembers what that section lacks (the last present's dirty
+  rectangles, or all of it). At the section's own present it first takes from the last frame what
+  it lacks *and* the app did not redraw (its dirty rectangles: `Present1.yaml`, the app updates
+  every pixel of them). `poly_d3d::swap::carry` computes that area, tested on the host.
+- So what is handed over is always a whole frame, and a frame the app redraws whole copies
+  nothing. Before, the back buffer held the last frame as soon as `Present` returned; now it
+  holds it only outside the area the app redraws. An app that reads its back buffer before
+  drawing sees the older frame, as on Windows.
+- When the sections go (released, resized, bound to another window), the back buffer first takes
+  all it lacks; during a present whose window changed, all it lacks less the dirty rectangles.
+- `Present1` takes up to 4,096 dirty rectangles for this; more than 64 are still handed over as
+  the whole buffer.
+
+**The compositor's side.** The take of a Windows layer is one copy of its damaged rectangles
+(`win32.rs` `blit`). The link also read win32k's device into a 16 KiB buffer allocated anew for
+every read; a native program's allocation of more than 2 KiB is its own `map` and `unmap`, so
+every frame a Windows app drew paid an `unmap` (about 0.5 ms with Chrome scrolling). The buffer
+now lives in the link.
+
+Chrome scrolling a long page at 2560x1600 / 200 %, timeline A/B within one session (blocks of
+16 presents, old copy vs new), per frame: Chrome's VizCompositorThread **9.95 → 8.11 ms** and
+**12.23 → 10.84 ms** (two sessions); compositor take **1.70–1.87 → 1.16–1.27 ms** (compositor
+stats windows); compositor `map`/`unmap` calls 795 → 0 per ring.

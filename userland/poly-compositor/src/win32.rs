@@ -671,6 +671,10 @@ pub struct Link {
     shell: Vec<(bool, alloc::string::String)>,
     /// Consent prompts win32k asked for, for the desktop (ADR 0222).
     consents: Vec<Action>,
+    /// What [`Link::pump`] reads the device into. Kept: a native program's allocation of more
+    /// than 2 KiB is a `map` and an `unmap` of its own, and taking this one for every read
+    /// unmapped 16 KiB in every frame a Windows app drew (0.5 ms each with Chrome scrolling).
+    read: Vec<u8>,
 }
 
 /// The `xdg_toplevel.resize_edge` bits of the server's interactive resize
@@ -745,6 +749,7 @@ impl Link {
             layout: alloc::string::String::new(),
             shell: Vec::new(),
             consents: Vec::new(),
+            read: vec![0u8; 16 * 1024],
         })
     }
 
@@ -919,11 +924,10 @@ impl Link {
 
     /// Read what win32k sent and apply it to the scene.
     pub fn pump(&mut self, scene: &mut Scene) {
-        let mut buf = vec![0u8; 16 * 1024];
         loop {
-            match os::read(self.fd, &mut buf) {
+            match os::read(self.fd, &mut self.read) {
                 Ok(0) => break,
-                Ok(n) => self.incoming.push(&buf[..n]),
+                Ok(n) => self.incoming.push(&self.read[..n]),
                 Err(e) => {
                     eprintln!("poly-compositor: {DEVICE}: {e}");
                     break;

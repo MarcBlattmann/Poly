@@ -6,8 +6,10 @@
 //! buffers are two pagefile sections, the back buffer texture's bytes are a view of one of them,
 //! and `Present`/`Present1` give that section and the dirty rectangles to win32k
 //! (`PolyUserPresentBuffer`), whose compositor maps it. The texture then draws into the other
-//! section, which first gets the presented frame's dirty rectangles, so the back buffer always
-//! holds the last frame presented as it did with one buffer.
+//! section. That one holds the frame before (or nothing, at first), as a flip-model back buffer
+//! does (Present.yaml `contents_rotation`); when it is presented, it first takes from the last
+//! frame what it lacks and the app did not redraw (its dirty rectangles), so what is shown is
+//! always whole. A frame the app redraws whole is not copied at all (ADR 0224 addendum).
 
 use crate::com::*;
 use crate::stubs;
@@ -121,6 +123,10 @@ struct Shared {
     height: u32,
     sections: [Section; 2],
     current: usize,
+    /// Where the back buffer holds an older frame than the last one presented.
+    owed: Vec<[i32; 4]>,
+    /// The other section never held a frame.
+    fresh: bool,
 }
 
 impl Shared {
@@ -162,15 +168,47 @@ impl Shared {
         };
         a.store.bytes().copy_from_slice(t.data());
         t.store = a.store.clone();
-        Some(Shared { hwnd, width: w, height: h, sections: [a, b], current: 0 })
+        Some(Shared { hwnd, width: w, height: h, sections: [a, b], current: 0, owed: Vec::new(), fresh: true })
+    }
+
+    /// Copy into the back buffer from the last frame presented (the other section) what it owes:
+    /// all of it (`drawn` none), or what the app did not redraw (`drawn`: the dirty rectangles,
+    /// none meaning all of it).
+    fn settle(&mut self, drawn: Option<&[[i32; 4]]>) {
+        if self.owed.is_empty() {
+            return;
+        }
+        let owed = core::mem::take(&mut self.owed);
+        let (w, h) = (self.width, self.height);
+        let take = match drawn {
+            Some(d) => poly_d3d::swap::carry(&owed, d, w, h),
+            None => owed,
+        };
+        let stride = w as usize * 4;
+        let (from, to) = (self.sections[1 - self.current].store.bytes(), self.sections[self.current].store.bytes());
+        for r in take {
+            let (l, top) = (r[0].clamp(0, w as i32) as usize, r[1].clamp(0, h as i32) as usize);
+            let (rt, b) = (r[2].clamp(0, w as i32) as usize, r[3].clamp(0, h as i32) as usize);
+            if l >= rt {
+                continue;
+            }
+            for y in top..b {
+                let at = y * stride;
+                to[at + l * 4..at + rt * 4].copy_from_slice(&from[at + l * 4..at + rt * 4]);
+            }
+        }
     }
 
     /// Hand the back buffer's section over with `rects` (none: all of it), then draw into the
-    /// other one, which first gets those rectangles of the frame. False when win32k refused it.
+    /// other one, which owes those rectangles of the frame. False when win32k refused it.
     fn present(&mut self, t: &mut Tex, rects: &[[i32; 4]]) -> bool {
+        self.settle(Some(rects));
+        // The first frame of new/resized sections (and presents with more than 64 rectangles)
+        // are handed over as the whole buffer so the compositor paints the entire layer.
+        let shown: &[[i32; 4]] = if self.fresh || rects.len() > 64 { &[] } else { rects };
         let stride = self.width as usize * 4;
         let cur = &self.sections[self.current];
-        // SAFETY: a system call reading `rects.len()` RECTs.
+        // SAFETY: a system call reading `shown.len()` RECTs.
         let status = unsafe {
             PolyUserPresentBuffer(
                 self.hwnd,
@@ -178,34 +216,30 @@ impl Shared {
                 self.width as usize,
                 self.height as usize,
                 stride,
-                rects.as_ptr(),
-                rects.len(),
+                shown.as_ptr(),
+                shown.len(),
             )
         };
         if status != 0 {
+            self.fresh = true;
             return false;
         }
         let next = 1 - self.current;
-        let (from, to) = (cur.store.bytes(), self.sections[next].store.bytes());
-        if rects.is_empty() {
-            to.copy_from_slice(from);
-        }
-        for r in rects {
-            let (l, top) = (r[0].clamp(0, self.width as i32) as usize, r[1].clamp(0, self.height as i32) as usize);
-            let (rt, b) = (r[2].clamp(0, self.width as i32) as usize, r[3].clamp(0, self.height as i32) as usize);
-            for y in top..b {
-                let at = y * stride;
-                to[at + l * 4..at + rt * 4].copy_from_slice(&from[at + l * 4..at + rt * 4]);
-            }
-        }
+        // The other section holds the frame before this one (or none yet): it owes what changed.
+        let all = [0, 0, self.width as i32, self.height as i32];
+        self.owed = if self.fresh || rects.is_empty() { alloc::vec![all] } else { rects.to_vec() };
+        self.fresh = false;
         t.store = self.sections[next].store.clone();
         self.current = next;
         true
     }
 
     /// The layer goes: win32k lets go of the sections, `t` (if the back buffer is still alive)
-    /// keeps its picture in bytes of its own, and the views and sections close.
-    fn end(self, t: Option<&mut Tex>) {
+    /// keeps its picture in bytes of its own, and the views and sections close. The back buffer
+    /// first takes what it owes from the last frame, less `drawn` (a present's dirty rectangles)
+    /// when the app is presenting it.
+    fn end(mut self, t: Option<&mut Tex>, drawn: Option<&[[i32; 4]]>) {
+        self.settle(drawn);
         // SAFETY: a system call; section 0 removes this process's layer of the window.
         unsafe { PolyUserPresentBuffer(self.hwnd, 0, 0, 0, 0, core::ptr::null(), 0) };
         if let Some(t) = t {
@@ -257,7 +291,7 @@ fn deliver_inner(s: &mut SwapChain, t: &mut Tex, rects: &[[i32; 4]]) {
             .is_some_and(|sh| sh.hwnd == s.hwnd && (sh.width, sh.height) == (t.width() as u32, t.height() as u32));
         if !fits {
             if let Some(old) = s.shared.take() {
-                old.end(Some(t));
+                old.end(Some(t), Some(rects));
             }
             s.shared = Shared::new(s.hwnd, t);
         }
@@ -274,7 +308,7 @@ fn deliver_inner(s: &mut SwapChain, t: &mut Tex, rects: &[[i32; 4]]) {
 fn end_shared(s: &mut SwapChain) {
     if let Some(old) = s.shared.take() {
         // SAFETY: the back buffer, if still alive, is a texture of this DLL.
-        old.end(unsafe { texture::tex(s.back) });
+        old.end(unsafe { texture::tex(s.back) }, None);
     }
 }
 
@@ -642,8 +676,8 @@ unsafe fn present_rects(this: *mut c_void, sync: u32, flags: u32, rects: &[[i32;
 }
 
 /// `Present1(SyncInterval, PresentFlags, pPresentParameters)`: dirty and scroll rectangles are for
-/// flip-model swap chains only. They are what the present hands over (ADR 0224); none, or more
-/// than 64, is the whole buffer.
+/// flip-model swap chains only. They are what the app redrew and what the present hands over
+/// (ADR 0224); none is the whole buffer (more than 64 are handed over as the whole buffer).
 unsafe extern "system" fn present1(this: *mut c_void, sync: u32, flags: u32, params: *const u32) -> HRESULT {
     let mut rects: Vec<[i32; 4]> = Vec::new();
     if !params.is_null() {
@@ -652,7 +686,7 @@ unsafe extern "system" fn present1(this: *mut c_void, sync: u32, flags: u32, par
         // SAFETY: the same structure (dxgi1_2.h): the count, then the rectangles, the scrolled
         // rectangle and its offset, pointers of this width.
         let p = unsafe { &*(params as *const PresentParameters) };
-        if dirty > 0 && dirty <= 64 && !p.rects.is_null() {
+        if dirty > 0 && dirty <= MAX_DIRTY && !p.rects.is_null() {
             // SAFETY: `DirtyRectsCount` RECTs of the caller.
             rects.extend_from_slice(unsafe { core::slice::from_raw_parts(p.rects, dirty as usize) });
         }
@@ -669,6 +703,9 @@ unsafe extern "system" fn present1(this: *mut c_void, sync: u32, flags: u32, par
     // SAFETY: as `Present`.
     unsafe { present_rects(this, sync, flags, &rects) }
 }
+
+/// The most dirty rectangles a present is taken with; more are the whole buffer.
+const MAX_DIRTY: u32 = 4096;
 
 /// `DXGI_PRESENT_PARAMETERS` (dxgi1_2.h).
 #[repr(C)]
