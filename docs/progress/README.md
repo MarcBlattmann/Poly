@@ -44,7 +44,7 @@ Roadmap progress and API coverage for [Poly](../../README.md). See [docs/ROADMAP
 | Windows | NT + win32k system services | 1,811 | 0 | 0 | 4 | 1,807 | 0 | 0 |
 | Windows | user-mode DLL exports | 130,638 | 1,116 | 3,456 | 3,814 | 52,956 | 0 | 69,296 |
 | macOS | BSD syscalls + Mach traps | 517 | 34 | 0 | 65 | 418 | 0 | 0 |
-| macOS | framework API | 880,557 | 0 | 0 | 912 | 879,645 | 0 | 0 |
+| macOS | framework API | 880,557 | 0 | 0 | 938 | 879,619 | 0 | 0 |
 
 *API coverage* is green entries out of the entries that are ours to build: *app-provided* entries (libraries the application or its installer supplies, ADR 0055) are listed under *Entries* but left out of the percentages, and so are entries *not applicable by design* (calls the reference OS itself does not offer on x86-64, or that would replace the running kernel; Poly answers them as the reference does). *App-weighted* counts each API by how often the target apps call it; it is the number that tracks real progress and appears once the call tracer exists.
 
