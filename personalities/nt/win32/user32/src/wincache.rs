@@ -1,8 +1,10 @@
-//! What `Window` answered, kept while the window state is unchanged (ADR 0249).
+//! What `Window`, `Desktop` and `KeyboardState` answered, kept while the window state is
+//! unchanged (ADR 0249).
 //!
 //! `IsWindow`, `IsZoomed`, `GetClientRect`, `MonitorFromWindow` and many more each asked the
 //! kernel for the window's whole record; Chrome's UI thread does so hundreds of times while
-//! switching tabs. The kernel maps a window-state page into the process on the first ask
+//! switching tabs. `GetKeyState` and `GetKeyboardState` asked for the thread's whole key state;
+//! Chrome asks for its modifiers many times for every key and mouse message it handles. The kernel maps a window-state page into the process on the first ask
 //! (`Request::SharedPage`), whose first eight bytes are a generation it raises before every change
 //! of the window manager. An answer is kept with the generation read *before* it was asked for,
 //! and used again while the page shows that generation: any change since makes it ask again.
@@ -18,9 +20,16 @@ static PAGE: AtomicU64 = AtomicU64::new(0);
 
 const SLOTS: usize = 32;
 
+/// What a kept reply answers.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Asked {
+    Window(u64),
+    Desktop,
+    KeyboardState,
+}
+
 struct Entry {
-    /// The request: `Window` of this window, or `Desktop` (0).
-    window: Option<u64>,
+    asked: Asked,
     tid: u32,
     generation: u64,
     reply: Reply,
@@ -68,26 +77,39 @@ fn generation() -> Option<u64> {
     Some(unsafe { (*(page as *const AtomicU64)).load(Ordering::Acquire) })
 }
 
-/// Whether `req` is answered from the cache: `Window` (the window's record) and `Desktop` (the
-/// screen, work area and DPI as the thread sees them).
+/// What `req` asks, if its reply can be kept: `Window` (the window's record), `Desktop` (the
+/// screen, work area and DPI as the thread sees them) and `KeyboardState` (the thread's key state
+/// as of the input messages it retrieved, which changes only with a change of the window manager:
+/// a message retrieved, `SetKeyboardState`).
+fn asked(req: &Request) -> Option<Asked> {
+    match req {
+        Request::Window { hwnd } => Some(Asked::Window(*hwnd)),
+        Request::Desktop {} => Some(Asked::Desktop),
+        Request::KeyboardState {} => Some(Asked::KeyboardState),
+        _ => None,
+    }
+}
+
+/// Whether `req` is answered from the cache.
 pub fn cacheable(req: &Request) -> bool {
-    matches!(req, Request::Window { .. } | Request::Desktop {})
+    asked(req).is_some()
 }
 
 /// The reply to `req` (one [`cacheable`] says yes to) as `fetch` gives it, from the cache while
 /// the window state is unchanged.
 pub fn reply(req: &Request, fetch: impl FnOnce() -> Reply) -> Reply {
+    let Some(asked) = asked(req) else { return fetch() };
     let Some(generation) = generation() else { return fetch() };
-    let window = match req {
-        Request::Window { hwnd } => Some(*hwnd),
-        _ => None,
-    };
     // SAFETY: no preconditions.
     let tid = unsafe { crate::GetCurrentThreadId() };
-    let h = window.unwrap_or(0) as usize;
+    let h = match asked {
+        Asked::Window(hwnd) => hwnd as usize,
+        Asked::Desktop => 0,
+        Asked::KeyboardState => 1,
+    };
     let slot = &CACHE[(h ^ (h >> 16) ^ (tid as usize).wrapping_mul(0x9E37)) % SLOTS];
     let hit = slot.with(|e| match e {
-        Some(e) if e.window == window && e.tid == tid && e.generation == generation => Some(e.reply.clone()),
+        Some(e) if e.asked == asked && e.tid == tid && e.generation == generation => Some(e.reply.clone()),
         _ => None,
     });
     if let Some(Some(r)) = hit {
@@ -96,7 +118,7 @@ pub fn reply(req: &Request, fetch: impl FnOnce() -> Reply) -> Reply {
     let r = fetch();
     // Failures of the call itself (a full buffer, a refused request) are not kept.
     if !matches!(r, Reply::Error { code } if code == crate::ERROR_INVALID_PARAMETER) {
-        slot.with(|e| *e = Some(Entry { window, tid, generation, reply: r.clone() }));
+        slot.with(|e| *e = Some(Entry { asked, tid, generation, reply: r.clone() }));
     }
     r
 }

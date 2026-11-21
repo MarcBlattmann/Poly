@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "wv_openw_views",
-      "exe_sha256": "5a956f46898c7258bd39172d89c5ff60d5249fed6f5944b45691d67be9f8d97e",
+      "exe_sha256": "6ffb2dce89dbdc9f071785a543c7147804af876ae28d871c8760507b3cb15014",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

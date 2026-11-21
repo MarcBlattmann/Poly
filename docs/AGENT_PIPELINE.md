@@ -683,7 +683,7 @@ paths), with an empty environment.
 `libsystem_pthread`, `libsystem_malloc`, `libdyld`) are the exception: such a
 test says `poly-mac: libsystem` in a comment among its first 30 lines, includes
 `poly_mlibc.h` (`tests/macos/include`; the bootstrap, `mach_port_*`, XPC and spawn-attribute tests include
-`poly_mapi.h`, same rules) instead and calls the function under test
+`poly_mapi.h`, the exception port and thread state tests `poly_mexc.h`, same rules) instead and calls the function under test
 through libSystem. It still reports with raw `write` calls only (`check`,
 `check_str`, `value`, `finish`, the same output format), so a broken function
 cannot hide behind its own output. `mac build` lets exactly these tests import
@@ -696,6 +696,13 @@ never exact times, and synchronise with semaphores rather than sleeps. `poly_mli
 starts every such program with a 30 second `alarm`, so a test that hangs is killed
 and fails instead of blocking the run. A test about the main queue and run loops
 carries both `poly-mac: libsystem` and `poly-mac: corefoundation`.
+
+CoreGraphics' tests (`macos/api/CoreGraphics.framework/...`) say `poly-mac: coregraphics`
+and include `poly_mcg.h`: they are linked with `-framework CoreGraphics -framework
+CoreFoundation` and may import CoreGraphics's and CoreFoundation's own symbols. They
+draw into a `CGBitmapContext` over a static buffer and print the bytes of chosen pixels
+(alpha grids, whole-pixel dumps, hashes of the buffer), so what is recorded is pixel
+exact; doubles are printed as the hex of their bits.
 
 ```sh
 cargo xtask pipeline mac build [--tests-dir DIR]... [--tests a,b]   # target/pipeline/macos/bin/<arch>/, manifest.json
@@ -764,6 +771,23 @@ by their relative name. Tests that touch Apple's own fonts (the default font, th
 for a character) have `sys_` in their names and say SYSTEM-DEPENDENT: their recorded names are Apple's
 choices, which Poly need not copy. Drawing tests render into an 8-bit gray `CGBitmapContext` and print the
 pixels row by row.
+
+**Tests about AppKit** (`specs/macos/AppKit.framework/<symbol>.tests/`): a test whose header comment
+has the line `poly-mac: appkit` is an Objective-C program (a `.c` file built with ARC) linked with
+`-framework AppKit -framework Foundation -framework QuartzCore` that may import the symbols of AppKit,
+Foundation, CoreFoundation, CoreGraphics, CoreText, QuartzCore and the Objective-C runtime. It includes
+`poly_mak.h` (on top of `poly_mfn.h`), which starts a 12 second watchdog and gives `ak_window` (an
+invisible window: alpha 0, clicks pass through), `ak_spin` (turn the run loop), `ak_stop_run_after`
+(`[NSApp run]` only returns after `stop:` and one more event), `ak_light`/`ak_dark` and `ak_render` (draw a
+view into an sRGB bitmap the test makes, so that pixel bytes do not depend on the display). The test
+program is not in an application bundle: its activation policy is Prohibited, it is never active and no
+window becomes key, so nothing takes the keyboard or the mouse from the person at the Mac, and the
+Mac's console session (the window server) must exist. Tests set the appearance they need (the Mac's
+setting is not read). Values that depend on the macOS release or the Mac (sizes of system controls,
+system colours and fonts, the display) are printed with a `sys_` name and called SYSTEM-DEPENDENT in the
+sheet. Raw numbers of `NSTextAlignment` differ between the architectures in the SDK, so tests compare with
+the named constants; the pixels of system controls differ by one step between x86_64 and arm64, which
+is why each architecture is recorded on its own.
 
 Poly cannot run Mach-O programs yet, so there is no comparison with Poly
 (`mac poly`/`mac diff`) until Mach-O loading exists.

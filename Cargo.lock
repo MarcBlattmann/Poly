@@ -139,6 +139,13 @@ name = "poly-bpf"
 version = "0.0.1"
 
 [[package]]
+name = "poly-cf"
+version = "0.0.1"
+dependencies = [
+ "poly-libsystem",
+]
+
+[[package]]
 name = "poly-cmd"
 version = "0.0.1"
 
@@ -266,6 +273,7 @@ version = "0.0.1"
 name = "poly-files"
 version = "0.0.1"
 dependencies = [
+ "poly-png",
  "poly-shell",
 ]
 
@@ -376,6 +384,10 @@ name = "poly-libm"
 version = "0.0.1"
 
 [[package]]
+name = "poly-libsystem"
+version = "0.0.1"
+
+[[package]]
 name = "poly-line"
 version = "0.0.1"
 
@@ -442,6 +454,14 @@ name = "poly-ntobj"
 version = "0.0.1"
 dependencies = [
  "poly-security",
+]
+
+[[package]]
+name = "poly-objc"
+version = "0.0.1"
+dependencies = [
+ "poly-dyld",
+ "poly-macho",
 ]
 
 [[package]]

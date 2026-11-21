@@ -1,0 +1,42 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/class_addMethod.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in class_addMethod.tests/macos.json.
+id: macos/api/libobjc.A.dylib/class_addMethod
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  BOOL class_addMethod(Class cls, SEL name, IMP imp, const char *types). Adds a method to the class
+  itself (a class method when cls is a metaclass). Returns YES when the class did not define that
+  selector itself: a selector nobody had, or one that only a superclass has (the new method overrides
+  it for the class and its subclasses; the superclass's own method and implementation are unchanged).
+  Returns NO, and changes nothing, when the class already defines the selector itself, whatever imp
+  and types are passed: the first implementation and the first type string are kept. The type string
+  is copied (the caller's buffer may change afterwards) and read back unchanged by
+  method_getTypeEncoding, including an empty string, an arbitrary string ("anything at all {}") and a
+  string that is not a valid encoding; a NULL type string is accepted and reads back as the empty
+  string. Works on a class that is not yet registered and on a registered class. After the call the
+  next message uses the new method, also for selectors that were sent before and for instances of
+  subclasses that do not define the selector themselves; a subclass's own method of that selector
+  keeps winning. The implementation is called with self, _cmd and the message's arguments (register
+  and stack arguments, doubles, 8 arguments were passed through). Adding to a class does not add to
+  its superclass or to a sibling. A NULL imp was not tried.
+returns:
+  yes: "YES (1): the class did not define the selector itself; the method is added"
+  no: "NO (0): the class already defines it itself; nothing changes"
+errors:
+  none: "no error codes; nothing is written to stderr"
+  null_imp: "not observed"
+side_effects: "the method list of the class changes; message dispatch for the class and its subclasses is updated at once (no stale caches); the type string is stored as a copy"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering:
+  - "effective for the very next message after the call returns"
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

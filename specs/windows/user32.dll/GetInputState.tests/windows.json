@@ -1,0 +1,29 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64",
+    "session": "interactive"
+  },
+  "bundle": "2c44ff600c90",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:21:59Z",
+  "tests": [
+    {
+      "name": "fk_inputstate_ctrl",
+      "exe_sha256": "ef1e36f26422eadde54ce65dc869b878ec2234e04e18b9b3503488399852065a",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "b2sgcmVnaXN0ZXJlZAo9PSBDdHJsK0wgdGhlbiBhOiB0aGUgc3RhdGUgc2VlbiBpbiBlYWNoIGtleS1kb3duIGhhbmRsZXIKICBhbGwgcXVldWVkOiBHZXRLZXlTdGF0ZSBjdHJsIGZhbHNlIEdldEFzeW5jS2V5U3RhdGUgY3RybCBmYWxzZQogIEUgV01fS0VZRE9XTiB2az0weDExIGw9MHgwMDFkMDAwMQogICAgICBmb2N1cyBFIGN0cmwgdHJ1ZSBrZXkgdHJ1ZQogIEUgV01fS0VZRE9XTiB2az0weDRjIGw9MHgwMDI2MDAwMQogICAgICBmb2N1cyBFIGN0cmwgdHJ1ZSBrZXkgdHJ1ZQogIEUgV01fS0lMTEZPQ1VTIG90aGVyPUYKICAgICAgR2V0Rm9jdXMgRiBhY3RpdmUgUAogIEYgV01fU0VURk9DVVMgb3RoZXI9RQogICAgICBHZXRGb2N1cyBGIGFjdGl2ZSBQCiAgRSBoYW5kbGVyOiBTZXRGb2N1cyhlZGl0IDEpCiAgRSBXTV9DSEFSIGNoPTB4MDAwYyBsPTB4MDAyNjAwMDEKICBGIFdNX0tFWVVQIHZrPTB4NGMgbD0weGMwMjYwMDAxCiAgRiBXTV9LRVlVUCB2az0weDExIGw9MHhjMDFkMDAwMQogIEYgV01fS0VZRE9XTiB2az0weDQxIGw9MHgwMDFlMDAwMQogICAgICBmb2N1cyBGIGN0cmwgZmFsc2Uga2V5IHRydWUKICBGIFdNX0NIQVIgY2g9MHgwMDYxIGw9MHgwMDFlMDAwMQogIEYgV01fS0VZVVAgdms9MHg0MSBsPTB4YzAxZTAwMDEKICB0ZXh0czogRSAiIiBGICJhIiBHICIiOyBmb2N1cyBGOyBmb3JlZ3JvdW5kIG91cnMgdHJ1ZQogIGF0IHRoZSBlbmQ6IEdldEtleVN0YXRlIGN0cmwgZmFsc2UgYSBmYWxzZQpzdW1tYXJ5IDEgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "ok registered\n== Ctrl+L then a: the state seen in each key-down handler\n  all queued: GetKeyState ctrl false GetAsyncKeyState ctrl false\n  E WM_KEYDOWN vk=0x11 l=0x001d0001\n      focus E ctrl true key true\n  E WM_KEYDOWN vk=0x4c l=0x00260001\n      focus E ctrl true key true\n  E WM_KILLFOCUS other=F\n      GetFocus F active P\n  F WM_SETFOCUS other=E\n      GetFocus F active P\n  E handler: SetFocus(edit 1)\n  E WM_CHAR ch=0x000c l=0x00260001\n  F WM_KEYUP vk=0x4c l=0xc0260001\n  F WM_KEYUP vk=0x11 l=0xc01d0001\n  F WM_KEYDOWN vk=0x41 l=0x001e0001\n      focus F ctrl false key true\n  F WM_CHAR ch=0x0061 l=0x001e0001\n  F WM_KEYUP vk=0x41 l=0xc01e0001\n  texts: E \"\" F \"a\" G \"\"; focus F; foreground ours true\n  at the end: GetKeyState ctrl false a false\nsummary 1 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1396
+    }
+  ]
+}

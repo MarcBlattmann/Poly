@@ -20,23 +20,41 @@ pub struct PageMap {
     len: usize,
     /// `(first page, state)`; the first run starts at 0.
     runs: Vec<(usize, PageState)>,
+    /// How many pages are committed, kept as the runs change: every commit checks the process's
+    /// committed bytes against its limits, and counting them run by run made each commit cost as
+    /// much as the process had runs.
+    committed: usize,
+}
+
+fn is_committed(s: &PageState) -> bool {
+    matches!(s, PageState::Committed(_))
 }
 
 impl PageMap {
     /// `len` pages, all in `state`.
     pub fn new(len: usize, state: PageState) -> PageMap {
-        PageMap { len, runs: if len == 0 { Vec::new() } else { vec![(0, state)] } }
+        PageMap {
+            len,
+            runs: if len == 0 { Vec::new() } else { vec![(0, state)] },
+            committed: if is_committed(&state) { len } else { 0 },
+        }
     }
 
     /// The pages of a list, one state each.
     pub fn from_states(states: &[PageState]) -> PageMap {
-        let mut map = PageMap { len: states.len(), runs: Vec::new() };
+        let mut map = PageMap { len: states.len(), runs: Vec::new(), committed: 0 };
         for (i, &s) in states.iter().enumerate() {
             if map.runs.last().is_none_or(|&(_, last)| last != s) {
                 map.runs.push((i, s));
             }
         }
+        map.committed = states.iter().filter(|s| is_committed(s)).count();
         map
+    }
+
+    /// How many pages are committed.
+    pub fn committed(&self) -> usize {
+        self.committed
     }
 
     pub fn len(&self) -> usize {
@@ -92,6 +110,8 @@ impl PageMap {
         if range.is_empty() {
             return;
         }
+        let was: usize = self.runs_in(range.clone()).filter(|(_, s)| is_committed(s)).map(|(r, _)| r.len()).sum();
+        self.committed = self.committed - was + if is_committed(&state) { range.len() } else { 0 };
         // The state the run that crosses `range.end` goes on in.
         let after_state = self.get_or(range.end);
         // The runs that start in `[range.start, range.end]` give way to the range's run and, if
@@ -212,9 +232,20 @@ mod tests {
             let (a, b) = (next(41), next(41));
             let (a, b) = (a.min(b), a.max(b));
             let s = states[next(states.len())];
-            m.fill(a..b, s);
-            model[a..b].fill(s);
+            if next(4) == 0 {
+                m.replace(a..b, R, s);
+                for p in &mut model[a..b] {
+                    if *p == R {
+                        *p = s;
+                    }
+                }
+            } else {
+                m.fill(a..b, s);
+                model[a..b].fill(s);
+            }
             assert_eq!(flat(&m), model);
+            // The committed count follows every change.
+            assert_eq!(m.committed(), model.iter().filter(|p| **p != R).count());
             // Neighbouring runs always differ.
             for w in m.runs.windows(2) {
                 assert_ne!(w[0].1, w[1].1);

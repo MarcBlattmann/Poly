@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:59:59",
+  "tests": [
+    {
+      "name": "exc_thread_swap_effect",
+      "source_sha256": "cb73da364f86be585e82fd210369317333c7631b640a8eb60425d37ad6ece578",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c3b23d0882a1eb2e7c6b316e88e22105700bd85c49135e170d36a2e864fe740e",
+          "exit_code": 0,
+          "stdout": "ok the swap succeeds and returns the old port\nok the breakpoint went to the new handler\nok and the thread continued with the register that handler set\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c8a5e2ab37b8dab219259aac84ea773dbe56dccb85fb576c426ae54bf5c1e91b",
+          "exit_code": 0,
+          "stdout": "ok the swap succeeds and returns the old port\nok the breakpoint went to the new handler\nok and the thread continued with the register that handler set\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "exc_thread_swap_errors",
+      "source_sha256": "494bfe7b3c1ec093d6cbefefc84f2bcef944f195ea00ae49cb8701612e2a5739",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "cdd00f8817925e8d78896e4f32c6c9e0c877efbd902eb17432340db196c99091",
+          "exit_code": 0,
+          "stdout": "ok behavior 99: KERN_INVALID_ARGUMENT\nok flavor 999: KERN_INVALID_ARGUMENT\nok mask 0x80000000: KERN_INVALID_ARGUMENT\nok the task port as the thread: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the thread: MACH_SEND_INVALID_DEST\nok the earlier setting is unchanged\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "96f5591948f08edb81f7de3dcdf02347f0b13912a28465237cce5a06e0cce766",
+          "exit_code": 0,
+          "stdout": "ok behavior 99: KERN_INVALID_ARGUMENT\nok flavor 999: KERN_INVALID_ARGUMENT\nok mask 0x80000000: KERN_INVALID_ARGUMENT\nok the task port as the thread: KERN_INVALID_ARGUMENT\nok MACH_PORT_NULL as the thread: MACH_SEND_INVALID_DEST\nok the earlier setting is unchanged\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

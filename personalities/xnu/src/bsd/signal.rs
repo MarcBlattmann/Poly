@@ -13,6 +13,8 @@ pub const SIGURG: u32 = 16;
 pub const SIGSTOP: u32 = 17;
 pub const SIGTSTP: u32 = 18;
 pub const SIGCONT: u32 = 19;
+/// `SIGSYS` (`sys/signal.h`): a call that does not exist.
+pub const SIGSYS: u32 = 12;
 pub const SIGCHLD: u32 = 20;
 pub const SIGTTIN: u32 = 21;
 pub const SIGTTOU: u32 = 22;

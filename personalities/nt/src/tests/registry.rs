@@ -185,8 +185,12 @@ fn create_set_query_enumerate() {
         let n = f.u32_at(buf + 12) as usize;
         subs.push(utf16(&f.bytes_at(buf + 16, n)));
     }
-    // (`Wow6432Node` is the 32-bit view of the software hive, ADR 0186 stage 2: a 64-bit caller lists it.)
-    assert_eq!(subs, ["Classes", "Microsoft", "PolyTest", "Wow6432Node"]);
+    // (`Wow6432Node` is the 32-bit view of the software hive, ADR 0186 stage 2: a 64-bit caller
+    // lists it; the other names are a Windows machine's defaults, `RegistryDefaults.Wow6432Node.yaml`.)
+    assert_eq!(
+        subs,
+        ["Classes", "Clients", "Microsoft", "Policies", "PolyTest", "RegisteredApplications", "WOW6432Node"]
+    );
     let buf = f.alloc(64);
     assert_eq!(
         f.call(Service::EnumerateKey, &[sw, 0, u64::from(KEY_NAME_INFORMATION), buf, 64, 0]),
@@ -465,13 +469,75 @@ fn subkeys(f: &mut Fake, h: u64) -> Vec<String> {
 }
 
 #[test]
-fn the_default_software_hive_has_an_empty_wow6432node() {
+fn the_default_software_hive_has_the_wow6432node_keys_of_windows() {
     let mut f = Fake::new();
-    let node = open_ok(&mut f, "\\Registry\\Machine\\SOFTWARE\\Wow6432Node");
-    assert!(subkeys(&mut f, node).is_empty());
+    // `RegistryDefaults.Wow6432Node.yaml` `software_64`, `classes_wow`.
+    let node = open_ok(&mut f, "\\Registry\\Machine\\SOFTWARE\\WOW6432Node");
+    assert_eq!(subkeys(&mut f, node), ["Classes", "Clients", "Microsoft", "Policies", "RegisteredApplications"]);
+    let classes_node = open_ok(&mut f, "\\Registry\\Machine\\SOFTWARE\\Classes\\WOW6432Node");
+    let mut names = subkeys(&mut f, classes_node);
+    names.sort();
+    assert_eq!(names, ["AppID", "CLSID", "DirectShow", "Interface", "Media Type", "MediaFoundation", "TypeLib"]);
     // A 64-bit process lists it below HKLM\SOFTWARE.
     let sw = open_ok(&mut f, SOFTWARE);
-    assert!(subkeys(&mut f, sw).iter().any(|n| n == "Wow6432Node"));
+    assert!(subkeys(&mut f, sw).iter().any(|n| n == "WOW6432Node"));
+}
+
+/// `RegistryDefaults.ClassesRoots.yaml` `hkcu_clsid`: a 32-bit program's create below the user's
+/// `Classes\CLSID` makes the user's `Classes\WOW6432Node` it goes through; and
+/// `one_key_64`: a 64-bit caller's create with `KEY_WOW64_64KEY` below `Classes\WOW6432Node`
+/// opened with it stays there.
+#[test]
+fn view_nodes_on_create() {
+    let mut f = Fake::new();
+    let user_classes =
+        alloc::format!("\\Registry\\User\\{}\\Software\\Classes", poly_registry::defaults::POLY_USER_SID);
+    assert_eq!(
+        open_key(&mut f, 0, &alloc::format!("{user_classes}\\WOW6432Node"), KEY_READ).0,
+        STATUS_OBJECT_NAME_NOT_FOUND
+    );
+    f.proc.wow64 = true;
+    let (s, h, _) = create_key(&mut f, 0, &alloc::format!("{user_classes}\\CLSID"), KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert!(key_name(&mut f, h).ends_with("\\Software\\Classes\\WOW6432Node\\CLSID"));
+    f.proc.wow64 = false;
+    let (s, node) =
+        open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Classes\\Wow6432Node", KEY_ALL_ACCESS | KEY_WOW64_64KEY);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (s, h, _) = create_key(&mut f, node, "Marker", KEY_ALL_ACCESS | KEY_WOW64_64KEY, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\Marker");
+}
+
+/// `RegistryDefaults.Wow6432Node.yaml` `one_key_64`, `software_32`: the physical registry's names
+/// for one key (links), and the 32-bit view's own reading of a leftover `Wow6432Node`.
+#[test]
+fn the_wow6432node_names_of_one_key() {
+    let mut f = Fake::new();
+    let name = |f: &mut Fake, path: &str| {
+        let (s, h) = open_key(f, 0, path, KEY_READ);
+        (s == STATUS_SUCCESS).then(|| key_name(f, h))
+    };
+    let classes_node = "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node";
+    // 64-bit view: Wow6432Node\Classes is Classes\Wow6432Node; its TypeLib and AppID are the shared ones.
+    let p = "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Classes\\CLSID";
+    assert_eq!(name(&mut f, p).as_deref(), Some(alloc::format!("{classes_node}\\CLSID").as_str()));
+    let p = "\\Registry\\Machine\\SOFTWARE\\Classes\\Wow6432Node\\TypeLib";
+    assert_eq!(name(&mut f, p).as_deref(), Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\TypeLib"));
+    let p = "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Classes\\AppID";
+    assert_eq!(name(&mut f, p).as_deref(), Some("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\AppID"));
+    assert_eq!(name(&mut f, "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Wow6432Node"), None);
+    // 32-bit view: SOFTWARE\Wow6432Node is SOFTWARE, so its Wow6432Node child does not exist.
+    f.proc.wow64 = true;
+    assert_eq!(name(&mut f, "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Wow6432Node"), None);
+    let p = "\\Registry\\Machine\\SOFTWARE\\Classes\\Wow6432Node\\Wow6432Node";
+    assert_eq!(name(&mut f, p).as_deref(), Some(classes_node));
+    // Its CurrentVersion has the (x86) folders.
+    let p = "\\Registry\\Machine\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion";
+    assert_eq!(
+        name(&mut f, p).as_deref(),
+        Some("\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion")
+    );
 }
 
 #[test]
@@ -481,7 +547,7 @@ fn a_32_bit_process_opens_and_creates_software_keys_under_wow6432node() {
     // The 32-bit process creates HKLM\SOFTWARE\Vendor ...
     let (s, h, d) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Vendor", KEY_ALL_ACCESS, 0);
     assert_eq!((s, d), (STATUS_SUCCESS, REG_CREATED_NEW_KEY));
-    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Vendor");
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Vendor");
     // ... and finds it again in its own view.
     assert_eq!(open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Vendor", KEY_READ).0, STATUS_SUCCESS);
     // With KEY_WOW64_64KEY it sees the native view, where there is no such key.
@@ -489,13 +555,13 @@ fn a_32_bit_process_opens_and_creates_software_keys_under_wow6432node() {
         open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Vendor", KEY_READ | KEY_WOW64_64KEY).0,
         STATUS_OBJECT_NAME_NOT_FOUND
     );
-    let (s, n) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Wow6432Node\\Vendor", KEY_READ);
+    let (s, n) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\WOW6432Node\\Vendor", KEY_READ);
     assert_eq!(s, STATUS_SUCCESS, "the physical key is below the node");
-    assert_eq!(key_name(&mut f, n), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Vendor");
+    assert_eq!(key_name(&mut f, n), "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Vendor");
     // A 32-bit process sees no Wow6432Node below HKLM\SOFTWARE (it is HKLM\SOFTWARE).
     let sw = open_ok(&mut f, SOFTWARE);
-    assert_eq!(key_name(&mut f, sw), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node");
-    assert!(!subkeys(&mut f, sw).iter().any(|n| n == "Wow6432Node"));
+    assert_eq!(key_name(&mut f, sw), "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node");
+    assert!(!subkeys(&mut f, sw).iter().any(|n| n == "WOW6432Node"));
     assert!(subkeys(&mut f, sw).iter().any(|n| n == "Vendor"));
 }
 
@@ -508,11 +574,11 @@ fn a_64_bit_process_does_not_see_the_32_bit_keys_unless_it_asks() {
     assert_eq!(open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Only32", KEY_READ).0, STATUS_OBJECT_NAME_NOT_FOUND);
     let (s, h) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Only32", KEY_READ | KEY_WOW64_32KEY);
     assert_eq!(s, STATUS_SUCCESS);
-    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Only32");
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Only32");
     // The mask bits are no rights: creating with them works in a 64-bit process, too.
     let (s, h, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Made32", KEY_ALL_ACCESS | KEY_WOW64_32KEY, 0);
     assert_eq!(s, STATUS_SUCCESS);
-    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Made32");
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Made32");
     assert_eq!(open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Made32", KEY_READ).0, STATUS_OBJECT_NAME_NOT_FOUND);
 }
 
@@ -524,14 +590,14 @@ fn a_relative_open_below_hklm_software_is_redirected_for_a_32_bit_process() {
     f.proc.wow64 = true;
     let (s, h, _) = create_key(&mut f, machine, "SOFTWARE\\Rel", KEY_ALL_ACCESS, 0);
     assert_eq!(s, STATUS_SUCCESS);
-    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Rel");
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Rel");
     // A handle to HKLM\SOFTWARE (the 32-bit view) and a relative create below it.
     let (s, sw) = open_key(&mut f, machine, "SOFTWARE", KEY_ALL_ACCESS);
     assert_eq!(s, STATUS_SUCCESS);
-    assert_eq!(key_name(&mut f, sw), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node");
+    assert_eq!(key_name(&mut f, sw), "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node");
     let (s, h, _) = create_key(&mut f, sw, "Below", KEY_ALL_ACCESS, 0);
     assert_eq!(s, STATUS_SUCCESS);
-    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\Wow6432Node\\Below");
+    assert_eq!(key_name(&mut f, h), "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Below");
     // The native view of the same relative name.
     let (s, native) = open_key(&mut f, machine, "SOFTWARE", KEY_ALL_ACCESS | KEY_WOW64_64KEY);
     assert_eq!(s, STATUS_SUCCESS);
@@ -540,6 +606,90 @@ fn a_relative_open_below_hklm_software_is_redirected_for_a_32_bit_process() {
     let (s, sys) = open_key(&mut f, machine, "SYSTEM", KEY_READ);
     assert_eq!(s, STATUS_SUCCESS);
     assert_eq!(key_name(&mut f, sys), "\\REGISTRY\\MACHINE\\SYSTEM");
+}
+
+/// `RegCreateKeyExW.yaml` `inheritance`, `level_by_level`, `below_software`, `named_node`,
+/// `empty_subkey`: a key made below an open key with no view bit is in that key's view, and the
+/// view is part of the open key's physical place.
+#[test]
+fn a_32_bit_process_makes_keys_in_the_view_of_the_open_key() {
+    let mut f = Fake::new();
+    f.proc.wow64 = true;
+    let machine = open_ok(&mut f, "\\Registry\\Machine");
+    let n = |f: &mut Fake, root: u64, name: &str, access: u32| {
+        let (s, h, _) = create_key(f, root, name, access, 0);
+        assert_eq!(s, STATUS_SUCCESS, "{name}");
+        (h, key_name(f, h))
+    };
+    let classes_n = "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes";
+    let clsid_x = "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\CLSID";
+    let clsid_n = "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\CLSID";
+    // Classes opened with 64: CLSID and its subkey with no bit are native; with 32, the 32-bit ones.
+    let (classes64, name) = n(&mut f, machine, "SOFTWARE\\Classes", KEY_ALL_ACCESS | KEY_WOW64_64KEY);
+    assert_eq!(name, classes_n);
+    let (clsid64, name) = n(&mut f, classes64, "CLSID", KEY_ALL_ACCESS);
+    assert_eq!(name, clsid_n);
+    assert_eq!(n(&mut f, clsid64, "{G}", KEY_ALL_ACCESS).1, alloc::format!("{clsid_n}\\{{G}}"));
+    assert_eq!(n(&mut f, clsid64, "{G}", KEY_ALL_ACCESS | KEY_WOW64_32KEY).1, alloc::format!("{clsid_x}\\{{G}}"));
+    // The open key itself again (kernelbase opens an empty name) keeps its view.
+    let (s, again) = open_key(&mut f, clsid64, "", KEY_ALL_ACCESS);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, again), clsid_n);
+    assert_eq!(n(&mut f, again, "{H}", KEY_ALL_ACCESS).1, alloc::format!("{clsid_n}\\{{H}}"));
+    // Classes opened with no bit (shared): CLSID is the 32-bit one, and a subkey of that stays
+    // there even with 64; CLSID with 64 is the native one.
+    let (classes, name) = n(&mut f, machine, "SOFTWARE\\Classes", KEY_ALL_ACCESS);
+    assert_eq!(name, classes_n);
+    let (clsid, name) = n(&mut f, classes, "CLSID", KEY_ALL_ACCESS);
+    assert_eq!(name, clsid_x);
+    assert_eq!(n(&mut f, clsid, "{G}", KEY_ALL_ACCESS | KEY_WOW64_64KEY).1, alloc::format!("{clsid_x}\\{{G}}"));
+    assert_eq!(n(&mut f, classes, "CLSID", KEY_ALL_ACCESS | KEY_WOW64_64KEY).1, clsid_n);
+    // A path that names the node is the physical key, also below a native handle.
+    assert_eq!(n(&mut f, classes64, "WOW6432Node\\CLSID", KEY_ALL_ACCESS).1, clsid_x);
+    // Software opened with no bit is Software\WOW6432Node; Classes below it is the shared
+    // Classes, and CLSID below that the 32-bit one (Google's updater makes its class this way).
+    let (sw, name) = n(&mut f, machine, "SOFTWARE", KEY_ALL_ACCESS);
+    assert_eq!(name, "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node");
+    let (cl, name) = n(&mut f, sw, "Classes", KEY_ALL_ACCESS);
+    assert_eq!(name, classes_n);
+    assert_eq!(n(&mut f, cl, "CLSID", KEY_ALL_ACCESS).1, clsid_x);
+    // AppID is shared: the walk and the one-call path reach the same key (`shared_keys`).
+    let (appid, _) = n(&mut f, cl, "AppID", KEY_ALL_ACCESS);
+    let (_, name) = n(&mut f, appid, "{A}", KEY_ALL_ACCESS);
+    assert_eq!(name, "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\AppID\\{A}");
+    let (s, h) = open_key(&mut f, machine, "SOFTWARE\\Classes\\AppID\\{A}", KEY_READ);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(key_name(&mut f, h), name);
+    // A vendor key below it stays in the 32-bit view with 64.
+    let vendor = n(&mut f, sw, "Vendor", KEY_ALL_ACCESS | KEY_WOW64_64KEY).1;
+    assert_eq!(vendor, "\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node\\Vendor");
+    // Software opened with 64: a vendor key with no bit is native, with 32 the 32-bit one.
+    let (sw64, _) = n(&mut f, machine, "SOFTWARE", KEY_ALL_ACCESS | KEY_WOW64_64KEY);
+    assert_eq!(n(&mut f, sw64, "Vendor", KEY_ALL_ACCESS).1, "\\REGISTRY\\MACHINE\\SOFTWARE\\Vendor");
+    assert_eq!(n(&mut f, sw64, "Vendor", KEY_ALL_ACCESS | KEY_WOW64_32KEY).1, vendor);
+}
+
+/// The default COM marshalling registrations exist in the 32-bit view too (ADR 0186 addendum):
+/// a 32-bit process finds `IDispatch`'s proxy/stub class and `PSOAInterface`'s server.
+#[test]
+fn a_32_bit_process_finds_the_default_com_registrations() {
+    let mut f = Fake::new();
+    f.proc.wow64 = true;
+    let classes = "\\Registry\\Machine\\SOFTWARE\\Classes";
+    for (path, physical) in [
+        (
+            "Interface\\{00020400-0000-0000-C000-000000000046}\\ProxyStubClsid32",
+            "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\Interface\\{00020400-0000-0000-C000-000000000046}\\ProxyStubClsid32",
+        ),
+        (
+            "CLSID\\{00020424-0000-0000-C000-000000000046}\\InprocServer32",
+            "\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\WOW6432Node\\CLSID\\{00020424-0000-0000-C000-000000000046}\\InprocServer32",
+        ),
+    ] {
+        let (s, h) = open_key(&mut f, 0, &alloc::format!("{classes}\\{path}"), KEY_READ);
+        assert_eq!(s, STATUS_SUCCESS, "{path}");
+        assert_eq!(key_name(&mut f, h), physical);
+    }
 }
 
 #[test]

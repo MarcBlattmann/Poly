@@ -1,0 +1,32 @@
+# Poly's own libobjc.A.dylib (ADR 0261): the Objective-C runtime as a Mach-O
+# dylib built from Rust for x86_64-apple-darwin with -Zbuild-std and linked
+# by rust-lld's Mach-O flavour (`cargo xtask libobjc`), like libSystem
+# (ADR 0258). Its own workspace. The logic lives in crates/poly-objc. No
+# third-party crates.
+[workspace]
+
+[package]
+name = "libobjc"
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+name = "libobjc"
+crate-type = ["staticlib"]
+
+[dependencies]
+poly-objc = { path = "../../../crates/poly-objc" }
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+codegen-units = 1
+debug = false
+
+[profile.dev]
+panic = "abort"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

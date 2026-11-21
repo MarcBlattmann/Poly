@@ -7,6 +7,8 @@ use crate::com::*;
 use crate::polyaudio;
 use alloc::vec::Vec;
 use core::ffi::c_void;
+use core::ptr::null_mut;
+use core::sync::atomic::{AtomicPtr, Ordering};
 use poly_com::guid::Guid;
 use poly_kernelbase::wasapi::{self as wa, IdKind};
 
@@ -34,8 +36,32 @@ static ENUMERATOR_VTBL: Vtbl<8> = Vtbl([
     unregister_notification as *const c_void,
 ]);
 
+/// The process's enumerator, once created; the module holds one reference on it for good.
+static ENUMERATOR: AtomicPtr<c_void> = AtomicPtr::new(null_mut());
+
+/// The enumerator for a creation, with a reference for the caller (`hand_out` gives it back).
+/// There is one per process, and the module keeps a reference of its own. That reference is
+/// the one an application sees in the counts on Windows (`AddRef` on a freshly created
+/// enumerator gives one more than the caller's own references; `CLSID_MMDeviceEnumerator.yaml`,
+/// `references` and `second_creation`: whether two creations give the same object is not
+/// specified). It holds no state of its own: the notification registrations are the process's.
 pub fn new_enumerator() -> *mut c_void {
-    new_object(&ENUMERATOR_VTBL, ENUMERATOR_IIDS, ())
+    let mut e = ENUMERATOR.load(Ordering::Acquire);
+    if e.is_null() {
+        let fresh = new_object(&ENUMERATOR_VTBL, ENUMERATOR_IIDS, ());
+        e = match ENUMERATOR.compare_exchange(null_mut(), fresh, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => fresh,
+            Err(other) => {
+                // Another thread created it first.
+                // SAFETY: our fresh object, with its only reference.
+                unsafe { release::<()>(fresh) };
+                other
+            }
+        };
+    }
+    // SAFETY: the process's enumerator, never freed (the module's reference).
+    unsafe { add_ref::<()>(e) };
+    e
 }
 
 unsafe extern "system" fn enum_audio_endpoints(_: *mut c_void, flow: u32, mask: u32, out: *mut *mut c_void) -> Hresult {

@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgcat_values",
+      "source_sha256": "04264d92ef67cdd2f47be38fdecc81283876827d115dffe45603253faabfc06e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4a6913216e029fd3e1e57e0e92161058cd29023cdf0d7cbe2333447ba1a2bbb2",
+          "exit_code": 0,
+          "stdout": "value translate(10,20) then scale(2,3) a 4000000000000000\nvalue translate(10,20) then scale(2,3) b 0000000000000000\nvalue translate(10,20) then scale(2,3) c 0000000000000000\nvalue translate(10,20) then scale(2,3) d 4008000000000000\nvalue translate(10,20) then scale(2,3) x 4034000000000000\nvalue translate(10,20) then scale(2,3) y 404e000000000000\nvalue scale(2,3) then translate(10,20) a 4000000000000000\nvalue scale(2,3) then translate(10,20) b 0000000000000000\nvalue scale(2,3) then translate(10,20) c 0000000000000000\nvalue scale(2,3) then translate(10,20) d 4008000000000000\nvalue scale(2,3) then translate(10,20) x 4024000000000000\nvalue scale(2,3) then translate(10,20) y 4034000000000000\nvalue rotate(0.5) then translate a 3fec1528065b7d50\nvalue rotate(0.5) then translate b 3fdeaee8744b05f0\nvalue rotate(0.5) then translate c bfdeaee8744b05f0\nvalue rotate(0.5) then translate d 3fec1528065b7d50\nvalue rotate(0.5) then translate x 4024000000000000\nvalue rotate(0.5) then translate y 4034000000000000\nvalue translate then rotate(0.5) a 3fec1528065b7d50\nvalue translate then rotate(0.5) b 3fdeaee8744b05f0\nvalue translate then rotate(0.5) c bfdeaee8744b05f0\nvalue translate then rotate(0.5) d 3fec1528065b7d50\nvalue translate then rotate(0.5) x bfea01844b5b5640\nvalue translate then rotate(0.5) y 4036588d5624e740\nvalue rotate(0.5) then scale a 3ffc1528065b7d50\nvalue rotate(0.5) then scale b 3ff7032e57384474\nvalue rotate(0.5) then scale c bfeeaee8744b05f0\nvalue rotate(0.5) then scale d 40050fde04c49dfc\nvalue rotate(0.5) then scale x 0000000000000000\nvalue rotate(0.5) then scale y 0000000000000000\nvalue the identity then scale a 4000000000000000\nvalue the identity then scale b 0000000000000000\nvalue the identity then scale c 0000000000000000\nvalue the identity then scale d 4008000000000000\nvalue the identity then scale x 0000000000000000\nvalue the identity then scale y 0000000000000000\nok concat with the identity is the transform\nvalue (1,1) through translate then scale: x 4036000000000000\nvalue y 404f800000000000\nok the identity is IsIdentity\nok the scale is not\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fa2dfa9a6e7c88f5acdcd4b483e7d8f430a7cfb3a2ea43248b983e951b0ab2a5",
+          "exit_code": 0,
+          "stdout": "value translate(10,20) then scale(2,3) a 4000000000000000\nvalue translate(10,20) then scale(2,3) b 0000000000000000\nvalue translate(10,20) then scale(2,3) c 0000000000000000\nvalue translate(10,20) then scale(2,3) d 4008000000000000\nvalue translate(10,20) then scale(2,3) x 4034000000000000\nvalue translate(10,20) then scale(2,3) y 404e000000000000\nvalue scale(2,3) then translate(10,20) a 4000000000000000\nvalue scale(2,3) then translate(10,20) b 0000000000000000\nvalue scale(2,3) then translate(10,20) c 0000000000000000\nvalue scale(2,3) then translate(10,20) d 4008000000000000\nvalue scale(2,3) then translate(10,20) x 4024000000000000\nvalue scale(2,3) then translate(10,20) y 4034000000000000\nvalue rotate(0.5) then translate a 3fec1528065b7d50\nvalue rotate(0.5) then translate b 3fdeaee8744b05f0\nvalue rotate(0.5) then translate c bfdeaee8744b05f0\nvalue rotate(0.5) then translate d 3fec1528065b7d50\nvalue rotate(0.5) then translate x 4024000000000000\nvalue rotate(0.5) then translate y 4034000000000000\nvalue translate then rotate(0.5) a 3fec1528065b7d50\nvalue translate then rotate(0.5) b 3fdeaee8744b05f0\nvalue translate then rotate(0.5) c bfdeaee8744b05f0\nvalue translate then rotate(0.5) d 3fec1528065b7d50\nvalue translate then rotate(0.5) x bfea01844b5b5640\nvalue translate then rotate(0.5) y 4036588d5624e740\nvalue rotate(0.5) then scale a 3ffc1528065b7d50\nvalue rotate(0.5) then scale b 3ff7032e57384474\nvalue rotate(0.5) then scale c bfeeaee8744b05f0\nvalue rotate(0.5) then scale d 40050fde04c49dfc\nvalue rotate(0.5) then scale x 0000000000000000\nvalue rotate(0.5) then scale y 0000000000000000\nvalue the identity then scale a 4000000000000000\nvalue the identity then scale b 0000000000000000\nvalue the identity then scale c 0000000000000000\nvalue the identity then scale d 4008000000000000\nvalue the identity then scale x 0000000000000000\nvalue the identity then scale y 0000000000000000\nok concat with the identity is the transform\nvalue (1,1) through translate then scale: x 4036000000000000\nvalue y 404f800000000000\nok the identity is IsIdentity\nok the scale is not\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

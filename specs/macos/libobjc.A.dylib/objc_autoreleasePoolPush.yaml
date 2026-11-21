@@ -1,0 +1,40 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_autoreleasePoolPush.yaml. Observed with Objective-C test programs built with
+# clang for x86_64 and arm64 (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in
+# objc_autoreleasePoolPush.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_autoreleasePoolPush
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively and x86_64 under Rosetta 2; every test printed the same bytes on both architectures and on every run. Test programs are built with `poly-mac: libobjc` (linked against libobjc and the root class NSObject only, no Foundation)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  A "count" below is what the root class's retainCount method reports: 1 for a new object, one per
+  owning reference. objc_autoreleasePoolPush() opens an autorelease pool on the calling thread and
+  returns an opaque non-null token to hand to objc_autoreleasePoolPop. Pools nest: objects
+  autoreleased after a push belong to that pool until it is popped, afterwards to the pool below.
+  The tokens of nested pools differ, and pushing again after a pop returns the token the popped
+  pool had (pop of the innermost, push: same token), so tokens name positions in a stack. Pools
+  work to any practical depth (200 open at once tested) and hold thousands of entries (3000 per
+  pool, two pools). An empty pool can be popped. A pool needs no earlier setup: the first push in
+  a program works. Identical on x86_64 and arm64. @autoreleasepool blocks compiled by clang push
+  at entry and pop at exit, also on break: objects autoreleased inside die at the end of their
+  block, inner blocks first (10 in the outer block and 5 in the inner one: 0 dead inside, 5 after
+  the inner block, 15 after the outer one).
+returns:
+  token: "non-null opaque pointer; never print it"
+errors:
+  none: "no error"
+side_effects: >
+  The calling thread gets one more open pool.
+threading: >
+  The pool stack belongs to the calling thread (that is the meaning of the call); behaviour with
+  more than one thread was not observed.
+ordering:
+  - "pop order is the reverse of push order"
+timing:
+  typical: "microseconds: a few memory operations, no system call in the common case"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

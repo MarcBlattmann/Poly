@@ -12,7 +12,7 @@
   "tests": [
     {
       "name": "wv_ntquery_names",
-      "exe_sha256": "95c2b25e26a8d2f4a836f5998a436fb8190bf1dac558901bb35fbdf6fd7d868e",
+      "exe_sha256": "1e6a44322ef2a74164a05ec0fb47c54d32e04246aafc8fca6842457f8eb25044",
       "status": "ran",
       "exit_code": 0,
       "exit_code_bits": 32,

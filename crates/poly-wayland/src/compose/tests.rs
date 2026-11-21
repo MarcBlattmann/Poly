@@ -44,6 +44,48 @@ fn rectangles() {
     assert!(a.contains(9, 0) && !a.contains(10, 0));
 }
 
+/// An intersection without overlap has no width *and* no height, so a row
+/// loop over it never runs (the shell's icon `draw` panicked on a result
+/// with zero width and a real height).
+#[test]
+fn intersections_without_overlap_have_no_rows() {
+    let clip = Rect::new(100, 50, 40, 30);
+    let no_rows = |r: Rect| r.is_empty() && r.width == 0 && r.height == 0 && r.bottom() == r.y;
+    // Fully outside, on every side, and the same rows/columns but apart.
+    for other in [
+        Rect::new(0, 50, 20, 30),   // left, same rows
+        Rect::new(200, 50, 20, 30), // right, same rows
+        Rect::new(100, 0, 40, 10),  // above, same columns
+        Rect::new(100, 90, 40, 10), // below, same columns
+        Rect::new(0, 0, 10, 10),    // diagonal
+    ] {
+        assert!(no_rows(clip.intersect(&other)), "{other:?}");
+        assert!(no_rows(other.intersect(&clip)), "{other:?}");
+    }
+    // Touching edges share no pixel.
+    for other in [
+        Rect::new(60, 50, 40, 30),  // ends where clip starts (x)
+        Rect::new(140, 50, 10, 30), // starts where clip ends (x)
+        Rect::new(100, 20, 40, 30), // ends where clip starts (y)
+        Rect::new(100, 80, 40, 10), // starts where clip ends (y)
+        Rect::new(140, 80, 5, 5),   // corner to corner
+    ] {
+        assert!(no_rows(clip.intersect(&other)), "{other:?}");
+        assert!(no_rows(other.intersect(&clip)), "{other:?}");
+    }
+    // An empty side, inside the other or not, gives nothing.
+    for empty in
+        [Rect::new(110, 55, 0, 10), Rect::new(110, 55, 10, 0), Rect::new(110, 55, 0, 0), Rect::new(0, 0, 0, 500)]
+    {
+        assert!(no_rows(clip.intersect(&empty)), "{empty:?}");
+        assert!(no_rows(empty.intersect(&clip)), "{empty:?}");
+    }
+    // One pixel of overlap is kept, and so is containment.
+    assert_eq!(clip.intersect(&Rect::new(139, 79, 5, 5)), Rect::new(139, 79, 1, 1));
+    assert_eq!(clip.intersect(&Rect::new(0, 0, 1000, 1000)), clip);
+    assert_eq!(Rect::new(i32::MIN, i32::MIN, i32::MAX, i32::MAX).intersect(&clip), Rect::new(100, 50, 0, 0));
+}
+
 #[test]
 fn premultiplied_blending() {
     // Opaque replaces, fully transparent keeps.

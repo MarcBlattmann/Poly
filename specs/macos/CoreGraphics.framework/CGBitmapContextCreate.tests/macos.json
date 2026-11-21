@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgbc_orientation",
+      "source_sha256": "e5799a1bdf6c6fb272aee0444a2b8762cee247b9a6006a2e6dbd6608e8de584e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "82c543eea37b86625d623d884722a39e4320d31bd8d06f9f9f3aa2420fc02155",
+          "exit_code": 0,
+          "stdout": "value origin at the lower left 00 00000000 00000000 00000000 00ff00ff\nvalue origin at the lower left 01 00000000 00000000 00000000 00000000\nvalue origin at the lower left 02 00000000 00000000 00000000 00000000\nvalue origin at the lower left 03 ff0000ff 00000000 00000000 00000000\nok (0,0) in user space is the buffer's last row, first pixel\nok (3,3) is row 0, last pixel\nvalue flipped (y down) 00 ff0000ff 00000000 00000000 00000000\nvalue flipped (y down) 01 00000000 00000000 00000000 00000000\nvalue flipped (y down) 02 00000000 00000000 00000000 00000000\nvalue flipped (y down) 03 00000000 00000000 00000000 00000000\nok after the flip (0,0) is row 0, first pixel\nvalue CTM a 3ff0000000000000\nvalue CTM d bff0000000000000\nvalue CTM ty 4010000000000000\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "634454b301bd06f4207ff58e1ac6a1a8078716b3286128e6ee5b2cfdfda050de",
+          "exit_code": 0,
+          "stdout": "value origin at the lower left 00 00000000 00000000 00000000 00ff00ff\nvalue origin at the lower left 01 00000000 00000000 00000000 00000000\nvalue origin at the lower left 02 00000000 00000000 00000000 00000000\nvalue origin at the lower left 03 ff0000ff 00000000 00000000 00000000\nok (0,0) in user space is the buffer's last row, first pixel\nok (3,3) is row 0, last pixel\nvalue flipped (y down) 00 ff0000ff 00000000 00000000 00000000\nvalue flipped (y down) 01 00000000 00000000 00000000 00000000\nvalue flipped (y down) 02 00000000 00000000 00000000 00000000\nvalue flipped (y down) 03 00000000 00000000 00000000 00000000\nok after the flip (0,0) is row 0, first pixel\nvalue CTM a 3ff0000000000000\nvalue CTM d bff0000000000000\nvalue CTM ty 4010000000000000\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgbc_premult",
+      "source_sha256": "762790e8ccead769af94287d035c75bd88f254d6940470a70c04d3eeb318b007",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "067e86b65df042e947551bbbee4bfcb418e12cdaff3baeba1cef27a7e4d7ddd2",
+          "exit_code": 0,
+          "stdout": "value alpha of the fill colour (of 255) 0\nvalue pixel (premultiplied RGBA) 00000000\nvalue alpha of the fill colour (of 255) 1\nvalue pixel (premultiplied RGBA) 01010001\nvalue alpha of the fill colour (of 255) 5\nvalue pixel (premultiplied RGBA) 05040205\nvalue alpha of the fill colour (of 255) 10\nvalue pixel (premultiplied RGBA) 0a08040a\nvalue alpha of the fill colour (of 255) 51\nvalue pixel (premultiplied RGBA) 33291433\nvalue alpha of the fill colour (of 255) 64\nvalue pixel (premultiplied RGBA) 40331a40\nvalue alpha of the fill colour (of 255) 100\nvalue pixel (premultiplied RGBA) 64502864\nvalue alpha of the fill colour (of 255) 127\nvalue pixel (premultiplied RGBA) 7f66337f\nvalue alpha of the fill colour (of 255) 128\nvalue pixel (premultiplied RGBA) 80663380\nvalue alpha of the fill colour (of 255) 150\nvalue pixel (premultiplied RGBA) 96783c96\nvalue alpha of the fill colour (of 255) 200\nvalue pixel (premultiplied RGBA) c8a050c8\nvalue alpha of the fill colour (of 255) 254\nvalue pixel (premultiplied RGBA) fecb66fe\nvalue alpha of the fill colour (of 255) 255\nvalue pixel (premultiplied RGBA) ffcc66ff\nvalue after this many 50% red fills 1\nvalue pixel 80000080\nvalue after this many 50% red fills 2\nvalue pixel c00000c0\nvalue after this many 50% red fills 3\nvalue pixel e00000e0\nvalue after this many 50% red fills 4\nvalue pixel f00000f0\nvalue after this many 50% red fills 5\nvalue pixel f80000f8\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "fe754be8b5a67d917a21c79a055ecb4bdbc00c2616ba37a8853e717a17db6f67",
+          "exit_code": 0,
+          "stdout": "value alpha of the fill colour (of 255) 0\nvalue pixel (premultiplied RGBA) 00000000\nvalue alpha of the fill colour (of 255) 1\nvalue pixel (premultiplied RGBA) 01010001\nvalue alpha of the fill colour (of 255) 5\nvalue pixel (premultiplied RGBA) 05040205\nvalue alpha of the fill colour (of 255) 10\nvalue pixel (premultiplied RGBA) 0a08040a\nvalue alpha of the fill colour (of 255) 51\nvalue pixel (premultiplied RGBA) 33291433\nvalue alpha of the fill colour (of 255) 64\nvalue pixel (premultiplied RGBA) 40331a40\nvalue alpha of the fill colour (of 255) 100\nvalue pixel (premultiplied RGBA) 64502864\nvalue alpha of the fill colour (of 255) 127\nvalue pixel (premultiplied RGBA) 7f66337f\nvalue alpha of the fill colour (of 255) 128\nvalue pixel (premultiplied RGBA) 80663380\nvalue alpha of the fill colour (of 255) 150\nvalue pixel (premultiplied RGBA) 96783c96\nvalue alpha of the fill colour (of 255) 200\nvalue pixel (premultiplied RGBA) c8a050c8\nvalue alpha of the fill colour (of 255) 254\nvalue pixel (premultiplied RGBA) fecb66fe\nvalue alpha of the fill colour (of 255) 255\nvalue pixel (premultiplied RGBA) ffcc66ff\nvalue after this many 50% red fills 1\nvalue pixel 80000080\nvalue after this many 50% red fills 2\nvalue pixel c00000c0\nvalue after this many 50% red fills 3\nvalue pixel e00000e0\nvalue after this many 50% red fills 4\nvalue pixel f00000f0\nvalue after this many 50% red fills 5\nvalue pixel f80000f8\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgbc_props",
+      "source_sha256": "293b4579f211a475cbe34ca72bdf2fca4f8b768a6875d97a3e493d01d8dc5ff7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3ebd5ae83310f074464486fa0ffb1ed2078dfd5d6267b15afc704654ade4e4ae",
+          "exit_code": 0,
+          "stdout": "ok a context with extra row bytes (128 for 80 needed) is made\nok width\nok height\nok bits per component\nok bits per pixel\nok bytes per row is the one given\nok the data pointer is the buffer given\nok alpha info\nok bitmap info is the alpha value\nok the colour space is the one given\nok the padding after each row (bytes 80..127) is not written\nok the pixels are in the buffer given\nok a bytes-per-row smaller than needed gives NULL\nok width 0 gives NULL\nok height 0 gives NULL\nok a NULL colour space without alpha-only gives NULL\nok an unsupported alpha with RGB (kCGImageAlphaOnly) gives NULL\nok an unsupported 3 bits per component gives NULL\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "09ed70eb970d824538061593a17a70c74ccf88dc3fe42825056416ce311c98b3",
+          "exit_code": 0,
+          "stdout": "ok a context with extra row bytes (128 for 80 needed) is made\nok width\nok height\nok bits per component\nok bits per pixel\nok bytes per row is the one given\nok the data pointer is the buffer given\nok alpha info\nok bitmap info is the alpha value\nok the colour space is the one given\nok the padding after each row (bytes 80..127) is not written\nok the pixels are in the buffer given\nok a bytes-per-row smaller than needed gives NULL\nok width 0 gives NULL\nok height 0 gives NULL\nok a NULL colour space without alpha-only gives NULL\nok an unsupported alpha with RGB (kCGImageAlphaOnly) gives NULL\nok an unsupported 3 bits per component gives NULL\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

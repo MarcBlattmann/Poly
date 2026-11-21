@@ -1,0 +1,88 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:50:53",
+  "tests": [
+    {
+      "name": "arc_storestrong_basic",
+      "source_sha256": "f62107e899577d1e5a620fc6f5a169b181e83543b91018a00fa545674152216e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7bac96c933e39572b8709a9ed974b44768d8265654c02abab3466b2ff87801ad",
+          "exit_code": 0,
+          "stdout": "ok slot holds the object\nvalue retainCount of the first after the store 2\nok slot holds the second\nvalue retainCount of the first after it was replaced 1\nvalue retainCount of the second 2\nvalue deallocs after the owner released the first 1\nok slot is nil\nvalue retainCount of the second after the slot was cleared 1\nvalue deallocs 2\nvalue order[0] 1\nvalue order[1] 2\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4f73736a3008c3468fc133ea6249fc91ce3625f72f1097454c42c69cee4a1539",
+          "exit_code": 0,
+          "stdout": "ok slot holds the object\nvalue retainCount of the first after the store 2\nok slot holds the second\nvalue retainCount of the first after it was replaced 1\nvalue retainCount of the second 2\nvalue deallocs after the owner released the first 1\nok slot is nil\nvalue retainCount of the second after the slot was cleared 1\nvalue deallocs 2\nvalue order[0] 1\nvalue order[1] 2\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_storestrong_custom",
+      "source_sha256": "926482b6474cca7d65ee2284dbded4cd9a37b242403d91cfc3be6993fbf56b2f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "545d3e4c1f973e390f8851c95cbedca172c7c7041edd2e19160768fdb0360a94",
+          "exit_code": 0,
+          "stdout": "value -retain calls 1\nvalue -release calls 0\nvalue -retain calls after replacing 2\nvalue -release calls after replacing 1\nvalue -release calls at the end 4\nok the old object's dealloc saw the new value already stored\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "072ccc95283302434dd180fd2370a38debdc4a6970b636d48d221e234ebe42e9",
+          "exit_code": 0,
+          "stdout": "value -retain calls 1\nvalue -release calls 0\nvalue -retain calls after replacing 2\nvalue -release calls after replacing 1\nvalue -release calls at the end 4\nok the old object's dealloc saw the new value already stored\nsummary 1 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "arc_storestrong_same",
+      "source_sha256": "05f6c026ccc83fe03299e88d3fefbd0c46c7e9e358a26068709ee231c62e4ae9",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "35bbbaf38f5b36657764bb74dfb43c003c573fad2f021aec3db2c074c14edeb5",
+          "exit_code": 0,
+          "stdout": "value retainCount, the slot the only owner 1\nvalue retainCount after storing the same object 1\nvalue deallocs after storing the same object 0\nok slot unchanged\nvalue deallocs after storing nil 1\nok slot nil\nvalue nil over nil survived 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "af858cd0b953a954f646b5f28294d3eec9da7877286d8e8fbce8aacbfad03456",
+          "exit_code": 0,
+          "stdout": "value retainCount, the slot the only owner 1\nvalue retainCount after storing the same object 1\nvalue deallocs after storing the same object 0\nok slot unchanged\nvalue deallocs after storing nil 1\nok slot nil\nvalue nil over nil survived 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

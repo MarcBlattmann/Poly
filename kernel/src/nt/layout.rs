@@ -226,10 +226,14 @@ pub(super) fn prepare(sys: &mut NtSystem) {
     // type-library format: every library's interfaces refer to it for `IUnknown` and `IDispatch`.
     if !super::OLEAUT32.is_empty() {
         let bytes = poly_com::typelib::stdole::file_bytes();
-        match create::install_file(&vr, &root, "Windows\\System32", "stdole2.tlb", &bytes) {
-            Ok(create::Installed::Written) => crate::kprintln!("nt: layout: stdole2.tlb written to System32"),
-            Ok(_) => {}
-            Err(e) => crate::kprintln!("nt: layout: cannot install stdole2.tlb ({:#x})", e.0),
+        // Both views' paths of the registration (`ComDefaults.StdOleTypeLib.yaml` `paths_2_0`:
+        // `win64` in System32, `win32` in SysWOW64); the library is the same.
+        for dir in ["System32", "SysWOW64"] {
+            match create::install_file(&vr, &root, &alloc::format!("Windows\\{dir}"), "stdole2.tlb", &bytes) {
+                Ok(create::Installed::Written) => crate::kprintln!("nt: layout: stdole2.tlb written to {dir}"),
+                Ok(_) => {}
+                Err(e) => crate::kprintln!("nt: layout: cannot install stdole2.tlb in {dir} ({:#x})", e.0),
+            }
         }
     }
     /// Poly's `win.ini`: its own comment and the sections, CR LF ends of lines.

@@ -1,0 +1,43 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_sync_enter.yaml. Observed with Objective-C test programs built for x86_64 and arm64
+# (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in objc_sync_enter.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_sync_enter
+oracle:
+  os: "macOS 27.0 (26A428)"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 (26A428), Darwin 27.0.0; tests are single C files compiled as Objective-C by `pipeline mac build` (clang, without ARC) and linked with /usr/lib/libobjc.A.dylib and libSystem; each runs 3 times per architecture in a fresh empty scratch directory with an empty environment. arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); no output differed between the two architectures in any test of this entry. No Foundation: the root class NSObject exported by libobjc itself is the only class used."
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  objc_sync_enter(obj) is the lock behind @synchronized (obj) { }. It acquires a recursive mutex
+  that belongs to the object (by identity: the same object always gives the same lock, different
+  objects give different locks, an instance, its class object and the class's metaclass are three
+  different locks) and returns OBJC_SYNC_SUCCESS (0). The same thread may enter again: the call
+  returns 0 at once and a matching number of objc_sync_exit calls is needed to release it (observed
+  with 200 nested enters). While one thread holds the lock, another thread entering the same object
+  blocks until the owner's last exit (a waiter was still blocked after the owner's inner exit and
+  got in after the last exit). Entering another object is not blocked. Mutual exclusion was
+  confirmed: four threads each performing 20000 read-modify-write increments under the lock got the
+  exact total 80000, with never two threads inside. nil is allowed: the call returns 0 and does
+  nothing (objc_sync_exit(nil) also 0). The lock does not retain the object (the retain count is
+  unchanged while it is locked), and an object that was locked and unlocked and then deallocated
+  leaves nothing behind: 20000 short-lived objects used as locks, one after the other, all entered
+  and exited with 0, and a new object that might reuse an address reported -1 when exited without an
+  enter. Observed identical on x86_64 and arm64. Not observed: contention fairness, locking an
+  object that is freed while locked by another thread, the result of objc_sync_try_enter.
+returns:
+  success: "0 (OBJC_SYNC_SUCCESS, <objc/objc-sync.h>)"
+  nil_object: "0, no lock is taken"
+errors:
+  none_observed: "no value other than 0 was seen from enter"
+side_effects: >
+  The calling thread owns the object's lock (recursion count +1). No retain of the object.
+threading: >
+  Blocks while another thread owns the lock of the same object; recursive for the owner.
+ordering:
+  - "the thread that blocked enters after the owner's last exit, not after an inner exit"
+timing:
+  typical: "microseconds per uncontended call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

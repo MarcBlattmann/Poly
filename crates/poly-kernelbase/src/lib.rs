@@ -100,6 +100,7 @@ pub mod oleaut;
 pub mod oleauto;
 pub mod path;
 pub mod pipe;
+pub mod policy;
 pub mod power;
 pub mod priority;
 pub mod process;

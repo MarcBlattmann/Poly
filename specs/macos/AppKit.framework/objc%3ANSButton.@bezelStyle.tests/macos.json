@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsbutton_bezelstyle_constants",
+      "source_sha256": "f7b4677ec3e3c0a819c32fd6a45c25d0ade93635494e2225a2017cdc410bc098",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e1e3ce1f349b6dde6c981efe4f8f7b9484f0452f6bc6845cda1270804e3fb02b",
+          "exit_code": 0,
+          "stdout": "ok NSBezelStyleAutomatic == 0 && NSBezelStylePush == 1 && NSBezelStyleRounded == 1\nok NSBezelStyleFlexiblePush == 2 && NSBezelStyleRegularSquare == 2\nok NSBezelStyleDisclosure == 5 && NSBezelStyleShadowlessSquare == 6 && NSBezelStyleCircular == 7\nok NSBezelStyleTexturedSquare == 8 && NSBezelStyleHelpButton == 9 && NSBezelStyleSmallSquare == 10\nok NSBezelStyleTexturedRounded == 11 && NSBezelStyleRoundRect == 12 && NSBezelStyleRecessed == 13\nok NSBezelStyleRoundedDisclosure == 14 && NSBezelStyleInline == 15\nok ok\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7f53c39f1a0c44efcb3f430253508b18da4c50e58f54fcdfd1a00af172b7b385",
+          "exit_code": 0,
+          "stdout": "ok NSBezelStyleAutomatic == 0 && NSBezelStylePush == 1 && NSBezelStyleRounded == 1\nok NSBezelStyleFlexiblePush == 2 && NSBezelStyleRegularSquare == 2\nok NSBezelStyleDisclosure == 5 && NSBezelStyleShadowlessSquare == 6 && NSBezelStyleCircular == 7\nok NSBezelStyleTexturedSquare == 8 && NSBezelStyleHelpButton == 9 && NSBezelStyleSmallSquare == 10\nok NSBezelStyleTexturedRounded == 11 && NSBezelStyleRoundRect == 12 && NSBezelStyleRecessed == 13\nok NSBezelStyleRoundedDisclosure == 14 && NSBezelStyleInline == 15\nok ok\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsbutton_bezelstyle_sizes",
+      "source_sha256": "16fbc2d2ef87d52a32c27765e01fc0712afc2f41082c2709a1478ea43eef778d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3925074ec960bf68fd6a95c17b9fa0e91509ae614e342a96805b025b4a9c86bd",
+          "exit_code": 0,
+          "stdout": "ok fit(NSBezelStyleDisclosure, @\"Hello\").width == fit(NSBezelStyleDisclosure, @\"A much longer title\").width\nok fit(NSBezelStyleHelpButton, @\"Hello\").width == fit(NSBezelStyleHelpButton, @\"A much longer title\").width\nok fit(NSBezelStylePush, @\"A much longer title\").width > fit(NSBezelStylePush, @\"Hello\").width\nvalue sys_push_w 55.00\nvalue sys_push_h 24.00\nvalue sys_regular_square_w 55.00\nvalue sys_regular_square_h 24.00\nvalue sys_disclosure_w 13.00\nvalue sys_disclosure_h 13.00\nvalue sys_shadowless_square_w 41.00\nvalue sys_shadowless_square_h 22.00\nvalue sys_circular_w 39.00\nvalue sys_circular_h 24.00\nvalue sys_textured_square_w 43.00\nvalue sys_textured_square_h 25.00\nvalue sys_help_w 24.00\nvalue sys_help_h 24.00\nvalue sys_small_square_w 37.00\nvalue sys_small_square_h 22.00\nvalue sys_textured_rounded_w 47.00\nvalue sys_textured_rounded_h 23.00\nvalue sys_round_rect_w 55.00\nvalue sys_round_rect_h 24.00\nvalue sys_recessed_w 55.00\nvalue sys_recessed_h 24.00\nvalue sys_rounded_disclosure_w 24.00\nvalue sys_rounded_disclosure_h 24.00\nvalue sys_inline_w 37.00\nvalue sys_inline_h 18.00\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "872fb8b2a64e8bea513c776b9c16f93acd7833652b33ac931659da0dda728aae",
+          "exit_code": 0,
+          "stdout": "ok fit(NSBezelStyleDisclosure, @\"Hello\").width == fit(NSBezelStyleDisclosure, @\"A much longer title\").width\nok fit(NSBezelStyleHelpButton, @\"Hello\").width == fit(NSBezelStyleHelpButton, @\"A much longer title\").width\nok fit(NSBezelStylePush, @\"A much longer title\").width > fit(NSBezelStylePush, @\"Hello\").width\nvalue sys_push_w 55.00\nvalue sys_push_h 24.00\nvalue sys_regular_square_w 55.00\nvalue sys_regular_square_h 24.00\nvalue sys_disclosure_w 13.00\nvalue sys_disclosure_h 13.00\nvalue sys_shadowless_square_w 41.00\nvalue sys_shadowless_square_h 22.00\nvalue sys_circular_w 39.00\nvalue sys_circular_h 24.00\nvalue sys_textured_square_w 43.00\nvalue sys_textured_square_h 25.00\nvalue sys_help_w 24.00\nvalue sys_help_h 24.00\nvalue sys_small_square_w 37.00\nvalue sys_small_square_h 22.00\nvalue sys_textured_rounded_w 47.00\nvalue sys_textured_rounded_h 23.00\nvalue sys_round_rect_w 55.00\nvalue sys_round_rect_h 24.00\nvalue sys_recessed_w 55.00\nvalue sys_recessed_h 24.00\nvalue sys_rounded_disclosure_w 24.00\nvalue sys_rounded_disclosure_h 24.00\nvalue sys_inline_w 37.00\nvalue sys_inline_h 18.00\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

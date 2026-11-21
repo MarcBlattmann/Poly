@@ -1,0 +1,48 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_retainAutoreleasedReturnValue.yaml. Observed with Objective-C test programs built with
+# clang for x86_64 and arm64 (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in
+# objc_retainAutoreleasedReturnValue.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_retainAutoreleasedReturnValue
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively and x86_64 under Rosetta 2; every test printed the same bytes on both architectures and on every run. Test programs are built with `poly-mac: libobjc` (linked against libobjc and the root class NSObject only, no Foundation)"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  A "count" below is what the root class's retainCount method reports: 1 for a new object, one per
+  owning reference. objc_retainAutoreleasedReturnValue(obj) is what a caller applies to the result
+  of a call to take ownership. It returns obj. Not paired (the callee did not use
+  objc_autoreleaseReturnValue or objc_retainAutoreleaseReturnValue, or the call is not the one
+  right after it): it retains like objc_retain (count +1 per call, 3 after two calls on a new
+  object). Paired with a callee's objc_autoreleaseReturnValue: it does not retain, because the
+  callee did not autorelease; the object ends with count 1 and nothing in the pool. Paired with
+  objc_retainAutoreleaseReturnValue: the count is 2 (the owner's and the caller's) and nothing is
+  in the pool. When the callee autoreleased normally (something happened between the call and this
+  one, here a call to another function), the object is in the pool and is retained: count 2, and
+  the pop brings it back to 1 with the object alive. Loops of 100 paired calls each release their
+  result before any pop. nil is accepted and returned. The pairing recognised differs by
+  architecture only in how the call site is shaped (see objc_autoreleaseReturnValue); every
+  observed result is the same on x86_64 and arm64. ARC-compiled caller (non-inlined callee that
+  also keeps the object in a global): the global and the caller each hold one count, the object
+  survives while the caller holds it and dies at the caller's scope end, with nothing left in the
+  pool. Note: the arm64 build of such a caller calls a sibling entry,
+  objc_claimAutoreleasedReturnValue, where the x86_64 build calls this one; the observable results
+  are the same.
+returns:
+  object: "the argument"
+  nil: "nil"
+errors:
+  none: "no error"
+side_effects: >
+  Count +1 unless paired with an unretained autoreleaseReturnValue of the same call.
+threading: >
+  No thread-specific behaviour was observed; every test ran on the main thread of one process.
+  Behaviour with several threads is not observed.
+ordering:
+  - "must be the first call after the callee returns for the pairing to be seen"
+timing:
+  typical: "microseconds: a few memory operations, no system call in the common case"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

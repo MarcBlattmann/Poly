@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgsa_rect",
+      "source_sha256": "f3ab1e34990eba6fcf30a99b92b02b7edbabb481e59d0803fcb50afb977963f8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "444b935aefc77efa7135eb68798cc7d6a71949fa9b76f94eb1ce124bb7e60622",
+          "exit_code": 0,
+          "stdout": "value x0 in 1/16 0\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1000 o\nvalue x0 in 1/16 1\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 2\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 3\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 4\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 5\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 6\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 7\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 8\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 9\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 10\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 11\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 12\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 13\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 14\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 15\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 16\nvalue painted columns (1 = painted), o = no partial alpha in col 0 0100 o\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "10145d60433109cc4f3d7b9d03263e3eba056f81ae15225e0f187d7debc71aff",
+          "exit_code": 0,
+          "stdout": "value x0 in 1/16 0\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1000 o\nvalue x0 in 1/16 1\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 2\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 3\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 4\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 5\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 6\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 7\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 8\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 9\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 10\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 11\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 12\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 13\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 14\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 15\nvalue painted columns (1 = painted), o = no partial alpha in col 0 1100 o\nvalue x0 in 1/16 16\nvalue painted columns (1 = painted), o = no partial alpha in col 0 0100 o\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "cgsa_widths",
+      "source_sha256": "3564a84f2e3b7a88010f345af3eb9bb4e046bcc91ef3f100fb7600c013ab5a46",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "69c59560c89e169eccb20324135a2b81104e4700cb330110bf81801bb37d8b26",
+          "exit_code": 0,
+          "stdout": "value x offset in 1/100 0\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 1 1 1 2 2 2 3 3 3\nvalue x offset in 1/100 25\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 1 1 2 2 2 3 3 3 3\nvalue x offset in 1/100 49\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 1 2 2 2 2 3 3 3 4\nvalue x offset in 1/100 50\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 1 2 2 2 2 3 3 3 4\nvalue x offset in 1/100 51\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 2 2 2 2 3 3 3 4 4\nvalue x offset in 1/100 75\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 2 2 2 2 3 3 4 4 4\nvalue the same call with antialiasing on: 1.5, width 1 00 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 01 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 02 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 03 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 04 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 05 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 06 00 7f 7f 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 07 00 00 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "73560f624ce807c9b07cf6b9ab9f8ac28e0d8c44f933701481bd88b00a3ee9e6",
+          "exit_code": 0,
+          "stdout": "value x offset in 1/100 0\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 1 1 1 2 2 2 3 3 3\nvalue x offset in 1/100 25\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 1 1 2 2 2 3 3 3 3\nvalue x offset in 1/100 49\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 1 2 2 2 2 3 3 3 4\nvalue x offset in 1/100 50\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 1 2 2 2 2 3 3 3 4\nvalue x offset in 1/100 51\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 2 2 2 2 3 3 3 4 4\nvalue x offset in 1/100 75\nvalue columns painted for widths .25 .5 .75 1 1.25 1.5 2 2.4 2.5 2.6 1 2 2 2 2 3 3 4 4 4\nvalue the same call with antialiasing on: 1.5, width 1 00 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 01 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 02 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 03 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 04 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 05 00 00 00 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 06 00 7f 7f 00 00 00 00 00\nvalue the same call with antialiasing on: 1.5, width 1 07 00 00 00 00 00 00 00 00\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

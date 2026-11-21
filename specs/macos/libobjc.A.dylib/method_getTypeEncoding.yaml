@@ -1,0 +1,45 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/method_getTypeEncoding.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in method_getTypeEncoding.tests/macos.json.
+id: macos/api/libobjc.A.dylib/method_getTypeEncoding
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  const char *method_getTypeEncoding(Method m). The method's type-encoding string, the same pointer on
+  every call. For methods compiled from @implementation it is the return type, the total size of the
+  argument frame, then each argument's type with its byte offset: void "v16@0:8", id "@16@0:8", int
+  "i16@0:8", unsigned "I", long "q", unsigned long long "Q", char "c", short "s", C _Bool "B", float
+  "f", double "d", long double "D", char* "*", const char* "r*", SEL ":", Class "#", void* "^v", int*
+  "^i", a struct returned or passed "{Name=...}" with the struct's tag (an anonymous struct typedef
+  gives "{?=dd}"), a union "(?=if)", a block "@?", and one-argument methods like "v20@0:8i16" or
+  "v32@0:8{MePt=dd}16"; every method's frame starts with self "@0" and _cmd ":8" and sizes are those
+  of 64-bit code. Class methods have the same form. The one difference between the architectures
+  observed: the Objective-C BOOL type is "B" on arm64 and "c" on x86_64 (so NSObject's -isEqual: is
+  "B24@0:8@16" on arm64 and "c24@0:8@16" on x86_64, likewise isKindOfClass:, isMemberOfClass:,
+  respondsToSelector:, conformsToProtocol:, isProxy, +instancesRespondToSelector: and
+  +isSubclassOfClass:); a C _Bool is "B" on both. NSObject: -init "@16@0:8", -dealloc "v16@0:8", -hash
+  "Q16@0:8", -retainCount "Q16@0:8", -release "Vv16@0:8" (oneway), -zone "^{_NSZone=}16@0:8",
+  -performSelector: "@24@0:8:16", -performSelector:withObject: "@32@0:8:16@24", +alloc "@16@0:8",
+  +allocWithZone: "@24@0:8^{_NSZone=}16", +initialize "v16@0:8". For a method added with
+  class_addMethod the string is a copy of what was passed, returned unchanged (also "", " ", "i",
+  "b4i12" and strings that are not encodings), and a NULL string reads back as the empty string, never
+  NULL. Replacing the implementation (class_replaceMethod, method_setImplementation) and exchanging
+  two Methods' implementations (method_exchangeImplementations) leave each Method's own encoding. An
+  override added in a subclass has its own string, a different pointer from the superclass's.
+returns:
+  encoding: "the type-encoding string; \"\" for a method added without types"
+errors:
+  none: "no error codes"
+side_effects: "none"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering: []
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

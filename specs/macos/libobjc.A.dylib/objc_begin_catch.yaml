@@ -1,0 +1,44 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_begin_catch.yaml. Observed with Objective-C test programs built for x86_64 and arm64
+# (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in objc_begin_catch.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_begin_catch
+oracle:
+  os: "macOS 27.0 (26A428)"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 (26A428), Darwin 27.0.0; tests are single C files compiled as Objective-C by `pipeline mac build` (clang, without ARC) and linked with /usr/lib/libobjc.A.dylib and libSystem; each runs 3 times per architecture in a fresh empty scratch directory with an empty environment. arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); no output differed between the two architectures in any test of this entry. No Foundation: the root class NSObject exported by libobjc itself is the only class used."
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  The compiler calls objc_begin_catch when control enters an Objective-C @catch handler; programs do
+  not call it, so it is observed through handlers. At that point the thrown object has one more
+  reference than before the throw: an object with retain count 1 held by the thrower shows 2 inside
+  any @catch (a class clause, id, or ...), the same object is passed to the handler as was thrown,
+  and the count is back at 1 after the handler (see objc_end_catch). During the unwinding, in
+  @finally clauses of inner frames the count is already 2. The count does not increase again when
+  the handler rethrows (@throw with no operand): in the first handler 2, in the handler that catches
+  the rethrown exception 2, after it 1; with two rethrow hops in a row 2 in the last handler and 1
+  after. A handler that throws the same object again, inside itself, and catches it in a nested
+  handler sees 3 in the nested handler and 2 back in the outer one, then 1 once both ended. When a
+  handler throws a different object, the first object is no longer held after leaving the handler
+  (count 1) and the new one is held (2) while its handler runs. An exception object the thrower
+  autoreleased shows 2 inside the handler and is deallocated when the thrower's pool is popped, not
+  at the end of the handler. Four threads, each throwing its own object 2000 times and catching it
+  twice (a second throw inside the handler), 8000 handlers in all: every handler got its own
+  thread's object, and the objects' retain counts were 1 at the end.
+returns:
+  in_handler: "the thrown object, retain count one higher than before the throw"
+  rethrow: "same object, count unchanged by the rethrow"
+errors:
+  none: "not applicable"
+side_effects: >
+  The runtime takes one reference on the exception object per active handler nesting of the same
+  object as described.
+threading: >
+  The handler state is per thread (8000 handlers on four threads never mixed up objects).
+ordering:
+  - "objc_begin_catch happens at handler entry, after the @finally clauses of inner frames"
+timing:
+  typical: "microseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

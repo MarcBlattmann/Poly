@@ -1,0 +1,56 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/objc_setAssociatedObject.yaml. Observed with Objective-C test programs built for x86_64 and arm64
+# (tests/macos/include/poly_mobjc.h, ADR 0182); results per architecture in objc_setAssociatedObject.tests/macos.json.
+id: macos/api/libobjc.A.dylib/objc_setAssociatedObject
+oracle:
+  os: "macOS 27.0 (26A428)"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 (26A428), Darwin 27.0.0; tests are single C files compiled as Objective-C by `pipeline mac build` (clang, without ARC) and linked with /usr/lib/libobjc.A.dylib and libSystem; each runs 3 times per architecture in a fresh empty scratch directory with an empty environment. arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); no output differed between the two architectures in any test of this entry. No Foundation: the root class NSObject exported by libobjc itself is the only class used."
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  objc_setAssociatedObject(object, key, value, policy) stores value under (object, key) in a table
+  the runtime keeps outside the object. The key is compared by its pointer value only and is never
+  dereferenced: the address of a static variable, a selector, the integer 1 and the NULL pointer all
+  work as keys, and a string with equal contents at another address is another key. Different
+  objects and different keys are independent; a class object holds associations of its own, separate
+  from those of its instances and of its metaclass. Policies (the OBJC_ASSOCIATION_* constants of
+  <objc/runtime.h>): ASSIGN stores the pointer without retaining it (retain count unchanged);
+  RETAIN_NONATOMIC and RETAIN retain the value (+1); COPY_NONATOMIC and COPY send the value
+  -copyWithZone: once at the time of the call and store the copy (retain count 1; the original is
+  untouched). The atomic policies differ from the nonatomic ones only when the value is read back
+  (see objc_getAssociatedObject). Setting a new value under a key that already holds one releases
+  the old value at once (a value only the association kept alive is deallocated during the call).
+  Setting the very same object again with a retaining policy does not free it and leaves its retain
+  count as it was (the association holds one reference, not two). Setting a nil value removes the
+  association and releases the old value if it was retained or copied; the policy given with nil
+  does not matter (nil with ASSIGN released an old RETAIN value). When the owner is deallocated its
+  associations are released after the owner's own -dealloc has run (the association is still
+  readable from inside that -dealloc); values with retaining policies lose the association's
+  reference, ASSIGN values are left alone. Associations are not zeroed when an ASSIGN value is
+  freed. Setting a non-nil value on a nil object makes the process crash with SIGSEGV (11) on both
+  architectures; setting nil on a nil object returns normally and does nothing.
+returns:
+  success: "no result (void); the association exists afterwards and objc_getAssociatedObject returns the value (or, for a COPY policy, the copy)"
+  nil_value: "the association under the key is removed, the old value released if it was retained"
+  retain_count_effect: "ASSIGN: 0; RETAIN, RETAIN_NONATOMIC: +1; COPY, COPY_NONATOMIC: the original 0, the copy 1"
+errors:
+  nil_object_with_value: "SIGSEGV (signal 11) in the calling process, observed in a child process on both architectures"
+  nil_object_with_nil_value: "returns, no effect"
+side_effects: >
+  A runtime-owned table entry is created, replaced or removed; retain counts of old and new values
+  change as described. The value may be deallocated during the call (old value replaced, or removed
+  by nil). Not observed: associations on tagged pointer objects, on objects of Swift classes, a
+  policy value outside the five documented ones.
+threading: >
+  The table is safe for concurrent reads (see objc_getAssociatedObject). Not observed: concurrent
+  writers to the same key.
+ordering:
+  - "the old value is released inside the call that replaces or removes it"
+  - "the COPY policies call -copyWithZone: inside the call, once"
+  - "when an owner dies: its own -dealloc first, then its associated values are released"
+timing:
+  typical: "microseconds per call (a hash table lookup under a lock)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

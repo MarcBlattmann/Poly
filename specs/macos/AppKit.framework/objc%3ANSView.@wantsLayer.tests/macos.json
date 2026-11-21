@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsview_wantslayer_set_get",
+      "source_sha256": "2e78184930e92c3471838ac28ed75425e76d069ca380263cd7ebf2c58932962e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7bb02be0c8b5184db7b98210dcc9ce5800e0ee3713f640674b017996dfdc400a",
+          "exit_code": 0,
+          "stdout": "ok !v.wantsLayer && v.layer == nil\nok v.wantsLayer && v.layer != nil\nok ![v.layer isMemberOfClass:[CALayer class]] && [v.layer isKindOfClass:[CALayer class]]\nok (id)v.layer.delegate == (id)v\nok v.layer.bounds.size.width is 40\nok v.layer.bounds.size.height is 30\nok !v.canDrawSubviewsIntoLayer && !v.layer.isOpaque\nok v.layer.bounds.size.width is 80\nok v.layer.bounds.size.height is 90\nok !v.wantsLayer && v.layer == nil\nok v.wantsUpdateLayer && !dv.wantsUpdateLayer\nok v.layerContentsRedrawPolicy == NSViewLayerContentsRedrawOnSetNeedsDisplay\nok dv.layerContentsRedrawPolicy == NSViewLayerContentsRedrawDuringViewResize\nok dv.layerContentsRedrawPolicy == NSViewLayerContentsRedrawDuringViewResize\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6181a183ef9e84f289bdc8a1489bb5c26dafd0a9594590c72f1b1d545dd9ee67",
+          "exit_code": 0,
+          "stdout": "ok !v.wantsLayer && v.layer == nil\nok v.wantsLayer && v.layer != nil\nok ![v.layer isMemberOfClass:[CALayer class]] && [v.layer isKindOfClass:[CALayer class]]\nok (id)v.layer.delegate == (id)v\nok v.layer.bounds.size.width is 40\nok v.layer.bounds.size.height is 30\nok !v.canDrawSubviewsIntoLayer && !v.layer.isOpaque\nok v.layer.bounds.size.width is 80\nok v.layer.bounds.size.height is 90\nok !v.wantsLayer && v.layer == nil\nok v.wantsUpdateLayer && !dv.wantsUpdateLayer\nok v.layerContentsRedrawPolicy == NSViewLayerContentsRedrawOnSetNeedsDisplay\nok dv.layerContentsRedrawPolicy == NSViewLayerContentsRedrawDuringViewResize\nok dv.layerContentsRedrawPolicy == NSViewLayerContentsRedrawDuringViewResize\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsview_wantslayer_update_layer",
+      "source_sha256": "aaefb512416d0c7574175611ace3b62532b3bddae4f0faf60e86ad3980c40401",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d9fea19ad5bc71d4af2fb1bf5223952506798e09ec73f1b5d62955f757ae1d9c",
+          "exit_code": 0,
+          "stdout": "ok [g_log rangeOfString:@\"updateLayer;\"].location != NSNotFound\nok [g_log rangeOfString:@\"drawRect;\"].location == NSNotFound\nok g_has_layer\nok [g_log isEqualToString:@\"updateLayer;\"]\nok [g_log rangeOfString:@\"drawRect;\"].location != NSNotFound\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2c21e54692f99195b7a211910a4b418ebb41d621f87090b99e21df2802bc9e91",
+          "exit_code": 0,
+          "stdout": "ok [g_log rangeOfString:@\"updateLayer;\"].location != NSNotFound\nok [g_log rangeOfString:@\"drawRect;\"].location == NSNotFound\nok g_has_layer\nok [g_log isEqualToString:@\"updateLayer;\"]\nok [g_log rangeOfString:@\"drawRect;\"].location != NSNotFound\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

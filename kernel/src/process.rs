@@ -268,6 +268,21 @@ impl Process {
         p
     }
 
+    /// An XNU process made by `fork` (`crate::xnu`): its files come from
+    /// the parent; its personality state starts empty (the caller copies
+    /// the signals).
+    pub fn new_xnu_child(
+        pid: u32,
+        ppid: u32,
+        format: binfmt::Format,
+        traced: bool,
+        files: crate::fs::Files,
+    ) -> Process {
+        let mut p = Process::with_state(pid, ppid, Personality::Xnu, format, None, traced, files);
+        p.xnu = Some(crate::xnu::XnuState::default());
+        p
+    }
+
     /// A Linux process made by `fork` / `clone` (`linux::task`): its files
     /// and personality state come from the parent.
     pub fn new_linux_child(
@@ -488,6 +503,11 @@ impl Process {
     /// [`detach_thread`]: Self::detach_thread
     /// [`wait`]: Self::wait
     pub fn ended(&self) {
+        // Its Mach task goes (its ports die, its name port too) before a
+        // waiter can see it ended, whatever ended it.
+        if self.personality == poly_abi::Personality::Xnu {
+            crate::xnu_mach::task_ended(self.pid);
+        }
         self.ended.store(true, Ordering::SeqCst);
         EVENTS.wake_all();
         // Native process handles of it turn readable (ADR 0125).

@@ -18,7 +18,7 @@ use poly_mach::exc::ThreadState64;
 use poly_mach::{TaskId, ThreadId, ulock};
 use poly_personality_xnu::exc;
 use poly_personality_xnu::kernel::{
-    Arch, Backing, Fault, Inherit, MachState, PageInfo, Region, ThreadStart, Wakeup, XnuKernel,
+    Arch, Backing, Fault, Inherit, MachState, PageInfo, Peer, Region, ThreadStart, Wakeup, XnuKernel,
 };
 
 static MACH: SpinLock<Option<MachState>> = SpinLock::new(None);
@@ -129,10 +129,17 @@ impl XnuKernel for MachThread<'_> {
             m.ipc.create_thread(task, thread);
         } else {
             m.ipc.create_task(task, thread);
-            // A child inherits its parent's task exception handlers.
-            m.ipc.inherit_exception_ports(u64::from(self.process.ppid), task);
+            // A child inherits its parent's task exception handlers and
+            // special ports.
+            m.ipc.inherit_from(u64::from(self.process.ppid), task);
         }
         f(m, self);
+    }
+
+    fn peer(&self, pid: i32) -> Option<Peer> {
+        let pid = u32::try_from(pid).ok()?;
+        let p = process::find(pid)?;
+        Some(Peer { running: !p.has_ended(), related: pid == self.process.ppid || p.ppid == self.process.pid })
     }
 
     fn kill_self(&mut self, signal: u32) {
@@ -180,6 +187,9 @@ impl XnuKernel for MachThread<'_> {
         if let Some(memory) = self.memory() {
             let _ = memory.unmap(start, end - start);
         }
+        if let Some(state) = self.process.xnu.as_ref() {
+            state.unmapped(start, end);
+        }
     }
 
     fn protect(&mut self, start: u64, end: u64, bits: u32) {
@@ -194,9 +204,12 @@ impl XnuKernel for MachThread<'_> {
         }
     }
 
-    fn set_inherit(&mut self, _start: u64, _end: u64, _inherit: Inherit) {
-        // XNU processes do not fork yet; the inheritance takes effect with
-        // fork.
+    fn set_inherit(&mut self, start: u64, end: u64, inherit: Inherit) {
+        // NONE leaves the range out of a fork child (`crate::xnu`); SHARE of
+        // private memory and COPY of shared memory are not done yet.
+        if let Some(state) = self.process.xnu.as_ref() {
+            state.set_inherit(start, end, inherit == Inherit::None);
+        }
     }
 
     fn zero(&mut self, start: u64, end: u64) {

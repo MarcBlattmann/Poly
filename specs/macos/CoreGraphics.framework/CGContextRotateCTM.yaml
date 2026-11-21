@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGContextRotateCTM.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGContextRotateCTM.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGContextRotateCTM
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGContextRotateCTM(context, angle) rotates user space by angle radians counterclockwise in the y-up space about the origin; the CTM is the matrix [cos sin -sin cos 0 0] (exact doubles recorded: for pi/2 cos is 6.1e-17, not 0). Rotating an 8x4 rect about (6,6) by pi/2 gives an exact 4 wide, 8 high block (ff at 4 columns, 8 rows); for pi/4, pi/6, -pi/6, pi the alpha grids in the tests give the rotated edges (antialiased). Two rotations of pi/8 give a = 0.7071067811865475, b = 0.7071067811865476 while one rotation of pi/4 gives a = 0.7071067811865476, b = 0.7071067811865475 (the last bits differ); a width 2 line rotated by pi/4 shows the diagonal stroke grid.
+returns:
+  "result": "void"
+errors:
+  "none": "no error result"
+side_effects: "changes the CTM of the graphics state"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

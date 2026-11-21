@@ -1,0 +1,42 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "d45892328ab7",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T12:26:42Z",
+  "tests": [
+    {
+      "name": "cnet_events_b",
+      "exe_sha256": "b47bf2cf014bd3daa19f31104dacf7d8aefa275d2ca377591c62d78eef1e4280",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "aXQgc3RhcnRzIG5vbi1zaWduYWxsZWQ6IHllcwpXU0FSZXNldEV2ZW50IG9mIGFuIGV2ZW50IHRoYXQgaXMgbm90IHNldDogeWVzCldTQVJlc2V0RXZlbnQgb2YgYSBzZXQgYXV0by1yZXNldCBldmVudDogeWVzOyBzaWduYWxsZWQgbm8KV1NBU2V0RXZlbnQoTlVMTCk6IG5vIFdTQUdldExhc3RFcnJvciA2CldTQUNsb3NlRXZlbnQ6IHllcwpXU0FDbG9zZUV2ZW50IG9mIGEgQ3JlYXRlRXZlbnRXIGV2ZW50OiB5ZXMKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "it starts non-signalled: yes\nWSAResetEvent of an event that is not set: yes\nWSAResetEvent of a set auto-reset event: yes; signalled no\nWSASetEvent(NULL): no WSAGetLastError 6\nWSACloseEvent: yes\nWSACloseEvent of a CreateEventW event: yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 43
+    },
+    {
+      "name": "cnet_events_c",
+      "exe_sha256": "8a51cf4be26b1340527e0a0d82226bf83969ad6ee7bc1c73f7eba233ed641064",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "V1NBU2V0RXZlbnQ6IHllczsgc2lnbmFsbGVkIHllczsgc3RpbGwgc2lnbmFsbGVkIGFmdGVyIGEgd2FpdCB5ZXMKYW4gYXV0by1yZXNldCBldmVudCBjcmVhdGVkIHNldDogc2lnbmFsbGVkIHllcwpXU0FSZXNldEV2ZW50KE5VTEwpOiBubyBXU0FHZXRMYXN0RXJyb3IgNgpXU0FDbG9zZUV2ZW50KE5VTEwpOiBubyBXU0FHZXRMYXN0RXJyb3IgNgpXU0FSZXNldEV2ZW50IG9mIHRoZSBjbG9zZWQgZXZlbnQ6IG5vIFdTQUdldExhc3RFcnJvciA2CmEgZHVwbGljYXRlIG9mIGEgY2xvc2VkIFdTQSBldmVudCBzdGlsbCB3b3Jrczogc2lnbmFsbGVkIHllcwpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "WSASetEvent: yes; signalled yes; still signalled after a wait yes\nan auto-reset event created set: signalled yes\nWSAResetEvent(NULL): no WSAGetLastError 6\nWSACloseEvent(NULL): no WSAGetLastError 6\nWSAResetEvent of the closed event: no WSAGetLastError 6\na duplicate of a closed WSA event still works: signalled yes\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 50
+    }
+  ]
+}

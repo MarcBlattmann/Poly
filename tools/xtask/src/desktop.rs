@@ -17,7 +17,9 @@
 //! its input (`input-send-event`, QEMU's QMP reference):
 //!
 //! 1. the desktop is up: the ridge (rgb(32, 32, 32) along the top), the
-//!    launcher hanging from it (ADR 0127), the wallpaper elsewhere;
+//!    wallpaper below it, no launcher (closed after a normal boot); typing
+//!    `files` on the empty desktop opens the launcher with all five letters,
+//!    and emptied it hangs from the ridge (ADR 0127);
 //! 2. typing `demo` into the launcher lists the apps (the compositor logs
 //!    the query); Enter starts the first, "Demo Window" (from the desktop
 //!    file), whose window must appear, centred below the ridge, in its
@@ -863,26 +865,37 @@ fn drive(socket: &Path, lines: Lines) -> std::result::Result<(), String> {
     let mut d = Driver { qmp, lines, shots, step: 0 };
     thread::sleep(Duration::from_millis(500));
 
-    // 1. The ridge and the launcher.
-    let img = d.shot("launcher")?;
+    // 1. The ridge, and no launcher: it is closed after a normal boot
+    // (chrome-qa-3 item 6; a session asks for it with `--launcher`).
+    let img = d.shot("desktop-at-start")?;
     expect("the screen is 1280x800", (img.width, img.height) == SIZE)?;
     expect("the ridge runs along the top", img.pixel(640, 6) == RIDGE && img.pixel(640, 20) == RIDGE)?;
     expect("the wallpaper is below the ridge", img.pixel(100, 26) != RIDGE && img.pixel(100, 700) != RIDGE)?;
-    // The launcher hangs from the ridge (Alpine Shell's look, ADR 0127):
-    // its search row 720 wide, x 280..1000, y 24..72, in the ridge's colour.
-    expect("the launcher hangs from the ridge", img.pixel(900, 40) == RIDGE && img.pixel(581, 64) == RIDGE)?;
-    expect("not outside the launcher", img.pixel(200, 40) != RIDGE && img.pixel(640, 90) != RIDGE)?;
+    expect("no launcher after the boot", img.pixel(900, 40) != RIDGE && img.pixel(581, 64) != RIDGE)?;
+    expect("the compositor says so", d.wait("desktop ready", 1)?.contains("launcher hidden"))?;
 
+    // Typing on the empty desktop opens the launcher with what was typed:
+    // the first letter is the query's first, none is lost.
     // Poly's own apps have their own icons (ADR 0146): the Files row's icon
     // box (x 296..324, y 114..142) shows the artwork's blue tile, not the
     // launcher's glyph. At its bottom, clear of the white folder.
     d.type_text(&["f", "i", "l", "e", "s"])?;
     d.wait("launcher query \"files\"", 30)?;
+    expect("the first letter opened the launcher", d.wait("launcher query \"f\"", 1).is_ok())?;
     thread::sleep(Duration::from_millis(800));
-    let img = d.shot("own-icon")?;
+    let img = d.shot("typed-on-desktop")?;
     let tile = img.pixel(310, 140);
     expect("Files shows its own icon (a blue tile)", tile[2] >= 0xc0 && tile[2] > tile[0] + 0x40)?;
     d.type_text(&["backspace"; 5])?;
+    d.wait("launcher query \"\"", 30)?;
+    thread::sleep(Duration::from_millis(800));
+
+    // The launcher hangs from the ridge (Alpine Shell's look, ADR 0127):
+    // nothing typed, its search row only, 720 wide, x 280..1000, y 24..72,
+    // in the ridge's colour.
+    let img = d.shot("launcher")?;
+    expect("the launcher hangs from the ridge", img.pixel(900, 40) == RIDGE && img.pixel(581, 64) == RIDGE)?;
+    expect("not outside the launcher", img.pixel(200, 40) != RIDGE && img.pixel(640, 90) != RIDGE)?;
 
     // 2. Type, list, launch.
     d.type_text(&["d", "e", "m", "o"])?;
@@ -1182,16 +1195,14 @@ fn drive_shell(socket: &Path, lines: Lines, sound: bool) -> std::result::Result<
     thread::sleep(Duration::from_millis(500));
     d.wait("session bus on unix:path=", 1)?;
 
-    // The owner's way to start an app (ADR 0234): the Windows key, then the name, then Enter. The
-    // launcher the desktop shows at the start stays for the key (it used to close, and the typing
-    // went nowhere); the name typed next goes into it, Enter starts the app below.
-    let hidden_before = count(&lines, LAUNCHER_HIDDEN);
+    // The owner's way to start an app (ADR 0234): the Windows key, then the name, then Enter. After
+    // a normal boot the launcher is closed (chrome-qa-3 item 6): the key opens it, the name typed
+    // next goes into it, Enter starts the app below.
+    let shown_before = count(&lines, LAUNCHER_SHOWN);
     d.type_text(&["meta_l"])?;
+    wait_nth(&lines, LAUNCHER_SHOWN, shown_before + 1, 30)?;
     thread::sleep(Duration::from_millis(1000));
-    expect(
-        "the Windows key keeps the launcher shown at the start",
-        count(&lines, LAUNCHER_HIDDEN) == hidden_before && d.shot("windows-key-at-start")?.pixel(900, 40) == RIDGE,
-    )?;
+    expect("the Windows key opens the launcher at the start", d.shot("windows-key-at-start")?.pixel(900, 40) == RIDGE)?;
 
     // A no-window app must return to the launcher after its child exits.
     let launchers_shown = count(&lines, LAUNCHER_SHOWN);

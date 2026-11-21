@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7da3bb96eb5b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T13:48:18Z",
+  "tests": [
+    {
+      "name": "dns_slow_does_not_block",
+      "exe_sha256": "95f0f1612957ff24fb5a3cb481319860ff750909ac7d85eaf9f1ab66ffb75468",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "d2hpbGUgdGhlIHNsb3cgbG9va3VwIHJ1bnM6IGxvY2FsaG9zdCBjb2RlIDAgKGVudHJpZXMgPiAwOiB0cnVlKTsgYSBudW1lcmljIGFkZHJlc3MgY29kZSAwOyBhIGZhaWxpbmcgZnVsbHkgcXVhbGlmaWVkIG5hbWUgY29kZSAxMTAwMTsgYSBzaW5nbGUtbGFiZWwgbmFtZSB3aXRoIEFJX0ROU19PTkxZIGNvZGUgMTEwMDEKdGhlIGZvdXIgbG9va3VwcyB0b29rIHVuZGVyIDUwMCBtcyB0b2dldGhlcjogdHJ1ZQp0aGUgc2xvdyBsb29rdXA6IGNvZGUgMTEwMDE7IHRvb2sgMzAwIHRvIDQwMDAgbXM6IHRydWUKc3VtbWFyeSAwIHBhc3NlZCwgMCBmYWlsZWQK",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "while the slow lookup runs: localhost code 0 (entries > 0: true); a numeric address code 0; a failing fully qualified name code 11001; a single-label name with AI_DNS_ONLY code 11001\nthe four lookups took under 500 ms together: true\nthe slow lookup: code 11001; took 300 to 4000 ms: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 1339
+    }
+  ]
+}

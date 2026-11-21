@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nscolor_labelcolor_catalog",
+      "source_sha256": "80e7adcb500a30bef533318b0ec897dfbcae1f4f4163acd8abe704639b92d6ff",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "26b2ad36a0c4d6d3c0359afc06d433038ca524163d4e79dadcc555135484e9f5",
+          "exit_code": 0,
+          "stdout": "ok NSColor.labelColor.type == NSColorTypeCatalog && NSColorTypeCatalog == 2\nok [NSColor.labelColor.catalogNameComponent isEqualToString:@\"System\"]\nok [NSColor.labelColor.colorNameComponent isEqualToString:@\"labelColor\"]\nok [NSColor.controlTextColor.colorNameComponent isEqualToString:@\"controlTextColor\"]\nok [NSColor.windowBackgroundColor.colorNameComponent isEqualToString:@\"windowBackgroundColor\"]\nok [NSColor.textBackgroundColor.colorNameComponent isEqualToString:@\"textBackgroundColor\"]\nok [NSColor.controlAccentColor.colorNameComponent isEqualToString:@\"controlAccentColor\"]\nok [NSColor.separatorColor.colorNameComponent isEqualToString:@\"separatorColor\"]\nok [NSColor.labelColor isEqual:NSColor.labelColor]\nok ![NSColor.labelColor isEqual:NSColor.blackColor]\nvalue redComponent of a catalog colour raises NSInvalidArgumentException\nok c != nil && c.type == NSColorTypeComponentBased\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "21d6a59113fdb83ba24efad23de5fc66eaf63259434402ef433d78f542a55dfc",
+          "exit_code": 0,
+          "stdout": "ok NSColor.labelColor.type == NSColorTypeCatalog && NSColorTypeCatalog == 2\nok [NSColor.labelColor.catalogNameComponent isEqualToString:@\"System\"]\nok [NSColor.labelColor.colorNameComponent isEqualToString:@\"labelColor\"]\nok [NSColor.controlTextColor.colorNameComponent isEqualToString:@\"controlTextColor\"]\nok [NSColor.windowBackgroundColor.colorNameComponent isEqualToString:@\"windowBackgroundColor\"]\nok [NSColor.textBackgroundColor.colorNameComponent isEqualToString:@\"textBackgroundColor\"]\nok [NSColor.controlAccentColor.colorNameComponent isEqualToString:@\"controlAccentColor\"]\nok [NSColor.separatorColor.colorNameComponent isEqualToString:@\"separatorColor\"]\nok [NSColor.labelColor isEqual:NSColor.labelColor]\nok ![NSColor.labelColor isEqual:NSColor.blackColor]\nvalue redComponent of a catalog colour raises NSInvalidArgumentException\nok c != nil && c.type == NSColorTypeComponentBased\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nscolor_labelcolor_light",
+      "source_sha256": "cdf9c7df57c23ac42b6f44fe1b04b0b3191535ce6e0cb3a7dcc9c0bc9f2c5c0f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "171bb2b3b9199362d54f02518a250c445120029e07e9ab93b465a7f54423ddf6",
+          "exit_code": 0,
+          "stdout": "ok v[0] == v[1] && v[1] == v[2] && v[0] < 20 && v[3] > 100 && v[3] < 255\nok v[3] == 255 && v[0] > 200\nok v[3] == 255 && v[0] > 200\nvalue sys_light_label 0 0 0 216 \nvalue sys_light_controlText 0 0 0 216 \nvalue sys_light_secondaryLabel 0 0 0 127 \nvalue sys_light_disabledControlText 0 0 0 63 \nvalue sys_light_placeholder 0 0 0 127 \nvalue sys_light_separator 0 0 0 25 \nvalue sys_light_windowBackground 255 255 255 255 \nvalue sys_light_textBackground 255 255 255 255 \nvalue sys_light_controlBackground 255 255 255 255 \nvalue sys_light_accent 0 122 255 255 \nvalue sys_light_systemRed 255 56 60 255 \nvalue sys_light_systemBlue 0 136 255 255 \nvalue sys_light_link 0 104 218 255 \nvalue sys_light_selectedTextBackground 179 215 255 255 \nvalue sys_light_grid 230 230 230 255 \nvalue sys_light_shadow 0 0 0 255 \nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "38c77009d914bcc9e20476a2f1a2312a63379f8bde05c0a049572776a9d6fa7f",
+          "exit_code": 0,
+          "stdout": "ok v[0] == v[1] && v[1] == v[2] && v[0] < 20 && v[3] > 100 && v[3] < 255\nok v[3] == 255 && v[0] > 200\nok v[3] == 255 && v[0] > 200\nvalue sys_light_label 0 0 0 216 \nvalue sys_light_controlText 0 0 0 216 \nvalue sys_light_secondaryLabel 0 0 0 127 \nvalue sys_light_disabledControlText 0 0 0 63 \nvalue sys_light_placeholder 0 0 0 127 \nvalue sys_light_separator 0 0 0 25 \nvalue sys_light_windowBackground 255 255 255 255 \nvalue sys_light_textBackground 255 255 255 255 \nvalue sys_light_controlBackground 255 255 255 255 \nvalue sys_light_accent 0 122 255 255 \nvalue sys_light_systemRed 255 56 60 255 \nvalue sys_light_systemBlue 0 136 255 255 \nvalue sys_light_link 0 104 218 255 \nvalue sys_light_selectedTextBackground 179 215 255 255 \nvalue sys_light_grid 230 230 230 255 \nvalue sys_light_shadow 0 0 0 255 \nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

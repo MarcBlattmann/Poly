@@ -1,0 +1,32 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/libobjc.A.dylib/class_getName.yaml. Observed with Objective-C test programs built by
+# `pipeline mac build` (directive `poly-mac: libobjc`, tests/macos/include/poly_mobjc.h, ADR 0182); results per
+# architecture in class_getName.tests/macos.json.
+id: macos/api/libobjc.A.dylib/class_getName
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment, built as Objective-C against libobjc.A.dylib and the root class NSObject only (no Foundation); arm64 observed natively, x86_64 under Rosetta 2, three runs per architecture with identical output; every observation below was the same on both architectures unless a difference is named"
+  observed_by: spec-macos-objc
+  date: 2026-11-20
+summary: >
+  const char *class_getName(Class cls). The class's name as a NUL-terminated string that stays valid
+  and is the same pointer on every call. Compiled classes give the name the compiler wrote; run-time
+  classes the name passed to objc_allocateClassPair (a copy: later changes of the caller's buffer do
+  not matter), before and after registration; names of 300 and 1024 characters, names with spaces and
+  symbols, and the empty name come back exactly. A metaclass has the same name as its class, and the
+  metaclass of a metaclass (the root metaclass) is named like the root class ("NSObject"). A nil class
+  gives the string "nil" (never NULL). Does not send +initialize.
+returns:
+  name: "the class name string"
+  nil_class: "\"nil\" for Nil"
+errors:
+  none: "no error codes"
+side_effects: "none"
+threading: "No thread-specific behaviour was observed: the tests are single-threaded and the call does not depend on the calling thread. Behaviour under concurrent calls from several threads was not observed."
+ordering: []
+timing:
+  typical: "microseconds: an in-process call"
+  guarantees: "none"
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

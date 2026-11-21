@@ -237,6 +237,13 @@ impl Mapping {
 /// Whether CR4.PCIDE is set.
 static PCID: AtomicBool = AtomicBool::new(false);
 
+/// Whether the kernel turns PCIDs on when the CPU has them. Off for now: with PCIDs (QEMU `-cpu host`,
+/// the desktop's default since ADR 0255) the kernel heap was corrupted soon after the compositor
+/// started (a page fault at address 0 in `poly_pagecache::Index::run`); the same tree runs clean with
+/// `-cpu host,-pcid` and `qemu64`. Every CR3 load flushes the TLB without them. Turned back on with
+/// the fix of that bug.
+pub const USE_PCIDS: bool = false;
+
 /// PCIDs handed out on each CPU, 1 to `PCIDS - 1` (0 is the kernel's).
 const PCIDS: usize = percpu::PCIDS;
 
@@ -682,6 +689,32 @@ impl AddressSpace {
         }
         self.sync_tlb(flush);
         Ok(())
+    }
+
+    /// Give the mapped page `virt` the rights `prot` after a fault the region allows (a write to
+    /// a page first mapped for reading, or an access through a stale TLB entry). When the page
+    /// only gains rights ([`PageFlags::only_adds_rights`]), only this CPU's TLB is flushed: another
+    /// CPU's entry for the page allows less, so an access through it faults and that CPU flushes
+    /// its own entry the same way. Anything else is [`protect`](Self::protect), with a shootdown.
+    pub fn grant(&self, virt: u64, prot: Prot) -> Result<(), MapError> {
+        check_range(virt, PAGE_SIZE)?;
+        let flags = prot.flags().ok_or(MapError::NoAccess)?;
+        {
+            let mut tables = self.tables.lock();
+            let old = tables.translate(virt).map_err(|_| MapError::NotMapped)?.flags;
+            let new = flags | (old & (OWNED | PageFlags::DIRTY | PageFlags::ACCESSED));
+            if old.only_adds_rights(new) {
+                tables.update_flags(virt, new).expect("translated above");
+                let _irq = cpu::InterruptsOff::new();
+                if self.is_active() {
+                    let mut flush = Flush::None;
+                    flush.add_page(virt);
+                    tlb::invalidate_current(flush);
+                }
+                return Ok(());
+            }
+        }
+        self.protect(virt, PAGE_SIZE, prot)
     }
 
     /// Where the user address `virt` leads, if it is mapped.

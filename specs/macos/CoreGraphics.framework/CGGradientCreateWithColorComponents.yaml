@@ -1,0 +1,26 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/CoreGraphics.framework/CGGradientCreateWithColorComponents.yaml. Observed with C programs that draw into a CGBitmapContext
+# (tests/macos/include/poly_mcg.h, marked `poly-mac: coregraphics`, ADR 0182); the tests print the bytes
+# of chosen pixels (or alpha grids, or hashes of the buffer) so the result is pixel exact; results per
+# architecture in CGGradientCreateWithColorComponents.tests/macos.json. No CoreGraphics, Quartz, Cairo or Skia source was read.
+id: macos/api/CoreGraphics.framework/CGGradientCreateWithColorComponents
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), internal APFS volume, SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment and stdin on /dev/null; arm64 observed natively, x86_64 under Rosetta 2 (both architectures observed; they gave the same bytes except where the summary says otherwise). Output of the tests is written with raw system calls, never through the code under test"
+  observed_by: spec-macos-cg
+  date: 2026-11-20
+summary: >
+  CGGradientCreateWithColorComponents(space, components, locations, count) makes a gradient from `count` stops, each with the space's components plus an alpha. NULL for a NULL colour space or NULL components; a NULL locations array spreads the stops evenly; one stop is made, zero stops is NULL. A CFType (CGGradientGetTypeID); retain/release. Drawn across 17 pixels: stops red, blue at 0, 1; red, green, blue evenly or at 0, 0.5, 1 give the same; at 0, 0.2, 1 the green sits at 20%; a black opaque to black clear gradient fades the alpha. A device gray gradient (black to white over 9 pixels) gives gray bytes 0a 2e 3f 64 76 9b bf d2 f6 (no linear spacing: the colour at the pixel centre in the gray space converted to sRGB); a Display P3 red to green gradient drawn into sRGB clamps out-of-gamut values.
+returns:
+  "gradient": "a new gradient, NULL for bad arguments"
+errors:
+  "bad_arguments": "NULL"
+side_effects: "makes a gradient object"
+threading: "a CGContext is not safe to draw into from two threads at once (not tested)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

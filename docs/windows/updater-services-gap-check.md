@@ -68,5 +68,5 @@ the 30 gave the same bytes as the 64-bit run; the other four: `IsWow64Process` a
 32-bit child (`wow_self`, `wow_rights`), the 64-bit `FILE_RENAME_INFO` layout passed by a 32-bit program fails with
 ERROR_INVALID_NAME 123 (`sfi_rename`; the 32-bit layout has a 4-byte `RootDirectory`), and `rpm_self` reads a "kernel half"
 address that the 32-bit build truncates (a difference of the test, not of the function). The sheets say so where it matters. The results are in the kit (`results/x86-vs-x64.txt`), not committed.
-A pipeline x86 test build (build for `i686`, a 32-bit import path for `ALLOWED_DLLS`, a `windows32.json` result file) remains a
-Poly gap, reported to the coordinator.
+The pipeline can build 32-bit tests since ADR 0259 (`// poly-arch: x86`, merged while this job ran); recording the 15 entries'
+tests again as 32-bit twins is open work for a later job (the stack tests of `spec-win-stack-roundrect` are the first to do it).

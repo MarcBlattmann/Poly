@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsscreen_mainscreen_device_description",
+      "source_sha256": "21a9fa7887764d841ffacc811ea111385423604b072abe68ae6e04b043538fdd",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0fcbe9a7708d6152fae5b02d38bab13ced2764f28b1c95c8a344cc8e409a9b78",
+          "exit_code": 0,
+          "stdout": "ok [keys isEqualToString:@\"NSDeviceBitsPerSample,NSDeviceColorSpaceName,NSDeviceIsScreen,NSDeviceResolution,NSDeviceSize,NSScreenNumber\"]\nok NSEqualSizes([d[NSDeviceSize] sizeValue], s.frame.size)\nok [d[NSDeviceIsScreen] isEqual:@\"YES\"]\nok res.width is 72 * s.backingScaleFactor\nok res.height is 72 * s.backingScaleFactor\nok [d[NSDeviceColorSpaceName] isEqual:NSCalibratedRGBColorSpace]\nok [d[NSDeviceBitsPerSample] integerValue] >= 8\nok [d[@\"NSScreenNumber\"] unsignedIntValue] > 0\nok [d[@\"NSScreenNumber\"] isEqual:NSScreen.mainScreen.deviceDescription[@\"NSScreenNumber\"]]\nvalue sys_resolution 144.00\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e0bd71a2ddf8f362886a96d2f51f98815876644ba5ca6fc783e2f14ecdba8082",
+          "exit_code": 0,
+          "stdout": "ok [keys isEqualToString:@\"NSDeviceBitsPerSample,NSDeviceColorSpaceName,NSDeviceIsScreen,NSDeviceResolution,NSDeviceSize,NSScreenNumber\"]\nok NSEqualSizes([d[NSDeviceSize] sizeValue], s.frame.size)\nok [d[NSDeviceIsScreen] isEqual:@\"YES\"]\nok res.width is 72 * s.backingScaleFactor\nok res.height is 72 * s.backingScaleFactor\nok [d[NSDeviceColorSpaceName] isEqual:NSCalibratedRGBColorSpace]\nok [d[NSDeviceBitsPerSample] integerValue] >= 8\nok [d[@\"NSScreenNumber\"] unsignedIntValue] > 0\nok [d[@\"NSScreenNumber\"] isEqual:NSScreen.mainScreen.deviceDescription[@\"NSScreenNumber\"]]\nvalue sys_resolution 144.00\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsscreen_mainscreen_window",
+      "source_sha256": "1349b33a97b9974eac428f7ae674bdb22fd2671b7ba8be706c4b89c47c73cba6",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8cf526482c134de573486ec33f0a357bfc56af74da483b3c419dbb9e9e7f8871",
+          "exit_code": 0,
+          "stdout": "ok w.screen == s\nok w.backingScaleFactor is s.backingScaleFactor\nok w.frame.origin.x == 0 && w.frame.origin.y == 0\nok w.frame.size.width is s.frame.size.width + 500\nok fixed.origin.x is 100\nok fixed.origin.y > far.origin.y\nvalue sys_constrained_y_delta_sign 1.00\nvalue borderless constrained y -5000.00\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c9dd9bbf5b6da31abb09f52f92e1ea917c81b0581ca62cd70641b37853077813",
+          "exit_code": 0,
+          "stdout": "ok w.screen == s\nok w.backingScaleFactor is s.backingScaleFactor\nok w.frame.origin.x == 0 && w.frame.origin.y == 0\nok w.frame.size.width is s.frame.size.width + 500\nok fixed.origin.x is 100\nok fixed.origin.y > far.origin.y\nvalue sys_constrained_y_delta_sign 1.00\nvalue borderless constrained y -5000.00\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

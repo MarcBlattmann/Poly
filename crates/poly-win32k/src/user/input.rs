@@ -17,12 +17,15 @@ const HTERROR: u64 = 0xFFFE;
 const MA_NOACTIVATE: u64 = 3;
 const MA_NOACTIVATEANDEAT: u64 = 4;
 
-/// The window DefWindowProc tracks the non-client mouse area of (it
-/// handled the last WM_NCMOUSEMOVE); 0 for none (TrackMouseEvent.yaml
-/// `nonclient`, SetCursorPos.yaml `caption`).
+/// The window whose non-client mouse area is tracked as far as this process
+/// knows (DefWindowProc handled its last WM_NCMOUSEMOVE, or the program asked
+/// with TME_NONCLIENT); 0 for none (TrackMouseEvent.yaml `nonclient`,
+/// SetCursorPos.yaml `caption`). The tracking itself is the window manager's
+/// (`wm::pointer`): it ends it when the pointer is over another window, also
+/// one of another process; this hint only saves a request on client moves.
 pub static NC_TRACK: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
-/// `WM_NCMOUSELEAVE` (winuser.h).
-const WM_NCMOUSELEAVE: u32 = 0x02A2;
+/// `HTTRANSPARENT` (winuser.h): -1.
+const HTTRANSPARENT: u64 = u64::MAX;
 
 /// The vertical and horizontal wheel messages: they keep the screen position in `lParam` and get
 /// no `WM_SETCURSOR`.
@@ -99,13 +102,22 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
     if synthetic && AFTER_MOVE_LOOP.swap(false, core::sync::atomic::Ordering::Relaxed) {
         env.call(Request::Cursor { set: true, x: sx, y: sy });
     }
-    // Moving from the tracked non-client area into the client area (or
-    // another window) ends the tracking: WM_NCMOUSELEAVE follows the move.
+    // HTTRANSPARENT: the move belongs to the window below; the window manager
+    // makes it again for that one (WM_MOUSELEAVE.yaml `windows_that_do_not_cover`).
+    if hit == HTTRANSPARENT && m.message == WM_MOUSEMOVE {
+        env.call(Request::TrackMouse { hwnd: i.hwnd, flags: crate::wm::pointer::TRACK_TRANSPARENT, hover: 0 });
+        return false;
+    }
+    // Moving from the tracked non-client area into the client area ends the
+    // tracking: WM_NCMOUSELEAVE follows the move. Over another window the
+    // window manager has ended it already.
     if m.message == WM_MOUSEMOVE {
         let tracked = NC_TRACK.load(core::sync::atomic::Ordering::Relaxed);
         if tracked != 0 && (tracked != i.hwnd || hit == HTCLIENT) {
             NC_TRACK.store(0, core::sync::atomic::Ordering::Relaxed);
-            env.call(Request::Post { hwnd: u64::from(tracked), msg: WM_NCMOUSELEAVE, w: 0, l: 0 });
+            if tracked == i.hwnd {
+                env.call(Request::TrackMouse { hwnd: tracked, flags: crate::wm::pointer::TRACK_NC_END, hover: 0 });
+            }
         }
     }
     let mut eat = false;
@@ -136,8 +148,14 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
                 // The window raised under the cursor gets a move after the
                 // button messages queued behind this one
                 // (WindowFromPoint.yaml wfp_activate: WM_NCHITTEST,
-                // WM_SETCURSOR, WM_MOUSEMOVE after the WM_LBUTTONUP).
-                if let Reply::Value { value } = env.call(Request::Cursor { set: false, x: 0, y: 0 }) {
+                // WM_SETCURSOR, WM_MOUSEMOVE after the WM_LBUTTONUP). In the
+                // interactive session the window manager makes it when the
+                // activation changed the window structure (`wm::pointer`;
+                // WM_CAPTURECHANGED.yaml `button`: no move for a window that
+                // stays where it is).
+                if !screen(env).interactive
+                    && let Reply::Value { value } = env.call(Request::Cursor { set: false, x: 0, y: 0 })
+                {
                     env.call(Request::Cursor { set: true, x: value as u32 as i32, y: (value >> 32) as u32 as i32 });
                 }
             }
@@ -166,38 +184,23 @@ pub fn mouse_retrieved<E: Env + ?Sized>(env: &E, m: &mut CMsg) -> bool {
 
 /// `TrackMouseEvent` with `TME_NONCLIENT` (TrackMouseEvent.yaml
 /// `nonclient`): `TME_LEAVE` asks for `WM_NCMOUSELEAVE`. With the cursor
-/// outside the window's non-client area the message is posted at once;
-/// over it, DefWindowProc's tracking of that area (`NC_TRACK`) ends with it.
-/// `TME_CANCEL` takes the tracking away.
+/// outside the window's non-client area the window manager posts it at once;
+/// over it, the tracking of that area ends with it. `TME_CANCEL` takes the
+/// tracking away.
 pub fn track_nonclient<E: Env + ?Sized>(env: &E, hwnd: u32, flags: u32) {
     const TME_LEAVE: u32 = 0x2;
     const TME_CANCEL: u32 = 0x8000_0000;
     use core::sync::atomic::Ordering::Relaxed;
-    if flags & TME_CANCEL != 0 {
-        if flags & TME_LEAVE != 0 && NC_TRACK.load(Relaxed) == hwnd {
-            NC_TRACK.store(0, Relaxed);
-        }
-        return;
-    }
     if flags & TME_LEAVE == 0 {
         return;
     }
-    let (x, y) = match env.call(Request::Cursor { set: false, x: 0, y: 0 }) {
-        Reply::Value { value } => (value as u32 as i32, (value >> 32) as u32 as i32),
-        _ => (0, 0),
-    };
-    let under = match env.call(Request::WindowFromPoint { x, y, below: 0 }) {
-        Reply::Handle { hwnd } => hwnd,
-        _ => 0,
-    };
-    let in_nonclient = under == hwnd && {
-        let hit = def_window_proc(env, u64::from(hwnd), WM_NCHITTEST, 0, makelparam(x, y));
-        hit > HTCLIENT
-    };
-    if in_nonclient {
-        NC_TRACK.store(hwnd, Relaxed);
+    env.call(Request::TrackMouse { hwnd, flags, hover: 0 });
+    if flags & TME_CANCEL != 0 {
+        if NC_TRACK.load(Relaxed) == hwnd {
+            NC_TRACK.store(0, Relaxed);
+        }
     } else {
-        env.call(Request::Post { hwnd: u64::from(hwnd), msg: WM_NCMOUSELEAVE, w: 0, l: 0 });
+        NC_TRACK.store(hwnd, Relaxed);
     }
 }
 

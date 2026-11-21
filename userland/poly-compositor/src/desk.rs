@@ -39,6 +39,8 @@ pub struct Options<'a> {
     pub keymap: Option<&'a str>,
     pub scale: Option<Scale>,
     pub settings: Option<String>,
+    /// The session asks for the launcher open at the start (`--launcher`).
+    pub launcher: bool,
 }
 
 /// The desktop.
@@ -134,6 +136,9 @@ impl Desktop {
         let apps = desktop::installed_apps();
         let title_font = fonts.sans;
         let mut shell = Shell::new(lw, lh, apps, poly_shell::draw::Text::with_fonts(fonts));
+        if o.launcher {
+            shell.show_launcher_at_start();
+        }
         desktop::load_wallpapers(&mut shell);
         shell.set_icon_files(Box::new(desktop::DiskIcons));
         if let Some(f) = title_font {
@@ -357,6 +362,20 @@ impl Desktop {
                 if pressed && self.shell.history_open() && key == 1 {
                     self.shell.overlay_key(Key::Escape);
                     return None;
+                }
+                // Typing on the empty desktop opens the launcher with what was
+                // typed: the first letter is its query's first, not lost.
+                if pressed
+                    && !self.shell.launcher().is_visible()
+                    && !server.scene().windows().iter().any(|w| w.is_visible())
+                {
+                    let (depressed, locked) = server.modifiers();
+                    if let Some(Key::Char(c)) = desktop::launcher_key(key, depressed, locked, self.layout) {
+                        self.shell.type_on_desktop(c);
+                        println!("poly-compositor: launcher shown (typed on the desktop)");
+                        println!("poly-compositor: launcher query {:?}", self.shell.launcher().query());
+                        return None;
+                    }
                 }
                 server.handle_input(ev);
                 if pressed && self.shell.launcher().is_visible() {

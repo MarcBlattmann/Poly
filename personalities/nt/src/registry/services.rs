@@ -65,7 +65,13 @@ pub fn create_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
     let caller = k.caller();
     let (handle, d) = k.with_state(|sys, p, b| {
         // The 32-bit or 64-bit view of the name (ADR 0186, stage 2).
-        super::apply_view(sys, &caller, p.wow64, access, &mut attrs);
+        let named = (attrs.root, attrs.name.clone());
+        let view = super::apply_view(sys, &caller, p.wow64, access, &mut attrs);
+        if (attrs.root, &attrs.name) != (named.0, &named.1)
+            && let Some(name) = attrs.name.clone()
+        {
+            super::make_view_node(sys, &name, now);
+        }
         let r = (|| {
             let root = match attrs.root {
                 Some(h) => root_key(sys, &caller, h)?,
@@ -92,6 +98,7 @@ pub fn create_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
                 let _ = sys.objects.close(&caller, c.handle);
                 return Err(STATUS_OBJECT_TYPE_MISMATCH);
             };
+            super::remember_view(sys, &caller, c.handle, view);
             Ok((c.handle, d))
         })();
         sys.registry.deliver(&mut sys.objects, Some(caller.process));
@@ -126,7 +133,7 @@ fn open<K: NtKernel>(k: &mut K, out: u64, access: u64, attrs: Attributes, open_o
     let now = k.system_time();
     let caller = k.caller();
     let h = k.with_state(|sys, p, b| {
-        super::apply_view(sys, &caller, p.wow64, access, &mut attrs);
+        let view = super::apply_view(sys, &caller, p.wow64, access, &mut attrs);
         let mut hook = KeyParse {
             reg: &mut sys.registry.reg,
             open_link: attrs.attributes & OBJ_OPENLINK != 0,
@@ -141,6 +148,9 @@ fn open<K: NtKernel>(k: &mut K, out: u64, access: u64, attrs: Attributes, open_o
             Some(ObjectType::Key),
             &mut hook,
         );
+        if let Ok(h) = r {
+            super::remember_view(sys, &caller, h, view);
+        }
         sys.reap(b);
         r
     })?;

@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/AppKit.framework/objc%3ANSWindow.initWithContentRect%3AstyleMask%3Abacking%3Adefer%3A.yaml. Observed with Objective-C test programs linked against AppKit
+# (tests/macos/include/poly_mak.h, ADR 0182); results per architecture in objc%3ANSWindow.initWithContentRect%3AstyleMask%3Abacking%3Adefer%3A.tests/macos.json.
+id: "macos/api/AppKit.framework/objc:NSWindow.initWithContentRect:styleMask:backing:defer:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the AppKit, Foundation, CoreGraphics and QuartzCore of that release, SIP on, the owner's logged-in graphical session (the window server is needed), the display a 1512 x 982 point built-in one at scale 2, the system appearance set to dark (tests always set the appearance they need); tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: appkit`, tests/macos/include/poly_mak.h): the program is not in an application bundle, so its activation policy is Prohibited, it is never the active application and no window is ever key or main; its windows are invisible (alpha 0, mouse clicks pass through) and are closed or ordered out before the test ends, and a watchdog ends a test after 12 seconds; pixels are drawn into bitmaps the test makes (tagged sRGB) so that colours do not depend on the display; values that depend on this macOS release or this Mac (sizes of system controls, system colours and fonts, the display) are printed with the name prefix sys_ and are described as SYSTEM-DEPENDENT; NSTextAlignment's numbers differ between the two architectures in the SDK (tests compare with the named constants), and the pixels of system controls differ by one step between them (each architecture is recorded on its own); results and output go through raw system calls"
+  observed_by: spec-macos-appkit-basics
+  date: 2026-11-20
+summary: >
+  -[NSWindow initWithContentRect:styleMask:backing:defer:] makes a window whose content rectangle is
+  the one given. For a 300 x 200 content rectangle at (100,200): a borderless window's frame is the
+  same rectangle; a titled window's frame is 32 higher (300 x 232, same origin) whatever closable,
+  miniaturizable and resizable bits are set; with NSWindowStyleMaskFullSizeContentView the frame is
+  the content rectangle (200) and contentLayoutRect is 168 high; a window with only the resizable bit
+  has no title bar (200). The content view is a plain NSView filling the content rectangle at (0,0)
+  and the style mask reads back as given. A new window is not visible, not key, not main, not
+  miniaturized, has the empty title (not nil), alpha 1, is opaque, has backing type buffered (2),
+  level normal (0), minimum size (0,32) when titled (huge maximum), the window itself as first
+  responder, no delegate and no toolbar, a window number above 0, and is listed by the application; a
+  titled window can become key but not main. With defer YES it still has its frame and content view,
+  is not visible until ordered front, and the content view can be replaced by a view of the program
+  (the new view gets the window and the content rectangle as its frame, the old one loses its window).
+returns:
+  success: "a new window (never nil here)"
+errors: {}
+side_effects: "registers the window with the application and the window server"
+threading: "AppKit objects are used on the main thread only; the tests use them there (a watchdog thread only ends the process)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds; drawing, ordering and notifications settle within a run-loop turn (tests spin the loop for 0.05 to 0.3 s)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

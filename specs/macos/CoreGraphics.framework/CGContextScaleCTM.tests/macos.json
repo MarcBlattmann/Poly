@@ -1,0 +1,40 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 12:02:24",
+  "tests": [
+    {
+      "name": "cgsc_more",
+      "source_sha256": "d3cee2336d8a960098f9c833b496784a03e7835b90d250d28d49b4cbca3774a2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "1f22c88836c3a608bd6c9a5c012a35e2a916586afbcf3a706327f59f98ffd43b",
+          "exit_code": 0,
+          "stdout": "value Scale(0, 1): nothing is drawn (empty buffer hash) eebe4e4e51c6c683\nvalue the scale was undone by the restore 00 00 00 00 00 00 00\nvalue the scale was undone by the restore 01 00 00 00 00 00 00\nvalue the scale was undone by the restore 02 00 00 00 00 00 00\nvalue the scale was undone by the restore 03 ff ff 00 00 00 00\nvalue Scale(1e6, 1e6) and a unit rect: covers the bitmap f540800a0b71e443\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7f4c291a92858b574a040fc025a9ecab29c1712aefe718d15773e7382e0052b0",
+          "exit_code": 0,
+          "stdout": "value Scale(0, 1): nothing is drawn (empty buffer hash) eebe4e4e51c6c683\nvalue the scale was undone by the restore 00 00 00 00 00 00 00\nvalue the scale was undone by the restore 01 00 00 00 00 00 00\nvalue the scale was undone by the restore 02 00 00 00 00 00 00\nvalue the scale was undone by the restore 03 ff ff 00 00 00 00\nvalue Scale(1e6, 1e6) and a unit rect: covers the bitmap f540800a0b71e443\nsummary 0 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

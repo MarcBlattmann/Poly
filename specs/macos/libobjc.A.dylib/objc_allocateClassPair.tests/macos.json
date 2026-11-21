@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 08:41:04",
+  "tests": [
+    {
+      "name": "allocpair_basic",
+      "source_sha256": "7c1ac00e1b2d8e8ec9964d872688c6586df2bb71a718f9e1b7d08e7871710d5f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "11a4b098f6d580d64be9965ece04f53375880bea5798056480dbc40ddaa3bfb8",
+          "exit_code": 0,
+          "stdout": "ok a class is returned\nvalue name ApNew\nok superclass is the one given\nok it has a metaclass\nok the metaclass is another object\nok metaclass is flagged as such\nok metaclass has the same name\nok metaclass superclass is the superclass's metaclass\nok not findable before registration\nok name of a registered compiled class is taken\nok name NSObject is taken\nok name of a runtime class is taken once registered\nok findable after registration\nok extraBytes 64 accepted\nok an instance of it works\nok unregistered class allocated\nok an unregistered superclass gives nil\nok after registering it, the subclass can be allocated\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c4c1e31a9ea332f9d2d1b6c669a12d9db3a8e010cb5d24727ad680aaaa48593a",
+          "exit_code": 0,
+          "stdout": "ok a class is returned\nvalue name ApNew\nok superclass is the one given\nok it has a metaclass\nok the metaclass is another object\nok metaclass is flagged as such\nok metaclass has the same name\nok metaclass superclass is the superclass's metaclass\nok not findable before registration\nok name of a registered compiled class is taken\nok name NSObject is taken\nok name of a runtime class is taken once registered\nok findable after registration\nok extraBytes 64 accepted\nok an instance of it works\nok unregistered class allocated\nok an unregistered superclass gives nil\nok after registering it, the subclass can be allocated\nsummary 17 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "allocpair_before_register",
+      "source_sha256": "10e161fe1b392d6ca51824d3060a55ffd62ced47b677ec5a71dda0b7f3e6293e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "11107b5da893f98196ef4f2e2a929c4251a0f61ad37c7ed4d67a921f73a254f8",
+          "exit_code": 0,
+          "stdout": "ok allocated\nvalue instance size before registration is that of the superclass 1\nok method added before registration\nok ivar added before registration\nok second ivar\nok an ivar with a taken name is refused\nvalue instance size grew by 16 (8 + 4, padded) 16\nok an ivar cannot be added after registration\nok a method can be added after registration\nok instance made\nvalue seven 7\nvalue eight 7\nok ivar found\nvalue ivar _a offset minus NSObject size 0\nvalue ivar _a type q\nok methods are per class\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "62b2a73adeb52eb3453bfb56e5ffe90aff9620c6d8d71e3e76832bd5a12a7c18",
+          "exit_code": 0,
+          "stdout": "ok allocated\nvalue instance size before registration is that of the superclass 1\nok method added before registration\nok ivar added before registration\nok second ivar\nok an ivar with a taken name is refused\nvalue instance size grew by 16 (8 + 4, padded) 16\nok an ivar cannot be added after registration\nok a method can be added after registration\nok instance made\nvalue seven 7\nvalue eight 7\nok ivar found\nvalue ivar _a offset minus NSObject size 0\nvalue ivar _a type q\nok methods are per class\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nswindow_title_notifications",
+      "source_sha256": "d3bfbabb9f28b9bf0caf5a23fb3c866d1fde93570746a17b613c026bf5e238d8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "006699db3cf10cf8231e69308f3e70b41aed5f5f6105dd8c74b448a6502de7ee",
+          "exit_code": 0,
+          "stdout": "ok n == 0\nok ![a.title isEqualToString:b.title]\nok [a.title isEqualToString:@\"A2\"]\nok a.contentLayoutGuide != nil\nok a.windowTitlebarLayoutDirection == NSUserInterfaceLayoutDirectionLeftToRight\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "49b7828cd6a72f884bbb4b18ac751ecbd462edde8bdddd1dd1cba5354ace8bb1",
+          "exit_code": 0,
+          "stdout": "ok n == 0\nok ![a.title isEqualToString:b.title]\nok [a.title isEqualToString:@\"A2\"]\nok a.contentLayoutGuide != nil\nok a.windowTitlebarLayoutDirection == NSUserInterfaceLayoutDirectionLeftToRight\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nswindow_title_set_get",
+      "source_sha256": "570e2b6942b3258be9db949b5d226980fe666dc1b5dd0c697a35ff2523c46904",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "83a1b71f84b054a7f6b3d2ef5636e39e507f09a271d24b3c76cfd1ff9663e9ac",
+          "exit_code": 0,
+          "stdout": "ok w.title != nil && w.title.length == 0\nok [w.title isEqualToString:@\"Hello\"]\nok [w.title isEqualToString:@\"abc\"]\nok w.title.length == 9\nok [w.title isEqualToString:@\"Grüße 中\\U0001F600\"]\nok w.title.length == 5000\nvalue setTitle: nil raises NSInternalInconsistencyException\nok w.title.length == 5000\nok w.title != nil && w.title.length == 0\nok NSEqualRects(fr, w.frame)\nok [b.title isEqualToString:@\"x\"]\nok b.frame.size.height is 50\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "135dd9b476ce2bc60581e1585d6d81a87e25b2318f62d0957f131a2c17f0317b",
+          "exit_code": 0,
+          "stdout": "ok w.title != nil && w.title.length == 0\nok [w.title isEqualToString:@\"Hello\"]\nok [w.title isEqualToString:@\"abc\"]\nok w.title.length == 9\nok [w.title isEqualToString:@\"Grüße 中\\U0001F600\"]\nok w.title.length == 5000\nvalue setTitle: nil raises NSInternalInconsistencyException\nok w.title.length == 5000\nok w.title != nil && w.title.length == 0\nok NSEqualRects(fr, w.frame)\nok [b.title isEqualToString:@\"x\"]\nok b.frame.size.height is 50\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

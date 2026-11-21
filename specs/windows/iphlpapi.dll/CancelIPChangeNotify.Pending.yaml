@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/iphlpapi.dll/CancelIPChangeNotify.Pending.yaml
+id: windows/api/iphlpapi.dll/CancelIPChangeNotify.Pending
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran at least twice with identical output, each run in a fresh scratch directory; the loopback and the internet were available"
+  observed_by: spec-win-chrome-setup
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above, and the observed call trace of Chrome for Testing 157 (its network service, headless, github.com and bbc.com, specs/windows/apps/chrome/traces/net-*.trace.json: function names, counts and first-call order only). Microsoft Learn: NotifyAddrChange, CancelIPChangeNotify. Nothing of Windows, Wine or Google's programs was read or disassembled.
+summary: >
+  NotifyAddrChange with an OVERLAPPED returns ERROR_IO_PENDING (997) and leaves the event non-signalled; CancelIPChangeNotify(&ov) cancels it (TRUE) and the event is signalled; a second cancel, or a cancel of an OVERLAPPED that was never given to NotifyAddrChange, is FALSE. Chrome's network change notifier does exactly this once per process.
+interface:
+  signature: "DWORD NotifyAddrChange(PHANDLE h, LPOVERLAPPED ov); BOOL CancelIPChangeNotify(LPOVERLAPPED ov)"
+rules:
+  pending: "NotifyAddrChange(&h, &ov) with ov.hEvent a manual-reset event: returns 997 (ERROR_IO_PENDING), the event not signalled."
+  cancel: "CancelIPChangeNotify(&ov): TRUE; after it (50 ms) the event is signalled."
+  twice: "CancelIPChangeNotify(&ov) again: FALSE; CancelIPChangeNotify of an OVERLAPPED never given to NotifyAddrChange: FALSE (the last error is not set by these two calls, observed 0)."
+errors:
+  pending: "997 returned by NotifyAddrChange"
+side_effects: "none outside the test's own handles"
+threading: "may be called from any thread"
+ordering: []
+timing:
+  typical: "well under a millisecond per call on the oracle, except the waits named in the rules"
+  guarantees: none
+tests:
+  visible: 2
+  held_out: 1
+building_tests: >
+  Rust tests (ADR 0075), the same program three times (cnet_ipc, cnet_ipc_b, cnet_ipc_c): each makes every call and writes every third observation line (the first line is the first file's, the second the second file's, and so on), so each program is complete and the three together give the whole list. Each declares what it calls from Learn's prototypes; observations are return values, error codes, counts and relations, never handles, addresses, ports or times.
+not_covered: >
+  an actual address change (cannot be provoked here), NotifyAddrChange without an OVERLAPPED (blocks), NotifyRouteChange.

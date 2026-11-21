@@ -1,0 +1,10 @@
+_aligned_alloc
+_calloc
+_free
+_malloc
+_malloc_good_size
+_malloc_size
+_posix_memalign
+_realloc
+_reallocf
+_valloc

@@ -15,6 +15,7 @@
 
 pub mod errno;
 pub mod file;
+pub mod path;
 pub mod signal;
 pub mod sysctl;
 
@@ -28,6 +29,37 @@ use signal::{Action, Signals};
 /// BSD system call numbers (macOS SDK `<sys/syscall.h>`).
 pub mod nr {
     pub const EXIT: u64 = 1;
+    pub const FORK: u64 = 2;
+    pub const LINK: u64 = 9;
+    pub const UNLINK: u64 = 10;
+    pub const MKNOD: u64 = 14;
+    pub const CHMOD: u64 = 15;
+    pub const IOCTL: u64 = 54;
+    pub const SYMLINK: u64 = 57;
+    pub const READLINK: u64 = 58;
+    pub const UMASK: u64 = 60;
+    pub const FCHMOD: u64 = 124;
+    pub const RENAME: u64 = 128;
+    pub const MKDIR: u64 = 136;
+    pub const RMDIR: u64 = 137;
+    pub const TRUNCATE: u64 = 200;
+    pub const FTRUNCATE: u64 = 201;
+    pub const GETXATTR: u64 = 234;
+    pub const FGETXATTR: u64 = 235;
+    pub const SETXATTR: u64 = 236;
+    pub const FSETXATTR: u64 = 237;
+    pub const REMOVEXATTR: u64 = 238;
+    pub const FREMOVEXATTR: u64 = 239;
+    pub const LISTXATTR: u64 = 240;
+    pub const FLISTXATTR: u64 = 241;
+    pub const RENAMEAT: u64 = 465;
+    pub const FCHMODAT: u64 = 467;
+    pub const LINKAT: u64 = 471;
+    pub const UNLINKAT: u64 = 472;
+    pub const READLINKAT: u64 = 473;
+    pub const SYMLINKAT: u64 = 474;
+    pub const MKDIRAT: u64 = 475;
+    pub const RENAMEATX_NP: u64 = 488;
     pub const READ: u64 = 3;
     pub const WRITE: u64 = 4;
     pub const OPEN: u64 = 5;
@@ -39,13 +71,19 @@ pub mod nr {
     pub const GETUID: u64 = 24;
     pub const GETEUID: u64 = 25;
     pub const KILL: u64 = 37;
+    pub const GETTIMEOFDAY: u64 = 116;
     pub const GETPPID: u64 = 39;
     pub const PIPE: u64 = 42;
+    pub const GETPGRP: u64 = 81;
+    pub const SETPGID: u64 = 82;
+    pub const GETPGID: u64 = 151;
     pub const GETEGID: u64 = 43;
     pub const SIGACTION: u64 = 46;
     pub const GETGID: u64 = 47;
     pub const SIGPROCMASK: u64 = 48;
     pub const SIGPENDING: u64 = 52;
+    pub const EXECVE: u64 = 59;
+    pub const VFORK: u64 = 66;
     pub const MUNMAP: u64 = 73;
     pub const DUP2: u64 = 90;
     pub const FCNTL: u64 = 92;
@@ -53,6 +91,7 @@ pub mod nr {
     pub const PWRITE: u64 = 154;
     pub const CSOPS: u64 = 169;
     pub const CSOPS_AUDITTOKEN: u64 = 170;
+    pub const WAITID: u64 = 173;
     pub const MMAP: u64 = 197;
     pub const LSEEK: u64 = 199;
     pub const SYSCTL: u64 = 202;
@@ -233,6 +272,10 @@ pub trait BsdKernel {
     fn system(&self) -> sysctl::System {
         sysctl::System::default()
     }
+    /// The wall clock: nanoseconds since 1970-01-01 00:00:00 UTC.
+    fn wall_clock_ns(&self) -> u64 {
+        0
+    }
 
     /// Work on the calling process's signal state.
     fn with_signals(&mut self, _f: &mut dyn FnMut(&mut Signals)) {
@@ -255,6 +298,106 @@ pub trait BsdKernel {
     /// Wait for the child `pid` (-1: any). `Ok(None)`: `nohang` and nothing
     /// to report. `ECHILD` without such a child.
     fn wait(&mut self, _pid: i32, _nohang: bool) -> Result<Option<(u32, ChildStatus)>, u32> {
+        Err(ENOSYS32)
+    }
+
+    /// [`BsdKernel::wait`] that leaves the child to be waited for again
+    /// (`reap` false: waitid's `WNOWAIT`, or a report that could not be
+    /// stored).
+    fn wait_for(&mut self, pid: i32, nohang: bool, reap: bool) -> Result<Option<(u32, ChildStatus)>, u32> {
+        if reap { self.wait(pid, nohang) } else { Err(ENOSYS32) }
+    }
+
+    /// mkdirat: a directory with `mode` (the umask applies).
+    fn mkdir(&mut self, _dirfd: i32, _path: &[u8], _mode: u16) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// unlinkat: a name (`dir`: an empty directory).
+    fn unlink(&mut self, _dirfd: i32, _path: &[u8], _dir: bool) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// linkat: a new name for what `old` names.
+    fn link(&mut self, _fd1: i32, _old: &[u8], _fd2: i32, _new: &[u8], _follow: bool) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// symlinkat: a link at `path` to `target`.
+    fn symlink(&mut self, _target: &[u8], _dirfd: i32, _path: &[u8]) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// readlinkat: a link's whole target.
+    fn readlink(&mut self, _dirfd: i32, _path: &[u8]) -> Result<Vec<u8>, u32> {
+        Err(ENOSYS32)
+    }
+
+    /// renameatx_np.
+    fn rename(&mut self, _fd1: i32, _old: &[u8], _fd2: i32, _new: &[u8], _how: path::RenameHow) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// fchmod / chmod of a path (following a last link).
+    fn chmod(&mut self, _target: path::Target<'_>, _mode: u16) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// fchmodat.
+    fn chmod_at(&mut self, _dirfd: i32, _path: &[u8], _mode: u16, _follow: bool) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// umask: set the mask, return the old one.
+    fn umask(&mut self, _mask: u16) -> u16 {
+        0o022
+    }
+
+    /// mknod(path, mode with the file type, device).
+    fn mknod(&mut self, _path: &[u8], _mode: u32, _dev: u32) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// truncate / ftruncate.
+    fn truncate(&mut self, _target: path::Target<'_>, _len: u64) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// An extended attribute operation on the VFS name (with its `user.`
+    /// prefix): Get returns the value, List the names (each NUL-ended),
+    /// Set and Remove nothing. A missing attribute is `ENOATTR`.
+    fn xattr(&mut self, _target: path::Target<'_>, _op: path::XattrOp<'_>) -> Result<Vec<u8>, u32> {
+        Err(ENOSYS32)
+    }
+
+    /// The bytes a read of `fd` would return now (FIONREAD of a pipe);
+    /// `None` for a file that is not a stream.
+    fn bytes_readable(&mut self, _fd: i32) -> Result<Option<usize>, u32> {
+        Err(ENOSYS32)
+    }
+
+    /// The process group of `pid` (0: the caller); `ESRCH` if none.
+    fn pgid(&self, _pid: u32) -> Result<u32, u32> {
+        Err(ENOSYS32)
+    }
+
+    /// setpgid: put `pid` (0: the caller, or one of its children) into
+    /// group `pgid` (0: its own).
+    fn set_pgid(&mut self, _pid: u32, _pgid: u32) -> Result<(), u32> {
+        Err(ENOSYS32)
+    }
+
+    /// fork: a copy of the calling process. Returns the child's pid; the
+    /// child returns its own pid with 1 in the second register (the kernel
+    /// sets the child's registers).
+    fn fork(&mut self) -> Result<u32, u32> {
+        Err(ENOSYS32)
+    }
+
+    /// execve: replace the calling process's program. Does not return on
+    /// success (the registers are the new program's); before the point of
+    /// no return the error comes back.
+    fn execve(&mut self, _path: &[u8], _argv: &[Vec<u8>], _envp: &[Vec<u8>]) -> Result<(), u32> {
         Err(ENOSYS32)
     }
 }
@@ -338,6 +481,11 @@ pub const E2BIG: u32 = 7;
 /// `ENOSYS` as a Darwin errno value.
 const ENOSYS32: u32 = errno::ENOSYS;
 
+/// Whether BSD call `number` returns a second result (in rdx / x1).
+pub const fn has_second_result(number: u64) -> bool {
+    matches!(number, nr::FORK | nr::PIPE)
+}
+
 /// Run BSD call `number` with arguments `a`; `None` if this layer does not
 /// have it.
 pub fn call(k: &mut dyn BsdKernel, number: u64, a: &[u64; 8]) -> Option<Result<Ret, u32>> {
@@ -384,6 +532,7 @@ pub fn call(k: &mut dyn BsdKernel, number: u64, a: &[u64; 8]) -> Option<Result<R
         PIPE => k.pipe().map(|(r, w)| Ret { value: r as u64, second: Some(w as u64) }),
         MMAP => mmap(k, a),
         MUNMAP => munmap(k, a[0], a[1]),
+        GETTIMEOFDAY => gettimeofday(k, a[0], a[1]),
         GETPID => ok(u64::from(k.pid())),
         GETPPID => ok(u64::from(k.ppid())),
         GETUID | GETEUID => ok(u64::from(k.ids().0)),
@@ -403,6 +552,58 @@ pub fn call(k: &mut dyn BsdKernel, number: u64, a: &[u64; 8]) -> Option<Result<R
         }
         KILL => kill(k, a[0] as i32, a[1] as i32),
         POSIX_SPAWN => posix_spawn(k, a),
+        MKDIR => path::mkdir(k, file::AT_FDCWD, a[0], a[1] as u32),
+        MKDIRAT => path::mkdir(k, a[0] as i32, a[1], a[2] as u32),
+        RMDIR => path::unlink(k, file::AT_FDCWD, a[0], path::AT_REMOVEDIR),
+        UNLINK => path::unlink(k, file::AT_FDCWD, a[0], 0),
+        UNLINKAT => path::unlink(k, a[0] as i32, a[1], a[2] as u32),
+        LINK => path::link(k, file::AT_FDCWD, a[0], file::AT_FDCWD, a[1], 0),
+        LINKAT => path::link(k, a[0] as i32, a[1], a[2] as i32, a[3], a[4] as u32),
+        SYMLINK => path::symlink(k, a[0], file::AT_FDCWD, a[1]),
+        SYMLINKAT => path::symlink(k, a[0], a[1] as i32, a[2]),
+        READLINK => path::readlink(k, file::AT_FDCWD, a[0], a[1], a[2]),
+        READLINKAT => path::readlink(k, a[0] as i32, a[1], a[2], a[3]),
+        RENAME => path::rename(k, file::AT_FDCWD, a[0], file::AT_FDCWD, a[1], 0),
+        RENAMEAT => path::rename(k, a[0] as i32, a[1], a[2] as i32, a[3], 0),
+        RENAMEATX_NP => path::rename(k, a[0] as i32, a[1], a[2] as i32, a[3], a[4] as u32),
+        CHMOD => path::chmod_path(k, file::AT_FDCWD, a[0], a[1] as u32, true),
+        FCHMODAT => path::chmod_path(k, a[0] as i32, a[1], a[2] as u32, a[3] as u32 & file::AT_SYMLINK_NOFOLLOW == 0),
+        FCHMOD => path::chmod(k, path::Target::Fd(fd), a[1] as u32),
+        UMASK => ok(u64::from(k.umask((a[0] & 0o777) as u16))),
+        MKNOD => path::mknod(k, a[0], a[1] as u32, a[2] as u32),
+        TRUNCATE => match read_cstr(k, a[0], PATH_MAX) {
+            Ok(p) if p.is_empty() => Err(ENOENT),
+            Ok(p) => path::truncate(k, path::Target::Path { path: &p, follow: true }, a[1] as i64),
+            Err(e) => Err(e),
+        },
+        FTRUNCATE => path::truncate(k, path::Target::Fd(fd), a[1] as i64),
+        GETXATTR => path::getxattr(k, false, a),
+        FGETXATTR => path::getxattr(k, true, a),
+        SETXATTR => path::setxattr(k, false, a),
+        FSETXATTR => path::setxattr(k, true, a),
+        LISTXATTR => path::listxattr(k, false, a),
+        FLISTXATTR => path::listxattr(k, true, a),
+        REMOVEXATTR => path::removexattr(k, false, a),
+        FREMOVEXATTR => path::removexattr(k, true, a),
+        IOCTL => ioctl(k, fd, a[1] as u32, a[2]),
+        GETPGRP => k.pgid(0).and_then(|g| ok(u64::from(g))),
+        GETPGID => k.pgid(a[0] as u32).and_then(|g| ok(u64::from(g))),
+        SETPGID => {
+            if (a[1] as i32) < 0 {
+                Err(EINVAL)
+            } else {
+                k.set_pgid(a[0] as u32, a[1] as u32).and_then(|()| ok(0))
+            }
+        }
+        FORK => k.fork().map(|pid| Ret { value: u64::from(pid), second: Some(0) }),
+        // vfork is no system call on macOS: the caller dies of SIGSYS (the
+        // vfork sheet; libSystem's vfork is a fork).
+        VFORK => {
+            k.exit_signal(signal::SIGSYS);
+            ok(0)
+        }
+        EXECVE => execve(k, a[0], a[1], a[2]),
+        WAITID => waitid(k, a[0] as u32, a[1] as i32, a[2], a[3] as u32),
         WAIT4 => wait4(k, a[0] as i32, a[1], a[2] as u32, a[3]),
         _ => return None,
     };
@@ -419,8 +620,13 @@ fn rw_read(k: &mut dyn BsdKernel, fd: i32, buf: u64, len: u64, offset: Option<u6
     let n = (len as usize).min(IO_CHUNK);
     let mut data = alloc::vec![0u8; n];
     let got = k.read(fd, &mut data, offset)?;
-    if got > 0 {
-        put(k, buf, &data[..got])?;
+    if got > 0 && put(k, buf, &data[..got]).is_err() {
+        // A buffer that cannot take the bytes: the read takes nothing back
+        // from the file (read_errors: the failed read consumed nothing).
+        if offset.is_none() {
+            let _ = k.lseek(fd, -(got as i64), 1);
+        }
+        return Err(EFAULT);
     }
     ok(got as u64)
 }
@@ -494,6 +700,72 @@ fn getdirentries(k: &mut dyn BsdKernel, fd: i32, buf: u64, size: u64, basep: u64
     ok(out.len() as u64)
 }
 
+/// `gettimeofday(tv, tz)`, Poly's form: the wall clock as a `struct
+/// timeval` (`<sys/_types/_timeval.h>`: 64-bit seconds, 32-bit
+/// microseconds) through `tv` when it is not null; `tz` is ignored (the
+/// manual page calls it obsolete) and the call returns 0. Poly's own
+/// libraries call it; programs reach the clock through libSystem.
+fn gettimeofday(k: &mut dyn BsdKernel, tv: u64, _tz: u64) -> Result<Ret, u32> {
+    if tv != 0 {
+        let ns = k.wall_clock_ns();
+        let mut b = [0u8; 16];
+        b[..8].copy_from_slice(&((ns / 1_000_000_000) as i64).to_le_bytes());
+        b[8..12].copy_from_slice(&(((ns % 1_000_000_000) / 1000) as i32).to_le_bytes());
+        put(k, tv, &b)?;
+    }
+    ok(0)
+}
+
+/// ioctl requests (`<sys/filio.h>`, `<sys/ttycom.h>`).
+pub const FIOCLEX: u32 = 0x2000_6601;
+pub const FIONCLEX: u32 = 0x2000_6602;
+pub const FIONBIO: u32 = 0x8004_667e;
+pub const FIONREAD: u32 = 0x4004_667f;
+pub const TIOCGWINSZ: u32 = 0x4008_7468;
+/// `ENOTTY` (`<sys/errno.h>`).
+pub const ENOTTY: u32 = 25;
+
+/// ioctl(fd, request, argument) (the ioctl sheet): the descriptor first;
+/// FIOCLEX / FIONCLEX set and clear close-on-exec, FIONBIO O_NONBLOCK,
+/// FIONREAD stores the bytes a read would get (a pipe's waiting bytes, a
+/// file's rest from the offset); TIOCGWINSZ of what is no terminal is
+/// ENOTTY (ENODEV for a device); an unknown request ENOTTY.
+fn ioctl(k: &mut dyn BsdKernel, fd: i32, request: u32, arg: u64) -> Result<Ret, u32> {
+    let st = k.stat(StatOf::Fd(fd))?;
+    match request {
+        FIOCLEX | FIONCLEX => k.set_cloexec(fd, request == FIOCLEX).and_then(|()| ok(0)),
+        FIONBIO => {
+            let on = read_u32(k, arg)? != 0;
+            let cur = k.status(fd)?;
+            k.set_status(fd, cur.append, on).and_then(|()| ok(0))
+        }
+        FIONREAD => {
+            let n = match k.bytes_readable(fd)? {
+                Some(n) => n as u64,
+                None if st.mode & file::S_IFMT == 0o100000 => {
+                    let at = k.lseek(fd, 0, 1)?;
+                    st.size.saturating_sub(at)
+                }
+                None => 0,
+            };
+            put(k, arg, &(n as u32).to_le_bytes()).and_then(|()| ok(0))
+        }
+        TIOCGWINSZ if st.mode & file::S_IFMT == S_IFCHR => Err(ENODEV),
+        _ => Err(ENOTTY),
+    }
+}
+
+/// fcntl commands of `<sys/fcntl.h>` beyond the descriptor ones.
+pub const F_RDAHEAD: u32 = 45;
+pub const F_NOCACHE: u32 = 48;
+pub const F_FULLFSYNC: u32 = 51;
+pub const F_GLOBAL_NOCACHE: u32 = 55;
+pub const F_BARRIERFSYNC: u32 = 85;
+pub const F_GETPATH_NOFIRMLINK: u32 = 102;
+const S_IFIFO: u32 = 0o010000;
+const S_IFCHR: u32 = 0o020000;
+const S_IFSOCK: u32 = 0o140000;
+
 fn fcntl(k: &mut dyn BsdKernel, fd: i32, cmd: u32, arg: u64) -> Result<Ret, u32> {
     use file::f;
     match cmd {
@@ -511,7 +783,21 @@ fn fcntl(k: &mut dyn BsdKernel, fd: i32, cmd: u32, arg: u64) -> Result<Ret, u32>
             let a = arg as u32;
             k.set_status(fd, a & file::o::APPEND != 0, a & file::o::NONBLOCK != 0).and_then(|()| ok(0))
         }
-        f::GETPATH => {
+        // The file system's commands (fcntl_fs): a pipe is EBADF; for the
+        // syncs a device is ENODEV; Poly's files have nothing to flush
+        // further, and caching hints take no effect.
+        F_FULLFSYNC | F_BARRIERFSYNC | F_NOCACHE | F_GLOBAL_NOCACHE | F_RDAHEAD => {
+            let st = k.stat(StatOf::Fd(fd))?;
+            match st.mode & file::S_IFMT {
+                S_IFIFO | S_IFSOCK => Err(EBADF),
+                S_IFCHR if matches!(cmd, F_FULLFSYNC | F_BARRIERFSYNC) => Err(ENODEV),
+                _ => ok(0),
+            }
+        }
+        f::GETPATH | F_GETPATH_NOFIRMLINK => {
+            if k.stat(StatOf::Fd(fd)).is_ok_and(|st| matches!(st.mode & file::S_IFMT, S_IFIFO | S_IFSOCK)) {
+                return Err(EBADF);
+            }
             let mut p = k.path_of(fd)?;
             if p.len() >= f::MAXPATHLEN {
                 return Err(ENAMETOOLONG);
@@ -797,6 +1083,87 @@ fn wait4(k: &mut dyn BsdKernel, pid: i32, status: u64, options: u32, rusage: u64
         let _ = k.copy_out(rusage, &[0u8; RUSAGE_SIZE]);
     }
     ok(u64::from(child))
+}
+
+/// execve(path, argv, envp): the arrays are read before anything changes
+/// (an unreadable one is `EFAULT`, the caller goes on).
+fn execve(k: &mut dyn BsdKernel, path: u64, argv: u64, envp: u64) -> Result<Ret, u32> {
+    let path = read_cstr(k, path, PATH_MAX)?;
+    if path.is_empty() {
+        return Err(ENOENT);
+    }
+    let mut total = 0;
+    let argv = read_strings(k, argv, &mut total)?;
+    let envp = read_strings(k, envp, &mut total)?;
+    // What the file is decides first (the execve sheet): a missing one or a
+    // path through a file comes from the lookup; a directory and a file
+    // without execute permission are EACCES. Anything the loader cannot
+    // run is ENOEXEC (the kernel's answer).
+    let st = k.stat(StatOf::Path { dirfd: file::AT_FDCWD, path: &path, follow: true })?;
+    if st.is_dir() || st.mode & 0o111 == 0 {
+        return Err(EACCES);
+    }
+    k.execve(&path, &argv, &envp)?;
+    ok(0)
+}
+
+/// waitid options (`sys/wait.h`).
+pub const WNOHANG_: u32 = 1;
+pub const WEXITED: u32 = 4;
+pub const WSTOPPED: u32 = 8;
+pub const WCONTINUED: u32 = 0x10;
+pub const WNOWAIT: u32 = 0x20;
+/// idtype_t (`sys/wait.h`).
+pub const P_ALL: u32 = 0;
+pub const P_PID: u32 = 1;
+pub const P_PGID: u32 = 2;
+/// `sizeof(siginfo_t)` on Darwin, and the codes waitid reports
+/// (`sys/signal.h`).
+pub const SIGINFO_SIZE: usize = 104;
+pub const CLD_EXITED: u32 = 1;
+pub const CLD_KILLED: u32 = 2;
+
+/// waitid(idtype, id, siginfo, options) (the waitid sheet): options first
+/// (none at all, or an unknown bit, is `EINVAL`); then the child; the
+/// siginfo is written before the child is reaped, so an unwritable one is
+/// `EFAULT` and leaves it waitable. Only `WNOHANG` asks for nothing and
+/// reports nothing.
+fn waitid(k: &mut dyn BsdKernel, idtype: u32, id: i32, info: u64, options: u32) -> Result<Ret, u32> {
+    let valid = WNOHANG_ | WEXITED | WSTOPPED | WCONTINUED | WNOWAIT;
+    if options == 0 || options & !valid != 0 {
+        return Err(EINVAL);
+    }
+    let pid = match idtype {
+        P_PID => id,
+        P_PGID if id == 0 => return Err(ECHILD),
+        P_PGID if id < 0 => return Err(EINVAL),
+        // A group: wait4's -pgid.
+        P_PGID => -id,
+        _ => -1,
+    };
+    let nohang = options & WNOHANG_ != 0;
+    if options & WEXITED == 0 {
+        // Stops and continues are not reported by Poly yet: nothing to say.
+        return if nohang { ok(0) } else { Err(ECHILD) };
+    }
+    let Some((child, st)) = k.wait_for(pid, nohang, false)? else { return ok(0) };
+    let mut si = [0u8; SIGINFO_SIZE];
+    let (code, status) = match st {
+        ChildStatus::Exited(c) => (CLD_EXITED, u32::from(c)),
+        ChildStatus::Signaled(s) => (CLD_KILLED, s),
+    };
+    si[0..4].copy_from_slice(&signal::SIGCHLD.to_le_bytes());
+    si[8..12].copy_from_slice(&code.to_le_bytes());
+    si[12..16].copy_from_slice(&child.to_le_bytes());
+    si[20..24].copy_from_slice(&status.to_le_bytes());
+    if info == 0 {
+        return Err(EFAULT);
+    }
+    put(k, info, &si)?;
+    if options & WNOWAIT == 0 {
+        k.wait_for(child as i32, true, true)?;
+    }
+    ok(0)
 }
 
 /// Put `r` into the x86-64 registers.
