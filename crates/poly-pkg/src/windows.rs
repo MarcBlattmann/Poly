@@ -26,8 +26,13 @@
 //! source was read.
 
 pub mod apps;
+pub mod cab;
+pub mod cfb;
+pub mod msi;
 pub mod program;
 
+#[cfg(test)]
+mod msi_tests;
 #[cfg(test)]
 pub(crate) mod testfiles;
 #[cfg(test)]

@@ -290,8 +290,20 @@ fn inflate_block(
 /// Decode a raw DEFLATE stream. Returns the output and how many bytes of
 /// `data` the stream used.
 pub fn inflate(data: &[u8], max_out: usize) -> Result<(Vec<u8>, usize), InflateError> {
+    inflate_with_history(data, &[], max_out)
+}
+
+/// Decode a raw DEFLATE stream with an initial LZ77 sliding-window history
+/// `history` (up to 32 KiB, as used by MSZIP in `[MS-CAB]`). Returns only the
+/// newly decoded bytes (excluding `history`) and how many bytes of `data` were
+/// consumed.
+pub fn inflate_with_history(data: &[u8], history: &[u8], max_out: usize) -> Result<(Vec<u8>, usize), InflateError> {
+    let hist = if history.len() > 32_768 { &history[history.len() - 32_768..] } else { history };
+    let hist_len = hist.len();
+    let total_max = hist_len.saturating_add(max_out);
     let mut bits = Bits::new(data);
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(hist_len);
+    out.extend_from_slice(hist);
     let mut fixed: Option<(Huffman, Huffman)> = None;
     loop {
         let last = bits.bit()? == 1;
@@ -306,7 +318,7 @@ pub fn inflate(data: &[u8], max_out: usize) -> Result<(Vec<u8>, usize), InflateE
                     return Err(InflateError::BadStoredLength);
                 }
                 let body = rest.get(4..4 + len).ok_or(InflateError::Truncated)?;
-                if out.len() + len > max_out {
+                if out.len() + len > total_max {
                     return Err(InflateError::TooLarge);
                 }
                 out.extend_from_slice(body);
@@ -314,11 +326,11 @@ pub fn inflate(data: &[u8], max_out: usize) -> Result<(Vec<u8>, usize), InflateE
             }
             1 => {
                 let (lit, dist) = fixed.get_or_insert_with(fixed_codes);
-                inflate_block(&mut bits, lit, dist, &mut out, max_out)?;
+                inflate_block(&mut bits, lit, dist, &mut out, total_max)?;
             }
             2 => {
                 let (lit, dist) = dynamic_codes(&mut bits)?;
-                inflate_block(&mut bits, &lit, &dist, &mut out, max_out)?;
+                inflate_block(&mut bits, &lit, &dist, &mut out, total_max)?;
             }
             _ => return Err(InflateError::BadBlockType),
         }
@@ -328,7 +340,8 @@ pub fn inflate(data: &[u8], max_out: usize) -> Result<(Vec<u8>, usize), InflateE
     }
     // Bits left in the last byte are padding; whole bytes buffered ahead
     // were never taken (`take` reads a byte only when it needs it).
-    Ok((out, bits.pos))
+    let produced = if hist_len == 0 { out } else { out.split_off(hist_len) };
+    Ok((produced, bits.pos))
 }
 
 /// Decode a zlib stream (RFC 1950): the two header bytes, DEFLATE data,
@@ -564,5 +577,23 @@ mod tests {
         fn finish(self) -> Vec<u8> {
             self.out
         }
+    }
+
+    #[test]
+    fn inflate_with_history_resolves_cross_block_back_references() {
+        // Fixed Huffman block (BFINAL=1, BTYPE=01) emitting:
+        // - match length=6 (sym 260, 7-bit code 4), dist=6 (dist sym 4 -> base 5, 1 extra bit = 1)
+        // - EOB (sym 256, 7-bit code 0)
+        let mut bw = BitWriter::default();
+        bw.bit(1); // BFINAL
+        bw.bits(1, 2); // BTYPE = fixed
+        bw.code(4, 7); // sym 260 (length 6)
+        bw.code(4, 5); // dist sym 4 (base 5, 1 extra bit)
+        bw.bits(1, 1); // extra = 1 -> distance 6
+        bw.code(0, 7); // sym 256 (EOB)
+        let raw = bw.finish();
+        assert_eq!(inflate(&raw, 64), Err(InflateError::BadDistance));
+        let (out, _) = inflate_with_history(&raw, b"hello Poly!!", 64).unwrap();
+        assert_eq!(out, b"Poly!!");
     }
 }

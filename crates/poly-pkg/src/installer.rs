@@ -23,6 +23,7 @@ use crate::appimage::Image;
 use crate::apt::{self, Progress};
 use crate::deb::{self, Info};
 use crate::format::{self, Format};
+use crate::windows::msi::MsiInfo;
 use crate::windows::program::Program;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -85,6 +86,8 @@ pub enum Task {
     Image,
     /// Run a Windows installer, or a Windows program (ADR 0230).
     Windows,
+    /// Install a Windows Installer package (`.msi`).
+    Msi,
 }
 
 /// Where the installer is.
@@ -132,6 +135,9 @@ pub enum Removal {
     /// A Windows app (ADR 0230): its uninstaller's command (the program a
     /// path of Poly's file system), and who made the app.
     Windows { command: Vec<String>, publisher: String, version: String },
+    /// A Windows Installer package (`.msi`) unpacked by Poly's installer: its
+    /// manifest slug, metadata, and installed size in bytes.
+    Msi { slug: String, publisher: String, version: String, size: u64 },
 }
 
 /// What the program found out about an app to uninstall.
@@ -162,6 +168,8 @@ pub struct Installer {
     pub image: Option<Image>,
     /// For a Windows program: what was read from it (ADR 0230).
     pub program: Option<Program>,
+    /// For a Windows Installer package (`.msi`): what was read from it.
+    pub msi: Option<MsiInfo>,
     /// While a Windows program runs: `Some(n)` once it has ended and `n`
     /// programs it started still run.
     pub waiting: Option<usize>,
@@ -206,6 +214,7 @@ impl Installer {
             removal: None,
             image: None,
             program: None,
+            msi: None,
             waiting: None,
             package: None,
             installed: None,
@@ -281,6 +290,20 @@ impl Installer {
         it
     }
 
+    /// The window for the Windows Installer package (`.msi`) at `path`: what
+    /// was read from its database, or why it cannot be installed.
+    pub fn for_msi(path: &str, msi: Result<MsiInfo, crate::Error>) -> Installer {
+        let mut it = Installer::new(path, Err("nothing to read"), None);
+        it.task = Task::Msi;
+        it.phase = Phase::Ready;
+        it.have_lists = true;
+        match msi {
+            Ok(msi) => it.msi = Some(msi),
+            Err(e) => it.phase = Phase::Refused(e.describe().to_string()),
+        }
+        it
+    }
+
     /// Whether the Windows program installs something (**Install**), not
     /// just runs (**Run**).
     pub fn windows_installer(&self) -> bool {
@@ -339,6 +362,9 @@ impl Installer {
         if let Some(program) = &self.program {
             return &program.name;
         }
+        if let Some(msi) = &self.msi {
+            return &msi.name;
+        }
         self.package.as_ref().map_or_else(|| file_name(&self.path), |p| p.name.as_str())
     }
 
@@ -346,6 +372,9 @@ impl Installer {
     pub fn summary(&self) -> &str {
         if let Some(p) = &self.program {
             return if !p.description.is_empty() && p.description != p.name { &p.description } else { &p.company };
+        }
+        if let Some(m) = &self.msi {
+            return if !m.summary.is_empty() && m.summary != m.name { &m.summary } else { &m.manufacturer };
         }
         match &self.image {
             Some(image) => image.summary.as_str(),
@@ -385,6 +414,19 @@ impl Installer {
             out.push(("Kind", p.kind()));
             return out;
         }
+        if let Some(m) = &self.msi {
+            let mut out = Vec::new();
+            if !m.version.is_empty() {
+                out.push(("Version", m.version.clone()));
+            }
+            let size = if m.installed_size > 0 { m.installed_size } else { m.size };
+            out.push(("Size", deb::human_kib(size.div_ceil(1024))));
+            if !m.manufacturer.is_empty() {
+                out.push(("Publisher", m.manufacturer.clone()));
+            }
+            out.push(("Kind", m.kind()));
+            return out;
+        }
         if let Some(Removal::Windows { publisher, version, .. }) = &self.removal {
             let mut out = Vec::new();
             if !version.is_empty() {
@@ -394,6 +436,20 @@ impl Installer {
                 out.push(("Publisher", publisher.clone()));
             }
             out.push(("Kind", "Windows app".to_string()));
+            return out;
+        }
+        if let Some(Removal::Msi { publisher, version, size, .. }) = &self.removal {
+            let mut out = Vec::new();
+            if !version.is_empty() {
+                out.push(("Version", version.clone()));
+            }
+            if *size > 0 {
+                out.push(("Size", deb::human_kib(size.div_ceil(1024))));
+            }
+            if !publisher.is_empty() {
+                out.push(("Publisher", publisher.clone()));
+            }
+            out.push(("Kind", "Windows app (MSI)".to_string()));
             return out;
         }
         if let Some(Removal::Image { size, .. }) = &self.removal {
@@ -438,6 +494,10 @@ impl Installer {
                     .to_string()
             }
             Phase::Ready if self.program.is_some() => "Run starts this Windows program. Nothing is installed.".to_string(),
+            Phase::Ready if self.msi.is_some() => {
+                "Install unpacks this Windows Installer package into C: and adds its apps to the launcher and to Applications."
+                    .to_string()
+            }
             Phase::Ready => {
                 "Installing adds the app and what it needs from Debian's archive to this computer.".to_string()
             }
@@ -474,6 +534,9 @@ impl Installer {
             Phase::Ready => match &self.removal {
                 Some(Removal::Windows { .. }) => alloc::format!(
                     "Uninstalling runs {app}'s own uninstaller, as on Windows. Its windows ask what they need; then {app} is gone from the launcher."
+                ),
+                Some(Removal::Msi { .. }) => alloc::format!(
+                    "Uninstalling removes {app} and the files its Windows Installer package installed. Your own files stay."
                 ),
                 Some(Removal::Image { .. }) => alloc::format!(
                     "Uninstalling removes {app} and its files from your user folder. Your own files stay."
@@ -513,7 +576,7 @@ impl Installer {
             Phase::Ready if self.image.is_some() => {
                 alloc::vec![("Cancel", Action::Close), ("Run", Action::Run), ("Install", Action::Install)]
             }
-            Phase::Ready if self.windows_installer() => {
+            Phase::Ready if self.windows_installer() || self.msi.is_some() => {
                 alloc::vec![("Cancel", Action::Close), ("Install", Action::Install)]
             }
             Phase::Ready if self.program.is_some() => alloc::vec![("Cancel", Action::Close), ("Run", Action::Run)],
@@ -552,7 +615,7 @@ impl Installer {
     /// The step after `done` (`None`: the first), if one is left.
     fn next_step(&self, done: Option<Step>) -> Option<Step> {
         let all: Vec<(Step, bool)> = match &self.removal {
-            None if self.image.is_some() => alloc::vec![(Step::Place, true)],
+            None if self.image.is_some() || self.msi.is_some() => alloc::vec![(Step::Place, true)],
             None if self.program.is_some() => alloc::vec![(Step::Program, self.windows_installer())],
             None => alloc::vec![
                 (Step::Configure, self.unconfigured > 0),
@@ -560,7 +623,7 @@ impl Installer {
                 (Step::Install, true)
             ],
             Some(Removal::Package) => alloc::vec![(Step::Remove, true), (Step::Autoremove, true)],
-            Some(Removal::Image { .. }) => alloc::vec![(Step::Delete, true)],
+            Some(Removal::Image { .. } | Removal::Msi { .. }) => alloc::vec![(Step::Delete, true)],
             Some(Removal::Windows { .. }) => alloc::vec![(Step::Program, true)],
         };
         let from = done.map_or(0, |d| all.iter().position(|(s, _)| *s == d).map_or(all.len(), |i| i + 1));
@@ -580,8 +643,9 @@ impl Installer {
     pub fn start(&mut self) -> Option<Vec<String>> {
         let known = self.package.is_some()
             || self.image.is_some()
+            || self.msi.is_some()
             || self.windows_installer()
-            || matches!(self.removal, Some(Removal::Image { .. } | Removal::Windows { .. }));
+            || matches!(self.removal, Some(Removal::Image { .. } | Removal::Windows { .. } | Removal::Msi { .. }));
         if self.phase != Phase::Ready || !known {
             return None;
         }
@@ -692,7 +756,11 @@ impl Installer {
             Step::Install | Step::Place | Step::Program => {
                 let name = self.package.as_ref().map(|p| p.name.clone()).unwrap_or_default();
                 self.apps = apps(&name);
-                self.installed = self.package.as_ref().map(|p| p.version.clone());
+                self.installed = self
+                    .package
+                    .as_ref()
+                    .map(|p| p.version.clone())
+                    .or_else(|| self.msi.as_ref().filter(|m| !m.version.is_empty()).map(|m| m.version.clone()));
                 self.percent = Some(100);
                 self.phase = Phase::Done;
                 None
@@ -1333,5 +1401,72 @@ Description: scientific calculator\n A GTK 3 calculator.\n";
         assert_eq!(open_waiting("  polyopen: the program has ended; waiting for 1 it started\r"), Some(1));
         assert_eq!(open_waiting("polyopen: ShellExecuteExW failed: 1223"), None);
         assert_eq!(open_waiting("setup: waiting for 3"), None);
+    }
+
+    #[test]
+    fn an_msi_package_installs_and_uninstalls_through_the_model() {
+        let info = MsiInfo {
+            name: "Widget Studio".into(),
+            version: "2.4.1".into(),
+            manufacturer: "Widget Corp".into(),
+            summary: "Design widgets".into(),
+            product_code: "{1111}".into(),
+            size: 50_000,
+            installed_size: 450_000,
+            file_count: 3,
+            bits: Some(64),
+            icon: None,
+        };
+        let mut it = Installer::for_msi("/home/poly/Downloads/widget.msi", Ok(info));
+        assert_eq!(it.task, Task::Msi);
+        assert_eq!((it.name(), it.summary()), ("Widget Studio", "Design widgets"));
+        assert_eq!(
+            it.facts(),
+            [
+                ("Version", "2.4.1".to_string()),
+                ("Size", "440 KB".to_string()),
+                ("Publisher", "Widget Corp".to_string()),
+                ("Kind", "Windows Installer package (64-bit)".to_string()),
+            ]
+        );
+        assert_eq!(it.buttons(), [("Cancel", Action::Close), ("Install", Action::Install)]);
+        assert_eq!(it.start(), Some(Vec::new()));
+        assert_eq!(it.phase, Phase::Working(Step::Place));
+        let id = "poly-windows-widget-studio.desktop".to_string();
+        assert_eq!(it.finished(true, |_| alloc::vec![(id.clone(), "Widget Studio".to_string())]), None);
+        assert_eq!(it.phase, Phase::Done);
+        assert_eq!(it.installed.as_deref(), Some("2.4.1"));
+        assert_eq!(it.buttons(), [("Close", Action::Close), ("Open", Action::Open)]);
+
+        // Refused MSI.
+        let bad = Installer::for_msi("/tmp/broken.msi", Err(crate::Error::Compression));
+        assert_eq!(bad.phase, Phase::Refused(crate::Error::Compression.describe().into()));
+
+        // Uninstall an MSI app.
+        let plan = Plan {
+            app: "Widget Studio".into(),
+            removal: Removal::Msi {
+                slug: "widget-studio".into(),
+                publisher: "Widget Corp".into(),
+                version: "2.4.1".into(),
+                size: 450_000,
+            },
+            package: None,
+            apps: alloc::vec![(id.clone(), "Widget Studio".to_string())],
+        };
+        let mut rem = Installer::for_removal(&id, Ok(plan));
+        assert_eq!(
+            rem.facts(),
+            [
+                ("Version", "2.4.1".to_string()),
+                ("Size", "440 KB".to_string()),
+                ("Publisher", "Widget Corp".to_string()),
+                ("Kind", "Windows app (MSI)".to_string()),
+            ]
+        );
+        assert_eq!(rem.start(), Some(Vec::new()));
+        assert_eq!(rem.phase, Phase::Working(Step::Delete));
+        assert_eq!(rem.finished(true, |_| Vec::new()), None);
+        assert_eq!(rem.phase, Phase::Done);
     }
 }

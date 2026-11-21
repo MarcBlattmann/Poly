@@ -96,10 +96,8 @@ impl Format {
             ),
             // Run on the NT personality since ADR 0230.
             Format::WindowsProgram => None,
-            // MSI is batch B6 of the Chrome installer plan: deferred.
-            Format::WindowsInstaller => Some(
-                "Poly cannot install Windows Installer packages (.msi) yet. Look for the app's installer program (.exe).",
-            ),
+            // Extracted into C: by Poly's installer (`windows::msi`).
+            Format::WindowsInstaller => None,
         }
     }
 }
@@ -134,9 +132,11 @@ mod tests {
     fn debian_packages_and_appimages_are_installed_today() {
         assert_eq!(Format::Deb.not_yet(), None);
         assert_eq!(Format::AppImage.not_yet(), None);
-        for f in [Format::Rpm, Format::Flatpak, Format::Snap, Format::WindowsInstaller] {
+        assert_eq!(Format::WindowsProgram.not_yet(), None);
+        assert_eq!(Format::WindowsInstaller.not_yet(), None);
+        for f in [Format::Rpm, Format::Flatpak, Format::Snap] {
             let why = f.not_yet().unwrap();
-            assert!(why.contains(".deb") || why.contains(".exe"), "{}", f.name());
+            assert!(why.contains(".deb"), "{}", f.name());
         }
     }
 }

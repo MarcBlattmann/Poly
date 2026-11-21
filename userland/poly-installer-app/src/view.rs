@@ -98,6 +98,17 @@ pub trait Host {
     /// After a Windows uninstaller: the launcher entries `apps` whose
     /// programs are gone are removed; the ones still there are returned.
     fn forget_windows(&mut self, apps: &[(String, String)]) -> Vec<(String, String)>;
+    /// Unpack the Windows Installer package (`.msi`) at `path` into `C:`,
+    /// write its launcher `.desktop` entries, icons, and uninstall manifest,
+    /// and return `(desktop_id, app_name, icon_path)` for each entry created.
+    fn install_msi(
+        &mut self,
+        path: &str,
+        msi: &poly_pkg::windows::msi::MsiInfo,
+    ) -> Result<Vec<(String, String, Option<String>)>, String>;
+    /// Remove an `.msi`-installed Windows app by its manifest `slug` (desktop
+    /// files, icons, recorded installed files, and empty created directories).
+    fn delete_msi(&mut self, slug: &str) -> Result<(), String>;
     /// Start the Windows program at `path` from where it is, without waiting.
     fn run_program(&mut self, path: &str) -> Result<(), String>;
     /// Tell the desktop that the installed apps changed.
@@ -341,9 +352,26 @@ impl InstallerApp {
         self.run(next, cx);
     }
 
-    /// Install the AppImage: its files are copied and its desktop file
-    /// written by the program.
+    /// Install an AppImage or unpack an `.msi` package.
     fn place(&mut self, cx: &mut Cx) {
+        if let Some(msi) = self.model.msi.clone() {
+            let path = self.model.path.clone();
+            match self.host.install_msi(&path, &msi) {
+                Ok(entries) => {
+                    self.app_icon = entries.first().and_then(|(_, _, ic)| ic.clone());
+                    let apps: Vec<(String, String)> = entries.into_iter().map(|(id, name, _)| (id, name)).collect();
+                    self.model.finished(true, |_| apps);
+                    self.host.apps_changed();
+                }
+                Err(why) => {
+                    self.model.output(&alloc::format!("E: {why}"));
+                    self.model.finished(false, |_| Vec::new());
+                }
+            }
+            self.report_end();
+            cx.redraw();
+            return;
+        }
         let (Some(image), path) = (self.model.image.clone(), self.model.path.clone()) else { return };
         match self.host.place_image(&path, &image) {
             Ok(placed) => {
@@ -389,6 +417,10 @@ impl InstallerApp {
                 let slug = slug.clone();
                 self.host.delete_image(&slug)
             }
+            (Phase::Working(Step::Delete), Some(Removal::Msi { slug, .. })) => {
+                let slug = slug.clone();
+                self.host.delete_msi(&slug)
+            }
             _ => Err("nothing to do".into()),
         };
         if let Err(why) = &result {
@@ -408,10 +440,11 @@ impl InstallerApp {
                 self.host.report(&alloc::format!("uninstalled {}: {}", self.model.name(), apps.join(", ")));
             }
             Phase::Done => {
-                let version = match (&self.model.package, &self.model.image, &self.model.program) {
-                    (Some(p), _, _) => p.version.as_str(),
-                    (None, Some(i), _) => i.version.as_str(),
-                    (None, None, Some(w)) => w.version.as_str(),
+                let version = match (&self.model.package, &self.model.image, &self.model.program, &self.model.msi) {
+                    (Some(p), _, _, _) => p.version.as_str(),
+                    (None, Some(i), _, _) => i.version.as_str(),
+                    (None, None, Some(w), _) => w.version.as_str(),
+                    (None, None, None, Some(m)) => m.version.as_str(),
                     _ => "",
                 };
                 let apps: Vec<String> =
