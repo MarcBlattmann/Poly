@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nstextfield_editing_delegate",
+      "source_sha256": "5421c5a678aa129a7777b37d3d3159f768d90a24fbd3b90c709da3db458a38a0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8b888d6a040afd7e98ee9dd8d45426442ca3b4ab902dfb9c8711c673127c071a",
+          "exit_code": 0,
+          "stdout": "ok [w makeFirstResponder:tf]\nok d.log.length == 0\nok [ed.string isEqualToString:@\"X\"] && [tf.stringValue isEqualToString:@\"X\"]\nok [d.log isEqualToString:@\"shouldBegin;begin;change;\"]\nok [d.log isEqualToString:@\"change;\"]\nok [w makeFirstResponder:nil]\nok [d.log isEqualToString:@\"shouldEnd;end;\"]\nok [tf.stringValue isEqualToString:@\"hello\"]\nok [w makeFirstResponder:tf]\nok [w makeFirstResponder:nil]\nvalue focus and leave without typing end;\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "348d055a8750708d518f9b08f4504a6c5bc938a90f24b927dead1b403e605f9e",
+          "exit_code": 0,
+          "stdout": "ok [w makeFirstResponder:tf]\nok d.log.length == 0\nok [ed.string isEqualToString:@\"X\"] && [tf.stringValue isEqualToString:@\"X\"]\nok [d.log isEqualToString:@\"shouldBegin;begin;change;\"]\nok [d.log isEqualToString:@\"change;\"]\nok [w makeFirstResponder:nil]\nok [d.log isEqualToString:@\"shouldEnd;end;\"]\nok [tf.stringValue isEqualToString:@\"hello\"]\nok [w makeFirstResponder:tf]\nok [w makeFirstResponder:nil]\nvalue focus and leave without typing end;\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nstextfield_editing_first_responder",
+      "source_sha256": "ec5f4767761254b179b89866aa59b2d7005add8538170fe1ff575bc659e3f7e8",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "dafd1be536196031d1907f10a7caccdc9144d65d84846f13f8491f8cd8174093",
+          "exit_code": 0,
+          "stdout": "ok tf.acceptsFirstResponder && !lb.acceptsFirstResponder && !ro.acceptsFirstResponder && bt.acceptsFirstResponder\nok !tf.acceptsFirstResponder\nok !tf.acceptsFirstResponder\nok w.firstResponder == w\nok [w makeFirstResponder:tf]\nok ed != nil && w.firstResponder == ed && w.firstResponder != tf\nok [ed isKindOfClass:[NSTextView class]]\nok ed == [w fieldEditor:NO forObject:tf]\nok [ed.string isEqualToString:@\"abc\"]\nok ed.selectedRange.location == 0 && ed.selectedRange.length == 3\nok [w makeFirstResponder:nil]\nok tf.currentEditor == nil && w.firstResponder == w\nok [w makeFirstResponder:tf]\nok tf.currentEditor == nil\nok [w makeFirstResponder:lb]\nok w.firstResponder != lb\nok [w makeFirstResponder:bt] && w.firstResponder == bt\nok !w.isKeyWindow\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d39f492e8dd34deaa97fdd66c267c81cb40fa45a282c05a2b73a202f548b0c78",
+          "exit_code": 0,
+          "stdout": "ok tf.acceptsFirstResponder && !lb.acceptsFirstResponder && !ro.acceptsFirstResponder && bt.acceptsFirstResponder\nok !tf.acceptsFirstResponder\nok !tf.acceptsFirstResponder\nok w.firstResponder == w\nok [w makeFirstResponder:tf]\nok ed != nil && w.firstResponder == ed && w.firstResponder != tf\nok [ed isKindOfClass:[NSTextView class]]\nok ed == [w fieldEditor:NO forObject:tf]\nok [ed.string isEqualToString:@\"abc\"]\nok ed.selectedRange.location == 0 && ed.selectedRange.length == 3\nok [w makeFirstResponder:nil]\nok tf.currentEditor == nil && w.firstResponder == w\nok [w makeFirstResponder:tf]\nok tf.currentEditor == nil\nok [w makeFirstResponder:lb]\nok w.firstResponder != lb\nok [w makeFirstResponder:bt] && w.firstResponder == bt\nok !w.isKeyWindow\nsummary 18 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

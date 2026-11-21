@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_unlock_basic",
+      "source_sha256": "fe461efaf4cb4164ea0f77c4bb44e242b372add94720cbd130e4ac25ae19724e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "93c4238d2db253a35baceb193b2bf1e4320d59533ff0f84feccf765f827573d7",
+          "exit_code": 0,
+          "stdout": "ok an unlock with no lock: 0xe00002c2\nok the seed did not change\nok an unlock with the lock: 0\nok a second unlock: 0xe00002c2\nok two locks, first unlock: 0\nok second unlock: 0\nok third unlock: 0xe00002c2\nok the surface can be locked again\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "af502cc44d2b0086f7322178cbfba50b4fd78407529ff24fd523e8e6a60dc5e4",
+          "exit_code": 0,
+          "stdout": "ok an unlock with no lock: 0xe00002c2\nok the seed did not change\nok an unlock with the lock: 0\nok a second unlock: 0xe00002c2\nok two locks, first unlock: 0\nok second unlock: 0\nok third unlock: 0xe00002c2\nok the surface can be locked again\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_unlock_threads",
+      "source_sha256": "0aa8d2381c155a20c2c2ac8a974a856a9b388f6d6415103870e528fe2c4c96ac",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "539a35df05702d08d380ceeaf0f0367e9df7f09fb8004a68431300e44f96a084",
+          "exit_code": 0,
+          "stdout": "ok an unlock in another thread: 0\nok and nothing is left to unlock\nok the byte written is there\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6a4db52c79cc72393e16cd4b657e97a2b3733c0cf9c8e36293afdfb8906b23e1",
+          "exit_code": 0,
+          "stdout": "ok an unlock in another thread: 0\nok and nothing is left to unlock\nok the byte written is there\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

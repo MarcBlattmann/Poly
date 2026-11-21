@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getaddrinfo.Local.yaml
+id: windows/api/ws2_32.dll/getaddrinfo.Local
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain, connected by Wi-Fi to a home router that is its only DNS server; NetBIOS over TCP/IP enabled, node type hybrid, no primary DNS suffix, a VPN adapter that has its own name-resolution policy rules for its own namespaces), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran twice with identical output, each run in a fresh scratch directory, with names that are new in every run"
+  observed_by: spec-win-dns-timing
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: getaddrinfo, GetAddrInfoW, ADDRINFOA, ADDRINFOW, freeaddrinfo, gethostbyname, "Winsock Error Codes", "Name Resolution Policy Table" (the tests of the unreachable server), the hosts file; ws2def.h, ws2tcpip.h, winsock2.h and winerror.h for constants and layouts. Chrome's calls: docs/windows/chrome-net-gaps.md and the committed network-service traces. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  The lookups that never need the network or fail without waiting: numeric hosts and localhost return in well under 50 ms; names that cannot be host names fail with 11001. The empty name returns the machine's own addresses.
+interface:
+  signature: "getaddrinfo and GetAddrInfoW of numeric addresses, localhost, the empty name and invalid names: the code, the entries and the time"
+rules:
+  numeric: "\"127.0.0.1\", \"::1\", \"192.0.2.1\" and \"2001:db8::1\" with AF_UNSPEC, and \"127.0.0.1\" with AF_INET, \"::1\" with AF_INET6: code 0, one entry of the family of the literal; under 50 ms (the test bound; 0 to 1 ms in the probe) after the first lookup of the process. GetAddrInfoW \"127.0.0.1\" the same."
+  localhost: "\"localhost\" with AF_UNSPEC: code 0, one IPv4 and one IPv6 entry; AF_INET only IPv4; AF_INET6 only IPv6; the same with AI_ADDRCONFIG, with AI_DNS_ONLY, in capitals (\"LocalHost\") and with a trailing dot (\"localhost.\"); GetAddrInfoW the same; under 100 ms (the test bound; 0 to 5 ms in the probe, 4 ms at the first lookup of the process)."
+  not_localhost: "\"polytest.localhost\" and \"localhost.localdomain\" are not answered locally: 11001 (11 to 13 ms in the probe, test bound under 500 ms)."
+  empty_name: "The empty name \"\" with AF_UNSPEC and SOCK_STREAM: code 0 and the machine's own addresses (8 entries on the oracle, all IPv4 or IPv6; the test checks only that there is at least one); 5 ms in the probe."
+  invalid_names: "A label of 64 characters, a name with a space, and \".\" fail with 11001 (the first two in 0 ms in the probe: they are refused before a query is sent; the dot in 11 ms); a leading underscore (\"_polytest-x.invalid\"), a label of 63 characters and a name under .test fail with 11001 (12 to 20 ms: they are sent). All bounded under 500 ms by the test."
+  error_places: "Return value, WSAGetLastError and GetLastError are equal (11001) for every failing name here."
+errors:
+  host_not_found: "WSAHOST_NOT_FOUND (11001)"
+side_effects: "none beyond the rules above"
+threading: "getaddrinfo may be called from any thread; lookups of several threads run at the same time"
+ordering: []
+timing:
+  typical: "bounds in the rules"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Every name that is meant not to exist is `polytest-<16 random hex digits>` (with .invalid, .test or .local added, or as a single label), different in every call and every run, so no earlier run and no cache can answer it; no name of another party is looked up except `wpad`, `localhost` and numeric addresses. Names of the hosts-file tests are `polytest-*.invalid`; the test adds its lines to the hosts file (192.0.2.0/24 and 2001:db8::/32, the documentation ranges), removes every line with `polytest-` at the end and at the start, and nothing connects to them. Times are taken with the performance counter around the call and printed only as facts about bounds ("under 500 ms: true"), never as values; the bounds leave a wide margin to what was measured. The tests need the network of the oracle only for the lookups of names that do not exist (a DNS server that answers NXDOMAIN) and run offline otherwise. dns_nx_repeat sleeps about 30 s and needs a per-test time limit of 60 s or more (poly-oracle.ps1 -TestTimeouts dns_nx_repeat=120); dns_hosts_* write to the hosts file and need an administrator token.
+not_covered: >
+  Internationalized names (see the not_covered of getaddrinfo), the contents of the empty-name list (they depend on the machine), names longer than 253 characters, the order of the entries.

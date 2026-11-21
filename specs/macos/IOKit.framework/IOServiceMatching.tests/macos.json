@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:12:44",
+  "tests": [
+    {
+      "name": "ios_service_matching_classes",
+      "source_sha256": "b3c6a8ae9817c7a3c239a8798f45a259a3c11705a36344535fce14fd84dc41bb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9fc20c542ec0aa4e2a394f23dadcb9c218692e4e2408786b7b223dce23a01994",
+          "exit_code": 0,
+          "stdout": "ok IOPlatformExpertDevice: one\nok IOSurfaceRoot: one\nok IOAccelerator: at least one\nok IOService: many\nok a class that does not exist: none\nvalue the number of IOAccelerator services is 1 or more 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "e76c7903478e9e29c3360d58de61533fb95e8b1ff33ad8b3da4ceeac6f71800b",
+          "exit_code": 0,
+          "stdout": "ok IOPlatformExpertDevice: one\nok IOSurfaceRoot: one\nok IOAccelerator: at least one\nok IOService: many\nok a class that does not exist: none\nvalue the number of IOAccelerator services is 1 or more 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_service_matching_consumed",
+      "source_sha256": "65d7e7ae50482cf7a3da0c31ada18275f940b628b3568d579262583729517c53",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e11d27fa13df154c7ed4fb35fe52e0589bb368d7f7483059331a277097e3709d",
+          "exit_code": 0,
+          "stdout": "ok two searches with one retained dictionary both find the platform expert\nok and it is the same registry entry\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "59171eb84e49b4e17829a15d32884d1a94fdff330278f6d88e5b19d426913545",
+          "exit_code": 0,
+          "stdout": "ok two searches with one retained dictionary both find the platform expert\nok and it is the same registry entry\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

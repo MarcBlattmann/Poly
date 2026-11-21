@@ -1,0 +1,36 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/AppKit.framework/objc%3ANSView.@flipped.yaml. Observed with Objective-C test programs linked against AppKit
+# (tests/macos/include/poly_mak.h, ADR 0182); results per architecture in objc%3ANSView.@flipped.tests/macos.json.
+id: "macos/api/AppKit.framework/objc:NSView.@flipped"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the AppKit, Foundation, CoreGraphics and QuartzCore of that release, SIP on, the owner's logged-in graphical session (the window server is needed), the display a 1512 x 982 point built-in one at scale 2, the system appearance set to dark (tests always set the appearance they need); tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: appkit`, tests/macos/include/poly_mak.h): the program is not in an application bundle, so its activation policy is Prohibited, it is never the active application and no window is ever key or main; its windows are invisible (alpha 0, mouse clicks pass through) and are closed or ordered out before the test ends, and a watchdog ends a test after 12 seconds; pixels are drawn into bitmaps the test makes (tagged sRGB) so that colours do not depend on the display; values that depend on this macOS release or this Mac (sizes of system controls, system colours and fonts, the display) are printed with the name prefix sys_ and are described as SYSTEM-DEPENDENT; NSTextAlignment's numbers differ between the two architectures in the SDK (tests compare with the named constants), and the pixels of system controls differ by one step between them (each architecture is recorded on its own); results and output go through raw system calls"
+  observed_by: spec-macos-appkit-basics
+  date: 2026-11-20
+summary: >
+  NSView isFlipped is NO for NSView and a window's content view and YES for NSButton and NSTextField;
+  a subclass returning YES makes the view's coordinates start at the top left. For two sibling views
+  of the same frame, a rectangle (10,10,20,20) converts from a flipped view of height 80 to an
+  unflipped one as (10,50,20,20) and back; a point converts with y -> height - y (also between views
+  with no common superview; converting a rectangle between views with no common superview does NOT
+  flip it: printed 10); two unflipped views convert as the identity. A subview's frame is in its
+  superview's coordinates: in a flipped 100 high superview a subview at y 10 and height 20 lies 10
+  from the top, the subview's own (0,0) is at the superview's y 30 when it is unflipped and at 10 when
+  it is flipped; in an unflipped superview y 10. The flippedness of the superview does not change the
+  subview's isFlipped. Window coordinates (the view argument nil) always start at the bottom left of
+  the content area: a flipped 50 x 20 subview at (10,10) of a 100 high window converts its (0,0) to
+  window (10,30) and its (0,20) to (10,10), the unflipped one converts (0,0) to (10,10); converting
+  back reverses this. Drawing: when drawRect: runs the current graphics context's isFlipped equals the
+  view's.
+returns:
+  success: "a BOOL"
+errors: {}
+side_effects: "none beyond what the summary says"
+threading: "AppKit objects are used on the main thread only; the tests use them there (a watchdog thread only ends the process)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds; drawing, ordering and notifications settle within a run-loop turn (tests spin the loop for 0.05 to 0.3 s)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

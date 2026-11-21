@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_set_value_many",
+      "source_sha256": "b655930495a057efb6df0b17f1a3fbf077845833733faf16d4860c432a307438",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "81b828f9f489f93724305a7eed3af65443c6aa617e7fa552b443f4923a5dfdc7",
+          "exit_code": 0,
+          "stdout": "ok a hundred keys read back\nok a string of 100000 characters is kept\nok one megabyte of data is kept\nok a key of 300 characters works\nok IOSurfaceCopyAllValues has the attachments\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "306991947ddf918f75212b84284a05a01d7b28809c91cede1a2938bbfdb2840c",
+          "exit_code": 0,
+          "stdout": "ok a hundred keys read back\nok a string of 100000 characters is kept\nok one megabyte of data is kept\nok a key of 300 characters works\nok IOSurfaceCopyAllValues has the attachments\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_set_value_types",
+      "source_sha256": "f5c3c6e21ea5ec27c866b18ffcd49f4b65b6f0b3e7599db66cc52500d687cb29",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "696f5953405cf7ce667bf570429dc8904cef23171838799f54a4ea864cda7114",
+          "exit_code": 0,
+          "stdout": "ok a string comes back equal\nok a number comes back as a number with the same value\nok data comes back with its bytes\nok a dictionary comes back with its entry\nok an array comes back with its items\nok a boolean comes back true\nok setting a key again replaces the value\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6a08042d0066a3c0dc5c561702a3d1e18ee644c19db14e482a6e057d2bc56667",
+          "exit_code": 0,
+          "stdout": "ok a string comes back equal\nok a number comes back as a number with the same value\nok data comes back with its bytes\nok a dictionary comes back with its entry\nok an array comes back with its items\nok a boolean comes back true\nok setting a key again replaces the value\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

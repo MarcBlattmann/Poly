@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getaddrinfo.FailureTiming.yaml
+id: windows/api/ws2_32.dll/getaddrinfo.FailureTiming
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain, connected by Wi-Fi to a home router that is its only DNS server; NetBIOS over TCP/IP enabled, node type hybrid, no primary DNS suffix, a VPN adapter that has its own name-resolution policy rules for its own namespaces), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran twice with identical output, each run in a fresh scratch directory, with names that are new in every run"
+  observed_by: spec-win-dns-timing
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: getaddrinfo, GetAddrInfoW, ADDRINFOA, ADDRINFOW, freeaddrinfo, gethostbyname, "Winsock Error Codes", "Name Resolution Policy Table" (the tests of the unreachable server), the hosts file; ws2def.h, ws2tcpip.h, winsock2.h and winerror.h for constants and layouts. Chrome's calls: docs/windows/chrome-net-gaps.md and the committed network-service traces. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Chrome's network service starts with getaddrinfo("wpad") three times and then looks up every host of a page on worker threads, synchronously; on Poly page loads are slow and a slow failing lookup is a suspect (docs/windows/chrome-net-gaps.md, row 8). Observed with names nobody owns (a random label under .invalid, .test or with a trailing dot): the lookup fails with 11001 (WSAHOST_NOT_FOUND) after the time of one DNS round trip, and a repeat of the same name is answered at once. Times depend on the network (here a home router as DNS server answered in 10 to 25 ms); the tests check bounds with a wide margin.
+interface:
+  signature: "getaddrinfo(name, NULL, {flags, AF_UNSPEC or AF_INET or AF_INET6, SOCK_STREAM}, &result) and GetAddrInfoW with the same arguments, for a fully qualified name that does not exist: the code, the places of the error, the time"
+rules:
+  first_lookup: "A new name that does not exist, looked up for the first time: return value 11001, WSAGetLastError and GetLastError 11001, *result NULL (no entries). Time on the oracle 10 to 25 ms; the test bound is under 500 ms. The same for AF_UNSPEC, AF_INET, AI_ADDRCONFIG, AI_DNS_ONLY (0x10), GetAddrInfoW, a name under .test and a name with a trailing dot (\"x.invalid.\")."
+  repeat: "The same name again: 11001 again, 0 to 7 ms (the test bound is under 100 ms): the failed answer is kept and the network is not asked again. The same for the same name with AF_INET6 after AF_INET (under 1 ms), with AI_DNS_ONLY, and when the repeat comes 1, 3, 10 or 30 s later (4 to 15 ms each; in a probe run also 45, 60, 90, 120, 180, 240, 330 and 400 s later, 5 to 15 ms each: the failed answer stays for at least 400 s on this machine)."
+  error_places: "Return value, WSAGetLastError and GetLastError are equal (11001) for every failing lookup of these tests; there is no 11004 (WSANO_DATA) and no 11002 (WSATRY_AGAIN) for a name that does not exist."
+  unreachable_server: "NOT covered by a test (it needs a way to make a DNS server unreachable for a name: here a name-resolution policy rule for the test namespace .polytest-unreach.invalid with a server address of the documentation range 192.0.2.0/24 that never answers, added with Add-DnsClientNrptRule and removed afterwards; a probe run, one lookup each): getaddrinfo of a new name under that namespace returns 11001 (not 11002) after 12.04 to 12.08 s; the same name again takes 12.0 s again (a failure by timeout is not kept); the same with AI_DNS_ONLY (12.05 s) and with GetAddrInfoW (12.04 s). So a DNS server that does not answer makes every lookup of a new name take about 12 s on Windows 11 26H2 before it fails."
+  no_family_effect: "The family, AI_ADDRCONFIG and AI_DNS_ONLY do not change the code or the time class of a failing fully qualified name."
+errors:
+  host_not_found: "WSAHOST_NOT_FOUND (11001) for every failing lookup of a name that does not exist"
+side_effects: "a lookup of a name that does not exist asks the machine's DNS server; the failed answer is kept for later lookups"
+threading: "getaddrinfo may be called from any thread; lookups of several threads run at the same time"
+ordering: []
+timing:
+  typical: "bounds in the rules"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Every name that is meant not to exist is `polytest-<16 random hex digits>` (with .invalid, .test or .local added, or as a single label), different in every call and every run, so no earlier run and no cache can answer it; no name of another party is looked up except `wpad`, `localhost` and numeric addresses. Names of the hosts-file tests are `polytest-*.invalid`; the test adds its lines to the hosts file (192.0.2.0/24 and 2001:db8::/32, the documentation ranges), removes every line with `polytest-` at the end and at the start, and nothing connects to them. Times are taken with the performance counter around the call and printed only as facts about bounds ("under 500 ms: true"), never as values; the bounds leave a wide margin to what was measured. The tests need the network of the oracle only for the lookups of names that do not exist (a DNS server that answers NXDOMAIN) and run offline otherwise. dns_nx_repeat sleeps about 30 s and needs a per-test time limit of 60 s or more (poly-oracle.ps1 -TestTimeouts dns_nx_repeat=120); dns_hosts_* write to the hosts file and need an administrator token.
+not_covered: >
+  A DNS server that answers slowly, server failure answers (SERVFAIL), search-list suffixes (the oracle has none), the exact time the failed answer is kept (900 s is the documented default of MaxNegativeCacheTtl; the tests show at least 30 s, a probe at least 400 s), flushing the cache (ipconfig /flushdns), a hosts-file entry that appears after a failure (see getaddrinfo.Families), the unreachable server as a test.

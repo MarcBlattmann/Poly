@@ -138,6 +138,26 @@ impl PageFlags {
         PageFlags(0)
     }
 
+    /// Whether a leaf going from `self` to `new` only gains rights: present, writable and user
+    /// stay where they were set, no-execute is not added, the accessed and dirty bits are not
+    /// cleared and the caching bits are the same; bits the CPU ignores may change. Then a TLB
+    /// entry another CPU holds for the old leaf allows less, never more: an access it refuses
+    /// faults, and that CPU flushes the entry itself (SDM Vol. 3A §4.10.4.3, "Optional
+    /// Invalidation": a translation that only gained rights need not be invalidated elsewhere).
+    pub const fn only_adds_rights(self, new: PageFlags) -> bool {
+        const KEPT: u64 = PageFlags::PRESENT.0
+            | PageFlags::WRITABLE.0
+            | PageFlags::USER.0
+            | PageFlags::ACCESSED.0
+            | PageFlags::DIRTY.0;
+        const SAME: u64 =
+            PageFlags::WRITE_THROUGH.0 | PageFlags::CACHE_DISABLE.0 | PageFlags::HUGE.0 | PageFlags::GLOBAL.0;
+        let kept = self.0 & KEPT & !new.0 == 0;
+        let no_new_nx = new.0 & PageFlags::NO_EXECUTE.0 == 0 || self.0 & PageFlags::NO_EXECUTE.0 != 0;
+        let same = (self.0 ^ new.0) & SAME == 0;
+        kept && no_new_nx && same
+    }
+
     /// Flags from raw entry bits; address bits are dropped.
     pub const fn from_bits(bits: u64) -> PageFlags {
         PageFlags(bits & !ADDR_MASK)
@@ -636,6 +656,12 @@ impl<M: PhysMemory> PageTables<M> {
     /// is now completely empty (all entries zero), bottom-up. The PML4 is
     /// never freed.
     ///
+    /// Whether a table is empty is asked of the two neighbours of the entry
+    /// just cleared first, then of the whole table: a range unmapped page by
+    /// page, upwards or downwards, finds a neighbour that is still mapped at
+    /// once, so freeing a large range costs a few reads per page, not a scan
+    /// of the table.
+    ///
     /// The unlinked frames are returned rather than freed: until the TLB
     /// flush for `virt` has completed on every CPU using these tables, the
     /// paging-structure caches may still walk through them. Hand them to the
@@ -647,7 +673,9 @@ impl<M: PhysMemory> PageTables<M> {
         let mut level = leaf.level;
         while level < 4 {
             let table = leaf.path[4 - level];
-            if (0..ENTRIES).any(|i| self.mem.read_entry(table, i) != 0) {
+            let at = index(virt, level);
+            let near = [at + 1, at.wrapping_sub(1)].into_iter().filter(|&i| i < ENTRIES);
+            if near.chain(0..ENTRIES).any(|i| self.mem.read_entry(table, i) != 0) {
                 break;
             }
             self.mem.write_entry(leaf.path[4 - level - 1], index(virt, level + 1), 0);

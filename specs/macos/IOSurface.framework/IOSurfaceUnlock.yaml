@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceUnlock.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceUnlock.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceUnlock
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceUnlock(surface, options, &seed) undoes a lock and returns 0; the seed stored is the current seed. Read-only and read-write locks are counted apart and the unlock has to say which it undoes: a read-only unlock of a read-write lock, and a read-write unlock of a read-only lock, return 0xe00002c2
+  and leave the lock held (the right unlock then returns 0); kIOSurfaceLockAvoidSync makes no difference (an unlock with it of a plain lock is 0, and the other way round); with a read-write and a read-only lock held each unlock undoes its own, in either order. An unlock with no lock to undo returns
+  0xe00002c2 (kIOReturnBadArgument) and changes nothing (two locks need two unlocks, the third is refused). The seed pointer may be NULL. An unlock may be made in another thread than the lock.
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  success: "0"
+errors:
+  no_lock: "0xe00002c2: no lock of that kind to undo"
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

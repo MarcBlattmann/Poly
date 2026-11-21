@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_iterator_next_registry",
+      "source_sha256": "78e36c475aa2b2cdbf7f0a7cd23108ead20aafff913efcc4690c496b97e2c1de",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "6c838f9624bdf8e481baf63ae127b77a0c53dc2b187744d2e273bbbc5aba462f",
+          "exit_code": 0,
+          "stdout": "ok the children iterator: returns 0\nok the platform expert has children\nok recursively: more than 100 entries\nok the whole registry has at least as many\nok the parent in the service plane exists\nok a plane that does not exist: an error\nvalue the error for a plane that does not exist -536870208\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "576a495a35ab630b3315b94da7dffe911638c44546afb445b756316fa0287388",
+          "exit_code": 0,
+          "stdout": "ok the children iterator: returns 0\nok the platform expert has children\nok recursively: more than 100 entries\nok the whole registry has at least as many\nok the parent in the service plane exists\nok a plane that does not exist: an error\nvalue the error for a plane that does not exist -536870208\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_iterator_next_zero",
+      "source_sha256": "e521da90f3b10b4173b2746cea717372d27ef8fb90da6269d1e5da2baaaf4c80",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0b7c8e7de95750def40f8f0af214eef9612891200315090e0b7b9ece1e67bf53",
+          "exit_code": 0,
+          "stdout": "ok IOIteratorNext(0): 0\nok IOObjectRelease(0): 0\nok IOObjectRelease of a service: 0\nok released again: 15\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "640e837d67c562053a953428c3b58f1ca3450f27f9e2b4ec2470ac8e314e2ff7",
+          "exit_code": 0,
+          "stdout": "ok IOIteratorNext(0): 0\nok IOObjectRelease(0): 0\nok IOObjectRelease of a service: 0\nok released again: 15\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

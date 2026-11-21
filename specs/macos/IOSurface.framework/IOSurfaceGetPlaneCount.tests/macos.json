@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_plane_count_basic",
+      "source_sha256": "07c8a6b21bae9bb6ae6d23dd8885dc435b8d0749f39abb7a107798952119b335",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c8c2707c6c684d3c0c4226fdd82b6693382a2cc6acb3ac156a205d8fee081cc2",
+          "exit_code": 0,
+          "stdout": "ok a plain surface: 0 planes\nok '420v' with bytes per element and no plane info: 0 planes\nok two plane entries: 2 planes\nok the widths and heights are the entries'\nok one plane entry: 1 plane\nok an odd size: plane 1 is the entry given, 50 wide\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f643196f60f685ebe09162308bdaa3706b9e4ebbd7c047558de68e51acd9914d",
+          "exit_code": 0,
+          "stdout": "ok a plain surface: 0 planes\nok '420v' with bytes per element and no plane info: 0 planes\nok two plane entries: 2 planes\nok the widths and heights are the entries'\nok one plane entry: 1 plane\nok an odd size: plane 1 is the entry given, 50 wide\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_plane_count_properties",
+      "source_sha256": "ffe6c1bc16740a3e01a7cc534ec8bbbe8fd2a9fc8da867cff504b1207fe59579",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "ddd35ec1c23aef25ccf885d6760a92c63756887b4e1ffa8e23277e18d6544d4e",
+          "exit_code": 0,
+          "stdout": "ok two planes\nok bytes per element of the planes: 1 and 2\nok bytes per row of the planes: 128 and 128\nok the surface's width and height are plane 0's\nok the pixel format is '420v'\nok the surface's bytes per element is plane 0's: 1\nok plane 2 does not exist: 0 for its sizes\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1008c380ac5795163e1ca1834c8d0da7b0aecaf990c5143c4e7b232230148a89",
+          "exit_code": 0,
+          "stdout": "ok two planes\nok bytes per element of the planes: 1 and 2\nok bytes per row of the planes: 128 and 128\nok the surface's width and height are plane 0's\nok the pixel format is '420v'\nok the surface's bytes per element is plane 0's: 1\nok plane 2 does not exist: 0 for its sizes\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

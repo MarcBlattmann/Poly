@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/windows/ws2_32.dll/getaddrinfo.Parallel.yaml
+id: windows/api/ws2_32.dll/getaddrinfo.Parallel
+oracle:
+  os: "Windows 11 Home 26H2 (build 26300.9974), x64"
+  machine: "homeserver2 (real hardware, a workgroup computer: not joined to a domain, connected by Wi-Fi to a home router that is its only DNS server; NetBIOS over TCP/IP enabled, node type hybrid, no primary DNS suffix, a VPN adapter that has its own name-resolution policy rules for its own namespaces), tests run over SSH by tools/pipeline/windows/poly-oracle.ps1 in the SSH logon session (session 0, no interactive desktop) as the local account \"server\" (member of Administrators) with its elevated administrator token; every test ran twice with identical output, each run in a fresh scratch directory, with names that are new in every run"
+  observed_by: spec-win-dns-timing
+  date: 2026-11-20
+sources: >
+  Observations of our own test programs on the machine above (Rust executables that declare the functions they call from Microsoft Learn prototypes and the public SDK headers). Microsoft Learn: getaddrinfo, GetAddrInfoW, ADDRINFOA, ADDRINFOW, freeaddrinfo, gethostbyname, "Winsock Error Codes", "Name Resolution Policy Table" (the tests of the unreachable server), the hosts file; ws2def.h, ws2tcpip.h, winsock2.h and winerror.h for constants and layouts. Chrome's calls: docs/windows/chrome-net-gaps.md and the committed network-service traces. The conformance tests of Wine, its source and ReactOS were not read. No Microsoft binary was decompiled or disassembled.
+summary: >
+  Chrome's host resolver calls getaddrinfo from worker threads. Lookups of different threads do not wait for each other: four slow lookups take as long as one, and a slow lookup on one thread does not delay a fast lookup on another.
+interface:
+  signature: "getaddrinfo called from several threads of one process at the same time"
+rules:
+  slow_in_parallel: "Four threads, four different new single-label names, hints flags 0: every lookup fails with 11001 after 300 to 4000 ms (1.26 to 1.28 s in the probe) and the total from the start of the first to the end of the last is 1.28 s (test bound: under 4000 ms, not four times one lookup). Three threads with the same single-label name: 11001 each, 1.25 to 1.26 s, the total 1.27 s (the same name is not serialised)."
+  fast_in_parallel: "Four threads with four new fully qualified names: 11001 each, 32 to 35 ms in the probe, total 36 ms (test bound: each and the total under 500 ms). Four threads with four new single-label names and AI_DNS_ONLY: 11001 each, 6 to 7 ms, total 8 ms (bound under 500 ms)."
+  slow_does_not_block: "While one thread waits in a lookup of a new single-label name (flags 0, about 1.2 s), another thread's lookups of \"localhost\" (code 0, entries), of \"127.0.0.1\" (code 0), of a new fully qualified name that does not exist (11001) and of a new single-label name with AI_DNS_ONLY (11001) all complete: the four took under 500 ms together (test bound); the slow one still fails with 11001 after 300 to 4000 ms."
+errors:
+  host_not_found: "WSAHOST_NOT_FOUND (11001)"
+side_effects: "none beyond the rules above"
+threading: "the tests start 3 to 4 threads that each make one lookup; the main thread waits for them"
+ordering: []
+timing:
+  typical: "bounds in the rules"
+  guarantees: none
+tests:
+  visible: 1  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
+building_tests: >
+  Rust tests (ADR 0075), one file per test, each carrying its own declarations. Every name that is meant not to exist is `polytest-<16 random hex digits>` (with .invalid, .test or .local added, or as a single label), different in every call and every run, so no earlier run and no cache can answer it; no name of another party is looked up except `wpad`, `localhost` and numeric addresses. Names of the hosts-file tests are `polytest-*.invalid`; the test adds its lines to the hosts file (192.0.2.0/24 and 2001:db8::/32, the documentation ranges), removes every line with `polytest-` at the end and at the start, and nothing connects to them. Times are taken with the performance counter around the call and printed only as facts about bounds ("under 500 ms: true"), never as values; the bounds leave a wide margin to what was measured. The tests need the network of the oracle only for the lookups of names that do not exist (a DNS server that answers NXDOMAIN) and run offline otherwise. dns_nx_repeat sleeps about 30 s and needs a per-test time limit of 60 s or more (poly-oracle.ps1 -TestTimeouts dns_nx_repeat=120); dns_hosts_* write to the hosts file and need an administrator token.
+not_covered: >
+  More than six threads, lookups while the same name is being added to the hosts file, lookups from several processes, the order in which the threads finish.

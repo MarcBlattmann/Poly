@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_use_count_decrement_exit",
+      "source_sha256": "670f50f6cac6a8e2fc411e1a0e3776999d7f5d68db667647854e6e828c62ca14",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b63f4cad15e1c4996f7ce00b33976b2e6857b68b40f706cf973506218bb70ebe",
+          "exit_code": 0,
+          "stdout": "ok the child ended with status 0\nok shortly after it exited the surface is not in use\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bda5e3d326b763b141f31da9dc36c0668db267730124123ea19f7e0ac5d8ec22",
+          "exit_code": 0,
+          "stdout": "ok the child ended with status 0\nok shortly after it exited the surface is not in use\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_use_count_decrement_processes",
+      "source_sha256": "d7c1886af4da97f2c04445e0d750b82f0a29de75ea689beb794c0a028b9ab61c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "78f3a63122e5066b4295afa68423c417ad0a94cd9dc48ab8d170ff9d17d3ff2d",
+          "exit_code": 0,
+          "stdout": "ok child: decrements at 0 leave its count 0\nok child: the parent's count still holds the surface in use\nsummary 2 passed, 0 failed\nok the child ended with status 0\nok the parent's count is still 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c2ded3e3db2603890b7ad233215f367feb9310aaafd8d065436ef1b78151a5d5",
+          "exit_code": 0,
+          "stdout": "ok child: decrements at 0 leave its count 0\nok child: the parent's count still holds the surface in use\nsummary 2 passed, 0 failed\nok the child ended with status 0\nok the parent's count is still 1\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

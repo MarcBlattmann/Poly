@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_copy_value_missing",
+      "source_sha256": "7cba8b7f6f18eeefa2642b486cc5bb2beb69e06041e2710804cdfc59e4677f74",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5274dbf189eea5fd4c827d593e4e8a659443a4c184e4195181bf56cf7272f962",
+          "exit_code": 0,
+          "stdout": "ok a key nobody set: NULL\nok kIOSurfaceWidth: NULL\nok kIOSurfaceHeight: NULL\nok kIOSurfaceBytesPerElement: NULL\nok kIOSurfaceBytesPerRow: NULL\nok kIOSurfaceAllocSize: NULL\nok kIOSurfacePixelFormat: NULL\nok kIOSurfaceName: the name\nok an attachment removed with IOSurfaceRemoveValue is NULL\nok the name given at creation is not removed by IOSurfaceRemoveValue\nok the empty key: NULL\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "1f916bfeffee471e54fd879b2b8327881e842915323f24a4698d73ff2a7c0d84",
+          "exit_code": 0,
+          "stdout": "ok a key nobody set: NULL\nok kIOSurfaceWidth: NULL\nok kIOSurfaceHeight: NULL\nok kIOSurfaceBytesPerElement: NULL\nok kIOSurfaceBytesPerRow: NULL\nok kIOSurfaceAllocSize: NULL\nok kIOSurfacePixelFormat: NULL\nok kIOSurfaceName: the name\nok an attachment removed with IOSurfaceRemoveValue is NULL\nok the name given at creation is not removed by IOSurfaceRemoveValue\nok the empty key: NULL\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_copy_value_two_processes",
+      "source_sha256": "63b767e77f335d9d4c61c1a1ded3cff758ee7cb524abbd299235453af72b6e41",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "da2d3237b37627131840ad7a59989a88c790ef2be4f3ff487aa2513d206b86bb",
+          "exit_code": 0,
+          "stdout": "ok child: the parent's string\nok child: the parent's number\nok the parent sees the child's string\nok child: a key the parent removed is gone\nsummary 3 passed, 0 failed\nok the child ended with status 0\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "205eaf29329e26875b4b4e27f3af4a5b0b058c67e81bfe4699ea987bd04f723d",
+          "exit_code": 0,
+          "stdout": "ok child: the parent's string\nok child: the parent's number\nok the parent sees the child's string\nok child: a key the parent removed is gone\nsummary 3 passed, 0 failed\nok the child ended with status 0\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

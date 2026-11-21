@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceCreateMachPort.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceCreateMachPort.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceCreateMachPort
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceCreateMachPort(surface) returns a send right (type 0x10000, one user reference) to a port that stands for the surface; each call returns another name; the right can be copied into a message (a port descriptor with disposition COPY_SEND) to another process, which gets the surface with IOSurfaceLookupFromMachPort.
+  The surface keeps its seed, ID and use count; but the surface counts as in use (IOSurfaceIsInUse) as soon as a port was made and for as long as its right is held (false again after mach_port_deallocate). The port keeps the surface alive: after the last reference was released the surface still comes back from the port, with its data, and
+  IOSurfaceLookup by the ID still finds it. mach_port_deallocate of the right makes the name invalid.
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  success: "a send right (a mach_port_t name)"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

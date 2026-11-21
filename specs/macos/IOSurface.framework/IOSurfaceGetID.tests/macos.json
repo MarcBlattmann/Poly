@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_id_global",
+      "source_sha256": "a8ca6b26dd832cc6a0b4f5f61b9224a255710b1daeaca9d5c323d3a3c8bc6133",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a3fbea97b1e7de157bd13eb7ca4458a77aaa97f561ce1ebd5127a3c6bbc4a273",
+          "exit_code": 0,
+          "stdout": "ok child: a surface that is not global is not found: NULL\nsummary 1 passed, 0 failed\nok the child of the other surface ended with 0\nok child: a global surface is found by its ID\nok child: with its width and its data\nsummary 2 passed, 0 failed\nok the child of the global surface ended with 0\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4146c358917e78cc6e34bdf3e3a8cea414043e54a5baab8ae01def176a76ed79",
+          "exit_code": 0,
+          "stdout": "ok child: a surface that is not global is not found: NULL\nsummary 1 passed, 0 failed\nok the child of the other surface ended with 0\nok child: a global surface is found by its ID\nok child: with its width and its data\nsummary 2 passed, 0 failed\nok the child of the global surface ended with 0\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_id_same_in_processes",
+      "source_sha256": "d19f4296764035943fd4d7ca923b82cce432a08935ceb64ed037710280e8cc22",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e69029efee4d8188775e5eed64c5d0e65c7cb83dfd845795228832bc5b63e350",
+          "exit_code": 0,
+          "stdout": "ok the child found the surface and answered\nok the low bits of the ID the child reports are the parent's\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9f0f280ffe1bb92bc3c6a799114796b0ef72b4eca0746910d31924a6a0bb830a",
+          "exit_code": 0,
+          "stdout": "ok the child found the surface and answered\nok the low bits of the ID the child reports are the parent's\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

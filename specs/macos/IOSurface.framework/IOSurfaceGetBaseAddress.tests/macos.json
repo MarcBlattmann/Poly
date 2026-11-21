@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_base_address_basic",
+      "source_sha256": "13199d44e75346eb3d929271210872befa3ef22a574befdd61eee709d6573f9a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "b9978f9d28bbb37bb8937f9ca3a57fcc7bba6f408443b5bb67153503cea5866b",
+          "exit_code": 0,
+          "stdout": "ok not NULL while unlocked\nok the same on every call\nok aligned to 4096\nvalue aligned to 16384 1\nok the same while locked\nok a fresh surface is all zero over its whole allocation\nok the same after the unlock\nok another surface has another address\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cbb8d7dd0559f39f01e74f28ee45658a9e8b588e803b2c7e57e9c0e05b6f6108",
+          "exit_code": 0,
+          "stdout": "ok not NULL while unlocked\nok the same on every call\nok aligned to 4096\nvalue aligned to 16384 1\nok the same while locked\nok a fresh surface is all zero over its whole allocation\nok the same after the unlock\nok another surface has another address\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_base_address_data",
+      "source_sha256": "0464e213583ad5e69a454e0f0a002a76f3812ee65d9b67536c4083f04b2e9b28",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "53a1f2771274ad7aa1d5a2ce05930bb5b9825db1f8223a0ebd628fc723e68acc",
+          "exit_code": 0,
+          "stdout": "ok every row, every column reads back after the unlock\nok row 3, column 5 is 8\nok a second reference by ID\nok has the same base address\nok and the same bytes\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "52f428623f73e5582bfab69d429dc3139773134f125185c41646a33b79a37fb8",
+          "exit_code": 0,
+          "stdout": "ok every row, every column reads back after the unlock\nok row 3, column 5 is 8\nok a second reference by ID\nok has the same base address\nok and the same bytes\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

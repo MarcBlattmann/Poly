@@ -80,3 +80,22 @@ by period (ADR 0244). A program waiting for each next 10 ms, a 48 kHz stream kep
   the device (60 ms), plus the host's audio backend. Chrome reports an output latency of 24 ms from its own view.
 - Exclusive mode, capture, loopback, device changes, `ISimpleAudioVolume` and the endpoint volume are not done. W3
   and W4 add them with their sheets.
+
+## Addendum (2026-11-20): long buffers, `IAudioClock2`, the enumerator's count
+
+Found by the integrator's held-out run (`int-round-e`):
+
+- **A long buffer panicked the kernel.** The engine opened its PolyAudio stream with the client's whole buffer, so
+  `Initialize` with a 20 s duration (960,000 frames, which the sheet accepts: no upper limit was seen on Windows)
+  asked the kernel for 7.68 MB in one allocation, and the kernel panicked when that failed. Now the engine's
+  PolyAudio stream is 100 ms (ten periods; the engine never queues more than four), whatever the client's buffer.
+  The kernel reserves a stream's buffer fallibly and fails the open with `STATUS_INSUFFICIENT_RESOURCES`
+  ([ADR 0250](0250-out-of-memory-never-panics-the-kernel.md)); the client's own buffer, in the application's
+  process, is reserved fallibly too and gives `E_OUTOFMEMORY`.
+- **`IAudioClock2`.** `QueryInterface` on the clock answers it (Learn; audioclient.h) with a tear-off: its slot 3,
+  `GetDevicePosition`, is not the clock's. The tear-off holds a reference on the clock and answers every other
+  interface as the clock does, so both have the clock's identity. No sheet specifies `GetDevicePosition`: it gives
+  the clock's position in frames and the performance counter.
+- **The enumerator's count.** On Windows an application's `AddRef` on a freshly created enumerator counts one more
+  than its own references. Each creation is still an object of its own, and now carries one reference the module
+  keeps, so the counts match. That reference is never given back; an enumerator is a few words.

@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_lookup_from_port_basic",
+      "source_sha256": "4d61cca83a4ddc6c14eb3039de211e317d73f4663609518eed1e793014437496",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8bcf907fb9f6894f76295610b119a0c69629e638455e750cbda58f2c45283b31",
+          "exit_code": 0,
+          "stdout": "ok found\nok another object for the same surface\nok same sizes and base address\nok MACH_PORT_NULL: NULL\nok 0x1234: NULL\nok an ordinary port: NULL\nok a dead name: NULL\nok MACH_PORT_DEAD: NULL\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "feb9bfd07be1b03578d86d7b06dc82657bbcd0586f6c57bee075f16cba2db587",
+          "exit_code": 0,
+          "stdout": "ok found\nok another object for the same surface\nok same sizes and base address\nok MACH_PORT_NULL: NULL\nok 0x1234: NULL\nok an ordinary port: NULL\nok a dead name: NULL\nok MACH_PORT_DEAD: NULL\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_lookup_from_port_shared",
+      "source_sha256": "5c6cb3a61dfc233846d485470d92a48012a7629ba520e58cacd9b4f80e9993c4",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "c80e8657d0d8b780ee353a3f062312c0e7f5d7c8b3bf11eb6ca043e2ac26fd7c",
+          "exit_code": 0,
+          "stdout": "ok child: sees the parent's attachment\nok child: its own use count is 1\nsummary 2 passed, 0 failed\nok the child ended with status 0\nok the parent sees the child's attachment\nok the parent's use count is its own: 0\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "3e195dcd1379861d7488c0341fa19ec55b3344b78ab4502e7842660abd2093ba",
+          "exit_code": 0,
+          "stdout": "ok child: sees the parent's attachment\nok child: its own use count is 1\nsummary 2 passed, 0 failed\nok the child ended with status 0\nok the parent sees the child's attachment\nok the parent's use count is its own: 0\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

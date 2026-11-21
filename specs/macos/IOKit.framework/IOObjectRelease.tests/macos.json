@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_object_release_loop",
+      "source_sha256": "445dcd6ab4c131d7c00c3c8f70f9c47d34fc2809b1d719fcc88971d3cf059b11",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "4e8b7955a3da9e9414ed98c81c8841fd2091f4f387a5480277091c4c8668e042",
+          "exit_code": 0,
+          "stdout": "ok a thousand searches and releases\nok a thousand iterators drained and released\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "54bc817ba7211a8e4a544feff04224fde2cbb4309a7a137ce2efa66cc217ec07",
+          "exit_code": 0,
+          "stdout": "ok a thousand searches and releases\nok a thousand iterators drained and released\nsummary 2 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_object_release_names",
+      "source_sha256": "ebd5fb569f79580659aa36d0295bdfc85e0ddecc6ec246924fc6fa311c7e20b0",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a5657579e36d186c03e1a431e6065d338b5633deb28581b70485083ed960790a",
+          "exit_code": 0,
+          "stdout": "ok the object is a send right\nok the same name for the same entry\nok after the last release the name is invalid\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "2e927335cd81eb284f90a2cf178e5ef42c7a8455f46d421007aa393c5c4ae0e2",
+          "exit_code": 0,
+          "stdout": "ok the object is a send right\nok the same name for the same entry\nok after the last release the name is invalid\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

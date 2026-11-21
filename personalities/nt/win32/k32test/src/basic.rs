@@ -187,6 +187,19 @@ pub(super) unsafe fn files() {
         check(f != INVALID_HANDLE_VALUE);
         check(ascii_eq(wslice(data.as_ptr().add(44).cast()), b"k32dir"));
         check(FindClose(f) != 0);
+        // A long name triggers 8.3 short-name generation via an internal directory listing;
+        // FindFirstFileW must populate cAlternateFileName and still leave the last error alone.
+        let h =
+            CreateFileW(w!("k32dir\\a_long_file_name.txt"), GENERIC_WRITE, 0, core::ptr::null(), CREATE_ALWAYS, 0, 0);
+        check(h != INVALID_HANDLE_VALUE);
+        check(CloseHandle(h) != 0);
+        SetLastError(87);
+        let f = FindFirstFileW(w!("k32dir\\a_long_file_name.txt"), data.as_mut_ptr());
+        check(f != INVALID_HANDLE_VALUE);
+        check_error(87);
+        check(ascii_eq(wslice(data.as_ptr().add(564).cast()), b"A_LONG~1.TXT"));
+        check(FindClose(f) != 0);
+        check(DeleteFileW(w!("k32dir\\a_long_file_name.txt")) != 0);
 
         // Full paths.
         let mut full = [0u16; 260];

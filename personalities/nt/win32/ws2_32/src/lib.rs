@@ -31,6 +31,7 @@ pub mod afd;
 pub mod asyncsel;
 pub mod events;
 pub mod ext;
+pub mod lock;
 pub mod names;
 pub mod sock;
 

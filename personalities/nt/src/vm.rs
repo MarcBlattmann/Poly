@@ -464,15 +464,7 @@ impl VirtualMemory {
         self.allocations
             .values()
             .filter(|a| matches!(a.kind, AllocKind::Private) && a.placeholder != Placeholder::Is)
-            .map(|a| {
-                let committed: usize = a
-                    .pages
-                    .runs_in(0..a.pages.len())
-                    .filter(|(_, s)| matches!(s, PageState::Committed(_)))
-                    .map(|(r, _)| r.len())
-                    .sum();
-                committed as u64 * PAGE_SIZE
-            })
+            .map(|a| a.pages.committed() as u64 * PAGE_SIZE)
             .sum()
     }
 

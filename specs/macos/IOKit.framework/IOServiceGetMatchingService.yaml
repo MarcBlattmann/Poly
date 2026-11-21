@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOKit.framework/IOServiceGetMatchingService.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOServiceGetMatchingService.tests/macos.json.
+id: macos/api/IOKit.framework/IOServiceGetMatchingService
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOServiceGetMatchingService(kIOMainPortDefault, matching) returns the first service of the class (an io_service_t to release with IOObjectRelease), or 0 when there is none: a class nobody has, a NULL dictionary, a registry entry ID that does not exist (IORegistryEntryIDMatching), a main port that is no port. It conforms to the class it was
+  asked for; its class name (IOObjectGetClass) is IOPlatformExpertDevice for that class; it is the entry the iterator gives first (same registry entry ID, IOObjectIsEqualTo); searching for the platform expert by its own entry ID finds it again. A GPU is found with IOAccelerator: it conforms to IOAccelerator; its "model" property is a non-empty string,
+  "gpu-core-count" a number of at least 1 and "vendor-id" 4 bytes of data (the values are the machine's own and not recorded).
+  The tests record shapes, never the machine's own values: no serial number, no platform UUID, no model name and no counts that depend on the hardware appear in them or in their recordings. Observed on a MacBook Pro (Apple M1 Pro) with arm64 native and x86_64 under Rosetta 2; the shapes were equal (the number of
+  services of some classes differs between the architectures and is not recorded as a check).
+returns:
+  success: "an io_service_t, or 0"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

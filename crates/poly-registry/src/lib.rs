@@ -38,6 +38,7 @@
 
 extern crate alloc;
 
+pub mod comdefaults;
 pub mod consts;
 pub mod defaults;
 pub mod hive;

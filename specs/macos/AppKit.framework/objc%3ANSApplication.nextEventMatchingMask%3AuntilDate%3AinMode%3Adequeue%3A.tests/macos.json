@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 13:39:53",
+  "tests": [
+    {
+      "name": "nsapplication_nexteventmatchingmask_mask",
+      "source_sha256": "7ee2d181056fb643cf168bbd42af1a5a6cb5a8506fed7fe4d482620b0160818d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5f503be0689d3ba99d5dd86c79cae599a939389a8940fe20c6c3c624e3e89757",
+          "exit_code": 0,
+          "stdout": "ok NSEventMaskApplicationDefined == (1ULL << NSEventTypeApplicationDefined)\nok NSEventMaskKeyDown == (1ULL << NSEventTypeKeyDown)\nok NSEventMaskAny == ~0ULL\nok e == nil\nok e == nil\nok e != nil && e.subtype == 1\nok e != nil && e.subtype == 2\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "a8c74d808ca8b332638557ab342319cacef6500b8d27281e20a3b1e38e2a7935",
+          "exit_code": 0,
+          "stdout": "ok NSEventMaskApplicationDefined == (1ULL << NSEventTypeApplicationDefined)\nok NSEventMaskKeyDown == (1ULL << NSEventTypeKeyDown)\nok NSEventMaskAny == ~0ULL\nok e == nil\nok e == nil\nok e != nil && e.subtype == 1\nok e != nil && e.subtype == 2\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsapplication_nexteventmatchingmask_posted_events",
+      "source_sha256": "3ed2381550ac364bdf623b70597a69227ce081ea7c98a623537adbb855693696",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0708a53bc51a21972279326843d9a6ee0229598e40679ac0d7a60ca9ea089434",
+          "exit_code": 0,
+          "stdout": "ok ev.type == NSEventTypeApplicationDefined && NSEventTypeApplicationDefined == 15\nok got != nil && got.type == NSEventTypeApplicationDefined && got.subtype == 7 && got.data1 == 11 && got.data2 == 0\nok got != ev\nok e1.subtype == 3 && e2.subtype == 1 && e3.subtype == 2\nok [a nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES] == nil\nok peek1 != nil && peek2 != nil && peek1.subtype == 9 && peek2.subtype == 9\nok taken.subtype == 9\nok [a nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES] == nil\nok late != nil && late.subtype == 4 && d >= 0.08 && d < 1.5\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4c96e641ac1da085577dc0246d596aaf648db99e3149e5ff0690788a9a6acda6",
+          "exit_code": 0,
+          "stdout": "ok ev.type == NSEventTypeApplicationDefined && NSEventTypeApplicationDefined == 15\nok got != nil && got.type == NSEventTypeApplicationDefined && got.subtype == 7 && got.data1 == 11 && got.data2 == 0\nok got != ev\nok e1.subtype == 3 && e2.subtype == 1 && e3.subtype == 2\nok [a nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES] == nil\nok peek1 != nil && peek2 != nil && peek1.subtype == 9 && peek2.subtype == 9\nok taken.subtype == 9\nok [a nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate distantPast] inMode:NSDefaultRunLoopMode dequeue:YES] == nil\nok late != nil && late.subtype == 4 && d >= 0.08 && d < 1.5\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

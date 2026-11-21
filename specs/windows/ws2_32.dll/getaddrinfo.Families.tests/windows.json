@@ -1,0 +1,28 @@
+{
+  "format": "poly-winrun/1",
+  "system": {
+    "name": "windows",
+    "version": "10.0.26300.0",
+    "build": "26300.9974",
+    "arch": "AMD64"
+  },
+  "bundle": "7da3bb96eb5b",
+  "runner": "poly-oracle.ps1 2",
+  "started": "2026-11-20T13:48:18Z",
+  "tests": [
+    {
+      "name": "dns_hosts_live",
+      "exe_sha256": "7dc39f216b663dec38099aac8cee534287289859dd30227abd24e59345d2c8a6",
+      "status": "ran",
+      "exit_code": 0,
+      "exit_code_bits": 32,
+      "output_b64": "YmVmb3JlOiBjb2RlIDExMDAxIGxhc3QgZXJyb3IgMTEwMDEgZW50cmllcyAwOyB1bmRlciA1MDAgbXM6IHRydWUKbGluZSBhZGRlZDogdHJ1ZQp0aGUgbmFtZSByZXNvbHZlcyBhZnRlciB0aGUgbGluZSB3YXMgYWRkZWQgKGl0IGZhaWxlZCBiZWZvcmUpOiB0cnVlOyB3aXRoaW4gMSBzOiB0cnVlCnRoZW46IGNvZGUgMCBsYXN0IGVycm9yIDAgZW50cmllcyAxOyBJUHY0IDE7IHVuZGVyIDEwMCBtczogdHJ1ZQppbiBjYXBpdGFsczogY29kZSAwIGxhc3QgZXJyb3IgMCBlbnRyaWVzIDEKd2l0aCBhIHRyYWlsaW5nIGRvdDogY29kZSAwIGxhc3QgZXJyb3IgMCBlbnRyaWVzIDEKbGluZXMgd2l0aCBhIGNvbW1lbnQgYW5kIGFuIGFsaWFzOiB0cnVlCnRoZSBhbGlhcyByZXNvbHZlczogdHJ1ZQp0aGUgZmlyc3QgbmFtZSBvZiB0aGUgbGluZTogY29kZSAwIGxhc3QgZXJyb3IgMCBlbnRyaWVzIDEKbGluZXMgcmVtb3ZlZDogdHJ1ZQp0aGUgbmFtZSBzdG9wcyByZXNvbHZpbmc6IHRydWU7IHdpdGhpbiAxIHM6IHRydWUKYWZ0ZXI6IGNvZGUgMTEwMDEgbGFzdCBlcnJvciAxMTAwMSBlbnRyaWVzIDA7IHVuZGVyIDUwMCBtczogdHJ1ZQpzdW1tYXJ5IDAgcGFzc2VkLCAwIGZhaWxlZAo=",
+      "stdout_b64": "",
+      "stderr_b64": "",
+      "output": "before: code 11001 last error 11001 entries 0; under 500 ms: true\nline added: true\nthe name resolves after the line was added (it failed before): true; within 1 s: true\nthen: code 0 last error 0 entries 1; IPv4 1; under 100 ms: true\nin capitals: code 0 last error 0 entries 1\nwith a trailing dot: code 0 last error 0 entries 1\nlines with a comment and an alias: true\nthe alias resolves: true\nthe first name of the line: code 0 last error 0 entries 1\nlines removed: true\nthe name stops resolving: true; within 1 s: true\nafter: code 11001 last error 11001 entries 0; under 500 ms: true\nsummary 0 passed, 0 failed\n",
+      "error": null,
+      "stable": true,
+      "ms": 120
+    }
+  ]
+}

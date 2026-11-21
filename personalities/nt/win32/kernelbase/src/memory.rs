@@ -435,8 +435,62 @@ pub unsafe extern "system" fn ReadProcessMemory(
     size: usize,
     read: *mut usize,
 ) -> i32 {
-    // SAFETY: the caller's pointers; copy_self checks the source.
-    unsafe { copy_self(process, base as usize, buf, size, read, false) }
+    /// `ERROR_NOACCESS` (`winerror.h`).
+    const ERROR_NOACCESS: u32 = 998;
+    /// The largest read made through a buffer of its own (bigger ones go to the caller's directly).
+    const STAGED_MAX: usize = 64 << 20;
+    // Every failure reports a count of 0 (sheet `ReadProcessMemory`: all or nothing).
+    if !read.is_null() {
+        // SAFETY: the caller's out parameter.
+        unsafe { *read = 0 };
+    }
+    let base = base as usize;
+    // An address in the kernel half (the top bit set) is ERROR_NOACCESS (rule `kernel_address`).
+    if base > usize::MAX / 2 {
+        return fail(ERROR_NOACCESS, FALSE);
+    }
+    if process == nt::CURRENT_PROCESS as isize {
+        // The whole range must be readable before anything is copied (rule `partial`).
+        let mut at = base;
+        let end = base.saturating_add(size);
+        while at < end {
+            let mut info = crate::base::MemoryBasicInformation::default();
+            // SAFETY: a MEMORY_BASIC_INFORMATION buffer of this build's layout.
+            let q = unsafe {
+                VirtualQuery(
+                    at as *const u8,
+                    (&mut info as *mut crate::base::MemoryBasicInformation).cast(),
+                    core::mem::size_of::<crate::base::MemoryBasicInformation>(),
+                )
+            };
+            if q == 0 || !region_readable(info.state, info.protect) {
+                return fail(ERROR_PARTIAL_COPY, FALSE);
+            }
+            at = info.base_address.saturating_add(info.region_size).max(at + 1);
+        }
+        // SAFETY: the range is readable; the caller's buffer holds `size` bytes.
+        return unsafe { copy_self(process, base, buf, size, read, false) };
+    }
+    // Any other handle: the kernel checks it (PROCESS_VM_READ is enough, rule `handle`). The bytes go
+    // through a buffer of their own, so a read that stops part way writes nothing.
+    if size > STAGED_MAX {
+        // SAFETY: the caller's pointers; the kernel checks the source.
+        return unsafe { copy_other(process, base, buf, size, read, false) };
+    }
+    let mut staged = alloc::vec![0u8; size];
+    let mut got = 0usize;
+    // SAFETY: a local buffer of `size` bytes and a local count.
+    let ok = unsafe { copy_other(process, base, staged.as_mut_ptr(), size, &mut got, false) };
+    if ok == FALSE {
+        return FALSE;
+    }
+    // SAFETY: the caller's buffer holds `size` bytes.
+    unsafe { core::ptr::copy_nonoverlapping(staged.as_ptr(), buf, size) };
+    if !read.is_null() {
+        // SAFETY: the caller's out parameter.
+        unsafe { *read = size };
+    }
+    TRUE
 }
 
 /// `WriteProcessMemory`: a read-only or code region is made writable for the copy and put back.

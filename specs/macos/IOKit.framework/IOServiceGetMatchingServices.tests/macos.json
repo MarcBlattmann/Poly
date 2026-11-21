@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_get_matching_services_found",
+      "source_sha256": "467a871714a6700389670651f668c06437e9512fdbba52d43a754b3da3498f06",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3c5a34b500f559e9dbeac396f49348ee3a734c00720786a10232c23b846d5648",
+          "exit_code": 0,
+          "stdout": "ok returns 0\nok an iterator\nok the object conforms to IOPlatformExpertDevice\nok exactly one service\nok kIOMainPortDefault is 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "ae7ff5c2980c70700a767566f061f953706a704d6bdadffa4da8fcea9fd1344f",
+          "exit_code": 0,
+          "stdout": "ok returns 0\nok an iterator\nok the object conforms to IOPlatformExpertDevice\nok exactly one service\nok kIOMainPortDefault is 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_get_matching_services_none",
+      "source_sha256": "9547558a870ea483391dc0dc72b62221a1a044c7d5cd7a8d41e99916e6f8bb1d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "730ba2af1dffdfbc886c71e6ae0495c5e9321efe3f78e1633bee9179f1cefc1b",
+          "exit_code": 0,
+          "stdout": "ok a class that does not exist: returns 0\nvalue the iterator it stores (0 means none) 0\nok the empty class name: returns 0\nok a NULL dictionary: 0xe00002c2\nok and nothing is stored\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8ddb5d024e08620b36f8190898be70cc08a0241adacf839fda8346716e30f1a4",
+          "exit_code": 0,
+          "stdout": "ok a class that does not exist: returns 0\nvalue the iterator it stores (0 means none) 0\nok the empty class name: returns 0\nok a NULL dictionary: 0xe00002c2\nok and nothing is stored\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

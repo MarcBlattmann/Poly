@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nswindow_makekeyandorderfront_notifications",
+      "source_sha256": "ff9326282feaac3097490a72e8c69440bd77cb3e0c5c973677f7e9a060556aa1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "354c0221a44da50f4a0eef62d0c167d9dd85e996ca26f47b4f56ef43ff1be6bf",
+          "exit_code": 0,
+          "stdout": "ok w.isVisible\nok [log rangeOfString:@\"NSWindowDidBecomeKeyNotification\"].location == NSNotFound\nok [log rangeOfString:@\"NSWindowDidBecomeMainNotification\"].location == NSNotFound\nok [log rangeOfString:@\"NSWindowDidResignKeyNotification\"].location == NSNotFound\nok d.key == 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "56fd0e132c2ea753260137ab7f384740cf45fbc8507b9ead9c3f4e82641f186a",
+          "exit_code": 0,
+          "stdout": "ok w.isVisible\nok [log rangeOfString:@\"NSWindowDidBecomeKeyNotification\"].location == NSNotFound\nok [log rangeOfString:@\"NSWindowDidBecomeMainNotification\"].location == NSNotFound\nok [log rangeOfString:@\"NSWindowDidResignKeyNotification\"].location == NSNotFound\nok d.key == 0\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nswindow_makekeyandorderfront_order",
+      "source_sha256": "146571f46ee64fb90450a5fd9898afc820a0fa89fc9af49c3fc2730effa8cae3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "7b30714ac27e6f1354f68f12c55b394e455a5bacafe9d02898f49ca91e584da6",
+          "exit_code": 0,
+          "stdout": "ok NSWindowAbove == 1 && NSWindowBelow == -1 && NSWindowOut == 0\nok w1.isVisible && !w2.isVisible && !w3.isVisible\nok w1.isVisible && w2.isVisible && !w3.isVisible\nok w3.isVisible\nok w1.isVisible && w2.isVisible && w3.isVisible\nok w1.isVisible && !w2.isVisible && w3.isVisible\nok w2.isVisible\nok w1.isVisible\nok !w1.isVisible\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f49fe8f05112585951aebe6d53775dcdb4ea251103523971c331fcb042473c32",
+          "exit_code": 0,
+          "stdout": "ok NSWindowAbove == 1 && NSWindowBelow == -1 && NSWindowOut == 0\nok w1.isVisible && !w2.isVisible && !w3.isVisible\nok w1.isVisible && w2.isVisible && !w3.isVisible\nok w3.isVisible\nok w1.isVisible && w2.isVisible && w3.isVisible\nok w1.isVisible && !w2.isVisible && w3.isVisible\nok w2.isVisible\nok w1.isVisible\nok !w1.isVisible\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

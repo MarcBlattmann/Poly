@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_lock_basic",
+      "source_sha256": "14095323611baebe8e6e65847a15b7cb83c69a9262aa329e30799c72043d5db1",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "180c15f4d9319b31fced31c673e225217337c6c42eb080b0396fc701e1cff743",
+          "exit_code": 0,
+          "stdout": "ok options 0\nok and unlock\nok kIOSurfaceLockReadOnly\nok and unlock\nok kIOSurfaceLockAvoidSync\nok and unlock\nok an option bit that means nothing (0x80)\nok nested: two locks\nok two unlocks\nok a read-only lock and a read-write lock together\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bdc4ff9fc77914cdec49eaaff5924a4a0ae0c151c41ca12b35d530562442c344",
+          "exit_code": 0,
+          "stdout": "ok options 0\nok and unlock\nok kIOSurfaceLockReadOnly\nok and unlock\nok kIOSurfaceLockAvoidSync\nok and unlock\nok an option bit that means nothing (0x80)\nok nested: two locks\nok two unlocks\nok a read-only lock and a read-write lock together\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_lock_other_reference",
+      "source_sha256": "cf9528c9cb8ed014cb39f581bf0d43b420a419a0cbc1b6bc1b32a3bf7d46f36f",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "675151ee6333a9964cdab0665b9036512b0b4c8a7fddfe24bdc3f8d9d5340f34",
+          "exit_code": 0,
+          "stdout": "ok a second reference\nok the second reference sees seed 1\nok a lock on it makes 2\nok and the first reference sees 2\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "39ccd3c4a427c9634644161b3d26d45a7306e0bcf5eabdb684ee0cebb9957c52",
+          "exit_code": 0,
+          "stdout": "ok a second reference\nok the second reference sees seed 1\nok a lock on it makes 2\nok and the first reference sees 2\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

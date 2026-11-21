@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsfont_systemfontofsize_metrics",
+      "source_sha256": "6cbbcdbda1a69d288a257a7d0b04467aa91bf8432c8a75ec997c7d20b8f5b6f2",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "58e1763c26e123effb66a557469e778a9969b15b6d2d15926f72a365e0de7a5c",
+          "exit_code": 0,
+          "stdout": "ok f.ascender > f.capHeight && f.capHeight > f.xHeight && f.xHeight > 0 && f.descender < 0\nok near(g.ascender, 2 * f.ascender) || absd(g.ascender - 2 * f.ascender) < 0.05\nok absd(g.capHeight - 2 * f.capHeight) < 0.05\nok absd(hh - 2 * h) < 0.05\nvalue sys_ascender 12.57\nvalue sys_descender -2.74\nvalue sys_leading 0.00\nvalue sys_capHeight 9.16\nvalue sys_xHeight 6.84\nvalue sys_italicAngle 0.00\nvalue sys_bbox_x -8.39\nvalue sys_bbox_y -3.58\nvalue sys_bbox_w 40.45\nvalue sys_bbox_h 16.02\nvalue sys_H_advance 9.57\nvalue sys_hello_w 30.95\nvalue sys_hello_h 16.00\nvalue sys_hello_bound_y -3.00\nvalue sys_hello_bound_h 16.00\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "7759ee994a4ed87564f1bc52cefdd483c12e53b6e9622604e95580e132dfd2d1",
+          "exit_code": 0,
+          "stdout": "ok f.ascender > f.capHeight && f.capHeight > f.xHeight && f.xHeight > 0 && f.descender < 0\nok near(g.ascender, 2 * f.ascender) || absd(g.ascender - 2 * f.ascender) < 0.05\nok absd(g.capHeight - 2 * f.capHeight) < 0.05\nok absd(hh - 2 * h) < 0.05\nvalue sys_ascender 12.57\nvalue sys_descender -2.74\nvalue sys_leading 0.00\nvalue sys_capHeight 9.16\nvalue sys_xHeight 6.84\nvalue sys_italicAngle 0.00\nvalue sys_bbox_x -8.39\nvalue sys_bbox_y -3.58\nvalue sys_bbox_w 40.45\nvalue sys_bbox_h 16.02\nvalue sys_H_advance 9.57\nvalue sys_hello_w 30.95\nvalue sys_hello_h 16.00\nvalue sys_hello_bound_y -3.00\nvalue sys_hello_bound_h 16.00\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsfont_systemfontofsize_names",
+      "source_sha256": "1c6d81ef2286e2c77990b8abc1db22178603022aa2fb63b581e00c72182f8267",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d91c593575a0dae759a3ce88ed9134ef1a273a1a19ef12f24e87ef110ce0f1e4",
+          "exit_code": 0,
+          "stdout": "ok [f.fontName isEqualToString:@\".AppleSystemUIFont\"] && [f.familyName isEqualToString:@\".AppleSystemUIFont\"]\nok f.pointSize is 13\nok !f.isFixedPitch\nvalue sys_displayName System Font Regular\nok [NSFont systemFontOfSize:0].pointSize is 13\nok [NSFont systemFontOfSize:20.5].pointSize is 20.5\nok NSFont.systemFontSize is 13\nok NSFont.smallSystemFontSize is 11\nok NSFont.labelFontSize is 10\nok [NSFont systemFontSizeForControlSize:NSControlSizeRegular] is 13\nok [NSFont systemFontSizeForControlSize:NSControlSizeSmall] is 11\nok [NSFont systemFontSizeForControlSize:NSControlSizeMini] is 9\nok [NSFont systemFontSizeForControlSize:NSControlSizeLarge] is 13\nok [f isEqual:[NSFont systemFontOfSize:13]] && ![f isEqual:[NSFont systemFontOfSize:14]]\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f9263f96a6a91581231dadb5a4858a2ba5135288703bf581bdc7ceee5201d5a8",
+          "exit_code": 0,
+          "stdout": "ok [f.fontName isEqualToString:@\".AppleSystemUIFont\"] && [f.familyName isEqualToString:@\".AppleSystemUIFont\"]\nok f.pointSize is 13\nok !f.isFixedPitch\nvalue sys_displayName System Font Regular\nok [NSFont systemFontOfSize:0].pointSize is 13\nok [NSFont systemFontOfSize:20.5].pointSize is 20.5\nok NSFont.systemFontSize is 13\nok NSFont.smallSystemFontSize is 11\nok NSFont.labelFontSize is 10\nok [NSFont systemFontSizeForControlSize:NSControlSizeRegular] is 13\nok [NSFont systemFontSizeForControlSize:NSControlSizeSmall] is 11\nok [NSFont systemFontSizeForControlSize:NSControlSizeMini] is 9\nok [NSFont systemFontSizeForControlSize:NSControlSizeLarge] is 13\nok [f isEqual:[NSFont systemFontOfSize:13]] && ![f isEqual:[NSFont systemFontOfSize:14]]\nsummary 13 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

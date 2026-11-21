@@ -925,12 +925,13 @@ unsafe fn process_memory() {
     let mut now = 0u32;
     check_eq(VirtualProtect(page, 4096, 0x02, &mut now) as usize, 1);
     check_eq(now as usize, 0x02); // put back
-    // The page after the allocation is reserved but not committed: a read across it fails
-    // halfway with ERROR_PARTIAL_COPY (299) and says how far it got.
+    // The page after the allocation is reserved but not committed: a read across it fails with
+    // ERROR_PARTIAL_COPY (299), copies nothing and reports 0 bytes (sheet `ReadProcessMemory` rule
+    // `partial`: all or nothing).
     let mut big = [0u8; 64];
     SetLastError(0);
     let r = ReadProcessMemory(me, page.add(4096 - 16), big.as_mut_ptr(), 64, &mut n);
-    check_got(r != 0 || (GetLastError() == 299 && n == 16), GetLastError());
+    check_got(r != 0 || (GetLastError() == 299 && n == 0 && big == [0; 64]), GetLastError());
     // Another process is not reachable yet.
     SetLastError(0);
     check_fail(ReadProcessMemory(0x7777_0000, page, buf.as_mut_ptr(), 8, &mut n) as usize, 6); // ERROR_INVALID_HANDLE
