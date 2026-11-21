@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_alloc_size_pages",
+      "source_sha256": "32acc52ffd11755cd2cdb90558d301a4b353e83008aeea8ba1fca6a2b863f54a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e997b16d8afc5057490c29b8fbb0eb2fa437f62dcdabaf799eb7e72868e340e9",
+          "exit_code": 0,
+          "stdout": "ok 1 by 10 elements of 4 bytes: 16384\nok 100 by 1 elements of 4 bytes: 16384\nok 100 by 10 elements of 4 bytes: 16384\nok 100 by 100 elements of 4 bytes: 65536\nok 100 by 1000 elements of 4 bytes: 524288\nok 100 by 4096 elements of 4 bytes: 2097152\nok 1000 by 10 elements of 4 bytes: 49152\nok 1920 by 10 elements of 4 bytes: 81920\nok 4000 by 10 elements of 4 bytes: 163840\nok the allocation holds all the rows\nok and is a multiple of 16384\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "b52327d41a0046bf1f9e2cabecd7c3cb8b95c5a0337aefbfd48b884502ee3002",
+          "exit_code": 0,
+          "stdout": "ok 1 by 10 elements of 4 bytes: 16384\nok 100 by 1 elements of 4 bytes: 16384\nok 100 by 10 elements of 4 bytes: 16384\nok 100 by 100 elements of 4 bytes: 65536\nok 100 by 1000 elements of 4 bytes: 524288\nok 100 by 4096 elements of 4 bytes: 2097152\nok 1000 by 10 elements of 4 bytes: 49152\nok 1920 by 10 elements of 4 bytes: 81920\nok 4000 by 10 elements of 4 bytes: 163840\nok the allocation holds all the rows\nok and is a multiple of 16384\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_alloc_size_planar",
+      "source_sha256": "dcf3883497631d071a708834285549a2eb31d3c834520a368db370401c9f7a2c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "3d6267cc934092dc4fa6cd2a397abcff0c0366d9bc3d84a54c6a185cd6f4de3b",
+          "exit_code": 0,
+          "stdout": "ok NV12 100 by 50: two planes\nok the allocation is 32768 bytes\nok plane 1 starts 16384 bytes after plane 0\nok plane 0 starts at the base address\nok widths and heights of the planes as given\nok bytes per element of the planes: 1 and 2\nok with plane offsets 0 and 6400 and AllocSize 16384 the planes are there\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "98fdb1707c569e779101804c914d254381d0e0c495be3b52924d94ad7dec3a7e",
+          "exit_code": 0,
+          "stdout": "ok NV12 100 by 50: two planes\nok the allocation is 32768 bytes\nok plane 1 starts 16384 bytes after plane 0\nok plane 0 starts at the base address\nok widths and heights of the planes as given\nok bytes per element of the planes: 1 and 2\nok with plane offsets 0 and 6400 and AllocSize 16384 the planes are there\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

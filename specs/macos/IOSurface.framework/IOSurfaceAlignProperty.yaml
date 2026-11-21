@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceAlignProperty.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceAlignProperty.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceAlignProperty
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceAlignProperty(key, value) rounds value up to the alignment the property has: kIOSurfaceBytesPerRow to a multiple of 128 (1 gives 128, 100 gives 128, 128 gives 128, 129 gives 256, 401 gives 512; 0 gives 0 in the one case tried); kIOSurfaceWidth, Height,
+  BytesPerElement and AllocSize are not aligned (16385 stays 16385), and so is any key that is not a surface property. IOSurfaceGetPropertyAlignment is 128 for BytesPerRow and 1 for those and for unknown keys; IOSurfaceGetPropertyMaximum is 16384 for the width and height, 32768 for BytesPerRow,
+  0 (none) for the allocation size, the element size and unknown keys. The alignment of BytesPerRow is the one IOSurfaceCreate applies: a surface's BytesPerRow is IOSurfaceAlignProperty(kIOSurfaceBytesPerRow, width * bytes per element). The maxima are not enforced by IOSurfaceCreate.
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  value: "the aligned value"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

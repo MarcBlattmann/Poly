@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_align_property_others",
+      "source_sha256": "b272e0311fdff5e298df24117a59ab0dc637cc727c9825e66025fe5c6b56848e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "acf6f5646fc842b470cee6df546c2320a23308114c9c13a9afb164796aaab033",
+          "exit_code": 0,
+          "stdout": "ok width: 16385 stays 16385 and the alignment is 1\nok height: 16385 stays 16385 and the alignment is 1\nok bytes per element: 16385 stays 16385 and the alignment is 1\nok allocation size: 16385 stays 16385 and the alignment is 1\nok maximum width 16384\nok maximum height 16384\nok maximum BytesPerRow 32768\nok no maximum for the allocation size\nvalue maximum of bytes per element 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "d8ecc8d67d8308887f47cc9ff0c688e93e5bca801a3b7061845e7a567b2b9537",
+          "exit_code": 0,
+          "stdout": "ok width: 16385 stays 16385 and the alignment is 1\nok height: 16385 stays 16385 and the alignment is 1\nok bytes per element: 16385 stays 16385 and the alignment is 1\nok allocation size: 16385 stays 16385 and the alignment is 1\nok maximum width 16384\nok maximum height 16384\nok maximum BytesPerRow 32768\nok no maximum for the allocation size\nvalue maximum of bytes per element 0\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_align_property_row",
+      "source_sha256": "0df77dcebcff312c545166e01e066d625ed0b9225b282161354f7081eb0094d7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f1dfaaad8a7f1a4c4dc5b6a6091c7699701ea7acf305adbd948e5ee5433aa10f",
+          "exit_code": 0,
+          "stdout": "ok 100 gives 128\nok 128 gives 128\nok 129 gives 256\nok 401 gives 512\nok 1 gives 128\nvalue 0 gives 0\nok the alignment of BytesPerRow is 128\nok a surface's BytesPerRow is the aligned width * bytes per element\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "8236e2ef2274dbf92517e679b55f4dd0a957222611992ea7c8e4956ee24c4675",
+          "exit_code": 0,
+          "stdout": "ok 100 gives 128\nok 128 gives 128\nok 129 gives 256\nok 401 gives 512\nok 1 gives 128\nvalue 0 gives 0\nok the alignment of BytesPerRow is 128\nok a surface's BytesPerRow is the aligned width * bytes per element\nsummary 7 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

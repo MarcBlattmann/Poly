@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOKit.framework/IORegistryEntryCreateCFProperty.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IORegistryEntryCreateCFProperty.tests/macos.json.
+id: macos/api/IOKit.framework/IORegistryEntryCreateCFProperty
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IORegistryEntryCreateCFProperty(entry, key, allocator, options) returns a new CF reference to the property, NULL for a key the entry does not have, for entry 0 and for 0x1234; a NULL allocator and kCFAllocatorDefault both work; two calls give equal values. Shapes on the platform expert (IOPlatformExpertDevice): kIOPlatformUUIDKey is a string of 36 characters, hex digits in
+  capital letters and dashes after 8, 13, 18 and 23 characters; kIOPlatformSerialNumberKey a string of 8 to 14 capital letters and digits (the string key "IOPlatformSerialNumber" gives the same value); "model" and "manufacturer" are data ending in a 0 byte; IORegistryEntryCreateCFProperties gives a mutable dictionary with more than 10 properties, among them "model".
+  IORegistryEntrySearchCFProperty finds a property on the entry (recursively) or through its parents (the GPU finds "model" on itself). On a GPU (IOAccelerator): "model" string, "gpu-core-count" number, "vendor-id" data of 4 bytes, "IOClass" and "IOProviderClass" strings.
+  The tests record shapes, never the machine's own values: no serial number, no platform UUID, no model name and no counts that depend on the hardware appear in them or in their recordings. Observed on a MacBook Pro (Apple M1 Pro) with arm64 native and x86_64 under Rosetta 2; the shapes were equal (the number of
+  services of some classes differs between the architectures and is not recorded as a check).
+returns:
+  success: "a new reference to the property, or NULL"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

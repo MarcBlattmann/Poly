@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_bytes_per_row_explicit",
+      "source_sha256": "d61b41c3fd28f45da99e49d4b131486af81071705c853b31081ec18273c542d7",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "13030c25fd43cdceac8a3b2ac57dfafdaa57e2802deadec9621a6be7f8a757b0",
+          "exit_code": 0,
+          "stdout": "ok 1000 is reported as 1000\nok CopyValue of kIOSurfaceBytesPerRow is NULL\nok CopyValue of kIOSurfaceWidth is NULL\nok CopyValue of kIOSurfaceAllocSize is NULL\nok the BytesPerRow of the surface made without one is aligned\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "c20d1dae69e862cab59aaa60e36d43585c98b72f77be0aa8397917b3fd8802f3",
+          "exit_code": 0,
+          "stdout": "ok 1000 is reported as 1000\nok CopyValue of kIOSurfaceBytesPerRow is NULL\nok CopyValue of kIOSurfaceWidth is NULL\nok CopyValue of kIOSurfaceAllocSize is NULL\nok the BytesPerRow of the surface made without one is aligned\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_bytes_per_row_plane",
+      "source_sha256": "a1347d04c007ebb37b37270a3581c8f0d6e91d5275d161b6314293293b7de0eb",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "a28790c4d8cecfadf66a8fabf640ec8e9e764ecd555cad382bf9c82e0a4eb5fc",
+          "exit_code": 0,
+          "stdout": "ok non-planar: plane 0 is the whole: BytesPerRowOfPlane(0) is the BytesPerRow\nok NV12 100 by 50: two planes\nok plane 0: 100 one-byte elements per row, aligned to 128\nok plane 1: 50 two-byte elements per row, aligned to 128\nok IOSurfaceGetBytesPerRow is plane 0's\nok a plane that does not exist: 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "0c05dd890ff0e40f2f84606fae0654e08122b76cd4a0c9f5f3f1c3ab7f026d40",
+          "exit_code": 0,
+          "stdout": "ok non-planar: plane 0 is the whole: BytesPerRowOfPlane(0) is the BytesPerRow\nok NV12 100 by 50: two planes\nok plane 0: 100 one-byte elements per row, aligned to 128\nok plane 1: 50 two-byte elements per row, aligned to 128\nok IOSurfaceGetBytesPerRow is plane 0's\nok a plane that does not exist: 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

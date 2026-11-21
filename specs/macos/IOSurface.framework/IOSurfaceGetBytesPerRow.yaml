@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceGetBytesPerRow.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceGetBytesPerRow.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceGetBytesPerRow
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceGetBytesPerRow(surface) is the distance between rows. When not given at creation: width * bytes per element rounded up to the next multiple of 128 bytes (widths 1 to 32 of 4-byte elements give 128, 33 to 64 give 256, 65 gives 384, 100 gives 512, 1000 gives 4096, 1920 gives 7680;
+  for a width of 100: 1 byte per element 128, 2 give 256, 3 give 384, 8 give 896, 16 give 1664); the height does not change it. When given (kIOSurfaceBytesPerRow of at least width * bytes per element) it is kept as given, not aligned (400, 401, 1000, 5000 stay). The built-in
+  keys are not stored values: IOSurfaceCopyValue of kIOSurfaceBytesPerRow, Width and AllocSize is NULL. For a planar surface it is plane 0's; IOSurfaceGetBytesPerRowOfPlane(s, 0) of a non-planar surface is the same number. A plane
+  with an explicit kIOSurfacePlaneBytesPerRow of 400 reports 400 for the plane while the surface's own number was 128 in the one case tried (recorded as a value).
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  value: "bytes per row"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

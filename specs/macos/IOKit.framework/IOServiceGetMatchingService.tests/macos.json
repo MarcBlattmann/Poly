@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_get_matching_service_found",
+      "source_sha256": "445824e4d95dfc49aa7b3aad2ad00a428728100c00779cbed280c1ab8563ae1a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "64d1f5f552d9a22b4c6a41a71981b0b4fdd32d47f4893026a55c364169137a09",
+          "exit_code": 0,
+          "stdout": "ok a service\nok it conforms to IOPlatformExpertDevice and to IOService\nok IOObjectGetClass succeeds\nok the class is IOPlatformExpertDevice\nok the same registry entry as the iterator's first\nok with the same registry entry ID, not 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "4d7a70915e6fd57c304200729eaebd1914d1782f062d62eff91d1011e7408752",
+          "exit_code": 0,
+          "stdout": "ok a service\nok it conforms to IOPlatformExpertDevice and to IOService\nok IOObjectGetClass succeeds\nok the class is IOPlatformExpertDevice\nok the same registry entry as the iterator's first\nok with the same registry entry ID, not 0\nsummary 6 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_get_matching_service_gpu",
+      "source_sha256": "e2259d5cf2467ad2f4d3add69864a2b33ab6266e2b7a20643d7ba377068274dc",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "147f1e5a0f9b00bcb6133dde461816b20f321a086a3df7e01cf9e633d3f66556",
+          "exit_code": 0,
+          "stdout": "ok a service\nok it conforms to IOAccelerator\nok a model property that is a non-empty string\nok a gpu-core-count that is a number of at least 1\nok a vendor-id that is data of 4 bytes\nvalue the type of the model 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "19983008d98a8cf03c4d31866f25b9984bc318b13b50642ac096957248ca0c7e",
+          "exit_code": 0,
+          "stdout": "ok a service\nok it conforms to IOAccelerator\nok a model property that is a non-empty string\nok a gpu-core-count that is a number of at least 1\nok a vendor-id that is data of 4 bytes\nvalue the type of the model 1\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

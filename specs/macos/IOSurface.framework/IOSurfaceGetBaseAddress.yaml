@@ -1,0 +1,27 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceGetBaseAddress.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceGetBaseAddress.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceGetBaseAddress
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceGetBaseAddress(surface) is the address of the surface's memory in this process: not NULL whether the surface is locked or not, the same on every call (before, during and after a lock) and for every reference to the surface in the process (IOSurfaceLookup, IOSurfaceLookupFromMachPort), aligned to
+  the page size (16384 on the kernel here), covering the whole allocation, zero-filled for a new surface. Different surfaces have memory that does not overlap. Written bytes stay after the unlock and are seen through every reference and, for a surface shared through a Mach port, in the other process; rows are
+  BytesPerRow apart. IOSurfaceGetBaseAddressOfPlane(s, 0) is the same address, also for a non-planar surface; plane 1 of a surface that has two starts beyond plane 0's rows; a plane that does not exist gives NULL.
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  value: "a pointer to the surface's memory"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

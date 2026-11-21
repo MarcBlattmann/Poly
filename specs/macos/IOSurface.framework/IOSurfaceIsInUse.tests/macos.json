@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 15:11:36",
+  "tests": [
+    {
+      "name": "ios_is_in_use_count_zero",
+      "source_sha256": "cc8e561793187e3c94635229d57ffad922b3d4add0698894ec60d5645dd71a15",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "8021ff6ba90a6c8a9a9344fe9a67781b7cd44c1094dcd9b675f2171ac4a043be",
+          "exit_code": 0,
+          "stdout": "ok count 1\nok no attachment says so\nok a new surface after it has count 0\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f485f0aabf3aca774cf2beec2ab2759a8f435c6cb26ad3d3449a8613bcbc2324",
+          "exit_code": 0,
+          "stdout": "ok count 1\nok no attachment says so\nok a new surface after it has count 0\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "ios_is_in_use_processes",
+      "source_sha256": "82bf973df4e4b7e36a74144fb434fb3d1036cb7ca5a62e1342063eb940066b3d",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "70ce879c53f902419fd988eaa3f078b9a1557c6540a5f42318501457f9753e77",
+          "exit_code": 0,
+          "stdout": "ok child: its use count is 2\nok the child holds it: the parent's own count is 0\nok and the surface is in use\nok after the child dropped one of two: still in use\nsummary 1 passed, 0 failed\nok the child ended with status 0\nok after it exited: not in use\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "9bad3ed5f2fcffb603a958bdb265e297311cff18340fd79aeb19c2c38a9ed1b9",
+          "exit_code": 0,
+          "stdout": "ok child: its use count is 2\nok the child holds it: the parent's own count is 0\nok and the surface is in use\nok after the child dropped one of two: still in use\nsummary 1 passed, 0 failed\nok the child ended with status 0\nok after it exited: not in use\nsummary 5 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

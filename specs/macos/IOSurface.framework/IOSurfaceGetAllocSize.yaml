@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceGetAllocSize.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceGetAllocSize.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceGetAllocSize
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceGetAllocSize(surface) is the size of the surface's memory. When no kIOSurfaceAllocSize was given: BytesPerRow * height rounded up to a multiple of 16384: 1 by 10, 100 by 1 and 100 by 10 elements of 4 bytes 16384; 100 by 100 65536; 100 by 1000 524288; 100 by 4096 2097152; 1000 by 10 49152;
+  1920 by 10 81920; 4000 by 10 163840. It always holds all the rows. A kIOSurfaceAllocSize in the properties is kept exactly (1000000; the whole of it can be written) when it holds the surface; one that is too small (20000 for 50 rows of 512, 100) gives NULL from IOSurfaceCreate;
+  25600, exactly the rows, is kept. A kIOSurfaceBytesPerRow of 5000 for 50 rows gives 262144. A planar surface holds each plane in whole pages: NV12 ('420v') 100 by 50 with plane 0 of rows of 128 and plane 1 is 32768 bytes, plane 1 starting 16384 bytes after plane 0; with plane offsets 0 and
+  6400 and an AllocSize of 16384 the planes are where the properties put them.
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  value: "bytes allocated"
+errors: {}
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

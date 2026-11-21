@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOKit.framework/IOServiceGetMatchingServices.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOServiceGetMatchingServices.tests/macos.json.
+id: macos/api/IOKit.framework/IOServiceGetMatchingServices
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOServiceGetMatchingServices(kIOMainPortDefault (0), matching, &iterator) returns 0 and an iterator over the services of the class and its subclasses (IOPlatformExpertDevice: one object, which conforms to IOPlatformExpertDevice; then 0 from IOIteratorNext); the dictionary is consumed. For a class nobody has it returns 0 and stores
+  0 as the iterator (no iterator object); for the empty class name 0; for a NULL dictionary 0xe00002c2 and nothing stored; for a main port that is no port (0x1234) MACH_SEND_INVALID_DEST (0x10000003). IOMainPort(MACH_PORT_NULL, &port) gives a send right that works like kIOMainPortDefault.
+  The tests record shapes, never the machine's own values: no serial number, no platform UUID, no model name and no counts that depend on the hardware appear in them or in their recordings. Observed on a MacBook Pro (Apple M1 Pro) with arm64 native and x86_64 under Rosetta 2; the shapes were equal (the number of
+  services of some classes differs between the architectures and is not recorded as a check).
+returns:
+  success: "0 and an iterator"
+errors:
+  null_dictionary: "0xe00002c2"
+  bad_port: "MACH_SEND_INVALID_DEST (0x10000003)"
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

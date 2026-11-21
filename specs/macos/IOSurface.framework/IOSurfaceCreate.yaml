@@ -1,0 +1,33 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceCreate.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceCreate.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceCreate
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceCreate(properties) makes a surface from a CFDictionary and returns a reference (NULL on failure). Needed: kIOSurfaceWidth and kIOSurfaceHeight (at least 1) and, optional, kIOSurfaceBytesPerElement (default 1; 0 is refused),
+  kIOSurfacePixelFormat (default 0, reported back by IOSurfaceGetPixelFormat), kIOSurfaceBytesPerRow (kept as given when at least width * bytes per element, not aligned; smaller is refused), kIOSurfaceAllocSize
+  (kept exactly, also when not a page multiple; smaller than the surface needs is refused), kIOSurfaceElementWidth and kIOSurfaceElementHeight (an element of 2 by 2 pixels halves the elements across and down), kIOSurfacePlaneInfo (an array
+  of dictionaries with kIOSurfacePlaneWidth, PlaneHeight, PlaneBytesPerElement and optional PlaneBytesPerRow, PlaneOffset, PlaneSize; an empty array is refused), kIOSurfaceName, kIOSurfaceCacheMode, kIOSurfaceIsGlobal (true: other
+  processes can find the surface by its ID). Refused with NULL: no width or height, 0, negative, bytes per element 0, an empty dictionary, a size that cannot be allocated (100000 by 100000 elements of 4 bytes). A width of 65536 is made
+  (the maxima that IOSurfaceGetPropertyMaximum reports are not enforced). A new surface reads back its width, height, bytes per element, format; 1 by 1 element; 0 planes; seed 0; use count 0; an ID that is not 0; zero-filled memory;
+  every call another surface (another ID, other memory). When the BytesPerRow is not given it is width * bytes per element rounded up to a multiple of 128 (see IOSurfaceGetBytesPerRow); the allocation is
+  the rows rounded up to whole pages of 16384 bytes (see IOSurfaceGetAllocSize).
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  success: "a new IOSurfaceRef (the caller releases it with CFRelease)"
+errors:
+  failure: "NULL when the properties do not make a surface"
+side_effects: "memory is allocated and the surface is registered with the system"
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 3  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

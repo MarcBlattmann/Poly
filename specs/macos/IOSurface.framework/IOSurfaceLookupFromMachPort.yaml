@@ -1,0 +1,28 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/IOSurface.framework/IOSurfaceLookupFromMachPort.yaml. Observed with C tests (framework calls, tests/macos/include/poly_miosurface.h; ADR 0182);
+# results per architecture in IOSurfaceLookupFromMachPort.tests/macos.json.
+id: macos/api/IOSurface.framework/IOSurfaceLookupFromMachPort
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), SIP on; tests run as the owner's unprivileged user (pipeline mac run, ADR 0182) in the owner's login session, built with the `poly-mac: iosurface` directive (tests/macos/include/poly_miosurface.h, poly_mlibc.h) so that they call IOSurface, IOKit, CoreFoundation and libSystem; each in a fresh empty scratch directory with an empty environment; the tests that share a surface run themselves again as a child and pass the surface's Mach port through a bootstrap service of their own name; arm64 observed natively and x86_64 under Rosetta 2 (installed on the oracle on 2026-11-20), results equal"
+  observed_by: spec-macos-iosurface
+  date: 2026-11-20
+summary: >
+  IOSurfaceLookupFromMachPort(port) gives a new reference to the surface the port stands for (another object: same ID, sizes, base address in the process, memory); MACH_PORT_NULL, MACH_PORT_DEAD, a name that is nothing, a dead name and an ordinary port give NULL. In another process (the port sent in a message through a
+  bootstrap service of the test's own name) it gives the surface with the parent's width, height, BytesPerRow and format, the same memory (the child's bytes under a lock are seen by the parent and the other way round), the same seed, the same attachments (IOSurfaceSetValue in one, IOSurfaceCopyValue in the other); the use count is each process's own.
+  The surface outlives the process that made it while another process holds the port.
+  arm64 was observed natively and x86_64 under Rosetta 2 on the same kernel: the results were equal. Sizes are the kernel's on Apple silicon: the page
+  size is 16384 bytes.
+returns:
+  success: "a new reference"
+errors:
+  not_a_surface_port: "NULL"
+side_effects: none
+threading: "no thread-specific behaviour observed; surfaces can be used from several threads"
+ordering: []
+timing:
+  typical: "microseconds to a few tens of microseconds per call (a call into the kernel driver)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner
