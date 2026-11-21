@@ -182,6 +182,33 @@ pub fn is_foundation_symbol(name: &str) -> bool {
 pub const COREGRAPHICS_DYLIB: &str = "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics";
 pub const CORETEXT_DYLIB: &str = "/System/Library/Frameworks/CoreText.framework/Versions/A/CoreText";
 
+/// The AppKit framework's install name.
+pub const APPKIT_DYLIB: &str = "/System/Library/Frameworks/AppKit.framework/Versions/C/AppKit";
+pub const QUARTZCORE_DYLIB: &str = "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore";
+
+/// A test about AppKit says so with this line; like a Foundation test its `.c`
+/// file is compiled as Objective-C with ARC (`poly-mac: no-arc` turns ARC off),
+/// linked with `-framework AppKit -framework Foundation`, and may import AppKit's,
+/// Foundation's, CoreFoundation's, CoreGraphics', CoreText's and QuartzCore's own
+/// symbols and the Objective-C runtime's, nothing else
+/// (`tests/macos/include/poly_mak.h`).
+pub const APPKIT_DIRECTIVE: &str = "poly-mac: appkit";
+
+/// Whether `source` carries [`APPKIT_DIRECTIVE`] in a comment line among its
+/// first 30 lines.
+pub fn uses_appkit(source: &str) -> bool {
+    source.lines().take(30).any(|l| {
+        let l = l.trim_start();
+        (l.starts_with("//") || l.starts_with('*') || l.starts_with("/*")) && l.contains(APPKIT_DIRECTIVE)
+    })
+}
+
+/// Whether an imported symbol is one an AppKit test may use: Foundation's,
+/// CoreText's and CoreGraphics' ones and QuartzCore's (`_CA...`, `_kCA...`).
+pub fn is_appkit_symbol(name: &str) -> bool {
+    is_foundation_symbol(name) || is_coretext_symbol(name) || ["_CA", "_kCA"].iter().any(|p| name.starts_with(p))
+}
+
 /// A test about CoreText says so with this line; it is then linked with
 /// `-framework CoreText -framework CoreGraphics -framework CoreFoundation` and
 /// may import CoreText's, CoreGraphics' and CoreFoundation's own symbols (`CT...`,
@@ -301,11 +328,15 @@ pub enum Imports {
     CoreText,
     /// IOSurface's, IOKit's and CoreFoundation's, and libSystem's ([`IOSURFACE_DIRECTIVE`]).
     IoSurface,
+    /// AppKit's and those of the frameworks below it ([`APPKIT_DIRECTIVE`]).
+    AppKit,
 }
 
 impl Imports {
     pub fn of_source(source: &str) -> Imports {
-        if uses_foundation(source) {
+        if uses_appkit(source) {
+            Imports::AppKit
+        } else if uses_foundation(source) {
             Imports::Foundation
         } else if has_directive(source, LIBOBJC_DIRECTIVE) {
             Imports::Objc { arc: has_directive(source, ARC_DIRECTIVE) }
@@ -487,12 +518,16 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
                     | Imports::CoreGraphics
                     | Imports::CoreText
                     | Imports::IoSurface
+                    | Imports::AppKit
             ) && d == COREFOUNDATION_DYLIB)
             || (imports_kind == Imports::IoSurface && (d == IOSURFACE_DYLIB || d == IOKIT_DYLIB))
-            || (imports_kind == Imports::CoreGraphics && d == COREGRAPHICS_DYLIB)
-            || (imports_kind == Imports::CoreText && (d == CORETEXT_DYLIB || d == COREGRAPHICS_DYLIB))
-            || (imports_kind == Imports::Foundation && (d == FOUNDATION_DYLIB || d == OBJC_DYLIB))
+            || (matches!(imports_kind, Imports::CoreGraphics | Imports::CoreText | Imports::AppKit)
+                && d == COREGRAPHICS_DYLIB)
+            || (matches!(imports_kind, Imports::CoreText | Imports::AppKit) && d == CORETEXT_DYLIB)
+            || (matches!(imports_kind, Imports::Foundation | Imports::AppKit)
+                && (d == FOUNDATION_DYLIB || d == OBJC_DYLIB))
             || (matches!(imports_kind, Imports::Objc { .. }) && d == OBJC_DYLIB)
+            || (imports_kind == Imports::AppKit && (d == APPKIT_DYLIB || d == QUARTZCORE_DYLIB))
     };
     if let Some(d) = dylibs.iter().find(|d| !allowed(d)) {
         return Err(format!("loads {d}; a test may load only {}", ALLOWED_DYLIBS.join(", ")));
@@ -511,6 +546,7 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
             Imports::Foundation => imports.retain(|i| !is_foundation_symbol(i)),
             Imports::CoreGraphics => imports.retain(|i| !is_coregraphics_symbol(i)),
             Imports::CoreText => imports.retain(|i| !is_coretext_symbol(i)),
+            Imports::AppKit => imports.retain(|i| !is_appkit_symbol(i)),
         }
         if !imports.is_empty() {
             return Err(format!(
@@ -522,6 +558,8 @@ pub fn check_executable(bytes: &[u8], arch: &str, imports_kind: Imports) -> Resu
                     Imports::Foundation => " but those of Foundation, CoreFoundation and the Objective-C runtime",
                     Imports::CoreGraphics => " but CoreGraphics's and CoreFoundation's own symbols",
                     Imports::CoreText => " but those of CoreText, CoreGraphics and CoreFoundation",
+                    Imports::AppKit =>
+                        " but those of AppKit, Foundation, CoreGraphics, CoreText, QuartzCore and the Objective-C runtime",
                 }
             ));
         }
@@ -615,6 +653,19 @@ pub fn build(repo: &Path, out: &Path, sources: &[Source]) -> Result<BuildManifes
                 }
                 Imports::Foundation => {
                     cc.args(["-x", "objective-c", arc_flag, "-framework", "Foundation"]);
+                }
+                Imports::AppKit => {
+                    cc.args([
+                        "-x",
+                        "objective-c",
+                        arc_flag,
+                        "-framework",
+                        "AppKit",
+                        "-framework",
+                        "Foundation",
+                        "-framework",
+                        "QuartzCore",
+                    ]);
                 }
                 Imports::CoreGraphics => {
                     cc.args(["-framework", "CoreGraphics", "-framework", "CoreFoundation"]);
@@ -1261,6 +1312,13 @@ mod tests {
     #[test]
     fn the_coretext_directive_symbols_and_fonts() {
         assert_eq!(Imports::of_source("/* poly-mac: coretext */\n"), Imports::CoreText);
+        assert_eq!(Imports::of_source("/* poly-mac: appkit */\n"), Imports::AppKit);
+        assert!(
+            is_appkit_symbol("_NSApp")
+                && is_appkit_symbol("_OBJC_CLASS_$_NSWindow")
+                && is_appkit_symbol("_kCAFilterLinear")
+        );
+        assert!(!is_appkit_symbol("_getpid") && !is_appkit_symbol("_dispatch_async"));
         assert_eq!(Imports::of_source("// poly-mac: corefoundation\n"), Imports::CoreFoundation);
         for name in [
             "_CTFontCreateWithName",

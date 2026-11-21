@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsview_frame_bounds_origin",
+      "source_sha256": "2f481b593364d0fd1f7fc334e01caedaedb2c1139adcff019f81f61c8df04920",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "5294d2b3cfcf8ed05a70838833346bb4a2416c581ef19c289f2e15451eaa42b7",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(v.frame, NSMakeRect(50, 60, 100, 100))\nok NSEqualRects(v.bounds, NSMakeRect(5, 5, 100, 100))\nok p.x is 50\nok p.y is 60\nok p.x is 45\nok p.y is 55\nok p.x is 5\nok p.y is 5\nok p.x is 45\nok NSEqualRects(v.bounds, NSMakeRect(-10, -10, 50, 50)) && NSEqualRects(v.frame, NSMakeRect(50, 60, 100, 100))\nok p.x is 50\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f1c62ff9c7676f870bcc35e8076f2d34eab8be58d5f6104a925f3a09c775502e",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(v.frame, NSMakeRect(50, 60, 100, 100))\nok NSEqualRects(v.bounds, NSMakeRect(5, 5, 100, 100))\nok p.x is 50\nok p.y is 60\nok p.x is 45\nok p.y is 55\nok p.x is 5\nok p.y is 5\nok p.x is 45\nok NSEqualRects(v.bounds, NSMakeRect(-10, -10, 50, 50)) && NSEqualRects(v.frame, NSMakeRect(50, 60, 100, 100))\nok p.x is 50\nsummary 11 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsview_frame_size_links_bounds",
+      "source_sha256": "70eaa4676c4fa95e9db746135f748c3c4e270b31a03a798be31121fcd0e18043",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "cd75bce14067fc528a1528e1904681b67e9d8ca5e1007d02265bedfeffca80e4",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(v.bounds, NSMakeRect(0, 0, 200, 100))\nok NSEqualRects(v.bounds, NSMakeRect(0, 0, 200, 100)) && NSEqualRects(v.frame, NSMakeRect(7, 8, 200, 100))\nok NSEqualRects(v.frame, NSMakeRect(7, 8, 200, 100))\nok NSEqualRects(v.bounds, NSMakeRect(0, 0, 100, 50))\nok p.x is 7 + 20\nok p.y is 8 + 20\nok v.bounds.size.width is 200\nok v.bounds.size.height is 100\nvalue frame.w 400.00\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "bf400a3ee7cc987b89edc748a059e45c3cc15d24dff5d857fde45cf78f3af1c8",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(v.bounds, NSMakeRect(0, 0, 200, 100))\nok NSEqualRects(v.bounds, NSMakeRect(0, 0, 200, 100)) && NSEqualRects(v.frame, NSMakeRect(7, 8, 200, 100))\nok NSEqualRects(v.frame, NSMakeRect(7, 8, 200, 100))\nok NSEqualRects(v.bounds, NSMakeRect(0, 0, 100, 50))\nok p.x is 7 + 20\nok p.y is 8 + 20\nok v.bounds.size.width is 200\nok v.bounds.size.height is 100\nvalue frame.w 400.00\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

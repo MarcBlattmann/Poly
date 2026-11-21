@@ -1,0 +1,35 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/AppKit.framework/objc%3ANSView.displayRectIgnoringOpacity%3AinContext%3A.yaml. Observed with Objective-C test programs linked against AppKit
+# (tests/macos/include/poly_mak.h, ADR 0182); results per architecture in objc%3ANSView.displayRectIgnoringOpacity%3AinContext%3A.tests/macos.json.
+id: "macos/api/AppKit.framework/objc:NSView.displayRectIgnoringOpacity:inContext:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the AppKit, Foundation, CoreGraphics and QuartzCore of that release, SIP on, the owner's logged-in graphical session (the window server is needed), the display a 1512 x 982 point built-in one at scale 2, the system appearance set to dark (tests always set the appearance they need); tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: appkit`, tests/macos/include/poly_mak.h): the program is not in an application bundle, so its activation policy is Prohibited, it is never the active application and no window is ever key or main; its windows are invisible (alpha 0, mouse clicks pass through) and are closed or ordered out before the test ends, and a watchdog ends a test after 12 seconds; pixels are drawn into bitmaps the test makes (tagged sRGB) so that colours do not depend on the display; values that depend on this macOS release or this Mac (sizes of system controls, system colours and fonts, the display) are printed with the name prefix sys_ and are described as SYSTEM-DEPENDENT; NSTextAlignment's numbers differ between the two architectures in the SDK (tests compare with the named constants), and the pixels of system controls differ by one step between them (each architecture is recorded on its own); results and output go through raw system calls"
+  observed_by: spec-macos-appkit-basics
+  date: 2026-11-20
+summary: >
+  -[NSView displayRectIgnoringOpacity:inContext:] draws the view into a graphics context made from a
+  bitmap of the test's own, tagged sRGB (premultiplied RGBA, 8 bits, row 0 on top); the bytes are
+  exact and do not depend on the system. A 10 x 8 point view at 1 pixel per point drawing a red
+  (1,0,0,1) fill of (1,1,3,2), a blue (0,0,1,0.5) fill with source-over of (6,1,3,2) and a green fill
+  of (1.5,5.5,3,2): untouched pixels are 0x00000000; red is 0xff0000ff at columns 1..3 of rows 5 and 6
+  (unflipped: y 1..3 is the bottom); half blue premultiplied is 0x00008080 at columns 6..8 of rows 5
+  and 6; the green fill with fractional edges has partial coverage: 0x003f003f at the corners,
+  0x007f007f at the edges, 0x00ff00ff inside (only row 1 columns 2..3) over rows 0..2 and columns
+  1..4. A flipped view puts the same drawing into rows 1 and 2 (red, blue) and 5..7 (green), the exact
+  vertical mirror of the unflipped bitmap. At 2 pixels per point the bitmap is 20 x 16 (its size stays
+  10 x 8 points), red covers columns 2..7 of rows 10..13 (24 pixels), the green fill lines up with
+  whole pixels (columns 3..8 of rows 1..4, 24 pixels of 0x00ff00ff, no partial coverage), blue is 24
+  pixels of 0x00008080, and no other pixel is set.
+returns:
+  success: "void"
+errors: {}
+side_effects: "none beyond what the summary says"
+threading: "AppKit objects are used on the main thread only; the tests use them there (a watchdog thread only ends the process)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds; drawing, ordering and notifications settle within a run-loop turn (tests spin the loop for 0.05 to 0.3 s)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

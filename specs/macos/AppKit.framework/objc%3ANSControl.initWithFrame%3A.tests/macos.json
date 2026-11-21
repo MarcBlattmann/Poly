@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nstextfield_initwithframe_defaults",
+      "source_sha256": "d57b6eadfc24eca46d7c0ac2c90442241c9255f0c52988bec2d17b37a6e18f70",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "dc07054bbd270dd4477fd82eef723f3e86b12d2784f32271d07d9cf0efd4f1e0",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(f.frame, NSMakeRect(1, 2, 100, 22))\nok f.stringValue != nil && f.stringValue.length == 0\nok f.isEditable && f.isSelectable && f.isBezeled && !f.isBordered && f.drawsBackground && f.isEnabled\nok f.bezelStyle == NSTextFieldSquareBezel && NSTextFieldSquareBezel == 0\nok f.tag == 0\nok [f.font.fontName isEqualToString:@\".AppleSystemUIFont\"]\nok f.font.pointSize is 13\nok [f.textColor isEqual:NSColor.controlTextColor]\nok [f.backgroundColor isEqual:NSColor.textBackgroundColor]\nok f.lineBreakMode == NSLineBreakByWordWrapping && NSLineBreakByWordWrapping == 0\nok !f.usesSingleLineMode && f.maximumNumberOfLines == 0\nok f.alignment == NSTextAlignmentLeft && NSTextAlignmentLeft == 0\nok f.acceptsFirstResponder && f.isFlipped\nok f.intrinsicContentSize.width is -1\nvalue sys_intrinsic_h 24.00\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f6ffa759233fcd745b4be050d6824bd38a262d601b37b3108150870367846add",
+          "exit_code": 0,
+          "stdout": "ok NSEqualRects(f.frame, NSMakeRect(1, 2, 100, 22))\nok f.stringValue != nil && f.stringValue.length == 0\nok f.isEditable && f.isSelectable && f.isBezeled && !f.isBordered && f.drawsBackground && f.isEnabled\nok f.bezelStyle == NSTextFieldSquareBezel && NSTextFieldSquareBezel == 0\nok f.tag == 0\nok [f.font.fontName isEqualToString:@\".AppleSystemUIFont\"]\nok f.font.pointSize is 13\nok [f.textColor isEqual:NSColor.controlTextColor]\nok [f.backgroundColor isEqual:NSColor.textBackgroundColor]\nok f.lineBreakMode == NSLineBreakByWordWrapping && NSLineBreakByWordWrapping == 0\nok !f.usesSingleLineMode && f.maximumNumberOfLines == 0\nok f.alignment == NSTextAlignmentLeft && NSTextAlignmentLeft == 0\nok f.acceptsFirstResponder && f.isFlipped\nok f.intrinsicContentSize.width is -1\nvalue sys_intrinsic_h 24.00\nsummary 14 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nstextfield_initwithframe_edit_field",
+      "source_sha256": "3d8c0d9c1f6103dc95ba997839efa78e3380b388cfdc93d0709eafb91b1a5a1a",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "2396643f2ef43d84190a24453448ae025c1e9bf4a60bdce3c9edcc635f9648c8",
+          "exit_code": 0,
+          "stdout": "ok [e.stringValue isEqualToString:@\"Edit\"]\nok e.isEditable && e.isSelectable && e.isBezeled && !e.isBordered && e.drawsBackground && e.acceptsFirstResponder\nok e.lineBreakMode == NSLineBreakByClipping\nok e.frame.origin.x is 0\nok e.frame.origin.y is 0\nvalue sys_edit_w 35.50\nvalue sys_edit_h 24.00\nvalue sys_empty_w 12.00\nok f.bezelStyle == e.bezelStyle && f.isBordered == e.isBordered && f.drawsBackground == e.drawsBackground\nok f.lineBreakMode == NSLineBreakByWordWrapping\nok [e isKindOfClass:[NSControl class]] && [e isKindOfClass:[NSView class]]\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "15f006b88c4f5b6fff1a0e2818397f3c9d8f2d68f98c5ff908aa990a2a165a0c",
+          "exit_code": 0,
+          "stdout": "ok [e.stringValue isEqualToString:@\"Edit\"]\nok e.isEditable && e.isSelectable && e.isBezeled && !e.isBordered && e.drawsBackground && e.acceptsFirstResponder\nok e.lineBreakMode == NSLineBreakByClipping\nok e.frame.origin.x is 0\nok e.frame.origin.y is 0\nvalue sys_edit_w 35.50\nvalue sys_edit_h 24.00\nvalue sys_empty_w 12.00\nok f.bezelStyle == e.bezelStyle && f.isBordered == e.isBordered && f.drawsBackground == e.drawsBackground\nok f.lineBreakMode == NSLineBreakByWordWrapping\nok [e isKindOfClass:[NSControl class]] && [e isKindOfClass:[NSView class]]\nsummary 8 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

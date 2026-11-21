@@ -1,0 +1,34 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/AppKit.framework/objc%3ANSColor+colorWithSRGBRed%3Agreen%3Ablue%3Aalpha%3A.yaml. Observed with Objective-C test programs linked against AppKit
+# (tests/macos/include/poly_mak.h, ADR 0182); results per architecture in objc%3ANSColor+colorWithSRGBRed%3Agreen%3Ablue%3Aalpha%3A.tests/macos.json.
+id: "macos/api/AppKit.framework/objc:NSColor+colorWithSRGBRed:green:blue:alpha:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the AppKit, Foundation, CoreGraphics and QuartzCore of that release, SIP on, the owner's logged-in graphical session (the window server is needed), the display a 1512 x 982 point built-in one at scale 2, the system appearance set to dark (tests always set the appearance they need); tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: appkit`, tests/macos/include/poly_mak.h): the program is not in an application bundle, so its activation policy is Prohibited, it is never the active application and no window is ever key or main; its windows are invisible (alpha 0, mouse clicks pass through) and are closed or ordered out before the test ends, and a watchdog ends a test after 12 seconds; pixels are drawn into bitmaps the test makes (tagged sRGB) so that colours do not depend on the display; values that depend on this macOS release or this Mac (sizes of system controls, system colours and fonts, the display) are printed with the name prefix sys_ and are described as SYSTEM-DEPENDENT; NSTextAlignment's numbers differ between the two architectures in the SDK (tests compare with the named constants), and the pixels of system controls differ by one step between them (each architecture is recorded on its own); results and output go through raw system calls"
+  observed_by: spec-macos-appkit-basics
+  date: 2026-11-20
+summary: >
+  +[NSColor colorWithSRGBRed:green:blue:alpha:] keeps its components exactly (1, 0.5, 0.25, 0.75), is
+  in the sRGB colour space with 4 components and type NSColorTypeComponentBased (0), isEqual: compares
+  components, and components outside 0..1 are kept (-0.5, 2); pure red has saturation, brightness and
+  alpha 1 (hue 0 or 1). colorUsingColorSpace: with sRGB gives an equal colour, with the device RGB
+  space the same numbers, with generic RGB different ones (green 0.5 -> 0.41, red 1 -> 0.99, blue 0.25
+  -> 0.19: SYSTEM-DEPENDENT, printed) which convert back within 0.01; colorWithCalibratedRed: and
+  colorWithDeviceRed: keep the numbers (the device colour is in the device RGB space);
+  colorWithWhite:alpha: is in generic gray gamma 2.2 and keeps whiteComponent (0.5 converts to sRGB
+  0.5). blackColor and whiteColor are generic gray with white 0 and 1, clearColor has alpha 0,
+  redColor, greenColor and blueColor are sRGB (1,0,0), (0,1,0), (0,0,1), blackColor equals
+  colorWithWhite:0 alpha:1, the colours are shared instances, copy gives an equal colour and
+  colorWithAlphaComponent: changes only the alpha.
+returns:
+  success: "a colour"
+errors: {}
+side_effects: "none beyond what the summary says"
+threading: "AppKit objects are used on the main thread only; the tests use them there (a watchdog thread only ends the process)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds; drawing, ordering and notifications settle within a run-loop turn (tests spin the loop for 0.05 to 0.3 s)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

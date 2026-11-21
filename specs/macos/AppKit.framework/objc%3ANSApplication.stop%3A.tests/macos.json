@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 13:39:53",
+  "tests": [
+    {
+      "name": "nsapplication_stop_needs_an_event",
+      "source_sha256": "34d02e882f22c35b2c32f0a48c7db5aa01c4eaac267f0626b7bfff5a022ebe94",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "e809d8fed5bda854499350bc56ba57adc9ad6d7f2223e25ba5a35ebab4d756d9",
+          "exit_code": 0,
+          "stdout": "ok d >= 0.55 && d < 3.0\nok running_after_stop == 0\nok !a.isRunning\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6c62e65c72d3163ed862c74b7da78276bcaf6302bc7c6a2e7e1718fd5352c073",
+          "exit_code": 0,
+          "stdout": "ok d >= 0.55 && d < 3.0\nok running_after_stop == 0\nok !a.isRunning\nsummary 3 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsapplication_stop_when_not_running",
+      "source_sha256": "da9b5715e49a616fb146dec836829a5e63ddafa95af7910ab0b274388168ef8e",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "f26ba8f31a2c6a4e4c320730316ccf83f3be1ba5389c97b2c8ab105680faeaed",
+          "exit_code": 0,
+          "stdout": "ok !a.isRunning\nok e != nil && e.type == NSEventTypeApplicationDefined && e.subtype == 5 && e.data1 == 55\nok [a nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.1] inMode:NSDefaultRunLoopMode dequeue:YES] == nil\nok !a.isRunning\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "47b2f4377291b67a3daf313a187ef164e7d6aa1d0de6db998af95440ee214d59",
+          "exit_code": 0,
+          "stdout": "ok !a.isRunning\nok e != nil && e.type == NSEventTypeApplicationDefined && e.subtype == 5 && e.data1 == 55\nok [a nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.1] inMode:NSDefaultRunLoopMode dequeue:YES] == nil\nok !a.isRunning\nsummary 4 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

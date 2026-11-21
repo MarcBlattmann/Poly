@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nscontrol_stringvalue_numbers",
+      "source_sha256": "bf00b3181e03aadf45b84e7f10f20a26a56fcc6dd8e8db2037c1d7511b66ad7c",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "0fb305950aa20be87fee74f2828e35461d06f99feec66c0fdf7e49d27da320ff",
+          "exit_code": 0,
+          "stdout": "ok f.intValue == 42 && f.integerValue == 42\nok f.doubleValue is 42\nok f.floatValue is 42\nok f.intValue == 0\nok f.intValue == 3\nok f.doubleValue is 3.9\nok f.intValue == 12\nok f.doubleValue is 1000\nok f.intValue == -5\nok [f.stringValue isEqualToString:@\"7\"]\nok [f.stringValue isEqualToString:@\"2.5\"]\nok [f.stringValue isEqualToString:@\"1.25\"]\nok [f.stringValue isEqualToString:@\"-300\"]\nok [f.objectValue isEqual:@\"hello\"]\nok [f.stringValue isEqualToString:@\"99\"]\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "89f5a059227d0c37d877eb066920d8e1528f0a138b4475ee3fada80de7d83ce4",
+          "exit_code": 0,
+          "stdout": "ok f.intValue == 42 && f.integerValue == 42\nok f.doubleValue is 42\nok f.floatValue is 42\nok f.intValue == 0\nok f.intValue == 3\nok f.doubleValue is 3.9\nok f.intValue == 12\nok f.doubleValue is 1000\nok f.intValue == -5\nok [f.stringValue isEqualToString:@\"7\"]\nok [f.stringValue isEqualToString:@\"2.5\"]\nok [f.stringValue isEqualToString:@\"1.25\"]\nok [f.stringValue isEqualToString:@\"-300\"]\nok [f.objectValue isEqual:@\"hello\"]\nok [f.stringValue isEqualToString:@\"99\"]\nsummary 15 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nscontrol_stringvalue_set_get",
+      "source_sha256": "405962bf5cf12f6da5e2868d1852d749ac6943407a693d04d54179b6735c78ae",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "9994c6a43ffaa67665dc5a2ae8e00e4c5e22da34bc6c6583a91bcbf3125bdb4c",
+          "exit_code": 0,
+          "stdout": "ok f.stringValue != nil && f.stringValue.length == 0\nok [f.stringValue isEqualToString:@\"abc\"]\nok [f.stringValue isEqualToString:@\"Grüße 中\\U0001F600\"]\nok f.stringValue.length == 5000\nok [f.stringValue isEqualToString:nl]\nok f.stringValue.length == 0\nok [f.stringValue isEqualToString:@\"same\"]\nok NSEqualRects(f.frame, NSMakeRect(0, 0, 100, 22))\nok t.n == 0\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "676392fbc3e0a489b3c981222fb6a4eeedb8b7d4e2fee467723ae5ce4dd374df",
+          "exit_code": 0,
+          "stdout": "ok f.stringValue != nil && f.stringValue.length == 0\nok [f.stringValue isEqualToString:@\"abc\"]\nok [f.stringValue isEqualToString:@\"Grüße 中\\U0001F600\"]\nok f.stringValue.length == 5000\nok [f.stringValue isEqualToString:nl]\nok f.stringValue.length == 0\nok [f.stringValue isEqualToString:@\"same\"]\nok NSEqualRects(f.frame, NSMakeRect(0, 0, 100, 22))\nok t.n == 0\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

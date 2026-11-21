@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nsbutton_initwithframe_convenience",
+      "source_sha256": "68f5551e503dd553318a2b52038a0ec36039f96ac70da72c5ed3f42b70f24edf",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "25751c8f447e215ce862a923421702edb248810ba26afd82b746425c9858c3c0",
+          "exit_code": 0,
+          "stdout": "ok [b.title isEqualToString:@\"Go\"] && b.target == t && b.action == @selector(act:)\nok b.frame.origin.x is 0\nok b.frame.origin.y is 0\nok b.frame.size.width > 0 && b.frame.size.height > 0\nok b.bezelStyle == NSBezelStyleAutomatic\nvalue sys_push_width 41.50\nvalue sys_push_height 24.00\nok [c.title isEqualToString:@\"Check\"] && c.state == NSControlStateValueOff\nok c.bezelStyle == NSBezelStyleRegularSquare && NSBezelStyleRegularSquare == 2\nok c.frame.size.width > 0 && c.frame.size.height > 0\nvalue sys_checkbox_height 16.00\nok [r.title isEqualToString:@\"Radio\"] && r.target == t\nok r.frame.size.width > 0 && r.frame.size.height > 0\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "cdb4ce9c8644eab529b27864cde6b47ce9fe075910ebd7e259fae132eb5df0e5",
+          "exit_code": 0,
+          "stdout": "ok [b.title isEqualToString:@\"Go\"] && b.target == t && b.action == @selector(act:)\nok b.frame.origin.x is 0\nok b.frame.origin.y is 0\nok b.frame.size.width > 0 && b.frame.size.height > 0\nok b.bezelStyle == NSBezelStyleAutomatic\nvalue sys_push_width 41.50\nvalue sys_push_height 24.00\nok [c.title isEqualToString:@\"Check\"] && c.state == NSControlStateValueOff\nok c.bezelStyle == NSBezelStyleRegularSquare && NSBezelStyleRegularSquare == 2\nok c.frame.size.width > 0 && c.frame.size.height > 0\nvalue sys_checkbox_height 16.00\nok [r.title isEqualToString:@\"Radio\"] && r.target == t\nok r.frame.size.width > 0 && r.frame.size.height > 0\nsummary 10 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nsbutton_initwithframe_frame_and_title",
+      "source_sha256": "fbab471f53e5376e930af4e8f5694e58146a65ea4a219fccbf98caafae18d955",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d1c39532499b96d8a73214c2076d4f2c28987c4dddacabde18dbcc2583af632f",
+          "exit_code": 0,
+          "stdout": "ok NSEqualSizes(s.frame.size, NSMakeSize(10, 5)) && NSEqualSizes(l.frame.size, NSMakeSize(500, 300))\nok [s isKindOfClass:[NSControl class]] && [s isKindOfClass:[NSView class]]\nok NSEqualRects(fr, s.frame)\nok [s.title isEqualToString:@\"abc\"]\nok [s.attributedTitle.string isEqualToString:@\"abc\"]\nok [s.title isEqualToString:@\"Grüße 中\"]\nok s.title != nil && s.title.length == 0\nok [s.alternateTitle isEqualToString:@\"Alt\"]\nok s.cell == nil || [s.cell isKindOfClass:[NSButtonCell class]]\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "5a00c51fb1c54a40221d46978cedfe7a1151b1cd5187e98654df87b9d5ccb355",
+          "exit_code": 0,
+          "stdout": "ok NSEqualSizes(s.frame.size, NSMakeSize(10, 5)) && NSEqualSizes(l.frame.size, NSMakeSize(500, 300))\nok [s isKindOfClass:[NSControl class]] && [s isKindOfClass:[NSView class]]\nok NSEqualRects(fr, s.frame)\nok [s.title isEqualToString:@\"abc\"]\nok [s.attributedTitle.string isEqualToString:@\"abc\"]\nok [s.title isEqualToString:@\"Grüße 中\"]\nok s.title != nil && s.title.length == 0\nok [s.alternateTitle isEqualToString:@\"Alt\"]\nok s.cell == nil || [s.cell isKindOfClass:[NSButtonCell class]]\nsummary 9 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}

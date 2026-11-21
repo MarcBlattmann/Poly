@@ -85,6 +85,61 @@ impl Guid {
         }
         Some(Guid { data1, data2, data3, data4 })
     }
+
+    /// `IIDFromString`'s reading of `text` (sheet `IIDFromString`): only the braced 38-character
+    /// form is accepted. Text of another length or without both braces is [`IidText::Malformed`];
+    /// text of the right shape with a character that is not a hexadecimal digit, or a hyphen out of
+    /// place, is [`IidText::BadCharacter`] with the value read up to it (the oracle writes a
+    /// partial value there).
+    pub fn parse_iid(text: &[u16]) -> IidText {
+        if text.len() != GUID_TEXT_LEN || text[0] != u16::from(b'{') || text[GUID_TEXT_LEN - 1] != u16::from(b'}') {
+            return IidText::Malformed;
+        }
+        if let Some(g) = Guid::parse(text) {
+            return IidText::Valid(g);
+        }
+        // The digits read before the first wrong character, the rest zero.
+        let mut digits = [0u8; 32];
+        let mut n = 0;
+        for (i, &c) in text[1..GUID_TEXT_LEN - 1].iter().enumerate() {
+            let pos = i + 1;
+            if [9usize, 14, 19, 24].contains(&pos) {
+                if c != u16::from(b'-') {
+                    break;
+                }
+                continue;
+            }
+            let d = match u8::try_from(c).unwrap_or(0) {
+                c @ b'0'..=b'9' => c - b'0',
+                c @ b'a'..=b'f' => c - b'a' + 10,
+                c @ b'A'..=b'F' => c - b'A' + 10,
+                _ => break,
+            };
+            digits[n] = d;
+            n += 1;
+        }
+        let num = |from: usize, len: usize| digits[from..from + len].iter().fold(0u64, |v, &d| v << 4 | u64::from(d));
+        let mut data4 = [0u8; 8];
+        for (i, b) in data4.iter_mut().enumerate() {
+            *b = num(16 + i * 2, 2) as u8;
+        }
+        IidText::BadCharacter(Guid {
+            data1: num(0, 8) as u32,
+            data2: num(8, 4) as u16,
+            data3: num(12, 4) as u16,
+            data4,
+        })
+    }
+}
+
+/// What [`Guid::parse_iid`] made of a text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IidText {
+    Valid(Guid),
+    /// Not the braced 38-character form: `E_INVALIDARG`, the output left alone.
+    Malformed,
+    /// The right form with a wrong character: `CO_E_INVALIDCLSID`, this partial value written.
+    BadCharacter(Guid),
 }
 
 #[cfg(test)]
@@ -94,6 +149,35 @@ mod tests {
 
     fn w(s: &str) -> alloc::vec::Vec<u16> {
         s.encode_utf16().collect()
+    }
+
+    #[test]
+    fn iid_text_is_braced_or_malformed_or_a_bad_character() {
+        let ok = "{abcdef01-2345-6789-ABCD-EF0123456789}";
+        assert!(matches!(Guid::parse_iid(&w(ok)), IidText::Valid(g) if g.data1 == 0xabcd_ef01));
+        for bad in [
+            "abcdef01-2345-6789-ABCD-EF0123456789",
+            "{abcdef01-2345-6789-ABCD-EF0123456789",
+            "abcdef01-2345-6789-ABCD-EF0123456789}",
+            "{abcdef01-2345-6789-ABCD-EF0123456789}x",
+            " {abcdef01-2345-6789-ABCD-EF0123456789}",
+            "{abcdef01-2345-6789-ABCD-EF012345678}",
+            "{abcdef01-2345-6789-ABCD-EF01234567890}",
+            "{abcdef0123456789-ABCD-EF0123456789}",
+            "",
+            "{}",
+            "Some.ProgID.1",
+        ] {
+            assert_eq!(Guid::parse_iid(&w(bad)), IidText::Malformed, "{bad:?}");
+        }
+        // Right length, a non-hexadecimal character: the digits before it are kept.
+        let IidText::BadCharacter(g) = Guid::parse_iid(&w("{abcdef01-2345-6789-ABCD-EF012345678G}")) else {
+            panic!("bad character")
+        };
+        assert_eq!((g.data1, g.data2, g.data3), (0xabcd_ef01, 0x2345, 0x6789));
+        assert_eq!(g.data4[7], 0x80);
+        // A hyphen in the wrong place with the right length.
+        assert!(matches!(Guid::parse_iid(&w("{abcdef0-12345-6789-ABCD-EF0123456789}")), IidText::BadCharacter(_)));
     }
 
     #[test]

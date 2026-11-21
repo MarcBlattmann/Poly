@@ -1,0 +1,37 @@
+# Spec sheet. Describes behaviour only: no code, no internals.
+# Path: specs/macos/AppKit.framework/objc%3ANSFont+systemFontOfSize%3A.yaml. Observed with Objective-C test programs linked against AppKit
+# (tests/macos/include/poly_mak.h, ADR 0182); results per architecture in objc%3ANSFont+systemFontOfSize%3A.tests/macos.json.
+id: "macos/api/AppKit.framework/objc:NSFont+systemFontOfSize:"
+oracle:
+  os: "macOS 27.0 (build 26A428), Darwin 27.0.0, xnu-13432.1.9~1/RELEASE_ARM64_T6000"
+  machine: "MacBook Pro, Apple M1 Pro (arm64), macOS 27.0 with the AppKit, Foundation, CoreGraphics and QuartzCore of that release, SIP on, the owner's logged-in graphical session (the window server is needed), the display a 1512 x 982 point built-in one at scale 2, the system appearance set to dark (tests always set the appearance they need); tests run as the owner's unprivileged user (pipeline mac run, ADR 0182), each in a fresh empty scratch directory with an empty environment; arm64 observed natively, x86_64 under Rosetta 2 (installed on the oracle); the 3 runs per architecture gave the same bytes. Tests are Objective-C programs in .c files built with ARC (the line `poly-mac: appkit`, tests/macos/include/poly_mak.h): the program is not in an application bundle, so its activation policy is Prohibited, it is never the active application and no window is ever key or main; its windows are invisible (alpha 0, mouse clicks pass through) and are closed or ordered out before the test ends, and a watchdog ends a test after 12 seconds; pixels are drawn into bitmaps the test makes (tagged sRGB) so that colours do not depend on the display; values that depend on this macOS release or this Mac (sizes of system controls, system colours and fonts, the display) are printed with the name prefix sys_ and are described as SYSTEM-DEPENDENT; NSTextAlignment's numbers differ between the two architectures in the SDK (tests compare with the named constants), and the pixels of system controls differ by one step between them (each architecture is recorded on its own); results and output go through raw system calls"
+  observed_by: spec-macos-appkit-basics
+  date: 2026-11-20
+summary: >
+  +[NSFont systemFontOfSize:] gives the system font: fontName '.AppleSystemUIFont' (a hidden font; the
+  family name is the same), the size as asked (20.5 stays), 0 gives 13, displayName 'System Font
+  Regular' (SYSTEM-DEPENDENT), not fixed pitch; fonts of the same name and size are equal.
+  systemFontSize 13, smallSystemFontSize 11, labelFontSize 10; systemFontSizeForControlSize: regular
+  13, small 11, mini 9, large 13. Variants: boldSystemFontOfSize: '.AppleSystemUIFontBold' (family
+  '.AppleSystemUIFont'), systemFontOfSize:weight: light '.AppleSystemUIFontLight',
+  monospacedSystemFontOfSize:weight: '.AppleSystemUIFontMonospaced-Regular' (fixed pitch), monospaced
+  digits '.SFNS-Regular'; messageFont and menuFont (size 0) the 13 point system font,
+  controlContentFont 12, titleBarFont '.AppleSystemUIFaceHeadline' 13, userFont 'Helvetica' 12 and
+  userFixedPitchFont 'Menlo-Regular' 11 (SYSTEM-DEPENDENT). Metrics of the 13 point system font
+  (SYSTEM-DEPENDENT): ascender 12.57, descender -2.74, leading 0, capHeight 9.16, xHeight 6.84,
+  italicAngle 0, bounding box (-8.39,-3.58,40.45,16.02), advance of 'H' 9.57, 'Hello' 30.95 x 16 via
+  sizeWithAttributes: and boundingRect (0,-3,30.95,16); Helvetica 12 has ascender 9.24, descender
+  -2.76. Fixed relations: ascender > capHeight > xHeight > 0 > descender, metrics scale with the size
+  (26 points: double), the width of 'HH' is twice that of 'H'.
+returns:
+  success: "an NSFont"
+errors: {}
+side_effects: "none beyond what the summary says"
+threading: "AppKit objects are used on the main thread only; the tests use them there (a watchdog thread only ends the process)"
+ordering: []
+timing:
+  typical: "microseconds to milliseconds; drawing, ordering and notifications settle within a run-loop turn (tests spin the loop for 0.05 to 0.3 s)"
+  guarantees: "none"
+tests:
+  visible: 2  # count in <symbol>.tests/
+  held_out: 1  # count kept by the diff runner

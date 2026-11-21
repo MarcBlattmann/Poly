@@ -1,0 +1,64 @@
+{
+  "format": "poly-macrun/1",
+  "system": {
+    "name": "macos",
+    "product_version": "27.0",
+    "build": "26A428",
+    "kernel_release": "27.0.0",
+    "kernel_version": "Darwin Kernel Version 27.0.0: Tue Aug 11 21:22:49 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T6000",
+    "machine": "arm64"
+  },
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "macOS SDK 27.2",
+  "started": "2026-11-20 14:52:55",
+  "tests": [
+    {
+      "name": "nscolor_colorwithsrgbred_components",
+      "source_sha256": "abb24b44c81dfe0f8e58e9150a685947321537fffb5e46b8447e72cd48731a51",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "d57ab4a9a3bf859de7f6cb3f722330c7fad8fe347c9cc359d0025631d3c53e3b",
+          "exit_code": 0,
+          "stdout": "ok c.redComponent is 1\nok c.greenComponent is 0.5\nok c.blueComponent is 0.25\nok c.alphaComponent is 0.75\nok c.colorSpace == [NSColorSpace sRGBColorSpace] && c.numberOfComponents == 4\nok c.type == NSColorTypeComponentBased && NSColorTypeComponentBased == 0\nok [c isEqual:[NSColor colorWithSRGBRed:1 green:0.5 blue:0.25 alpha:0.75]]\nok ![c isEqual:[NSColor colorWithSRGBRed:1 green:0.5 blue:0.25 alpha:0.5]]\nok ![c isEqual:[NSColor colorWithSRGBRed:0.9 green:0.5 blue:0.25 alpha:0.75]]\nok [NSColor colorWithSRGBRed:0 green:0 blue:0 alpha:1].alphaComponent is 1\nok s is 1\nok b is 1\nok a is 1\nok h < 0.01 || h > 0.99\nok x.redComponent is -0.5\nok x.greenComponent is 2\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "6c537bd5c6775ec0aa63db7281b8e36bb128b4d4dc721c934411eda2ec5e8cce",
+          "exit_code": 0,
+          "stdout": "ok c.redComponent is 1\nok c.greenComponent is 0.5\nok c.blueComponent is 0.25\nok c.alphaComponent is 0.75\nok c.colorSpace == [NSColorSpace sRGBColorSpace] && c.numberOfComponents == 4\nok c.type == NSColorTypeComponentBased && NSColorTypeComponentBased == 0\nok [c isEqual:[NSColor colorWithSRGBRed:1 green:0.5 blue:0.25 alpha:0.75]]\nok ![c isEqual:[NSColor colorWithSRGBRed:1 green:0.5 blue:0.25 alpha:0.5]]\nok ![c isEqual:[NSColor colorWithSRGBRed:0.9 green:0.5 blue:0.25 alpha:0.75]]\nok [NSColor colorWithSRGBRed:0 green:0 blue:0 alpha:1].alphaComponent is 1\nok s is 1\nok b is 1\nok a is 1\nok h < 0.01 || h > 0.99\nok x.redComponent is -0.5\nok x.greenComponent is 2\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    },
+    {
+      "name": "nscolor_colorwithsrgbred_named",
+      "source_sha256": "a3c885e66d6b41c7f171c8a68e3a543796eb140e17be83e2f26090cd383a71d3",
+      "results": {
+        "arm64": {
+          "status": "ran",
+          "executable_sha256": "15c2ef8ee5d31441af3787e955e0e14c9a84004039e1a62e97905dfd30759087",
+          "exit_code": 0,
+          "stdout": "ok k.whiteComponent is 0\nok w.whiteComponent is 1\nok k.alphaComponent is 1\nok NSColor.clearColor.alphaComponent is 0\nok [k isEqual:[NSColor colorWithWhite:0 alpha:1]]\nok k.colorSpace == [NSColorSpace genericGamma22GrayColorSpace]\nok r.colorSpace == [NSColorSpace sRGBColorSpace]\nok r.redComponent is 1\nok r.greenComponent is 0\nok NSColor.greenColor.greenComponent is 1\nok NSColor.blueColor.blueComponent is 1\nok NSColor.blackColor == NSColor.blackColor\nok [[r copy] isEqual:r]\nok h.alphaComponent is 0.5\nok h.redComponent is 1\nok r.alphaComponent is 1\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        },
+        "x86_64": {
+          "status": "ran",
+          "executable_sha256": "f570afc9f70d7a722f68fd3707ccd6140a17ec2d0a19d4b40f13658ad9dba80c",
+          "exit_code": 0,
+          "stdout": "ok k.whiteComponent is 0\nok w.whiteComponent is 1\nok k.alphaComponent is 1\nok NSColor.clearColor.alphaComponent is 0\nok [k isEqual:[NSColor colorWithWhite:0 alpha:1]]\nok k.colorSpace == [NSColorSpace genericGamma22GrayColorSpace]\nok r.colorSpace == [NSColorSpace sRGBColorSpace]\nok r.redComponent is 1\nok r.greenComponent is 0\nok NSColor.greenColor.greenComponent is 1\nok NSColor.blueColor.blueComponent is 1\nok NSColor.blackColor == NSColor.blackColor\nok [[r copy] isEqual:r]\nok h.alphaComponent is 0.5\nok h.redComponent is 1\nok r.alphaComponent is 1\nsummary 16 passed, 0 failed\n",
+          "stderr": "",
+          "runs": 3,
+          "stable": true
+        }
+      }
+    }
+  ]
+}
