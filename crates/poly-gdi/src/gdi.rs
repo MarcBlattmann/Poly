@@ -2487,7 +2487,9 @@ impl Gdi {
             // PS_INSIDEFRAME (6), the style in the low four bits (PS_STYLE_MASK).
             (clamp(n).max(1), pen_style & 0xF == 6)
         });
-        let (fill, outline) = shapes::round_rect(bx.left, bx.top, bx.right, bx.bottom, clamp(cw), clamp(ch), pen);
+        let brush = !matches!(self.obj(u64::from(state.brush)), Some(Obj::Brush { style: BS_NULL, .. }));
+        let (fill, outline) =
+            shapes::round_rect(bx.left, bx.top, bx.right, bx.bottom, clamp(cw), clamp(ch), pen, brush);
         self.paint_brush_area(dc, &fill, state.brush, &state);
         if let Some(c) = pen_color {
             self.paint_area(dc, &outline, c, None, &state);

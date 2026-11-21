@@ -76,8 +76,20 @@ fn round_box(x0: i32, y0: i32, x1: i32, y1: i32, cw: i32, ch: i32) -> Region {
 /// What `RoundRect` paints in device coordinates: `(brush, pen)` for the pixel box `l..r`,
 /// `t..b` (right and bottom exclusive, ordered), corners `cw` x `ch` (absolute values), and a pen
 /// `width` pixels wide (`None`: the null pen) that is centred on the outline or, with
-/// `inside_frame` (`PS_INSIDEFRAME`), kept inside the box (`RoundRect.yaml`).
-pub fn round_rect(l: i32, t: i32, r: i32, b: i32, cw: i32, ch: i32, pen: Option<(i32, bool)>) -> (Region, Region) {
+/// `inside_frame` (`PS_INSIDEFRAME`), kept inside the box (`RoundRect.yaml`). `brush` says whether
+/// a brush is selected: a wide pen on a rounded box takes another route without one
+/// (`outline_wide` (1), `crate::rrwide`).
+#[allow(clippy::too_many_arguments)]
+pub fn round_rect(
+    l: i32,
+    t: i32,
+    r: i32,
+    b: i32,
+    cw: i32,
+    ch: i32,
+    pen: Option<(i32, bool)>,
+    brush: bool,
+) -> (Region, Region) {
     if r <= l || b <= t || (r - l == 1 && b - t == 1) {
         return (Region::new(), Region::new());
     }
@@ -88,6 +100,15 @@ pub fn round_rect(l: i32, t: i32, r: i32, b: i32, cw: i32, ch: i32, pen: Option<
     let n = width.max(1);
     let (x1, y1) = (r - 1, b - 1);
     let (w, h) = (i64::from(r) - i64::from(l), i64::from(b) - i64::from(t));
+    // `outline_wide`, `inside_frame`, `brush_pixels`: a solid or inside-frame pen of width 2 to 6
+    // on a rounded box (a corner of 1 x 1 included: `rect_wide`) widens the outline path with
+    // its pen polygon; an inside-frame pen on a box no larger than the width is not specified.
+    if (2..=6).contains(&n) && cw != 0 && ch != 0 && !(inside && (w <= i64::from(n) || h <= i64::from(n))) {
+        let (cw, ch) = (i64::from(cw), i64::from(ch));
+        if let Some((fill, pen)) = crate::rrwide::round_rect_wide(w, h, cw, ch, i64::from(n), inside, brush) {
+            return (pixels_region(l, t, &fill), pixels_region(l, t, &pen));
+        }
+    }
     // `corner_size`: 0 on either axis, or 1 on both, is a plain rectangle.
     let plain = cw == 0 || ch == 0 || (cw == 1 && ch == 1);
     if n == 1 || (!inside && !plain) {
@@ -329,28 +350,28 @@ mod tests {
     #[test]
     fn round_rect_plain_boxes_and_pens() {
         // Corner 0, 1-pixel pen: the outline of the box and the inside (RoundRect.yaml `box`).
-        let (brush, pen) = round_rect(10, 8, 40, 30, 0, 0, Some((1, false)));
+        let (brush, pen) = round_rect(10, 8, 40, 30, 0, 0, Some((1, false)), true);
         assert_eq!((pixels(&pen).len(), pixels(&brush).len()), (100, 560));
         // Wider centred pens grow outward (pen_width).
         for (n, pen_n, brush_n) in [(2, 200, 513), (3, 300, 468), (5, 500, 384)] {
-            let (brush, pen) = round_rect(10, 8, 40, 30, 0, 0, Some((n, false)));
+            let (brush, pen) = round_rect(10, 8, 40, 30, 0, 0, Some((n, false)), true);
             assert_eq!((pixels(&pen).len(), pixels(&brush).len()), (pen_n, brush_n), "width {n}");
         }
         for (n, pen_n, brush_n) in [(1, 100, 560), (3, 276, 384), (5, 420, 240)] {
-            let (brush, pen) = round_rect(10, 8, 40, 30, 0, 0, Some((n, true)));
+            let (brush, pen) = round_rect(10, 8, 40, 30, 0, 0, Some((n, true)), true);
             assert_eq!((pixels(&pen).len(), pixels(&brush).len()), (pen_n, brush_n), "inside {n}");
         }
         // The null pen: CreateRoundRectRgn's region; a 1x1 box: nothing.
-        let (brush, pen) = round_rect(0, 0, 10, 8, 0, 0, None);
+        let (brush, pen) = round_rect(0, 0, 10, 8, 0, 0, None, true);
         assert_eq!((pixels(&brush).len(), pixels(&pen).len()), (9 * 7, 0));
-        assert!(round_rect(5, 5, 6, 6, 0, 0, Some((1, false))).1.is_empty());
+        assert!(round_rect(5, 5, 6, 6, 0, 0, Some((1, false)), true).1.is_empty());
     }
 
     #[test]
     fn one_pixel_outline_of_a_circle_and_small_boxes() {
         // RoundRect.yaml `outline_1px`, the 21x21 circle of rr_pen1 at (2,2): its top run is
         // x 10..=14 on row 2, its widest rows x 2 and 22 on rows 10..=14.
-        let (brush, pen) = round_rect(2, 2, 23, 23, 21, 21, Some((1, false)));
+        let (brush, pen) = round_rect(2, 2, 23, 23, 21, 21, Some((1, false)), true);
         let row = |y: i32| (0..30).filter(|&x| pen.contains_point(x, y)).collect::<Vec<_>>();
         assert_eq!(row(2), [10, 11, 12, 13, 14]);
         for y in 10..=14 {
@@ -359,8 +380,8 @@ mod tests {
         // The brush never overlaps the pen.
         assert!(brush.intersect(&pen).is_empty());
         // `box`: 2x2 draws (l, t) and (l, t+1); 3x3 with corners four pen pixels and one brush pixel.
-        assert_eq!(pixels(&round_rect(5, 5, 7, 7, 4, 4, Some((1, false))).1), [(5, 5), (5, 6)]);
-        let (b3, p3) = round_rect(5, 5, 8, 8, 3, 3, Some((1, false)));
+        assert_eq!(pixels(&round_rect(5, 5, 7, 7, 4, 4, Some((1, false)), true).1), [(5, 5), (5, 6)]);
+        let (b3, p3) = round_rect(5, 5, 8, 8, 3, 3, Some((1, false)), true);
         assert_eq!((pixels(&p3).len(), pixels(&b3)), (4, std::vec![(6, 6)]));
     }
 
