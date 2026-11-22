@@ -28,6 +28,7 @@
 pub mod apps;
 pub mod cab;
 pub mod cfb;
+pub mod lzx;
 pub mod msi;
 pub mod program;
 

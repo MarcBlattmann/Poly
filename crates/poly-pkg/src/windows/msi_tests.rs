@@ -3,8 +3,12 @@
 //! shortcuts, icons, manifest/uninstall metadata, and malformed/malicious input
 //! handling.
 
-use super::cab::{self, COMP_LZX, COMP_MSZIP, COMP_NONE, COMP_QUANTUM, Cabinet};
+use super::cab::{self, COMP_LZX, COMP_MSZIP, COMP_NONE, COMP_QUANTUM, Cabinet, lzx_compress_type};
 use super::cfb::{self, Cfb, ENDOFCHAIN, FREESECT, NOSTREAM, OBJ_ROOT, OBJ_STREAM};
+use super::lzx::testutil::{
+    BitWriter, build_lengths_for_active, canonical_codes, encode_uncompressed_chunk, forward_e8_translation,
+    write_tree_lengths,
+};
 use super::msi::{self, MsiDatabase, MsiManifest};
 use super::program::{CFB_SIGNATURE, MSI_CLSID, PNG_SIGNATURE};
 use super::testfiles::{dib32, fake_png};
@@ -879,8 +883,8 @@ fn cab_extracts_uncompressed_and_mszip_including_cross_block_history() {
     assert_eq!(files[0].1, block0_plain);
     assert_eq!(files[1], ("SecondFile".to_string(), b"Poly!!".to_vec()));
 
-    // 3. Unsupported compression types (LZX, Quantum) return Error::Compression cleanly.
-    for comp in [COMP_LZX, COMP_QUANTUM, 0x000F] {
+    // 3. Unsupported compression types (invalid LZX window, Quantum) return Error::Compression cleanly.
+    for comp in [COMP_LZX, lzx_compress_type(14), lzx_compress_type(22), COMP_QUANTUM, 0x000F] {
         let unsupported = build_cab(comp, &[("a", 4)], &[(b"1234".to_vec(), 4)], false);
         let parsed = Cabinet::parse(&unsupported).unwrap();
         assert_eq!(parsed.extract_all().unwrap_err(), Error::Compression);
@@ -1158,4 +1162,104 @@ fn manifest_roundtrip_and_path_safety_guards() {
     let ico_png = build_ico(&[(32, 32, &png)]);
     assert_eq!(msi::icon_bytes_to_png(&ico_png, 0), Some(png));
     assert_eq!(msi::icon_bytes_to_png(b"garbage", 0), None);
+}
+
+#[test]
+fn msi_extracts_embedded_lzx_cab_with_verbatim_and_e8_translation() {
+    // Build a synthetic embedded LZX CAB (`window_bits = 16`, E8 enabled) holding:
+    // - MainExe (12 bytes): contains an x86 0xE8 CALL instruction (`MZ\x90\x00\xE8...`)
+    // - ReadmeFile (18 bytes): contains repeated bytes decoded via a verbatim LZX block!
+    // Total uncompressed folder size = 30 bytes (12 + 18).
+    let main_exe: &[u8] = b"MZ\x90\x00\xE8\x40\x00\x00\x00!!!"; // 12 bytes
+    let readme: &[u8] = b"Hello!!!!Hello!!!!"; // 18 bytes
+    assert_eq!(main_exe.len(), 12);
+    assert_eq!(readme.len(), 18);
+
+    let mut plain = Vec::new();
+    plain.extend_from_slice(main_exe);
+    plain.extend_from_slice(readme);
+    assert_eq!(plain.len(), 30);
+
+    // Apply forward E8 translation across the 30-byte frame (filesize = 12_000_000).
+    let filesize = 12_000_000u32;
+    let mut pre = plain.clone();
+    forward_e8_translation(&mut pre, 0, filesize);
+    assert_ne!(&pre[..12], main_exe, "0xE8 call operand should be translated");
+
+    // Encode the 30-byte frame as two LZX blocks inside one CFDATA chunk:
+    // - Block 1 (Uncompressed, 21 bytes): `pre[..21]` (all of MainExe + "Hello!!!!")
+    //   reloading R0 = 9 (distance to "Hello!!!!"!).
+    // - Block 2 (Verbatim, 9 bytes): 1 match using R0 = 9, length = 9 (footer 0 in length tree)
+    //   reproducing the second "Hello!!!!"!
+    let main_n = 256 + 8 * 32; // window_bits = 16 -> 32 position slots
+    let sym_r0_long = 256 + 7; // slot 0 (R0), length_header = 7 -> read length_tree
+    let target_main = build_lengths_for_active(main_n, &[sym_r0_long]);
+    let main_codes = canonical_codes(&target_main);
+    let target_len = build_lengths_for_active(249, &[0]); // footer 0 -> length 9
+    let len_codes = canonical_codes(&target_len);
+    let mut prev_main = alloc::vec![0u8; main_n];
+    let mut prev_len = [0u8; 249];
+
+    let mut bw = BitWriter::new();
+    bw.write_bits(1, 1); // E8 translation enabled
+    bw.write_bits(filesize >> 16, 16);
+    bw.write_bits(filesize & 0xFFFF, 16);
+    // Block 1: Uncompressed 21 bytes (odd -> followed by 1 pad byte)
+    bw.write_bits(3, 3);
+    bw.write_bits(21, 24);
+    bw.align_for_uncompressed();
+    bw.write_u32_le(9); // R0 = 9
+    bw.write_u32_le(1);
+    bw.write_u32_le(1);
+    bw.write_raw_bytes(&pre[..21]);
+    bw.write_raw_bytes(&[0]); // odd-length pad byte
+    // Block 2: Verbatim 9 bytes copying "Hello!!!!" via R0 = 9
+    bw.write_bits(1, 3);
+    bw.write_bits(9, 24);
+    write_tree_lengths(&mut bw, &mut prev_main, &target_main, 0, 256);
+    write_tree_lengths(&mut bw, &mut prev_main, &target_main, 256, main_n);
+    write_tree_lengths(&mut bw, &mut prev_len, &target_len, 0, 249);
+    let (mc, ml) = main_codes[sym_r0_long];
+    bw.write_bits(mc, u32::from(ml));
+    let (lc, ll) = len_codes[0];
+    bw.write_bits(lc, u32::from(ll));
+    let lzx_chunk = bw.finish();
+
+    let lzx_cab = build_cab(lzx_compress_type(16), &[("MainExe", 12), ("ReadmeFile", 18)], &[(lzx_chunk, 30)], true);
+
+    // Embed into a full synthetic `.msi` and extract end-to-end via MsiDatabase::extract_files!
+    let msi_bytes = sample_msi(Some("#lzx1.cab"), Some(("lzx1.cab", lzx_cab)), false, 3);
+    let db = MsiDatabase::open(&mut reader(&msi_bytes)).unwrap();
+    let plan = db.plan_install().unwrap();
+    let mut written: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    let extracted = db
+        .extract_files(
+            &plan,
+            &mut reader(&msi_bytes),
+            |_| None,
+            |path, data| {
+                written.insert(path.to_string(), data.to_vec());
+                Ok(())
+            },
+        )
+        .unwrap();
+    assert_eq!(extracted.len(), 2);
+    assert_eq!(written["/nt/c/Program Files/Widget Studio/widget.exe"], main_exe);
+    assert_eq!(written["/nt/c/Program Files/Widget Studio/data/readme.txt"], readme);
+
+    // Also verify multi-chunk (>32 KiB) embedded LZX CAB through CAB parser.
+    let big_a = alloc::vec![0x5Au8; 32_768];
+    let big_b = b"tail after 32 KiB LZX boundary".to_vec();
+    let c0 = encode_uncompressed_chunk(&big_a, true, 1, 1, 1);
+    let c1 = encode_uncompressed_chunk(&big_b, false, 1, 1, 1);
+    let big_cab = build_cab(
+        lzx_compress_type(15),
+        &[("First", big_a.len()), ("Second", big_b.len())],
+        &[(c0, big_a.len() as u16), (c1, big_b.len() as u16)],
+        true,
+    );
+    let parsed = Cabinet::parse(&big_cab).unwrap();
+    let files = parsed.extract_all().unwrap();
+    assert_eq!(files[0].1, big_a);
+    assert_eq!(files[1].1, big_b);
 }

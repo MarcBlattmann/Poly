@@ -4,11 +4,16 @@
 //! - `tcompTYPE_NONE` (0): uncompressed blocks;
 //! - `tcompTYPE_MSZIP` (1): RFC 1951 DEFLATE blocks prefixed with `CK`
 //!   (`0x43, 0x4B`), maintaining the 32 KiB sliding history window across
-//!   blocks within a folder via [`poly_png::inflate::inflate_with_history`].
+//!   blocks within a folder via [`poly_png::inflate::inflate_with_history`];
+//! - `tcompTYPE_LZX` (3): LZX blocks with window sizes 32 KiB..2 MiB
+//!   (`window_bits` 15..=21), maintaining sliding window, Huffman trees, and
+//!   `R0`/`R1`/`R2` state across blocks within a folder via
+//!   [`crate::windows::lzx::LzxDecoder`].
 //!
-//! Other compression types (Quantum, LZX) return [`Error::Compression`].
+//! Other compression types (Quantum) return [`Error::Compression`].
 
 use crate::Error;
+use crate::windows::lzx::LzxDecoder;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -25,6 +30,12 @@ pub const COMP_NONE: u16 = 0x0000;
 pub const COMP_MSZIP: u16 = 0x0001;
 pub const COMP_QUANTUM: u16 = 0x0002;
 pub const COMP_LZX: u16 = 0x0003;
+
+/// Encode `CFFOLDER.typeCompress` for `tcompTYPE_LZX` with `window_bits`
+/// (`15..=21`, corresponding to 32 KiB..2 MiB; `[MS-CAB]` 2.1.2).
+pub const fn lzx_compress_type(window_bits: u16) -> u16 {
+    COMP_LZX | ((window_bits & 0x1F) << 8)
+}
 
 /// `CFFILE.attribs` bit indicating UTF-8 `szName` (`[MS-CAB]` 2.1.3).
 const ATTR_NAME_IS_UTF: u16 = 0x0080;
@@ -204,9 +215,14 @@ impl<'a> Cabinet<'a> {
     pub fn decompress_folder(&self, folder_idx: usize) -> Result<Vec<u8>, Error> {
         let folder = *self.folders.get(folder_idx).ok_or(Error::Corrupt)?;
         let method = folder.compress_type & 0x000F;
-        if method != COMP_NONE && method != COMP_MSZIP {
-            return Err(Error::Compression);
-        }
+        let mut lzx = match method {
+            COMP_NONE | COMP_MSZIP => None,
+            COMP_LZX => {
+                let window_bits = (folder.compress_type >> 8) & 0x1F;
+                Some(LzxDecoder::new(window_bits)?)
+            }
+            _ => return Err(Error::Compression),
+        };
         let mut pos = folder.data_offset as usize;
         let mut out = Vec::new();
         for _ in 0..folder.block_count {
@@ -256,6 +272,10 @@ impl<'a> Cabinet<'a> {
                     }
                     out.extend_from_slice(&decoded);
                 }
+                COMP_LZX => {
+                    let decoder = lzx.as_mut().ok_or(Error::Compression)?;
+                    decoder.decompress_chunk(payload, cb_uncomp, &mut out)?;
+                }
                 _ => return Err(Error::Compression),
             }
             pos = data_end;
@@ -304,5 +324,135 @@ impl<'a> Cabinet<'a> {
             },
         )?;
         Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::windows::lzx::testutil::{
+        BitWriter, build_lengths_for_active, canonical_codes, encode_uncompressed_chunk, write_tree_lengths,
+    };
+    use alloc::vec;
+
+    type TestFolderSpec = (u16, Vec<(Vec<u8>, u16)>);
+
+    /// Build a multi-folder `[MS-CAB]` archive for testing folder isolation
+    /// and multi-`CFDATA` LZX extraction.
+    fn build_multi_folder_cab(folders: &[TestFolderSpec], files: &[(&str, u16, u32, u32)]) -> Vec<u8> {
+        let coff_files = 36u32 + (folders.len() as u32) * 8;
+        let mut file_section = Vec::new();
+        for &(name, folder_idx, folder_off, size) in files {
+            file_section.extend_from_slice(&size.to_le_bytes());
+            file_section.extend_from_slice(&folder_off.to_le_bytes());
+            file_section.extend_from_slice(&folder_idx.to_le_bytes());
+            file_section.extend_from_slice(&0u16.to_le_bytes()); // date
+            file_section.extend_from_slice(&0u16.to_le_bytes()); // time
+            file_section.extend_from_slice(&ATTR_NAME_IS_UTF.to_le_bytes());
+            file_section.extend_from_slice(name.as_bytes());
+            file_section.push(0);
+        }
+        let mut data_offset = coff_files + file_section.len() as u32;
+        let mut folder_section = Vec::new();
+        let mut data_section = Vec::new();
+        for (compress_type, blocks) in folders {
+            folder_section.extend_from_slice(&data_offset.to_le_bytes());
+            folder_section.extend_from_slice(&(blocks.len() as u16).to_le_bytes());
+            folder_section.extend_from_slice(&compress_type.to_le_bytes());
+            for (payload, uncomp) in blocks {
+                let mut hdr = [0u8; 4];
+                hdr[0..2].copy_from_slice(&(payload.len() as u16).to_le_bytes());
+                hdr[2..4].copy_from_slice(&uncomp.to_le_bytes());
+                let csum = csum_compute(&hdr, csum_compute(payload, 0));
+                data_section.extend_from_slice(&csum.to_le_bytes());
+                data_section.extend_from_slice(&hdr);
+                data_section.extend_from_slice(payload);
+                data_offset += 8 + payload.len() as u32;
+            }
+        }
+        let total = data_offset;
+        let mut out = Vec::with_capacity(total as usize);
+        out.extend_from_slice(CAB_SIGNATURE);
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&total.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&coff_files.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.push(3); // minor
+        out.push(1); // major
+        out.extend_from_slice(&(folders.len() as u16).to_le_bytes());
+        out.extend_from_slice(&(files.len() as u16).to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes()); // flags
+        out.extend_from_slice(&1u16.to_le_bytes()); // setID
+        out.extend_from_slice(&0u16.to_le_bytes()); // iCabinet
+        out.extend_from_slice(&folder_section);
+        out.extend_from_slice(&file_section);
+        out.extend_from_slice(&data_section);
+        out
+    }
+
+    #[test]
+    fn cab_lzx_multi_cfdata_folder_and_folder_boundary_reset() {
+        // Folder 0 (LZX window 15): 2 CFDATA blocks (> 32 KiB total).
+        // Block 0: 32768 bytes uncompressed ending in "PolyLZX!".
+        // Block 1: Verbatim block copying "PolyLZX!" from Block 0 via R0=8 (set by Block 0!).
+        let mut block0_plain = vec![b'Z'; 32_760];
+        block0_plain.extend_from_slice(b"PolyLZX!");
+        let block0 = encode_uncompressed_chunk(&block0_plain, true, 8, 1, 1);
+
+        let main_n = 256 + 8 * 30;
+        let sym_r0_len8 = 256 + 6; // slot 0 (R0=8), len 8
+        let target_main = build_lengths_for_active(main_n, &[sym_r0_len8]);
+        let main_codes = canonical_codes(&target_main);
+        let target_len = vec![0u8; 249];
+        let mut prev_main = vec![0u8; main_n];
+        let mut prev_len = [0u8; 249];
+        let mut bw = BitWriter::new();
+        bw.write_bits(1, 3); // Verbatim (not first chunk, so no E8 header bit)
+        bw.write_bits(8, 24);
+        write_tree_lengths(&mut bw, &mut prev_main, &target_main, 0, 256);
+        write_tree_lengths(&mut bw, &mut prev_main, &target_main, 256, main_n);
+        write_tree_lengths(&mut bw, &mut prev_len, &target_len, 0, 249);
+        let (c, l) = main_codes[sym_r0_len8];
+        bw.write_bits(c, u32::from(l));
+        let block1 = bw.finish();
+
+        // Folder 1 (LZX window 21 = 2 MiB): independent folder starts fresh with
+        // its own E8 header bit and sliding window!
+        let f1_plain = b"Second folder LZX-21 payload";
+        let f1_block = encode_uncompressed_chunk(f1_plain, true, 1, 1, 1);
+
+        let cab_bytes = build_multi_folder_cab(
+            &[
+                (lzx_compress_type(15), vec![(block0, 32_768), (block1, 8)]),
+                (lzx_compress_type(21), vec![(f1_block, f1_plain.len() as u16)]),
+            ],
+            &[("part0.bin", 0, 0, 32_768), ("part1.bin", 0, 32_768, 8), ("other.txt", 1, 0, f1_plain.len() as u32)],
+        );
+
+        let cab = Cabinet::parse(&cab_bytes).unwrap();
+        let files = cab.extract_all().unwrap();
+        assert_eq!(files.len(), 3);
+        assert_eq!(files[0].0, "part0.bin");
+        assert_eq!(files[0].1, block0_plain);
+        assert_eq!(files[1], (String::from("part1.bin"), b"PolyLZX!".to_vec()));
+        assert_eq!(files[2], (String::from("other.txt"), f1_plain.to_vec()));
+    }
+
+    #[test]
+    fn cab_lzx_rejects_invalid_window_bits_and_corrupt_streams() {
+        for bad_w in [0u16, 14, 22, 31] {
+            let cab_bytes =
+                build_multi_folder_cab(&[(lzx_compress_type(bad_w), vec![(vec![0u8; 4], 4)])], &[("a.bin", 0, 0, 4)]);
+            let cab = Cabinet::parse(&cab_bytes).unwrap();
+            assert_eq!(cab.extract_all().unwrap_err(), Error::Compression, "bad_w={bad_w}");
+        }
+
+        // Valid window bits, corrupt/truncated LZX payload.
+        let cab_bytes =
+            build_multi_folder_cab(&[(lzx_compress_type(15), vec![(vec![0xFF, 0xFF], 16)])], &[("a.bin", 0, 0, 16)]);
+        let cab = Cabinet::parse(&cab_bytes).unwrap();
+        let err = cab.extract_all().unwrap_err();
+        assert!(matches!(err, Error::Corrupt | Error::Truncated), "err={err:?}");
     }
 }
