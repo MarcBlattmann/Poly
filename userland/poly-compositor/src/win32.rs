@@ -35,8 +35,9 @@ use alloc::vec::Vec;
 use poly_wayland::compose::{Content, Rect, Scene, WindowId};
 use poly_win32k::frame::FrameMetrics;
 use poly_win32k::link::{
-    BufferId, CursorShape, DEVICE, Edges, FromCompositor, LayerId, PixelFormat, READ_BUFFER, ReadBuffer, Record,
-    Stream, SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState, layer_buffer_offset,
+    BufferId, ClipAssembly, ClipPayload, CursorShape, DEVICE, Edges, FromCompositor, LayerId, PixelFormat, READ_BUFFER,
+    ReadBuffer, Record, Stream, SurfaceId, SurfaceKind, ToCompositor, VERSION, WindowState,
+    encode_from_compositor_clip, layer_buffer_offset,
 };
 
 /// The scene owner of Windows surfaces: this bit, or'ed with the surface,
@@ -495,6 +496,8 @@ impl WindowsSurfaces {
             }
             // A request for the desktop, not for a surface ([`Link::take_shell`]).
             ToCompositor::Shell { .. } => {}
+            // Clipboard bridge records are assembled in [`Link::pump`].
+            ToCompositor::ClipClear { .. } | ToCompositor::ClipData { .. } | ToCompositor::ClipCommit { .. } => {}
             ToCompositor::Margins { surface, left, top, right, bottom } => {
                 let u = self.units;
                 if let Some(s) = self.surfaces.get_mut(&surface) {
@@ -671,6 +674,10 @@ pub struct Link {
     shell: Vec<(bool, alloc::string::String)>,
     /// Consent prompts win32k asked for, for the desktop (ADR 0222).
     consents: Vec<Action>,
+    /// In-flight clipboard chunks coming from win32k (Windows → Wayland).
+    clip_in: ClipAssembly,
+    /// Completed Windows clipboard updates waiting for the clipboard bridge.
+    clip_ready: Vec<ClipPayload>,
     /// What [`Link::pump`] reads the device into. Kept: a native program's allocation of more
     /// than 2 KiB is a `map` and an `unmap` of its own, and taking this one for every read
     /// unmapped 16 KiB in every frame a Windows app drew (0.5 ms each with Chrome scrolling).
@@ -749,6 +756,8 @@ impl Link {
             layout: alloc::string::String::new(),
             shell: Vec::new(),
             consents: Vec::new(),
+            clip_in: ClipAssembly::new(),
+            clip_ready: Vec::new(),
             read: vec![0u8; 16 * 1024],
         })
     }
@@ -914,11 +923,35 @@ impl Link {
         self.send(FromCompositor::Consent { request, allow });
     }
 
+    /// Completed Windows clipboard updates received since the last call.
+    pub fn take_clipboard(&mut self) -> Vec<ClipPayload> {
+        core::mem::take(&mut self.clip_ready)
+    }
+
+    /// Send a Wayland/desktop clipboard update to win32k over `/dev/win32k`.
+    pub fn send_clipboard(&mut self, seq: u32, text: Option<&[u8]>, dib: Option<&[u8]>) {
+        let mut bytes = Vec::new();
+        encode_from_compositor_clip(&mut bytes, seq, text, dib);
+        self.write_all(&bytes);
+    }
+
     fn send(&mut self, record: FromCompositor) {
         let mut bytes = Vec::new();
         record.encode(&mut bytes);
-        if let Err(e) = os::write(self.fd, &bytes) {
-            eprintln!("poly-compositor: {DEVICE}: {e}");
+        self.write_all(&bytes);
+    }
+
+    fn write_all(&self, mut bytes: &[u8]) {
+        while !bytes.is_empty() {
+            match os::write(self.fd, bytes) {
+                Ok(0) => break,
+                Ok(n) => bytes = &bytes[n..],
+                Err(e) if e.kind() == crate::io::ErrorKind::Interrupted => {}
+                Err(e) => {
+                    eprintln!("poly-compositor: {DEVICE}: {e}");
+                    break;
+                }
+            }
         }
     }
 
@@ -938,6 +971,7 @@ impl Link {
         while let Some(r) = self.incoming.next_record() {
             let Ok(r) = r else { continue };
             match r {
+                ToCompositor::Welcome { .. } => self.clip_in.reset(),
                 ToCompositor::Buffer { buffer, height, stride, .. } => {
                     self.copies.0.insert(buffer, vec![0u8; stride as usize * height as usize]);
                 }
@@ -953,6 +987,15 @@ impl Link {
                     }
                 }
                 ToCompositor::Shell { show, ref path } => self.shell.push((show, path.clone())),
+                ToCompositor::ClipClear { seq } => self.clip_ready.push(self.clip_in.clear(seq)),
+                ToCompositor::ClipData { seq, format, offset, total, ref data } => {
+                    self.clip_in.push(seq, format, offset, total, data);
+                }
+                ToCompositor::ClipCommit { seq } => {
+                    if let Some(payload) = self.clip_in.commit(seq) {
+                        self.clip_ready.push(payload);
+                    }
+                }
                 _ => {}
             }
             let sources = Sources { copies: &self.copies, views: &self.views };

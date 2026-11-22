@@ -486,6 +486,97 @@ fn a_new_focus_gets_the_selection_before_the_keyboard() {
 }
 
 #[test]
+fn external_selection_offers_pastes_and_prevents_feedback_loops() {
+    use crate::server::{ExternalPasteRequest, SelectionEvent};
+
+    let (mut srv, shared) = server();
+    let (mut a, ra) = connect(&mut srv, &shared);
+    let ga = globals(&mut a, &mut srv, ra);
+    let (ma, da) = data_device(&mut a, &mut srv, ra);
+    mapped(&mut a, &mut srv, &ga, "a", 10, 10, 0);
+    a.take();
+
+    // 1. Compositor installs an external selection (e.g. from Windows): focused
+    //    client gets a wl_data_offer with those MIME types, and NO SelectionEvent
+    //    is emitted back (no feedback loop!).
+    let ext_id = srv.set_external_selection(vec!["text/plain;charset=utf-8".into(), "image/png".into()]);
+    assert!(srv.take_selection_events().is_empty(), "external selection must not emit SelectionEvent");
+    a.read(&mut srv);
+    let e = a.take();
+    assert_eq!(
+        names(&e),
+        [
+            ("wl_data_device", "data_offer"),
+            ("wl_data_offer", "offer"),
+            ("wl_data_offer", "offer"),
+            ("wl_data_device", "selection"),
+        ]
+    );
+    let Arg::NewId(offer) = e[0].args[0] else { panic!() };
+    assert_eq!(e[1].args, [Arg::Str(Some("text/plain;charset=utf-8".into()))]);
+    assert_eq!(e[2].args, [Arg::Str(Some("image/png".into()))]);
+    assert_eq!((e[3].object, &e[3].args[0]), (da, &Arg::Object(Some(offer))));
+
+    // Client requests paste from the external offer -> queued as ExternalPasteRequest.
+    a.send(&mut srv, offer, wl_data_offer::Request::Receive { mime_type: "image/png".into(), fd: Fd(9001) });
+    assert_eq!(
+        srv.take_external_paste_requests(),
+        vec![ExternalPasteRequest { id: ext_id, mime_type: "image/png".into(), fd: Fd(9001) }]
+    );
+
+    // 2. Client sets its own selection -> emits SelectionEvent::ClientSelection,
+    //    and old external offer becomes inert (receive closes fd).
+    let src = source(&mut a, &mut srv, ma, &["text/plain;charset=utf-8", "UTF8_STRING"]);
+    a.send(&mut srv, da, wl_data_device::Request::SetSelection { source: Some(src), serial: 1 });
+    assert_eq!(
+        srv.take_selection_events(),
+        vec![SelectionEvent::ClientSelection {
+            client: a.id,
+            source: src,
+            mime_types: vec!["text/plain;charset=utf-8".into(), "UTF8_STRING".into()],
+        }]
+    );
+    a.send(&mut srv, offer, wl_data_offer::Request::Receive { mime_type: "image/png".into(), fd: Fd(9002) });
+    assert!(srv.take_external_paste_requests().is_empty());
+    assert!(shared.borrow().closed.contains(&9002), "stale external offer closes fd");
+
+    // 3. Compositor requests the client's selection bytes via request_client_selection.
+    assert!(srv.request_client_selection(a.id, src, "text/plain;charset=utf-8".into(), Fd(9003)));
+    a.read(&mut srv);
+    let e = a.take();
+    assert!(e.iter().any(|ev| {
+        ev.object == src
+            && ev.name() == ("wl_data_source", "send")
+            && ev.args == [Arg::Str(Some("text/plain;charset=utf-8".into())), Arg::Fd(Fd(9003))]
+    }));
+
+    // 4. Setting a new external selection cancels the client's source without
+    //    emitting a SelectionEvent back to the bridge.
+    let _ext2 = srv.set_external_selection(vec!["text/plain".into()]);
+    assert!(srv.take_selection_events().is_empty());
+    a.read(&mut srv);
+    assert!(a.take().iter().any(|ev| ev.object == src && ev.name() == ("wl_data_source", "cancelled")));
+    // Requesting the cancelled client source fails and closes the fd.
+    assert!(!srv.request_client_selection(a.id, src, "text/plain".into(), Fd(9004)));
+    assert!(shared.borrow().closed.contains(&9004));
+
+    // 5. Clearing the external selection sends selection(None) without emitting SelectionEvent.
+    srv.clear_external_selection();
+    assert!(srv.take_selection_events().is_empty());
+    a.read(&mut srv);
+    let e = a.take();
+    assert_eq!(e.last().unwrap().name(), ("wl_data_device", "selection"));
+    assert_eq!(e.last().unwrap().args, [Arg::Object(None)]);
+
+    // 6. Client sets selection then destroys its source -> emits Cleared.
+    let src2 = source(&mut a, &mut srv, ma, &["text/plain"]);
+    a.send(&mut srv, da, wl_data_device::Request::SetSelection { source: Some(src2), serial: 2 });
+    let _ = srv.take_selection_events();
+    a.send(&mut srv, src2, wl_data_source::Request::Destroy);
+    assert_eq!(srv.take_selection_events(), vec![SelectionEvent::Cleared]);
+}
+
+#[test]
 fn drag_and_drop_between_clients() {
     let (mut srv, shared) = server();
     let (mut a, ra, ga, _pa) = pointer_client(&mut srv, &shared);

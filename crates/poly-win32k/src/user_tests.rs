@@ -1,6 +1,10 @@
 //! The message sequences against a `Wm` in memory, with window procedures
 //! that log what they get the way the slice's visible tests print it.
 
+// The initializers are `const`; clippy 1.97 reports them anyway for
+// `std::thread_local!` in this `no_std` crate's tests.
+#![allow(clippy::missing_const_for_thread_local)]
+
 extern crate std;
 
 use super::*;

@@ -166,6 +166,170 @@ pub enum CursorShape {
     Image { buffer: BufferId, hot_x: u16, hot_y: u16 },
 }
 
+/// The most bytes a single bridged clipboard item may carry (16 MiB).
+pub const MAX_CLIPBOARD_BYTES: usize = 16 * 1024 * 1024;
+
+/// The most payload bytes one clipboard chunk record carries (32 KiB, well
+/// within the 16-bit record length).
+pub const CLIPBOARD_CHUNK: usize = 32 * 1024;
+
+/// A canonical clipboard format exchanged across the desktop link.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ClipFormat {
+    /// UTF-8 text (LF line endings, no trailing NUL).
+    Utf8Text,
+    /// Packed Windows `CF_DIB` (`BITMAPINFOHEADER` + optional masks/palette + pixels).
+    Dib,
+}
+
+/// A complete clipboard update assembled from link records.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ClipPayload {
+    pub seq: u32,
+    pub text: Option<Vec<u8>>,
+    pub dib: Option<Vec<u8>>,
+}
+
+impl ClipPayload {
+    pub fn is_empty(&self) -> bool {
+        self.text.is_none() && self.dib.is_none()
+    }
+}
+
+/// Reassembles chunked `ClipData` records until `ClipCommit` (or `ClipClear`).
+/// Shared by both win32k and the compositor.
+#[derive(Clone, Debug, Default)]
+pub struct ClipAssembly {
+    seq: Option<u32>,
+    text: Option<(usize, Vec<u8>)>,
+    dib: Option<(usize, Vec<u8>)>,
+    failed: bool,
+}
+
+impl ClipAssembly {
+    pub fn new() -> ClipAssembly {
+        ClipAssembly::default()
+    }
+
+    pub fn reset(&mut self) {
+        *self = ClipAssembly::default();
+    }
+
+    /// Record a `ClipClear`: resets any in-progress assembly and returns an
+    /// empty payload immediately.
+    pub fn clear(&mut self, seq: u32) -> ClipPayload {
+        self.reset();
+        ClipPayload { seq, text: None, dib: None }
+    }
+
+    /// Append one `ClipData` chunk for generation `seq`. A newer `seq`
+    /// supersedes any incomplete earlier generation.
+    pub fn push(&mut self, seq: u32, format: ClipFormat, offset: u32, total: u32, data: &[u8]) {
+        if self.seq != Some(seq) {
+            self.reset();
+            self.seq = Some(seq);
+        }
+        if self.failed {
+            return;
+        }
+        let (offset, total) = (offset as usize, total as usize);
+        if total > MAX_CLIPBOARD_BYTES || offset.checked_add(data.len()).is_none_or(|end| end > total) {
+            self.failed = true;
+            return;
+        }
+        let slot = match format {
+            ClipFormat::Utf8Text => &mut self.text,
+            ClipFormat::Dib => &mut self.dib,
+        };
+        match slot {
+            None => {
+                if offset != 0 {
+                    self.failed = true;
+                    return;
+                }
+                let mut buf = Vec::with_capacity(total.min(CLIPBOARD_CHUNK));
+                buf.extend_from_slice(data);
+                *slot = Some((total, buf));
+            }
+            Some((expected, buf)) => {
+                if *expected != total || offset != buf.len() {
+                    self.failed = true;
+                    return;
+                }
+                buf.extend_from_slice(data);
+            }
+        }
+    }
+
+    /// Finish generation `seq` when `ClipCommit` arrives. Returns `Some` only
+    /// when `seq` matches and every started format received all its bytes.
+    pub fn commit(&mut self, seq: u32) -> Option<ClipPayload> {
+        if self.seq != Some(seq) || self.failed {
+            self.reset();
+            return None;
+        }
+        let finish = |slot: Option<(usize, Vec<u8>)>| -> Result<Option<Vec<u8>>, ()> {
+            match slot {
+                None => Ok(None),
+                Some((total, buf)) if buf.len() == total => Ok(Some(buf)),
+                Some(_) => Err(()),
+            }
+        };
+        let text = finish(self.text.take());
+        let dib = finish(self.dib.take());
+        self.reset();
+        Some(ClipPayload { seq, text: text.ok()?, dib: dib.ok()? })
+    }
+}
+
+/// Append `ToCompositor` clipboard records for `(seq, text, dib)` to `out`.
+pub fn encode_to_compositor_clip(out: &mut Vec<u8>, seq: u32, text: Option<&[u8]>, dib: Option<&[u8]>) {
+    if text.is_none() && dib.is_none() {
+        ToCompositor::ClipClear { seq }.encode(out);
+        return;
+    }
+    for (format, payload) in [(ClipFormat::Utf8Text, text), (ClipFormat::Dib, dib)] {
+        let Some(bytes) = payload else { continue };
+        if bytes.len() > MAX_CLIPBOARD_BYTES {
+            continue;
+        }
+        let total = bytes.len() as u32;
+        if bytes.is_empty() {
+            ToCompositor::ClipData { seq, format, offset: 0, total: 0, data: Vec::new() }.encode(out);
+            continue;
+        }
+        for (i, chunk) in bytes.chunks(CLIPBOARD_CHUNK).enumerate() {
+            ToCompositor::ClipData { seq, format, offset: (i * CLIPBOARD_CHUNK) as u32, total, data: chunk.to_vec() }
+                .encode(out);
+        }
+    }
+    ToCompositor::ClipCommit { seq }.encode(out);
+}
+
+/// Append `FromCompositor` clipboard records for `(seq, text, dib)` to `out`.
+pub fn encode_from_compositor_clip(out: &mut Vec<u8>, seq: u32, text: Option<&[u8]>, dib: Option<&[u8]>) {
+    if text.is_none() && dib.is_none() {
+        FromCompositor::ClipClear { seq }.encode(out);
+        return;
+    }
+    for (format, payload) in [(ClipFormat::Utf8Text, text), (ClipFormat::Dib, dib)] {
+        let Some(bytes) = payload else { continue };
+        if bytes.len() > MAX_CLIPBOARD_BYTES {
+            continue;
+        }
+        let total = bytes.len() as u32;
+        if bytes.is_empty() {
+            FromCompositor::ClipData { seq, format, offset: 0, total: 0, data: Vec::new() }.encode(out);
+            continue;
+        }
+        for (i, chunk) in bytes.chunks(CLIPBOARD_CHUNK).enumerate() {
+            FromCompositor::ClipData { seq, format, offset: (i * CLIPBOARD_CHUNK) as u32, total, data: chunk.to_vec() }
+                .encode(out);
+        }
+    }
+    FromCompositor::ClipCommit { seq }.encode(out);
+}
+
 /// win32k → compositor.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ToCompositor {
@@ -239,6 +403,12 @@ pub enum ToCompositor {
     /// (the image the program named), never from the app's windows. A compositor that does not
     /// know the record skips it, and the request is answered No when the link ends.
     Consent { request: u32, pid: u32, program: String, path: String, file: String },
+    /// The Windows clipboard was cleared (or has no bridgeable materialized formats).
+    ClipClear { seq: u32 },
+    /// One chunk of a Windows clipboard format for generation `seq`.
+    ClipData { seq: u32, format: ClipFormat, offset: u32, total: u32, data: Vec<u8> },
+    /// All formats for Windows clipboard generation `seq` have been sent.
+    ClipCommit { seq: u32 },
 }
 
 /// compositor → win32k.
@@ -276,6 +446,12 @@ pub enum FromCompositor {
     Units { units: u32 },
     /// The user's answer to [`ToCompositor::Consent`] `request`: Yes (`allow`) or No.
     Consent { request: u32, allow: bool },
+    /// The Wayland/desktop selection was cleared (or has no bridgeable formats).
+    ClipClear { seq: u32 },
+    /// One chunk of a Wayland/desktop selection format for generation `seq`.
+    ClipData { seq: u32, format: ClipFormat, offset: u32, total: u32, data: Vec<u8> },
+    /// All formats for Wayland/desktop selection generation `seq` have been sent.
+    ClipCommit { seq: u32 },
 }
 
 /// Why bytes are not a record.
@@ -337,6 +513,22 @@ impl Body<'_> {
         self.bytes = rest;
         core::str::from_utf8(s).map(String::from).map_err(|_| Error::BadValue)
     }
+    fn bytes_u16(&mut self) -> Result<Vec<u8>, Error> {
+        let n = usize::from(self.u16()?);
+        if self.bytes.len() < n {
+            return Err(Error::BadLength);
+        }
+        let (b, rest) = self.bytes.split_at(n);
+        self.bytes = rest;
+        Ok(b.to_vec())
+    }
+    fn clip_format(&mut self) -> Result<ClipFormat, Error> {
+        match self.u8()? {
+            1 => Ok(ClipFormat::Utf8Text),
+            2 => Ok(ClipFormat::Dib),
+            _ => Err(Error::BadValue),
+        }
+    }
 }
 
 /// Builds one record: the header is patched when it is finished.
@@ -374,6 +566,10 @@ impl<'a> Out<'a> {
     fn string(self, s: &str) -> Self {
         let s = cut(s, MAX_TEXT);
         self.u16(s.len() as u16).bytes(s.as_bytes())
+    }
+    fn bytes_u16(self, b: &[u8]) -> Self {
+        let b = &b[..b.len().min(CLIPBOARD_CHUNK)];
+        self.u16(b.len() as u16).bytes(b)
     }
     fn bytes(self, b: &[u8]) -> Self {
         self.out.extend_from_slice(b);
@@ -422,6 +618,9 @@ mod kind {
     pub const LAYER_DROP: u16 = 0x0014;
     pub const LAYER_GONE: u16 = 0x0015;
     pub const CONSENT: u16 = 0x0016;
+    pub const CLIP_CLEAR: u16 = 0x0017;
+    pub const CLIP_DATA: u16 = 0x0018;
+    pub const CLIP_COMMIT: u16 = 0x0019;
 
     pub const HELLO: u16 = 0x8001;
     pub const OUTPUT: u16 = 0x8002;
@@ -437,6 +636,16 @@ mod kind {
     pub const RELEASED: u16 = 0x800C;
     pub const UNITS: u16 = 0x800D;
     pub const CONSENT_ANSWER: u16 = 0x800E;
+    pub const CLIP_CLEAR_FROM: u16 = 0x800F;
+    pub const CLIP_DATA_FROM: u16 = 0x8010;
+    pub const CLIP_COMMIT_FROM: u16 = 0x8011;
+}
+
+fn clip_format_of(f: ClipFormat) -> u8 {
+    match f {
+        ClipFormat::Utf8Text => 1,
+        ClipFormat::Dib => 2,
+    }
 }
 
 fn kind_of(k: SurfaceKind) -> u8 {
@@ -545,6 +754,15 @@ impl Record for ToCompositor {
             Consent { request, pid, program, path, file } => {
                 Out::new(out, kind::CONSENT).u32(*request).u32(*pid).string(program).string(path).string(file).done()
             }
+            ClipClear { seq } => Out::new(out, kind::CLIP_CLEAR).u32(*seq).done(),
+            ClipData { seq, format, offset, total, data } => Out::new(out, kind::CLIP_DATA)
+                .u32(*seq)
+                .u8(clip_format_of(*format))
+                .u32(*offset)
+                .u32(*total)
+                .bytes_u16(data)
+                .done(),
+            ClipCommit { seq } => Out::new(out, kind::CLIP_COMMIT).u32(*seq).done(),
         }
     }
 
@@ -636,6 +854,15 @@ impl Record for ToCompositor {
             kind::CONSENT => {
                 Consent { request: b.u32()?, pid: b.u32()?, program: b.string()?, path: b.string()?, file: b.string()? }
             }
+            kind::CLIP_CLEAR => ClipClear { seq: b.u32()? },
+            kind::CLIP_DATA => ClipData {
+                seq: b.u32()?,
+                format: b.clip_format()?,
+                offset: b.u32()?,
+                total: b.u32()?,
+                data: b.bytes_u16()?,
+            },
+            kind::CLIP_COMMIT => ClipCommit { seq: b.u32()? },
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -675,6 +902,15 @@ impl Record for FromCompositor {
             Released { buffer } => Out::new(out, kind::RELEASED).u32(*buffer).done(),
             Units { units } => Out::new(out, kind::UNITS).u32(*units).done(),
             Consent { request, allow } => Out::new(out, kind::CONSENT_ANSWER).u32(*request).bool(*allow).done(),
+            ClipClear { seq } => Out::new(out, kind::CLIP_CLEAR_FROM).u32(*seq).done(),
+            ClipData { seq, format, offset, total, data } => Out::new(out, kind::CLIP_DATA_FROM)
+                .u32(*seq)
+                .u8(clip_format_of(*format))
+                .u32(*offset)
+                .u32(*total)
+                .bytes_u16(data)
+                .done(),
+            ClipCommit { seq } => Out::new(out, kind::CLIP_COMMIT_FROM).u32(*seq).done(),
         }
     }
 
@@ -712,6 +948,15 @@ impl Record for FromCompositor {
             kind::RELEASED => Released { buffer: b.u32()? },
             kind::UNITS => Units { units: b.u32()? },
             kind::CONSENT_ANSWER => Consent { request: b.u32()?, allow: b.bool()? },
+            kind::CLIP_CLEAR_FROM => ClipClear { seq: b.u32()? },
+            kind::CLIP_DATA_FROM => ClipData {
+                seq: b.u32()?,
+                format: b.clip_format()?,
+                offset: b.u32()?,
+                total: b.u32()?,
+                data: b.bytes_u16()?,
+            },
+            kind::CLIP_COMMIT_FROM => ClipCommit { seq: b.u32()? },
             other => return Err(Error::UnknownKind(other)),
         })
     }
@@ -826,6 +1071,10 @@ mod tests {
                 path: String::from(r"C:\Users\poly\Downloads\ChromeSetup.exe"),
                 file: String::from("/win/c/Users/poly/Downloads/ChromeSetup.exe"),
             },
+            ClipClear { seq: 11 },
+            ClipData { seq: 12, format: ClipFormat::Utf8Text, offset: 0, total: 5, data: b"hello".to_vec() },
+            ClipData { seq: 12, format: ClipFormat::Dib, offset: 0, total: 4, data: vec![1, 2, 3, 4] },
+            ClipCommit { seq: 12 },
         ]
     }
 
@@ -854,6 +1103,10 @@ mod tests {
             Released { buffer: 9 },
             Units { units: 2 },
             Consent { request: 7, allow: true },
+            ClipClear { seq: 21 },
+            ClipData { seq: 22, format: ClipFormat::Utf8Text, offset: 0, total: 3, data: b"abc".to_vec() },
+            ClipData { seq: 22, format: ClipFormat::Dib, offset: 0, total: 2, data: vec![9, 8] },
+            ClipCommit { seq: 22 },
         ]
     }
 
@@ -934,5 +1187,63 @@ mod tests {
         let Some(Ok(ToCompositor::Title { text, .. })) = s.next_record() else { panic!() };
         assert_eq!(text.len(), MAX_TEXT);
         assert!(text.chars().all(|c| c == 'ü'));
+    }
+
+    #[test]
+    fn clipboard_chunking_and_assembly_round_trip() {
+        // Multi-chunk (> CLIPBOARD_CHUNK) text + image in both directions.
+        let big_text: Vec<u8> = (0..(CLIPBOARD_CHUNK * 2 + 17)).map(|i| b'a' + (i % 26) as u8).collect();
+        let big_dib: Vec<u8> = (0..(CLIPBOARD_CHUNK + 5)).map(|i| (i & 0xFF) as u8).collect();
+        let mut wire = Vec::new();
+        encode_to_compositor_clip(&mut wire, 42, Some(&big_text), Some(&big_dib));
+        let mut stream = Stream::<ToCompositor>::new();
+        stream.push(&wire);
+        let mut asm = ClipAssembly::new();
+        let mut assembled = None;
+        for rec in stream.map(Result::unwrap) {
+            match rec {
+                ToCompositor::ClipClear { seq } => assembled = Some(asm.clear(seq)),
+                ToCompositor::ClipData { seq, format, offset, total, data } => {
+                    asm.push(seq, format, offset, total, &data);
+                }
+                ToCompositor::ClipCommit { seq } => assembled = asm.commit(seq),
+                _ => panic!("unexpected record"),
+            }
+        }
+        assert_eq!(assembled, Some(ClipPayload { seq: 42, text: Some(big_text), dib: Some(big_dib) }));
+
+        // Empty string is distinct from ClipClear.
+        let mut empty_str_wire = Vec::new();
+        encode_from_compositor_clip(&mut empty_str_wire, 5, Some(b""), None);
+        let mut s = Stream::<FromCompositor>::new();
+        s.push(&empty_str_wire);
+        let mut asm = ClipAssembly::new();
+        let mut out = None;
+        for rec in s.map(Result::unwrap) {
+            match rec {
+                FromCompositor::ClipClear { seq } => out = Some(asm.clear(seq)),
+                FromCompositor::ClipData { seq, format, offset, total, data } => {
+                    asm.push(seq, format, offset, total, &data);
+                }
+                FromCompositor::ClipCommit { seq } => out = asm.commit(seq),
+                _ => panic!(),
+            }
+        }
+        assert_eq!(out, Some(ClipPayload { seq: 5, text: Some(Vec::new()), dib: None }));
+
+        // Clear produces an empty payload.
+        let mut clear_wire = Vec::new();
+        encode_from_compositor_clip(&mut clear_wire, 6, None, None);
+        let mut s = Stream::<FromCompositor>::new();
+        s.push(&clear_wire);
+        assert_eq!(s.next_record(), Some(Ok(FromCompositor::ClipClear { seq: 6 })));
+
+        // Newer seq supersedes an incomplete earlier transfer; oversized total rejected.
+        let mut asm = ClipAssembly::new();
+        asm.push(1, ClipFormat::Utf8Text, 0, 100, b"partial");
+        asm.push(2, ClipFormat::Utf8Text, 0, 2, b"ok");
+        assert_eq!(asm.commit(2), Some(ClipPayload { seq: 2, text: Some(b"ok".to_vec()), dib: None }));
+        asm.push(3, ClipFormat::Dib, 0, (MAX_CLIPBOARD_BYTES + 1) as u32, b"x");
+        assert_eq!(asm.commit(3), None);
     }
 }

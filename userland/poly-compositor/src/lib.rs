@@ -83,6 +83,7 @@ extern crate poly_rt;
 #[cfg(test)]
 extern crate std;
 
+pub mod clipboard;
 mod desk;
 mod desktop;
 mod evdev;
@@ -755,6 +756,7 @@ fn run(args: &[String]) -> Result<u8, String> {
     };
     // Windows apps' top-level windows through win32k's desktop link (ADR 0131).
     let mut winlink = if o.desktop { win32::Link::open(server.scene(), o.windows_hidpi) } else { None };
+    let mut clip_bridge = clipboard::ClipboardBridge::new();
     let mut env = client_env(&o.socket, &dir, &dump_path, bus_address.as_deref(), xw.as_ref().map(|x| x.display_env()));
     // Poly's own apps follow the desktop's theme and keyboard layout from
     // the settings file (ADR 0134).
@@ -811,9 +813,10 @@ fn run(args: &[String]) -> Result<u8, String> {
             fds.push(os::PollFd::readable(fd));
         }
         let flip_pending = screen.kms().is_some_and(|k| k.is_pending());
-        // Xwayland's, then the link to Windows apps: each reads only its own.
+        // Xwayland's, then the link to Windows apps, then async clipboard pipes.
         let x_fds = add_fds(&mut fds, xw.iter().flat_map(|x| x.poll_fds()));
         let win_fds = add_fds(&mut fds, winlink.iter().map(|l| os::PollFd::readable(l.fd())));
+        let clip_fds = add_fds(&mut fds, clip_bridge.poll_fds());
         let now = os::monotonic_ns();
         let mut timeout = if server.wants_frame() && !flip_pending {
             (next_frame.saturating_sub(now) / 1_000_000) as i32
@@ -1022,7 +1025,7 @@ fn run(args: &[String]) -> Result<u8, String> {
             }
         }
 
-        // Windows apps' windows: what win32k reported.
+        // Windows apps' windows and shared clipboard: what win32k reported.
         if let Some(l) = &mut winlink
             && fds[win_fds].iter().any(|p| p.revents != 0)
         {
@@ -1031,6 +1034,13 @@ fn run(args: &[String]) -> Result<u8, String> {
             if o.stats {
                 stats.take_ns = stats.take_ns.saturating_add(os::monotonic_ns().saturating_sub(start));
             }
+        }
+        // Advance async clipboard pipe transfers, then bridge any new Wayland
+        // or Windows clipboard updates (before flushing Wayland client sockets).
+        clip_bridge.polled(&fds[clip_fds], winlink.as_mut());
+        clip_bridge.sync_from_wayland(&mut server, winlink.as_mut());
+        if let Some(l) = &mut winlink {
+            clip_bridge.sync_from_win32(&mut server, l);
         }
         // A Windows program's "open" with no program of its own, or its "show in folder":
         // Files does it (ADR 0223).
@@ -1167,6 +1177,8 @@ fn run(args: &[String]) -> Result<u8, String> {
             server.remove_client(id);
             conns.remove(&id);
         }
+        // If a disconnecting client owned the Wayland selection, clear Windows' clipboard too.
+        clip_bridge.sync_from_wayland(&mut server, winlink.as_mut());
 
         if dump {
             // Drawn in place, what changed is drawn first; with KMS the

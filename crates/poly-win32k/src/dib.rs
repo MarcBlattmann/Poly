@@ -222,6 +222,136 @@ pub fn to_bgra(b: &[u8]) -> Option<(i32, i32, Vec<u8>)> {
     Some((w as i32, h as i32, out))
 }
 
+/// The 14-byte `BITMAPFILEHEADER` size (`wingdi.h`).
+const BMP_FILE_HEADER: usize = 14;
+
+/// Upper bound on pixels accepted when decoding a PNG for clipboard bridging
+/// (4M pixels = 16 MiB at 32 bpp).
+const MAX_CLIPBOARD_PIXELS: u64 = 4_000_000;
+
+/// Wrap a packed DIB (`CF_DIB` / `CF_DIBV5`) in a 14-byte `BITMAPFILEHEADER`
+/// to produce a complete BMP file (`image/bmp`).
+pub fn to_bmp(dib: &[u8]) -> Option<Vec<u8>> {
+    let i = info(dib)?;
+    let total = u32::try_from(BMP_FILE_HEADER.checked_add(dib.len())?).ok()?;
+    let off = u32::try_from(BMP_FILE_HEADER.checked_add(i.bits_at)?).ok()?;
+    let mut out = Vec::with_capacity(BMP_FILE_HEADER + dib.len());
+    out.extend_from_slice(b"BM");
+    out.extend_from_slice(&total.to_le_bytes());
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&off.to_le_bytes());
+    out.extend_from_slice(dib);
+    Some(out)
+}
+
+/// Extract a packed `CF_DIB` (40-byte `BITMAPINFOHEADER` + masks/palette +
+/// pixels) from a BMP file (`image/bmp`).
+pub fn from_bmp(bmp: &[u8]) -> Option<Vec<u8>> {
+    if bmp.len() < BMP_FILE_HEADER + V4 || &bmp[0..2] != b"BM" {
+        return None;
+    }
+    let bf_off = rd32(bmp, 10)? as usize;
+    let dib = &bmp[BMP_FILE_HEADER..];
+    let i = info(dib)?;
+    let packed = if bf_off > BMP_FILE_HEADER + i.bits_at && bf_off <= bmp.len() {
+        let mut p = Vec::with_capacity(i.bits_at + (bmp.len() - bf_off));
+        p.extend_from_slice(&dib[..i.bits_at]);
+        p.extend_from_slice(&bmp[bf_off..]);
+        p
+    } else {
+        dib.to_vec()
+    };
+    if i.header >= V5 { from_v5(&packed) } else { Some(packed) }
+}
+
+/// Encode a packed DIB (`CF_DIB` / `CF_DIBV5`) as an 8-bit RGBA PNG file
+/// (`image/png`), using stored DEFLATE blocks (W3C PNG 3rd ed., RFC 1950/1951).
+pub fn to_png(dib: &[u8]) -> Option<Vec<u8>> {
+    let i = info(dib)?;
+    let (w, h, mut bgra) = to_bgra(dib)?;
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    // Many Windows apps place 32-bpp BI_RGB DIBs with zeroed alpha bytes
+    // (XRGB layout); treat an all-zero alpha channel as opaque so Linux apps
+    // do not display a completely transparent image.
+    if i.bpp == 32 && i.compression == BI_RGB && bgra.chunks_exact(4).all(|p| p[3] == 0) {
+        for p in bgra.chunks_exact_mut(4) {
+            p[3] = 255;
+        }
+    }
+    let (w, h) = (w as u32, h as u32);
+    let row_bytes = (w as usize).checked_mul(4)?;
+    let raw_len = (h as usize).checked_mul(row_bytes.checked_add(1)?)?;
+    let mut raw = Vec::with_capacity(raw_len);
+    for row in bgra.chunks_exact(row_bytes) {
+        raw.push(0); // filter type 0 (None)
+        for px in row.chunks_exact(4) {
+            raw.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
+        }
+    }
+    let mut z = Vec::with_capacity(raw.len() + (raw.len() / 0xFFFF + 1) * 5 + 6);
+    // Zlib header: CM=8 (DEFLATE), CINFO=7 (32K window), FCHECK makes header % 31 == 0.
+    z.extend_from_slice(&[0x78, 0x01]);
+    let blocks: Vec<&[u8]> = raw.chunks(0xFFFF).collect();
+    for (idx, block) in blocks.iter().enumerate() {
+        z.push(u8::from(idx + 1 == blocks.len()));
+        let len = block.len() as u16;
+        z.extend_from_slice(&len.to_le_bytes());
+        z.extend_from_slice(&(!len).to_le_bytes());
+        z.extend_from_slice(block);
+    }
+    if blocks.is_empty() {
+        z.extend_from_slice(&[1, 0, 0, 0xFF, 0xFF]);
+    }
+    z.extend_from_slice(&poly_png::inflate::adler32(&raw).to_be_bytes());
+
+    let mut out = Vec::with_capacity(poly_png::SIGNATURE.len() + 25 + z.len() + 24);
+    out.extend_from_slice(&poly_png::SIGNATURE);
+    let mut chunk = |kind: &[u8; 4], data: &[u8]| {
+        out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        out.extend_from_slice(kind);
+        out.extend_from_slice(data);
+        out.extend_from_slice(&poly_png::crc32(&[kind, data]).to_be_bytes());
+    };
+    let mut ihdr = [0u8; 13];
+    ihdr[0..4].copy_from_slice(&w.to_be_bytes());
+    ihdr[4..8].copy_from_slice(&h.to_be_bytes());
+    ihdr[8..13].copy_from_slice(&[8, 6, 0, 0, 0]); // 8-bit RGBA
+    chunk(b"IHDR", &ihdr);
+    chunk(b"IDAT", &z);
+    chunk(b"IEND", &[]);
+    Some(out)
+}
+
+/// Decode a PNG file (`image/png`) into a bottom-up 32-bit `BI_RGB` packed
+/// `CF_DIB` (40-byte `BITMAPINFOHEADER` + `B, G, R, A` rows), preserving alpha.
+pub fn from_png(png: &[u8]) -> Option<Vec<u8>> {
+    let img = poly_png::decode_with(png, &poly_png::Limits { max_pixels: MAX_CLIPBOARD_PIXELS }).ok()?;
+    let (w, h) = (i32::try_from(img.width).ok()?, i32::try_from(img.height).ok()?);
+    if w <= 0 || h <= 0 {
+        return None;
+    }
+    let pixel_bytes = (img.width as usize).checked_mul(img.height as usize)?.checked_mul(4)?;
+    let size_image = u32::try_from(pixel_bytes).ok()?;
+    let mut out = Vec::with_capacity(V4 + pixel_bytes);
+    out.extend_from_slice(&(V4 as u32).to_le_bytes());
+    out.extend_from_slice(&(w as u32).to_le_bytes());
+    out.extend_from_slice(&(h as u32).to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&32u16.to_le_bytes());
+    out.extend_from_slice(&BI_RGB.to_le_bytes());
+    out.extend_from_slice(&size_image.to_le_bytes());
+    out.extend_from_slice(&[0u8; 16]);
+    let wu = img.width as usize;
+    for y in (0..img.height as usize).rev() {
+        for &argb in &img.pixels[y * wu..(y + 1) * wu] {
+            out.extend_from_slice(&[argb as u8, (argb >> 8) as u8, (argb >> 16) as u8, (argb >> 24) as u8]);
+        }
+    }
+    Some(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -256,5 +386,81 @@ mod tests {
         let (_, _, back) = to_bgra(&dib).unwrap();
         assert_eq!(&back[..4], &[0, 1, 2, 255]);
         assert_eq!(&back[12..], &[12, 13, 14, 255]);
+    }
+
+    #[test]
+    fn bmp_and_dib_round_trip() {
+        let px = [0x10u8, 0x20, 0x30, 0xFF, 0x40, 0x50, 0x60, 0xFF, 0x70, 0x80, 0x90, 0xFF, 0xA0, 0xB0, 0xC0, 0xFF];
+        let dib = make32(2, 2, &px);
+        let bmp = to_bmp(&dib).unwrap();
+        assert_eq!(&bmp[0..2], b"BM");
+        assert_eq!(rd32(&bmp, 2), Some((14 + dib.len()) as u32));
+        assert_eq!(rd32(&bmp, 10), Some((14 + 40 + 12) as u32));
+        assert_eq!(from_bmp(&bmp).unwrap(), dib);
+
+        // V5-header BMP normalizes to 40-byte CF_DIB.
+        let v5 = to_v5(&dib).unwrap();
+        let v5_bmp = to_bmp(&v5).unwrap();
+        assert_eq!(from_bmp(&v5_bmp).unwrap(), dib);
+
+        // BMP with extra padding before pixel bits is compacted into packed DIB.
+        let mut padded = bmp[..14 + 52].to_vec();
+        padded.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
+        padded.extend_from_slice(&bmp[14 + 52..]);
+        let new_len = padded.len() as u32;
+        padded[2..6].copy_from_slice(&new_len.to_le_bytes());
+        padded[10..14].copy_from_slice(&((14 + 52 + 4) as u32).to_le_bytes());
+        assert_eq!(from_bmp(&padded).unwrap(), dib);
+
+        // Invalid inputs rejected cleanly.
+        assert!(from_bmp(b"NO").is_none());
+        assert!(from_bmp(b"BMshort").is_none());
+        assert!(to_bmp(&[0u8; 10]).is_none());
+    }
+
+    #[test]
+    fn png_and_dib_round_trip() {
+        // Opaque 2x2 BI_BITFIELDS DIB -> PNG -> DIB -> BGRA.
+        let px = [0x11u8, 0x22, 0x33, 0xFF, 0x44, 0x55, 0x66, 0xFF, 0x77, 0x88, 0x99, 0xFF, 0xAA, 0xBB, 0xCC, 0xFF];
+        let dib = make32(2, 2, &px);
+        let png = to_png(&dib).unwrap();
+        assert!(png.starts_with(&poly_png::SIGNATURE));
+        let back_dib = from_png(&png).unwrap();
+        let (w, h, back_px) = to_bgra(&back_dib).unwrap();
+        assert_eq!((w, h), (2, 2));
+        assert_eq!(back_px, px);
+
+        // Semi-transparent 32-bpp BI_RGB DIB preserves alpha through PNG round-trip.
+        let mut argb_dib = vec![0u8; 40 + 8];
+        argb_dib[0..4].copy_from_slice(&40u32.to_le_bytes());
+        argb_dib[4..8].copy_from_slice(&2u32.to_le_bytes());
+        argb_dib[8..12].copy_from_slice(&1u32.to_le_bytes());
+        argb_dib[12..14].copy_from_slice(&1u16.to_le_bytes());
+        argb_dib[14..16].copy_from_slice(&32u16.to_le_bytes());
+        argb_dib[40..44].copy_from_slice(&[0x10, 0x20, 0x30, 0x80]);
+        argb_dib[44..48].copy_from_slice(&[0x40, 0x50, 0x60, 0xFF]);
+        let png = to_png(&argb_dib).unwrap();
+        let decoded = poly_png::decode(&png).unwrap();
+        assert_eq!(decoded.pixels, [0x8030_2010, 0xFF60_5040]);
+        let (_, _, back) = to_bgra(&from_png(&png).unwrap()).unwrap();
+        assert_eq!(back, [0x10, 0x20, 0x30, 0x80, 0x40, 0x50, 0x60, 0xFF]);
+
+        // 32-bpp BI_RGB with all-zero alpha (XRGB) becomes opaque in PNG.
+        let mut xrgb_dib = argb_dib.clone();
+        xrgb_dib[43] = 0;
+        xrgb_dib[47] = 0;
+        let decoded = poly_png::decode(&to_png(&xrgb_dib).unwrap()).unwrap();
+        assert_eq!(decoded.pixels, [0xFF30_2010, 0xFF60_5040]);
+
+        // Multi-DEFLATE-block PNG (> 65535 raw bytes): 200x100 = 80100 raw bytes.
+        let big = make32(200, 100, &vec![0x5Au8; 200 * 100 * 4]);
+        let big_png = to_png(&big).unwrap();
+        let big_back = from_png(&big_png).unwrap();
+        let (bw, bh, bpx) = to_bgra(&big_back).unwrap();
+        assert_eq!((bw, bh, bpx.len()), (200, 100, 200 * 100 * 4));
+        assert_eq!(&bpx[..4], &[0x5A, 0x5A, 0x5A, 0xFF]);
+
+        // Invalid PNG rejected cleanly.
+        assert!(from_png(b"not a png").is_none());
     }
 }

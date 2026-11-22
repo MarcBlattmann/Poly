@@ -335,3 +335,161 @@ fn reads_leave_the_window_state_generation_and_changes_raise_it() {
     call(&mut f, Request::SetText { hwnd: created.hwnd, text: "x".encode_utf16().collect() });
     assert!(BUMPS.load(Ordering::SeqCst) > before, "a change");
 }
+
+#[test]
+fn clipboard_bridges_bidirectionally_over_desktop_link_without_echo() {
+    use poly_win32k::clip::{
+        self, CF_DIB, CF_DIBV5, CF_OEMTEXT, CF_TEXT, CF_UNICODETEXT, ClipOp, ClipRes, WM_CLIPBOARDUPDATE,
+    };
+    use poly_win32k::dib;
+    use poly_win32k::frame::FrameMetrics;
+    use poly_win32k::link::{
+        ClipAssembly, ClipFormat, FromCompositor, Stream, ToCompositor, VERSION, encode_all,
+        encode_from_compositor_clip,
+    };
+    use poly_win32k::proto::{ClassRef, CreateSpec};
+
+    let mut f = Fake::new();
+    let call = |f: &mut Fake, req: Request| user_call(f, &req, 512).1.expect("a reply");
+    let clip = |f: &mut Fake, op: ClipOp| match call(f, Request::Clip { op }) {
+        Reply::Clip { res } => res,
+        other => panic!("unexpected {other:?}"),
+    };
+    let take_records = |f: &mut Fake| {
+        let mut s = Stream::<ToCompositor>::new();
+        s.push(&f.with_state(|sys, _, _| sys.win32k.link_output()));
+        s.map(Result::unwrap).collect::<alloc::vec::Vec<_>>()
+    };
+
+    // Create a window and register it as a clipboard format listener.
+    let name: alloc::vec::Vec<u16> = "ClipWin".encode_utf16().collect();
+    call(
+        &mut f,
+        Request::RegisterClass { spec: ClassSpec { name: name.clone(), wndproc: 0x1000, ..ClassSpec::default() } },
+    );
+    let spec =
+        CreateSpec { class: ClassRef::Name { name }, style: 0x00CF_0000, cx: 100, cy: 100, ..CreateSpec::default() };
+    let Reply::Created { created } = call(&mut f, Request::CreateWindow { spec }) else { panic!() };
+    let hwnd = created.hwnd;
+    assert_eq!(clip(&mut f, ClipOp::Listener { hwnd, add: true }), ClipRes::Ok {});
+
+    // Connect compositor.
+    let hello =
+        FromCompositor::Hello { version: VERSION, width: 800, height: 600, scale: 1, frame: FrameMetrics::POLY };
+    f.with_state(|sys, _, _| {
+        let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
+        win32k.link_receive(objects, &encode_all(&[hello]));
+    });
+    let _ = take_records(&mut f);
+
+    // 1. Windows -> Wayland: set Unicode text + DIB and close.
+    let dib = dib::make32(2, 1, &[0x10, 0x20, 0x30, 0xFF, 0x40, 0x50, 0x60, 0xFF]);
+    assert_eq!(clip(&mut f, ClipOp::Open { hwnd }), ClipRes::Ok {});
+    assert!(matches!(clip(&mut f, ClipOp::Empty {}), ClipRes::Val { .. }));
+    assert_eq!(
+        clip(&mut f, ClipOp::Set { format: CF_UNICODETEXT, handle: 1, data: Some(clip::from_utf8(b"Hello\nWorld")) }),
+        ClipRes::Ok {}
+    );
+    assert_eq!(clip(&mut f, ClipOp::Set { format: CF_DIB, handle: 2, data: Some(dib.clone()) }), ClipRes::Ok {});
+    assert_eq!(clip(&mut f, ClipOp::Close {}), ClipRes::Ok {});
+
+    let recs = take_records(&mut f);
+    let mut asm = ClipAssembly::new();
+    let mut payload = None;
+    for r in recs {
+        match r {
+            ToCompositor::ClipData { seq, format, offset, total, data } => asm.push(seq, format, offset, total, &data),
+            ToCompositor::ClipCommit { seq } => payload = asm.commit(seq),
+            ToCompositor::ClipClear { seq } => payload = Some(asm.clear(seq)),
+            _ => {}
+        }
+    }
+    let payload = payload.expect("exported clipboard payload");
+    assert_eq!(payload.text.as_deref(), Some(&b"Hello\nWorld"[..]));
+    assert_eq!(payload.dib.as_deref(), Some(dib.as_slice()));
+    // Drain WM_CLIPBOARDUPDATE from our own write.
+    let _ = call(&mut f, Request::Peek { filter: 0, min: 0, max: 0, flags: poly_win32k::wm::PM_REMOVE });
+
+    // 2. Wayland -> Windows: send text + DIB from compositor.
+    let ClipRes::Val { value: seq_before } = clip(&mut f, ClipOp::Sequence {}) else { panic!() };
+    let mut wire = alloc::vec::Vec::new();
+    let dib2 = dib::make32(1, 2, &[0xAA, 0xBB, 0xCC, 0xFF, 0x11, 0x22, 0x33, 0xFF]);
+    encode_from_compositor_clip(&mut wire, 10, Some("Linux 🌍\nLine 2".as_bytes()), Some(&dib2));
+    f.with_state(|sys, _, _| {
+        let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
+        win32k.link_receive(objects, &wire);
+    });
+
+    // Must NOT echo back to the compositor!
+    let echo = take_records(&mut f);
+    assert!(
+        !echo.iter().any(|r| matches!(
+            r,
+            ToCompositor::ClipClear { .. } | ToCompositor::ClipData { .. } | ToCompositor::ClipCommit { .. }
+        )),
+        "unexpected echo back to compositor: {echo:?}"
+    );
+
+    // Sequence number bumped, listener got WM_CLIPBOARDUPDATE, formats synthesized.
+    let ClipRes::Val { value: seq_after } = clip(&mut f, ClipOp::Sequence {}) else { panic!() };
+    assert!(seq_after > seq_before);
+    let mut got_update = false;
+    while let Reply::Message { msg } =
+        call(&mut f, Request::Peek { filter: 0, min: 0, max: 0, flags: poly_win32k::wm::PM_REMOVE })
+    {
+        if msg.hwnd == hwnd && msg.msg == WM_CLIPBOARDUPDATE {
+            got_update = true;
+        }
+    }
+    assert!(got_update, "WM_CLIPBOARDUPDATE not posted to listener");
+
+    assert_eq!(clip(&mut f, ClipOp::Open { hwnd: 0 }), ClipRes::Ok {});
+    let ClipRes::Data { bytes, .. } = clip(&mut f, ClipOp::Get { format: CF_UNICODETEXT }) else { panic!() };
+    assert_eq!(clip::to_utf8(CF_UNICODETEXT, &bytes).unwrap(), "Linux 🌍\nLine 2".as_bytes());
+    assert_eq!(clip(&mut f, ClipOp::Available { format: CF_TEXT }), ClipRes::Val { value: 1 });
+    assert_eq!(clip(&mut f, ClipOp::Available { format: CF_OEMTEXT }), ClipRes::Val { value: 1 });
+    assert_eq!(clip(&mut f, ClipOp::Available { format: CF_DIBV5 }), ClipRes::Val { value: 1 });
+    let ClipRes::Data { bytes: got_dib, .. } = clip(&mut f, ClipOp::Get { format: CF_DIB }) else { panic!() };
+    assert_eq!(got_dib, dib2);
+    assert_eq!(clip(&mut f, ClipOp::Close {}), ClipRes::Ok {});
+    assert!(take_records(&mut f).is_empty(), "reading clipboard must not trigger export");
+
+    // 3. Windows clears clipboard -> ClipClear emitted.
+    assert_eq!(clip(&mut f, ClipOp::Open { hwnd }), ClipRes::Ok {});
+    assert!(matches!(clip(&mut f, ClipOp::Empty {}), ClipRes::Val { .. }));
+    assert_eq!(clip(&mut f, ClipOp::Close {}), ClipRes::Ok {});
+    assert!(take_records(&mut f).iter().any(|r| matches!(r, ToCompositor::ClipClear { .. })));
+
+    // 4. Wayland clears clipboard -> no echo.
+    let mut clear_wire = alloc::vec::Vec::new();
+    encode_from_compositor_clip(&mut clear_wire, 11, None, None);
+    f.with_state(|sys, _, _| {
+        let (win32k, objects) = (&mut sys.win32k, &mut sys.objects);
+        win32k.link_receive(objects, &clear_wire);
+    });
+    assert!(take_records(&mut f).is_empty());
+
+    // 5. Delayed rendering: does not block, exports empty until rendered.
+    assert_eq!(clip(&mut f, ClipOp::Open { hwnd }), ClipRes::Ok {});
+    assert!(matches!(clip(&mut f, ClipOp::Empty {}), ClipRes::Val { .. }));
+    assert_eq!(clip(&mut f, ClipOp::Set { format: CF_UNICODETEXT, handle: 0, data: None }), ClipRes::Ok {});
+    assert_eq!(clip(&mut f, ClipOp::Close {}), ClipRes::Ok {});
+    assert!(take_records(&mut f).iter().any(|r| matches!(r, ToCompositor::ClipClear { .. })));
+    // Once rendered, exports the materialized text.
+    assert_eq!(clip(&mut f, ClipOp::Open { hwnd: 0 }), ClipRes::Ok {});
+    assert_eq!(
+        clip(&mut f, ClipOp::Get { format: CF_UNICODETEXT }),
+        ClipRes::Render { owner: hwnd, format: CF_UNICODETEXT }
+    );
+    assert_eq!(
+        clip(&mut f, ClipOp::Set { format: CF_UNICODETEXT, handle: 9, data: Some(clip::from_utf8(b"lazy")) }),
+        ClipRes::Ok {}
+    );
+    let rendered_recs = take_records(&mut f);
+    assert!(rendered_recs.iter().any(|r| matches!(
+        r,
+        ToCompositor::ClipData { format: ClipFormat::Utf8Text, data, .. } if data == b"lazy"
+    )));
+    assert_eq!(clip(&mut f, ClipOp::RenderDone { format: CF_UNICODETEXT }), ClipRes::Ok {});
+    assert_eq!(clip(&mut f, ClipOp::Close {}), ClipRes::Ok {});
+}

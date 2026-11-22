@@ -60,6 +60,7 @@ mod wm;
 mod xdg;
 mod xwayland;
 
+pub use data_device::{ExternalPasteRequest, SelectionEvent};
 pub use dmabuf::{MOD_INVALID, MOD_LINEAR, format_table as dmabuf_format_table, formats as dmabuf_formats};
 pub use external::WmEvent;
 pub use wm::{InternalEvent, WindowInfo};

@@ -31,7 +31,7 @@ use poly_ntobj::{Handle, NtStatus, ObjectId, ObjectType};
 use poly_win32k::desktop::Desktop;
 use poly_win32k::frame::Rect;
 use poly_win32k::layers::{Layers, Presented};
-use poly_win32k::link::{FromCompositor, Request as DesktopRequest};
+use poly_win32k::link::{ClipAssembly, FromCompositor, Request as DesktopRequest};
 use poly_win32k::proto::{Reply, Request};
 use poly_win32k::services::Win32kService;
 use poly_win32k::surfaces::{BAND_BYTES, MAX_SIDE, Surfaces};
@@ -69,6 +69,8 @@ pub struct Win32k {
     dragging: Option<u32>,
     /// The user's answers to consent prompts the compositor sent, for the broker (ADR 0222).
     consent_answers: alloc::vec::Vec<(u32, bool)>,
+    /// In-flight clipboard chunks coming from the compositor (Wayland → Windows).
+    clip_in: ClipAssembly,
 }
 
 impl Win32k {
@@ -100,9 +102,14 @@ impl Win32k {
         self.sync();
     }
 
-    /// Bring the desktop link's surfaces in line with the windows.
+    /// Bring the desktop link's surfaces and clipboard in line with the windows.
     pub fn sync(&mut self) {
         self.surfaces.sync(&self.wm, &mut self.desktop);
+        if self.wm.clipboard_bridge_dirty()
+            && let Some(snap) = self.wm.mutate().take_clipboard_bridge()
+        {
+            self.desktop.set_clipboard(snap.seq, snap.text, snap.dib);
+        }
     }
 
     /// The device: bytes the compositor wrote (its greeting brings the
@@ -184,6 +191,21 @@ impl Win32k {
                         self.wm.mutate().configure_from_desktop(hwnd, client, frame, &mut fx);
                     }
                 }
+                // Shared clipboard bridge (Wayland/Linux -> Windows).
+                FromCompositor::ClipClear { seq } => {
+                    let _ = self.clip_in.clear(seq);
+                    self.desktop.clear_replayed_clipboard();
+                    self.wm.mutate().set_clipboard_from_bridge(None, None, 0, &mut fx);
+                }
+                FromCompositor::ClipData { seq, format, offset, total, data } => {
+                    self.clip_in.push(seq, format, offset, total, &data);
+                }
+                FromCompositor::ClipCommit { seq } => {
+                    if let Some(payload) = self.clip_in.commit(seq) {
+                        self.desktop.clear_replayed_clipboard();
+                        self.wm.mutate().set_clipboard_from_bridge(payload.text, payload.dib, 0, &mut fx);
+                    }
+                }
                 _ => {}
             }
         }
@@ -220,6 +242,7 @@ impl Win32k {
 
     /// The device: the compositor closed it.
     pub fn link_closed(&mut self) {
+        self.clip_in.reset();
         self.desktop.disconnect();
         self.sync();
     }
