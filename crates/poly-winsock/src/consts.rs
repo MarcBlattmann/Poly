@@ -121,24 +121,28 @@ pub const AI_PASSIVE: i32 = 0x01;
 pub const AI_CANONNAME: i32 = 0x02;
 pub const AI_NUMERICHOST: i32 = 0x04;
 pub const AI_NUMERICSERV: i32 = 0x08;
+pub const AI_DNS_ONLY: i32 = 0x10;
 pub const AI_ALL: i32 = 0x0100;
 pub const AI_ADDRCONFIG: i32 = 0x0400;
 pub const AI_V4MAPPED: i32 = 0x0800;
-/// The flags Poly accepts; any other bit is `WSAEINVAL` (`EAI_BADFLAGS`).
+/// The flags Poly knows (`ws2def.h`); unknown flag bits are not refused on Windows.
 pub const AI_KNOWN: i32 =
-    AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV | AI_ALL | AI_ADDRCONFIG | AI_V4MAPPED;
+    AI_PASSIVE | AI_CANONNAME | AI_NUMERICHOST | AI_NUMERICSERV | AI_DNS_ONLY | AI_ALL | AI_ADDRCONFIG | AI_V4MAPPED;
 
-/// `ADDRINFOA` / `ADDRINFOW` on x64: four `int`s, `size_t ai_addrlen`,
-/// then the name, address and next pointers.
-pub const ADDRINFO_SIZE: usize = 48;
+/// Pointer size of the target (`8` on x64, `4` on x86).
+const PTR_SIZE: usize = core::mem::size_of::<usize>();
+
+/// `ADDRINFOA` / `ADDRINFOW` (`ws2def.h`): four `int`s, `size_t ai_addrlen`,
+/// then the name, address and next pointers (48 bytes on x64, 32 on x86).
 pub const ADDRINFO_FLAGS: usize = 0;
 pub const ADDRINFO_FAMILY: usize = 4;
 pub const ADDRINFO_SOCKTYPE: usize = 8;
 pub const ADDRINFO_PROTOCOL: usize = 12;
 pub const ADDRINFO_ADDRLEN: usize = 16;
-pub const ADDRINFO_CANONNAME: usize = 24;
-pub const ADDRINFO_ADDR: usize = 32;
-pub const ADDRINFO_NEXT: usize = 40;
+pub const ADDRINFO_CANONNAME: usize = 16 + PTR_SIZE;
+pub const ADDRINFO_ADDR: usize = 16 + 2 * PTR_SIZE;
+pub const ADDRINFO_NEXT: usize = 16 + 3 * PTR_SIZE;
+pub const ADDRINFO_SIZE: usize = 16 + 4 * PTR_SIZE;
 
 pub const NI_NOFQDN: i32 = 0x01;
 pub const NI_NUMERICHOST: i32 = 0x02;
@@ -163,11 +167,16 @@ pub const WSADATA_SIZE: usize = 408;
 pub const WSADATA_DESCRIPTION: usize = 16;
 pub const WSADATA_STATUS: usize = WSADATA_DESCRIPTION + WSADESCRIPTION_LEN + 1;
 
-// ----- hostent (winsock2.h, x64)
+// ----- hostent (winsock2.h)
 
-/// `h_name`, `h_aliases`, `h_addrtype` (short), `h_length` (short),
-/// `h_addr_list`.
-pub const HOSTENT_SIZE: usize = 32;
+/// `hostent` (`winsock2.h`): `h_name`, `h_aliases`, `h_addrtype` (short),
+/// `h_length` (short), `h_addr_list` (32 bytes on x64, 16 on x86).
+pub const HOSTENT_NAME: usize = 0;
+pub const HOSTENT_ALIASES: usize = PTR_SIZE;
+pub const HOSTENT_ADDRTYPE: usize = 2 * PTR_SIZE;
+pub const HOSTENT_LENGTH: usize = 2 * PTR_SIZE + 2;
+pub const HOSTENT_ADDR_LIST: usize = 3 * PTR_SIZE;
+pub const HOSTENT_SIZE: usize = 4 * PTR_SIZE;
 
 // ----- WSA error codes (winerror.h)
 
@@ -248,5 +257,45 @@ mod tests {
         // _IOW('f', 126, u_long): IOC_IN | (4 << 16) | ('f' << 8) | 126.
         assert_eq!(FIONBIO, 0x8000_0000 | (4 << 16) | ((b'f' as u32) << 8) | 126);
         assert_eq!(FIONREAD, 0x4000_0000 | (4 << 16) | ((b'f' as u32) << 8) | 127);
+        assert_eq!(AI_DNS_ONLY, 0x10);
+        assert_ne!(AI_KNOWN & AI_DNS_ONLY, 0);
+    }
+
+    #[test]
+    fn addrinfo_and_hostent_layouts_match_target_abi() {
+        #[repr(C)]
+        struct AddrInfo {
+            flags: i32,
+            family: i32,
+            socktype: i32,
+            protocol: i32,
+            addrlen: usize,
+            canonname: *mut u8,
+            addr: *mut u8,
+            next: *mut AddrInfo,
+        }
+        #[repr(C)]
+        struct HostEnt {
+            name: *mut u8,
+            aliases: *mut *mut u8,
+            addrtype: i16,
+            length: i16,
+            addr_list: *mut *mut u8,
+        }
+        assert_eq!(ADDRINFO_SIZE, core::mem::size_of::<AddrInfo>());
+        assert_eq!(ADDRINFO_FLAGS, core::mem::offset_of!(AddrInfo, flags));
+        assert_eq!(ADDRINFO_FAMILY, core::mem::offset_of!(AddrInfo, family));
+        assert_eq!(ADDRINFO_SOCKTYPE, core::mem::offset_of!(AddrInfo, socktype));
+        assert_eq!(ADDRINFO_PROTOCOL, core::mem::offset_of!(AddrInfo, protocol));
+        assert_eq!(ADDRINFO_ADDRLEN, core::mem::offset_of!(AddrInfo, addrlen));
+        assert_eq!(ADDRINFO_CANONNAME, core::mem::offset_of!(AddrInfo, canonname));
+        assert_eq!(ADDRINFO_ADDR, core::mem::offset_of!(AddrInfo, addr));
+        assert_eq!(ADDRINFO_NEXT, core::mem::offset_of!(AddrInfo, next));
+        assert_eq!(HOSTENT_SIZE, core::mem::size_of::<HostEnt>());
+        assert_eq!(HOSTENT_NAME, core::mem::offset_of!(HostEnt, name));
+        assert_eq!(HOSTENT_ALIASES, core::mem::offset_of!(HostEnt, aliases));
+        assert_eq!(HOSTENT_ADDRTYPE, core::mem::offset_of!(HostEnt, addrtype));
+        assert_eq!(HOSTENT_LENGTH, core::mem::offset_of!(HostEnt, length));
+        assert_eq!(HOSTENT_ADDR_LIST, core::mem::offset_of!(HostEnt, addr_list));
     }
 }

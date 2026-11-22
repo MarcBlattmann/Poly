@@ -15,8 +15,10 @@
 //!   (`NtDeviceIoControlFile` codes and their buffers).
 //! - [`dns`]: the stub resolver's queries and the answers it reads
 //!   (RFC 1035, RFC 3596).
+//! - [`hosts`]: the Windows `hosts` file parser.
+//! - [`cache`]: the resolver's negative (`NXDOMAIN`) and positive DNS cache.
 //! - [`resolve`]: `getaddrinfo`'s and `getnameinfo`'s decisions: hints,
-//!   numeric hosts, `localhost`, service names, the results' order.
+//!   numeric hosts, `localhost`, service names, family/mapping rules, the results' order.
 //! - [`exports`]: the names `ws2_32.dll` exports.
 //! - [`poll`]: `select` and `WSAPoll` events over the device's readiness.
 //! - [`events`]: `WSAEventSelect`'s and `WSAEnumNetworkEvents`' rules (ADR 0155).
@@ -37,12 +39,14 @@ extern crate alloc;
 
 pub mod addr;
 pub mod afd;
+pub mod cache;
 pub mod consts;
 pub mod dns;
 pub mod dup;
 pub mod error;
 pub mod events;
 pub mod exports;
+pub mod hosts;
 pub mod known;
 pub mod poll;
 pub mod resolve;

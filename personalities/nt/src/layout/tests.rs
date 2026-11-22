@@ -3,7 +3,9 @@
 
 extern crate std;
 
-use super::create::{self, HomeUnified, Installed, create, install_file, install_own_copy, unify_home};
+use super::create::{
+    self, HomeUnified, Installed, create, install_file, install_if_missing, install_own_copy, unify_home,
+};
 use super::env::{self, Block, Machine};
 use super::sync::{self, sync};
 use super::*;
@@ -774,4 +776,30 @@ fn expansion_follows_expand_environment_strings() {
     assert_eq!(b.sorted()[0].0, "Root", "the first name's case stays");
     b.remove("rOOt");
     assert_eq!(b.get("Root"), None);
+}
+
+#[test]
+fn install_if_missing_creates_once_and_keeps_edits() {
+    let (vr, root) = setup();
+    let initial = b"# Poly hosts file\r\n";
+    assert_eq!(
+        install_if_missing(&vr, &root, "Windows\\System32\\drivers\\etc", "hosts", initial),
+        Ok(Installed::Written)
+    );
+    assert!(exists(&vr, "/nt/c/Windows/System32/drivers/etc/hosts"));
+    // Modify the file as a user or test would.
+    let edited = b"192.0.2.77 polytest-live.invalid\r\n";
+    assert_eq!(install_file(&vr, &root, "Windows\\System32\\drivers\\etc", "hosts", edited), Ok(Installed::Written));
+    // Calling install_if_missing again (case-insensitive) preserves the edits.
+    assert_eq!(
+        install_if_missing(&vr, &root, "Windows\\System32\\drivers\\etc", "HOSTS", initial),
+        Ok(Installed::Unchanged)
+    );
+    let f = vr
+        .vfs
+        .open(&vr.ctx, &vr.cred, At::Cwd, b"/nt/c/Windows/System32/drivers/etc/hosts", OpenFlags::RDONLY, 0)
+        .unwrap();
+    let mut got = [0u8; 64];
+    let n = f.read_at(0, &mut got).unwrap();
+    assert_eq!(&got[..n], edited);
 }

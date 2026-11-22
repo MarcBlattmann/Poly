@@ -15,104 +15,284 @@
 //! buffers Winsock owns; Learn makes them per thread, Poly has one per
 //! process (to be revisited with thread-local storage).
 
+use crate::lock::Locked;
 use crate::sock::{self, Socket};
-use crate::{afd, check_started, cstr, fail, heap_alloc, heap_free, set_error, wstr};
+use crate::{Handle, afd, check_started, cstr, fail, heap_alloc, heap_free, set_error, wstr};
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cell::UnsafeCell;
 use core::net::{IpAddr, SocketAddr};
+use core::sync::atomic::{AtomicU16, Ordering};
+use poly_winsock::cache::{CacheLookup, DnsCache};
 use poly_winsock::consts::*;
 use poly_winsock::dns::{self, DnsError};
+use poly_winsock::hosts;
 use poly_winsock::resolve::{self, Entry, Hints, Host};
 use poly_winsock::{addr, text};
 
-// ----- the stub resolver
+// ----- the stub resolver, hosts file and cache
 
-/// How long one server gets to answer.
+/// How long one server gets to answer a DNS batch.
 const DNS_TIMEOUT_MS: u32 = 2000;
+/// Once one query of an A+AAAA batch returned addresses, wait at most this
+/// long for the second family before returning what already arrived.
+const DNS_SECOND_GRACE_MS: u64 = 250;
+/// Local-network fallback wait (LLMNR / mDNS / NetBIOS) for single-label and
+/// `.local` names without `AI_DNS_ONLY` when DNS found no addresses.
+/// Observed on Windows 11: ~1.13–1.29 s (spec bounds: 300–4000 ms).
+const LOCAL_FALLBACK_WAIT_MS: u32 = 1100;
+/// Largest `hosts` file read (bytes).
+const MAX_HOSTS_BYTES: usize = 256 * 1024;
 
-fn dns_error(e: DnsError) -> u32 {
-    match e {
-        DnsError::NotFound | DnsError::BadName => WSAHOST_NOT_FOUND,
-        DnsError::NoData => WSANO_DATA,
-        DnsError::TryAgain => WSATRY_AGAIN,
-        DnsError::Fail => WSANO_RECOVERY,
+const HOSTS_BYTES: &[u8] = b"C:\\Windows\\System32\\drivers\\etc\\hosts\0";
+const HOSTS_PATH: [u16; HOSTS_BYTES.len()] = {
+    let mut w = [0u16; HOSTS_BYTES.len()];
+    let mut i = 0;
+    while i < HOSTS_BYTES.len() {
+        w[i] = HOSTS_BYTES[i] as u16;
+        i += 1;
     }
+    w
+};
+
+const GENERIC_READ: u32 = 0x8000_0000;
+const FILE_SHARE_ALL: u32 = 7;
+const OPEN_EXISTING: u32 = 3;
+const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+const INVALID_HANDLE_VALUE: Handle = -1;
+
+/// Process-wide DNS cache (negative NXDOMAIN + positive RR). Never locked
+/// across network I/O, file I/O or sleeps so parallel lookups never block
+/// one another.
+static DNS_CACHE: Locked<DnsCache> = Locked::new(DnsCache::new());
+
+/// Monotonic DNS transaction id counter so concurrent threads never collide.
+static NEXT_DNS_ID: AtomicU16 = AtomicU16::new(0x5a17);
+
+fn now_ms() -> u64 {
+    // SAFETY: kernel32 query with no preconditions.
+    unsafe { crate::GetTickCount64() }
 }
 
-/// Ask the servers for `name`'s records of `qtype`.
-fn query(name: &str, qtype: u16) -> Result<dns::Answer, DnsError> {
-    let info = afd::net_info();
-    if info.servers().is_empty() {
-        return Err(DnsError::TryAgain);
+/// Read `C:\Windows\System32\drivers\etc\hosts` fresh so live edits are seen
+/// immediately by subsequent lookups.
+fn read_hosts_file() -> Option<Vec<u8>> {
+    // SAFETY: `HOSTS_PATH` is NUL-terminated UTF-16.
+    let h = unsafe {
+        crate::CreateFileW(
+            HOSTS_PATH.as_ptr(),
+            GENERIC_READ,
+            FILE_SHARE_ALL,
+            core::ptr::null(),
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            0,
+        )
+    };
+    if h == INVALID_HANDLE_VALUE || h == 0 {
+        return None;
     }
-    let mut last = DnsError::TryAgain;
-    for server in info.servers() {
-        let s = sock::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if s == INVALID_SOCKET {
-            return Err(DnsError::Fail);
+    let mut out = Vec::new();
+    let mut chunk = [0u8; 4096];
+    while out.len() < MAX_HOSTS_BYTES {
+        let want = chunk.len().min(MAX_HOSTS_BYTES - out.len()) as u32;
+        let mut got = 0u32;
+        // SAFETY: `h` is our open file handle and `chunk` / `got` are live locals.
+        let ok = unsafe { crate::ReadFile(h, chunk.as_mut_ptr(), want, &mut got, core::ptr::null_mut()) };
+        if ok == 0 || got == 0 {
+            break;
         }
-        let r = ask(s, *server, name, qtype);
-        sock::closesocket(s);
-        match r {
-            Ok(a) => return Ok(a),
-            Err(e @ (DnsError::NotFound | DnsError::NoData)) => return Err(e),
-            Err(e) => last = e,
-        }
+        out.extend_from_slice(&chunk[..got as usize]);
     }
-    Err(last)
+    // SAFETY: `h` was opened by `CreateFileW` above and is closed once.
+    unsafe { crate::CloseHandle(h) };
+    Some(out)
 }
 
-fn ask(s: Socket, server: [u8; 4], name: &str, qtype: u16) -> Result<dns::Answer, DnsError> {
-    let timeout = DNS_TIMEOUT_MS.to_le_bytes();
-    // SAFETY: a local value of the option's size.
-    unsafe { sock::setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, timeout.as_ptr(), 4) };
-    let id = (s as u16) ^ 0x5a17 ^ (qtype << 4);
-    let q = dns::query(id, name, qtype)?;
+/// Send all `qtypes` (1 or 2) in parallel on one UDP socket to `server:53`
+/// and collect replies until all are answered, any returns `NXDOMAIN`, or the
+/// deadline expires.
+fn ask_batch(
+    s: Socket,
+    server: [u8; 4],
+    name: &str,
+    qtypes: &[u16],
+) -> (Vec<(u16, Result<dns::Answer, DnsError>)>, bool) {
+    let base = NEXT_DNS_ID.fetch_add(qtypes.len().max(1) as u16, Ordering::Relaxed);
     let (to, tolen) = addr::encode(&SocketAddr::new(IpAddr::from(server), dns::PORT));
-    // SAFETY: local buffers.
-    if unsafe { sock::sendto(s, q.as_ptr(), q.len() as i32, 0, to.as_ptr(), tolen as i32) } < 0 {
-        return Err(DnsError::TryAgain);
+    let mut pending: Vec<(u16, u16, Option<Result<dns::Answer, DnsError>>)> = Vec::with_capacity(qtypes.len());
+    let mut sent = 0usize;
+    for (i, &qt) in qtypes.iter().enumerate() {
+        let id = base.wrapping_add(i as u16);
+        let q = match dns::query(id, name, qt) {
+            Ok(q) => q,
+            Err(e) => return (alloc::vec![(qt, Err(e))], false),
+        };
+        // SAFETY: local buffers.
+        if unsafe { sock::sendto(s, q.as_ptr(), q.len() as i32, 0, to.as_ptr(), tolen as i32) } >= 0 {
+            pending.push((id, qt, None));
+            sent += 1;
+        } else {
+            pending.push((id, qt, Some(Err(DnsError::TryAgain))));
+        }
     }
+    if sent == 0 {
+        return (pending.into_iter().map(|(_, qt, r)| (qt, r.unwrap_or(Err(DnsError::TryAgain)))).collect(), false);
+    }
+
+    let mut deadline = now_ms().saturating_add(u64::from(DNS_TIMEOUT_MS));
+    let mut got_addrs = false;
     let mut buf = [0u8; dns::MAX_UDP];
-    for _ in 0..4 {
+    let mut stray = 0u32;
+
+    while pending.iter().any(|(_, _, r)| r.is_none()) {
+        let now = now_ms();
+        if now >= deadline {
+            break;
+        }
+        let rem = (deadline - now).clamp(1, u64::from(u32::MAX)) as u32;
+        let timeout = rem.to_le_bytes();
+        // SAFETY: a local value of the option's size.
+        unsafe { sock::setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, timeout.as_ptr(), 4) };
         let n = sock::recv(s, buf.as_mut_ptr(), buf.len() as i32, 0);
         if n < 0 {
-            return Err(DnsError::TryAgain);
+            break;
         }
-        match dns::parse(&buf[..n as usize], id, name, qtype) {
-            // Not our answer (another id): keep reading.
-            Err(DnsError::Fail) if buf.len() >= 2 && u16::from_be_bytes([buf[0], buf[1]]) != id => {}
-            r => return r,
+        let pkt = &buf[..n as usize];
+        let Some(rid) = dns::reply_id(pkt) else {
+            stray += 1;
+            if stray >= 16 {
+                break;
+            }
+            continue;
+        };
+        let Some(slot) = pending.iter_mut().find(|(id, _, r)| *id == rid && r.is_none()) else {
+            stray += 1;
+            if stray >= 16 {
+                break;
+            }
+            continue;
+        };
+        let parsed = dns::parse(pkt, slot.0, name, slot.1);
+        if parsed == Err(DnsError::NotFound) {
+            // NXDOMAIN applies to every RR type of the domain: short-circuit immediately.
+            return (Vec::new(), true);
         }
+        if let Ok(ref ans) = parsed
+            && !ans.addrs.is_empty()
+            && !got_addrs
+        {
+            got_addrs = true;
+            deadline = deadline.min(now_ms().saturating_add(DNS_SECOND_GRACE_MS));
+        }
+        slot.2 = Some(parsed);
     }
-    Err(DnsError::TryAgain)
+
+    let results = pending.into_iter().map(|(_, qt, r)| (qt, r.unwrap_or(Err(DnsError::TryAgain)))).collect();
+    (results, false)
 }
 
-/// Every address of `name` for the hints' family (IPv6 first), and the
-/// canonical name.
-fn lookup(name: &str, h: &Hints) -> Result<(Vec<IpAddr>, Option<String>), u32> {
-    let types: &[u16] = match h.family {
-        AF_INET => &[dns::TYPE_A],
-        AF_INET6 => &[dns::TYPE_AAAA],
-        _ => &[dns::TYPE_AAAA, dns::TYPE_A],
-    };
+/// Resolve `name` via the `hosts` file, the DNS cache, UDP DNS queries, and
+/// (for single-label / `.local` names without `AI_DNS_ONLY`) the local-network
+/// fallback wait.
+fn lookup_name(name: &str, h: &Hints) -> Result<(Vec<IpAddr>, Option<String>), u32> {
+    // 1. Live hosts file always takes precedence over DNS and the negative cache.
+    if let Some(bytes) = read_hosts_file()
+        && let Some(entry) = hosts::lookup(&bytes, name)
+    {
+        return Ok((entry.addrs, Some(entry.canonical)));
+    }
+    // Reject syntactically invalid host names immediately without DNS or fallback wait.
+    if !dns::is_valid_name(name) {
+        return Err(resolve::dns_error_wsa(DnsError::BadName));
+    }
+
+    let types = resolve::query_types(h);
     let mut addrs = Vec::new();
-    let mut canonical = None;
-    let mut first_error = None;
-    for &t in types {
-        match query(name, t) {
-            Ok(a) => {
-                addrs.extend(a.addrs);
-                canonical = canonical.or(a.canonical);
+    let mut canonical: Option<String> = None;
+    let mut missing: Vec<u16> = Vec::with_capacity(types.len());
+    let mut dns_nxdomain = false;
+
+    // 2. Consult the in-process DNS cache under a brief lock.
+    let now = now_ms();
+    DNS_CACHE.with(|cache| {
+        if cache.is_negative(name, now) {
+            dns_nxdomain = true;
+            return;
+        }
+        for &t in types {
+            match cache.lookup(name, t, now) {
+                CacheLookup::Negative => {
+                    dns_nxdomain = true;
+                    missing.clear();
+                    return;
+                }
+                CacheLookup::Positive(a) => {
+                    addrs.extend(a.addrs);
+                    if canonical.is_none() {
+                        canonical = a.canonical;
+                    }
+                }
+                CacheLookup::Miss => missing.push(t),
             }
-            Err(e) => {
-                first_error.get_or_insert(e);
+        }
+    });
+
+    // 3. Query DNS servers for any uncached record types (with no lock held).
+    if !dns_nxdomain && !missing.is_empty() {
+        let info = afd::net_info();
+        for server in info.servers() {
+            let s = sock::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+            if s == INVALID_SOCKET {
+                break;
+            }
+            let (results, nx) = ask_batch(s, *server, name, &missing);
+            sock::closesocket(s);
+            if nx {
+                DNS_CACHE.with(|c| c.insert_negative(name, now_ms()));
+                addrs.clear();
+                break;
+            }
+            let mut retry_types = Vec::new();
+            let ts = now_ms();
+            for (qt, res) in results {
+                match res {
+                    Ok(a) => {
+                        DNS_CACHE.with(|c| c.insert_positive(name, qt, &a, ts));
+                        addrs.extend(a.addrs);
+                        if canonical.is_none() {
+                            canonical = a.canonical;
+                        }
+                    }
+                    Err(DnsError::NoData) => {}
+                    Err(DnsError::NotFound) => {
+                        DNS_CACHE.with(|c| c.insert_negative(name, ts));
+                        addrs.clear();
+                        retry_types.clear();
+                        break;
+                    }
+                    // Timeouts / SERVFAIL are never cached.
+                    Err(DnsError::TryAgain | DnsError::Fail | DnsError::BadName) => {
+                        retry_types.push(qt);
+                    }
+                }
+            }
+            missing = retry_types;
+            if missing.is_empty() {
+                break;
             }
         }
     }
+
+    // 4. Local-network fallback wait for single-label / `.local` names when
+    // `AI_DNS_ONLY` is not set and DNS did not resolve the name. Not cached
+    // and runs without any lock so parallel lookups proceed concurrently.
     if addrs.is_empty() {
-        return Err(first_error.map_or(WSAHOST_NOT_FOUND, dns_error));
+        if h.flags & AI_DNS_ONLY == 0 && dns::needs_local_fallback(name) {
+            // SAFETY: kernel32 sleep with no preconditions.
+            unsafe { crate::Sleep(LOCAL_FALLBACK_WAIT_MS) };
+        }
+        return Err(resolve::dns_error_wsa(DnsError::NotFound));
     }
     Ok((addrs, canonical))
 }
@@ -120,7 +300,7 @@ fn lookup(name: &str, h: &Hints) -> Result<(Vec<IpAddr>, Option<String>), u32> {
 /// `getaddrinfo`'s answer: the entries and the canonical name.
 fn resolve_all(node: Option<&str>, service: Option<&str>, h: &Hints) -> Result<(Vec<Entry>, Option<String>), u32> {
     check_started()?;
-    if node.is_none_or(str::is_empty) && service.is_none_or(str::is_empty) {
+    if node.is_none() && service.is_none_or(str::is_empty) {
         return Err(EAI_NONAME);
     }
     resolve::check_hints(h, node)?;
@@ -129,14 +309,15 @@ fn resolve_all(node: Option<&str>, service: Option<&str>, h: &Hints) -> Result<(
     let (host, scope) = resolve::classify(node, h, own.host_name())?;
     let (addrs, canonical) = match host {
         Host::Addrs(a) => (a, None),
-        Host::Lookup(name) => lookup(&name, h)?,
+        Host::SelfAddrs => (resolve::self_addrs(&afd::local_addrs(), h), Some(String::from(own.host_name()))),
+        Host::Lookup(name) => lookup_name(&name, h)?,
     };
     let numeric = node.is_some_and(|n| resolve::numeric_host(n).is_some());
     let entries = resolve::entries(&addrs, port, scope, h, numeric);
     if entries.is_empty() {
         return Err(EAI_NONAME);
     }
-    let canonical = canonical.or_else(|| node.map(String::from));
+    let canonical = canonical.or_else(|| node.filter(|n| !n.is_empty()).map(String::from));
     Ok((entries, canonical))
 }
 
@@ -459,7 +640,7 @@ struct HostBuf {
 }
 
 static HOST: Static<HostBuf> = Static(UnsafeCell::new(HostBuf {
-    hostent: [0; 32],
+    hostent: [0; HOSTENT_SIZE],
     name: [0; 256],
     aliases: [0],
     addrs: [[0; 4]; 16],
@@ -480,7 +661,8 @@ pub unsafe extern "system" fn gethostbyname(name: *const u8) -> *mut u8 {
     let h = Hints { family: AF_INET, ..Hints::default() };
     let addrs = match resolve::classify(Some(&name), &h, own.host_name()) {
         Ok((Host::Addrs(a), _)) => Ok(a),
-        Ok((Host::Lookup(n), _)) => lookup(&n, &h).map(|(a, _)| a),
+        Ok((Host::SelfAddrs, _)) => Ok(resolve::self_addrs(&afd::local_addrs(), &h)),
+        Ok((Host::Lookup(n), _)) => lookup_name(&n, &h).map(|(a, _)| a),
         Err(e) => Err(e),
     };
     let addrs: Vec<[u8; 4]> = match addrs {
@@ -497,7 +679,7 @@ pub unsafe extern "system" fn gethostbyname(name: *const u8) -> *mut u8 {
         }
     };
     if addrs.is_empty() {
-        set_error(WSANO_DATA);
+        set_error(WSAHOST_NOT_FOUND);
         return core::ptr::null_mut();
     }
     // SAFETY: Winsock's own buffer (see `Static`).
@@ -513,11 +695,11 @@ pub unsafe extern "system" fn gethostbyname(name: *const u8) -> *mut u8 {
             b.list[i] = b.addrs[i].as_ptr() as usize;
         }
         let he = b.hostent.as_mut_ptr();
-        core::ptr::write_unaligned(he.cast::<usize>(), b.name.as_ptr() as usize);
-        core::ptr::write_unaligned(he.add(8).cast::<usize>(), b.aliases.as_ptr() as usize);
-        core::ptr::write_unaligned(he.add(16).cast::<i16>(), AF_INET as i16);
-        core::ptr::write_unaligned(he.add(18).cast::<i16>(), 4);
-        core::ptr::write_unaligned(he.add(24).cast::<usize>(), b.list.as_ptr() as usize);
+        core::ptr::write_unaligned(he.add(HOSTENT_NAME).cast::<usize>(), b.name.as_ptr() as usize);
+        core::ptr::write_unaligned(he.add(HOSTENT_ALIASES).cast::<usize>(), b.aliases.as_ptr() as usize);
+        core::ptr::write_unaligned(he.add(HOSTENT_ADDRTYPE).cast::<i16>(), AF_INET as i16);
+        core::ptr::write_unaligned(he.add(HOSTENT_LENGTH).cast::<i16>(), 4);
+        core::ptr::write_unaligned(he.add(HOSTENT_ADDR_LIST).cast::<usize>(), b.list.as_ptr() as usize);
         he
     }
 }

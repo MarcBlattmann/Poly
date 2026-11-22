@@ -50,7 +50,10 @@ pub struct Entry {
 pub enum Host {
     /// Addresses known without a lookup.
     Addrs(Vec<IpAddr>),
-    /// A name for the resolver (already checked to be a plausible name).
+    /// The empty host string `""` (without `AI_NUMERICHOST` or `AI_PASSIVE`):
+    /// resolves to the machine's own addresses.
+    SelfAddrs,
+    /// A name for the hosts file and stub resolver (already checked to be a plausible name).
     Lookup(String),
 }
 
@@ -184,14 +187,24 @@ fn unspecified(af: i32) -> IpAddr {
 }
 
 /// Classify the host part (`own` is the machine's host name). A numeric
-/// host of the wrong family is `WSAHOST_NOT_FOUND`; a name with
-/// `AI_NUMERICHOST` too.
+/// host of the wrong family is `WSAHOST_NOT_FOUND`; a name (or `""`) with
+/// `AI_NUMERICHOST` too. An empty string `""` without `AI_NUMERICHOST`
+/// resolves to the machine's own addresses (or wildcard with `AI_PASSIVE`).
 pub fn classify(node: Option<&str>, h: &Hints, own: &str) -> Result<(Host, u32), u32> {
     let fams = families(h);
-    let Some(node) = node.filter(|n| !n.is_empty()) else {
+    let Some(node) = node else {
         let pick = if h.flags & AI_PASSIVE != 0 { unspecified } else { loopback };
         return Ok((Host::Addrs(fams.iter().map(|&f| pick(f)).collect()), 0));
     };
+    if node.is_empty() {
+        if h.flags & AI_NUMERICHOST != 0 {
+            return Err(EAI_NONAME);
+        }
+        if h.flags & AI_PASSIVE != 0 {
+            return Ok((Host::Addrs(fams.iter().map(|&f| unspecified(f)).collect()), 0));
+        }
+        return Ok((Host::SelfAddrs, 0));
+    }
     if let Some((ip, scope)) = numeric_host(node) {
         let af = if ip.is_ipv4() { AF_INET } else { AF_INET6 };
         if !fams.contains(&af) {
@@ -211,23 +224,84 @@ pub fn classify(node: Option<&str>, h: &Hints, own: &str) -> Result<(Host, u32),
     Ok((Host::Lookup(node.to_string()), 0))
 }
 
+/// The machine's own addresses for an empty node string `""`: prefers non-loopback
+/// interface addresses for each allowed family and falls back to loopback when a
+/// family has none.
+pub fn self_addrs(if_addrs: &[(bool, IpAddr)], h: &Hints) -> Vec<IpAddr> {
+    let mut out = Vec::new();
+    for &af in families(h) {
+        let mut found = false;
+        for &(is_lo, ip) in if_addrs {
+            if is_lo {
+                continue;
+            }
+            let matches = (af == AF_INET && ip.is_ipv4()) || (af == AF_INET6 && ip.is_ipv6());
+            if matches && !out.contains(&ip) {
+                out.push(ip);
+                found = true;
+            }
+        }
+        if !found {
+            let lo = loopback(af);
+            if !out.contains(&lo) {
+                out.push(lo);
+            }
+        }
+    }
+    out
+}
+
+/// DNS record types to query for `h`.
+pub fn query_types(h: &Hints) -> &'static [u16] {
+    match h.family {
+        AF_INET => &[crate::dns::TYPE_A],
+        AF_INET6 if h.flags & AI_V4MAPPED != 0 => &[crate::dns::TYPE_AAAA, crate::dns::TYPE_A],
+        AF_INET6 => &[crate::dns::TYPE_AAAA],
+        _ => &[crate::dns::TYPE_AAAA, crate::dns::TYPE_A],
+    }
+}
+
+/// The WSA error `getaddrinfo` / `GetAddrInfoW` reports when a host lookup
+/// finds no addresses (observed on Windows 11: `WSAHOST_NOT_FOUND` (11001) for
+/// NXDOMAIN, missing family / NODATA, invalid names and timeouts alike).
+pub fn dns_error_wsa(_e: crate::dns::DnsError) -> u32 {
+    WSAHOST_NOT_FOUND
+}
+
 /// The result list for `addrs` (filtered by the hints' family, ordered
 /// IPv6 first unless the family is fixed) with `port`; `numeric` when the host was an address
 /// literal (`ai_flags` `AI_NUMERICHOST`). The socket type and protocol are the hints'.
+///
+/// For `AF_INET6` on a non-numeric name with `AI_V4MAPPED`, IPv4 addresses are
+/// returned as IPv4-mapped IPv6 addresses when no native IPv6 addresses exist,
+/// or in addition to them when `AI_ALL` is also set.
 pub fn entries(addrs: &[IpAddr], port: u16, scope: u32, h: &Hints, numeric: bool) -> Vec<Entry> {
     let mut out = Vec::new();
+    let flags = if numeric { AI_NUMERICHOST } else { 0 };
+    let push_unique = |out: &mut Vec<Entry>, af: i32, a: SocketAddr| {
+        if !out.iter().any(|e| e.addr == a) {
+            out.push(Entry { flags, family: af, socktype: h.socktype, protocol: h.protocol, addr: a });
+        }
+    };
     for &af in families(h) {
         for ip in addrs {
-            let a = match ip {
-                IpAddr::V4(v) if af == AF_INET => SocketAddr::new(IpAddr::V4(*v), port),
-                IpAddr::V6(v) if af == AF_INET6 => SocketAddr::V6(SocketAddrV6::new(*v, port, 0, scope)),
-                _ => continue,
-            };
-            if out.iter().any(|e: &Entry| e.addr == a) {
-                continue;
+            match ip {
+                IpAddr::V4(v) if af == AF_INET => {
+                    push_unique(&mut out, AF_INET, SocketAddr::new(IpAddr::V4(*v), port));
+                }
+                IpAddr::V6(v) if af == AF_INET6 => {
+                    push_unique(&mut out, AF_INET6, SocketAddr::V6(SocketAddrV6::new(*v, port, 0, scope)));
+                }
+                _ => {}
             }
-            let flags = if numeric { AI_NUMERICHOST } else { 0 };
-            out.push(Entry { flags, family: af, socktype: h.socktype, protocol: h.protocol, addr: a });
+        }
+    }
+    if !numeric && h.family == AF_INET6 && h.flags & AI_V4MAPPED != 0 && (out.is_empty() || h.flags & AI_ALL != 0) {
+        for ip in addrs {
+            if let IpAddr::V4(v) = ip {
+                let mapped = SocketAddr::V6(SocketAddrV6::new(v.to_ipv6_mapped(), port, 0, 0));
+                push_unique(&mut out, AF_INET6, mapped);
+            }
         }
     }
     out
@@ -397,5 +471,83 @@ mod tests {
         let other: SocketAddr = "10.0.2.2:80".parse().unwrap();
         assert_eq!(name_of_host(&other, 0).unwrap(), "10.0.2.2");
         assert_eq!(name_of_host(&other, NI_NAMEREQD), Err(EAI_NONAME));
+    }
+
+    #[test]
+    fn empty_name_and_not_localhost() {
+        let any = h(0, AF_UNSPEC, SOCK_STREAM);
+        assert_eq!(classify(Some(""), &any, "poly"), Ok((Host::SelfAddrs, 0)));
+        assert_eq!(classify(Some(""), &h(AI_NUMERICHOST, AF_INET, SOCK_STREAM), "poly"), Err(EAI_NONAME));
+        assert_eq!(
+            classify(Some(""), &h(AI_PASSIVE, AF_INET, SOCK_STREAM), "poly"),
+            Ok((Host::Addrs(alloc::vec![IpAddr::V4(Ipv4Addr::UNSPECIFIED)]), 0))
+        );
+        // Subdomains of localhost and localhost.localdomain are NOT answered locally.
+        assert_eq!(
+            classify(Some("polytest.localhost"), &any, "poly").unwrap().0,
+            Host::Lookup("polytest.localhost".into())
+        );
+        assert_eq!(
+            classify(Some("localhost.localdomain"), &any, "poly").unwrap().0,
+            Host::Lookup("localhost.localdomain".into())
+        );
+        // self_addrs picks NIC addresses and falls back to loopback per family.
+        let ifs = [
+            (true, IpAddr::V4(Ipv4Addr::LOCALHOST)),
+            (true, IpAddr::V6(Ipv6Addr::LOCALHOST)),
+            (false, IpAddr::V4(Ipv4Addr::new(10, 0, 2, 15))),
+        ];
+        let a = self_addrs(&ifs, &any);
+        assert_eq!(a, [IpAddr::V6(Ipv6Addr::LOCALHOST), IpAddr::V4(Ipv4Addr::new(10, 0, 2, 15))]);
+        assert_eq!(self_addrs(&[], &any), [IpAddr::V6(Ipv6Addr::LOCALHOST), IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+    }
+
+    #[test]
+    fn family_filtering_and_v4mapped_all_rules() {
+        let ip4 = IpAddr::V4(Ipv4Addr::new(192, 0, 2, 55));
+        let ip6 = IpAddr::V6("2001:db8::55".parse().unwrap());
+        let mapped = IpAddr::V6("::ffff:192.0.2.55".parse().unwrap());
+
+        // IPv4-only name.
+        assert_eq!(entries(&[ip4], 0, 0, &h(0, AF_UNSPEC, SOCK_STREAM), false).len(), 1);
+        assert_eq!(entries(&[ip4], 0, 0, &h(0, AF_INET, SOCK_STREAM), false).len(), 1);
+        assert!(entries(&[ip4], 0, 0, &h(0, AF_INET6, SOCK_STREAM), false).is_empty());
+        let e = entries(&[ip4], 0, 0, &h(AI_V4MAPPED, AF_INET6, SOCK_STREAM), false);
+        assert_eq!(e.len(), 1);
+        assert_eq!((e[0].family, e[0].addr.ip()), (AF_INET6, mapped));
+        let e = entries(&[ip4], 0, 0, &h(AI_V4MAPPED | AI_ALL, AF_INET6, SOCK_STREAM), false);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].addr.ip(), mapped);
+        // Numeric IPv4 does NOT map to IPv6 even with AI_V4MAPPED.
+        assert!(entries(&[ip4], 0, 0, &h(AI_V4MAPPED, AF_INET6, SOCK_STREAM), true).is_empty());
+        assert_eq!(classify(Some("127.0.0.1"), &h(AI_V4MAPPED, AF_INET6, SOCK_STREAM), "poly"), Err(EAI_NONAME));
+
+        // IPv6-only name.
+        assert_eq!(entries(&[ip6], 0, 0, &h(0, AF_UNSPEC, SOCK_STREAM), false).len(), 1);
+        assert_eq!(entries(&[ip6], 0, 0, &h(0, AF_INET6, SOCK_STREAM), false).len(), 1);
+        assert!(entries(&[ip6], 0, 0, &h(0, AF_INET, SOCK_STREAM), false).is_empty());
+        assert_eq!(entries(&[ip6], 0, 0, &h(AI_V4MAPPED, AF_INET6, SOCK_STREAM), false).len(), 1);
+        assert_eq!(entries(&[ip6], 0, 0, &h(AI_ADDRCONFIG, AF_UNSPEC, SOCK_STREAM), false).len(), 1);
+
+        // Both IPv4 and IPv6.
+        let both = [ip4, ip6];
+        assert_eq!(entries(&both, 0, 0, &h(0, AF_UNSPEC, SOCK_STREAM), false).len(), 2);
+        assert_eq!(entries(&both, 0, 0, &h(0, AF_INET, SOCK_STREAM), false).len(), 1);
+        assert_eq!(entries(&both, 0, 0, &h(0, AF_INET6, SOCK_STREAM), false).len(), 1);
+        // AI_V4MAPPED alone: native IPv6 only (mapped IPv4 is not added).
+        let e = entries(&both, 0, 0, &h(AI_V4MAPPED, AF_INET6, SOCK_STREAM), false);
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].addr.ip(), ip6);
+        // AI_V4MAPPED | AI_ALL: both native IPv6 and mapped IPv4.
+        let e = entries(&both, 0, 0, &h(AI_V4MAPPED | AI_ALL, AF_INET6, SOCK_STREAM), false);
+        assert_eq!(e.len(), 2);
+        assert_eq!(e[0].addr.ip(), ip6);
+        assert_eq!(e[1].addr.ip(), mapped);
+
+        // DNS query types.
+        assert_eq!(query_types(&h(0, AF_INET, SOCK_STREAM)), &[crate::dns::TYPE_A]);
+        assert_eq!(query_types(&h(0, AF_INET6, SOCK_STREAM)), &[crate::dns::TYPE_AAAA]);
+        assert_eq!(query_types(&h(AI_V4MAPPED, AF_INET6, SOCK_STREAM)), &[crate::dns::TYPE_AAAA, crate::dns::TYPE_A]);
+        assert_eq!(query_types(&h(0, AF_UNSPEC, SOCK_STREAM)), &[crate::dns::TYPE_AAAA, crate::dns::TYPE_A]);
     }
 }

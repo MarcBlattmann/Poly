@@ -263,6 +263,16 @@ pub fn net_info() -> afd::NetInfo {
     }
 }
 
+/// The machine's interface addresses (`(is_loopback, ip)`) from `\Device\Afd`'s `IF_LIST`.
+pub fn local_addrs() -> alloc::vec::Vec<(bool, core::net::IpAddr)> {
+    let mut out = [0u8; afd::IF_LIST_MAX_BYTES];
+    let Ok(h) = control() else { return alloc::vec::Vec::new() };
+    match ioctl(h, afd::IF_LIST, &[], &mut out) {
+        (STATUS_SUCCESS, n) => afd::decode_if_addrs(&out[..n.min(out.len())]),
+        _ => alloc::vec::Vec::new(),
+    }
+}
+
 /// What an endpoint is (`None` if `h` is not a socket).
 pub fn info(h: Handle) -> Option<afd::Info> {
     let mut out = [0u8; afd::Info::SIZE];

@@ -383,6 +383,23 @@ pub fn install_file(vr: &VfsRoot, root: &NodeRef, dir: &str, name: &str, bytes: 
     Ok(Installed::Written)
 }
 
+/// Put `bytes` as file `name` into `dir` (`\`-separated, below `root`, made if
+/// missing) only when no entry of that name (without case) exists yet. Existing
+/// files are left untouched so user edits survive a reboot (e.g. `drivers\etc\hosts`).
+pub fn install_if_missing(
+    vr: &VfsRoot,
+    root: &NodeRef,
+    dir: &str,
+    name: &str,
+    bytes: &[u8],
+) -> Result<Installed, NtStatus> {
+    let (folder, _) = ensure_path(vr, root, dir)?;
+    if find_child(vr, &folder, &wide(name))?.is_some() {
+        return Ok(Installed::Unchanged);
+    }
+    install_file(vr, root, dir, name, bytes)
+}
+
 /// [`install_file`] for a DLL the user may replace with another vendor's
 /// copy (ADR 0199, owner decision 5: Microsoft's `vc_redist` replaces
 /// Poly's Visual C++ runtime): written when missing, rewritten when it is
