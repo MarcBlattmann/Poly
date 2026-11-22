@@ -32,6 +32,9 @@ pub const C_PATH: &str = "/nt/c";
 
 /// The directory `C:` really is (after following `/nt/c`), once decided.
 static C_ROOT: Mutex<Option<String>> = Mutex::new(None);
+/// The unified user home mapping `(posix_home, dos_profile)` (e.g. `("/home/poly",
+/// "C:\\Users\\poly")`), set when [`create::unify_home`] succeeds.
+static HOME_ALIAS: Mutex<Option<(String, String)>> = Mutex::new(None);
 
 /// The VFS directories that are `C:`: `/nt/c` and, when it is a link, its
 /// target (for naming executables, [`layout::dos_path_of_vfs`]).
@@ -46,15 +49,21 @@ pub fn c_roots() -> Vec<String> {
 }
 
 /// An argument of a Windows program started from Poly's side, as the program is given it
-/// ([`layout::dos_argument`], ADR 0234): an absolute path naming a file or folder is its DOS path.
+/// ([`layout::dos_argument_with`], ADR 0234): an absolute path naming a file or folder is its DOS
+/// path (including unified `/home/poly/...` → `C:\Users\poly\...`).
 pub fn dos_argument(arg: String) -> String {
     let roots = c_roots();
     let roots: Vec<&[u8]> = roots.iter().map(|r| r.as_bytes()).collect();
+    let home = HOME_ALIAS.lock().clone();
+    let aliases: Vec<layout::PathAlias<'_>> = home
+        .as_ref()
+        .map(|(vfs, dos)| alloc::vec![layout::PathAlias { vfs: vfs.as_bytes(), dos: dos.as_str() }])
+        .unwrap_or_default();
     let exists = |p: &str| {
         let vfs = fs::vfs();
         vfs.root_context().is_ok_and(|ctx| vfs.lookup(&ctx, &Cred::root(), At::Cwd, p.as_bytes(), true).is_ok())
     };
-    layout::dos_argument(&arg, &roots, exists).unwrap_or(arg)
+    layout::dos_argument_with(&arg, &roots, &aliases, exists).unwrap_or(arg)
 }
 
 fn mkdir_all(path: &str) -> Result<(), Errno> {
@@ -121,6 +130,19 @@ pub(super) fn prepare(sys: &mut NtSystem) {
     let real = vfs.path_of(&ctx, &root).ok().map(|p| String::from_utf8_lossy(&p).into_owned());
     *C_ROOT.lock() = real.clone();
     let vr = VfsRoot::new(vfs, ctx, cred);
+    let posix_home = POLY_USER.posix_home();
+    match create::unify_home(&vr, &root, C_PATH, &POLY_USER, &posix_home) {
+        Ok(how) => {
+            if how != create::HomeUnified::Conflict {
+                *HOME_ALIAS.lock() = Some((posix_home.clone(), POLY_USER.profile()));
+                sys.io.set_home_alias(&POLY_USER.profile_vfs(C_PATH), &posix_home);
+            }
+            crate::kprintln!("nt: layout: user home {posix_home} <-> {} ({how:?})", POLY_USER.profile());
+        }
+        Err(e) => {
+            crate::kprintln!("nt: layout: cannot unify {posix_home} with {}: {:#x}", POLY_USER.profile(), e.0);
+        }
+    }
     let report = create::create(&vr, &root, &POLY_USER);
     for (path, status) in &report.conflicts {
         crate::kprintln!("nt: layout: {path} cannot be made ({:#x}): something else is there", status.0);
@@ -337,12 +359,17 @@ pub(super) fn environment(sys: &NtSystem) -> Vec<u16> {
 pub fn dos_path(path: &[u8]) -> String {
     let roots = c_roots();
     let roots: Vec<&[u8]> = roots.iter().map(|r| r.as_bytes()).collect();
+    let home = HOME_ALIAS.lock().clone();
+    let aliases: Vec<layout::PathAlias<'_>> = home
+        .as_ref()
+        .map(|(vfs, dos)| alloc::vec![layout::PathAlias { vfs: vfs.as_bytes(), dos: dos.as_str() }])
+        .unwrap_or_default();
     let mut abs = Vec::new();
     if !path.starts_with(b"/") {
         abs.push(b'/');
     }
     abs.extend_from_slice(path);
-    layout::dos_path_of_vfs(&abs, &roots)
+    layout::dos_path_of_vfs_with(&abs, &roots, &aliases)
 }
 
 mod tests {
@@ -387,6 +414,46 @@ mod tests {
             drop(vfs.open(&ctx, &cred, At::Cwd, file.as_bytes(), OpenFlags::WRONLY | OpenFlags::CREAT, 0o644).map_err(|_| "create")?);
             if super::link_c(&file, &target) != Err(Errno::EEXIST) {
                 return Err("a file in the way was replaced");
+            }
+            Ok(())
+        }
+    }
+
+    kernel_test! {
+        /// Unified user home (Phase 8): `/home/poly` and `C:\Users\poly` name the same directory
+        /// tree, so files written via either side appear immediately on the other.
+        fn nt_layout_unifies_user_home() -> TestResult {
+            let vfs = crate::fs::vfs();
+            let ctx = vfs.root_context().map_err(|_| "no VFS")?;
+            let cred = Cred::root();
+            let base = "/tmp/poly-home-unify-test";
+            let c_dir = alloc::format!("{base}/nt/c");
+            let posix_home = alloc::format!("{base}/home/poly");
+            super::mkdir_all(&c_dir).map_err(|_| "mkdir c_dir")?;
+            let root = vfs.lookup(&ctx, &cred, At::Cwd, c_dir.as_bytes(), true).map_err(|_| "lookup c_dir")?;
+            let vr = VfsRoot::new(vfs, vfs.root_context().map_err(|_| "no VFS")?, cred.clone());
+            let how = create::unify_home(&vr, &root, &c_dir, &POLY_USER, &posix_home)
+                .map_err(|_| "unify_home failed")?;
+            if how != create::HomeUnified::LinkedPosixToProfile {
+                return Err("expected LinkedPosixToProfile for missing posix home");
+            }
+            if create::unify_home(&vr, &root, &c_dir, &POLY_USER, &posix_home) != Ok(create::HomeUnified::AlreadyUnified) {
+                return Err("second unify_home was not idempotent");
+            }
+            let report = create::create(&vr, &root, &POLY_USER);
+            if !report.conflicts.is_empty() {
+                return Err("layout create had conflicts on unified home");
+            }
+            // Write via POSIX home, read via NT profile.
+            let from_posix = alloc::format!("{posix_home}/Downloads/hello.txt");
+            let f = vfs
+                .open(&ctx, &cred, At::Cwd, from_posix.as_bytes(), OpenFlags::WRONLY | OpenFlags::CREAT, 0o644)
+                .map_err(|_| "create via posix home")?;
+            f.write_at(0, b"shared").map_err(|_| "write")?;
+            drop(f);
+            let via_nt = alloc::format!("{c_dir}/Users/poly/Downloads/hello.txt");
+            if vfs.lookup(&ctx, &cred, At::Cwd, via_nt.as_bytes(), true).is_err() {
+                return Err("file written via POSIX home was not visible under NT profile");
             }
             Ok(())
         }

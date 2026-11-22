@@ -3,7 +3,9 @@
 
 extern crate std;
 
-use super::create::{self, Installed, create, install_file, install_if_missing, install_own_copy};
+use super::create::{
+    self, HomeUnified, Installed, create, install_file, install_if_missing, install_own_copy, unify_home,
+};
 use super::env::{self, Block, Machine};
 use super::sync::{self, sync};
 use super::*;
@@ -145,6 +147,193 @@ fn a_path_argument_that_names_a_file_reaches_a_windows_program_as_its_dos_path()
     {
         assert_eq!(arg(a), None, "{a}");
     }
+}
+
+#[test]
+fn unified_home_path_aliases_map_between_posix_and_windows() {
+    let roots: &[&[u8]] = &[b"/nt/c", b"/winc/poly/nt/c"];
+    let posix = POLY_USER.posix_home();
+    let profile = POLY_USER.profile();
+    let aliases = [PathAlias { vfs: posix.as_bytes(), dos: &profile }];
+    assert_eq!(dos_path_of_vfs_with(b"/home/poly", roots, &aliases), "C:\\Users\\poly");
+    assert_eq!(dos_path_of_vfs_with(b"/home/poly/", roots, &aliases), "C:\\Users\\poly");
+    assert_eq!(
+        dos_path_of_vfs_with(b"/home/poly/Downloads/qa test.txt", roots, &aliases),
+        "C:\\Users\\poly\\Downloads\\qa test.txt"
+    );
+    // Exact component boundary: `/home/poly2` is not `/home/poly`.
+    assert_eq!(dos_path_of_vfs_with(b"/home/poly2/x.txt", roots, &aliases), "Z:\\home\\poly2\\x.txt");
+    assert_eq!(dos_path_of_vfs_with(b"/tmp/a.txt", roots, &aliases), "Z:\\tmp\\a.txt");
+    let files = ["/home/poly/Downloads/report.pdf", "/nt/c/Users/poly/Desktop/a.txt", "/tmp/b.png"];
+    let exists = |p: &str| files.contains(&p);
+    assert_eq!(
+        dos_argument_with("/home/poly/Downloads/report.pdf", roots, &aliases, exists).as_deref(),
+        Some("C:\\Users\\poly\\Downloads\\report.pdf")
+    );
+    assert_eq!(
+        dos_argument_with("/nt/c/Users/poly/Desktop/a.txt", roots, &aliases, exists).as_deref(),
+        Some("C:\\Users\\poly\\Desktop\\a.txt")
+    );
+    assert_eq!(dos_argument_with("/tmp/b.png", roots, &aliases, exists).as_deref(), Some("Z:\\tmp\\b.png"));
+    assert_eq!(dos_argument_with("/home/poly/missing.txt", roots, &aliases, exists), None);
+    // Reverse direction: NT profile VFS path -> POSIX home path.
+    let profile_vfs = POLY_USER.profile_vfs("/nt/c");
+    assert_eq!(
+        rewrite_prefix_ci("/nt/c/Users/poly/Downloads/report.pdf", &profile_vfs, &posix).as_deref(),
+        Some("/home/poly/Downloads/report.pdf")
+    );
+    assert_eq!(
+        rewrite_prefix_ci("/nt/c/users/POLY/Documents/a.txt", &profile_vfs, &posix).as_deref(),
+        Some("/home/poly/Documents/a.txt")
+    );
+    assert_eq!(rewrite_prefix_ci("/nt/c/Users/poly", &profile_vfs, &posix).as_deref(), Some("/home/poly"));
+    assert_eq!(rewrite_prefix_ci("/nt/c/Users/poly2/a.txt", &profile_vfs, &posix), None);
+    assert_eq!(rewrite_prefix_ci("/nt/c/Windows/win.ini", &profile_vfs, &posix), None);
+}
+
+#[test]
+fn unify_home_links_missing_or_empty_posix_home_to_windows_profile() {
+    let (vr, root) = setup();
+    assert_eq!(unify_home(&vr, &root, "/nt/c", &POLY_USER, "/home/poly"), Ok(HomeUnified::LinkedPosixToProfile));
+    assert_eq!(vr.vfs.readlink(&vr.ctx, &vr.cred, At::Cwd, b"/home/poly").unwrap(), b"/nt/c/Users/poly");
+    // Idempotent.
+    assert_eq!(unify_home(&vr, &root, "/nt/c", &POLY_USER, "/home/poly"), Ok(HomeUnified::AlreadyUnified));
+    let report = create(&vr, &root, &POLY_USER);
+    assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
+    // Files created via POSIX home are immediately visible under C:\Users\poly and vice versa.
+    for dir in ["Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos"] {
+        assert!(exists(&vr, &alloc::format!("/home/poly/{dir}")), "{dir}");
+    }
+    let f = vr
+        .vfs
+        .open(
+            &vr.ctx,
+            &vr.cred,
+            At::Cwd,
+            b"/home/poly/Downloads/from-linux.txt",
+            OpenFlags::WRONLY | OpenFlags::CREAT,
+            0o644,
+        )
+        .unwrap();
+    f.write_at(0, b"linux").unwrap();
+    drop(f);
+    assert_eq!(node(&vr, "/nt/c/Users/poly/Downloads/from-linux.txt").stat().unwrap().size, 5);
+    let f2 = vr
+        .vfs
+        .open(
+            &vr.ctx,
+            &vr.cred,
+            At::Cwd,
+            b"/nt/c/Users/poly/Documents/from-win.txt",
+            OpenFlags::WRONLY | OpenFlags::CREAT,
+            0o644,
+        )
+        .unwrap();
+    f2.write_at(0, b"windows").unwrap();
+    drop(f2);
+    assert_eq!(node(&vr, "/home/poly/Documents/from-win.txt").stat().unwrap().size, 7);
+
+    // An empty POSIX home on tmpfs is replaced with the symlink too (preserving any NT files).
+    let (vr2, root2) = setup();
+    vr2.vfs.mkdir(&vr2.ctx, &vr2.cred, At::Cwd, b"/home", 0o755).unwrap();
+    vr2.vfs.mkdir(&vr2.ctx, &vr2.cred, At::Cwd, b"/home/poly", 0o755).unwrap();
+    vr2.vfs.mkdir(&vr2.ctx, &vr2.cred, At::Cwd, b"/nt/c/Users", 0o755).unwrap();
+    vr2.vfs.mkdir(&vr2.ctx, &vr2.cred, At::Cwd, b"/nt/c/Users/poly", 0o755).unwrap();
+    let kept = vr2
+        .vfs
+        .open(&vr2.ctx, &vr2.cred, At::Cwd, b"/nt/c/Users/poly/kept.txt", OpenFlags::WRONLY | OpenFlags::CREAT, 0o644)
+        .unwrap();
+    kept.write_at(0, b"keep").unwrap();
+    drop(kept);
+    assert_eq!(unify_home(&vr2, &root2, "/nt/c", &POLY_USER, "/home/poly"), Ok(HomeUnified::LinkedPosixToProfile));
+    assert_eq!(node(&vr2, "/home/poly/kept.txt").stat().unwrap().size, 4);
+}
+
+#[test]
+fn unify_home_bind_mounts_non_empty_posix_home_and_inherits_owner() {
+    let (vr, root) = setup();
+    // Simulate a Chromium disk where `/home/poly` already exists, is owned by uid 1000, and holds files.
+    vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Cwd, b"/home", 0o755).unwrap();
+    vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Cwd, b"/home/poly", 0o755).unwrap();
+    vr.vfs.chown(&vr.ctx, &vr.cred, At::Cwd, b"/home/poly", Some(1000), Some(1000), true).unwrap();
+    vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Cwd, b"/home/poly/Downloads", 0o755).unwrap();
+    vr.vfs.chown(&vr.ctx, &vr.cred, At::Cwd, b"/home/poly/Downloads", Some(1000), Some(1000), true).unwrap();
+    let dl = vr
+        .vfs
+        .open(&vr.ctx, &vr.cred, At::Cwd, b"/home/poly/Downloads/app.deb", OpenFlags::WRONLY | OpenFlags::CREAT, 0o644)
+        .unwrap();
+    dl.write_at(0, b"pkg").unwrap();
+    drop(dl);
+
+    assert_eq!(unify_home(&vr, &root, "/nt/c", &POLY_USER, "/home/poly"), Ok(HomeUnified::BoundProfileToPosix));
+    // Idempotent.
+    assert_eq!(unify_home(&vr, &root, "/nt/c", &POLY_USER, "/home/poly"), Ok(HomeUnified::AlreadyUnified));
+    // Existing Linux files are visible under C:\Users\poly.
+    assert_eq!(node(&vr, "/nt/c/Users/poly/Downloads/app.deb").stat().unwrap().size, 3);
+    // Layout creation adds missing folders inside the unified home and inherits uid/gid 1000.
+    let report = create(&vr, &root, &POLY_USER);
+    assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
+    for dir in ["Desktop", "Documents", "Downloads", "Music", "Pictures", "Videos", "AppData"] {
+        let st = node(&vr, &alloc::format!("/home/poly/{dir}")).stat().unwrap();
+        assert_eq!((st.uid, st.gid), (1000, 1000), "{dir} should inherit poly's uid/gid");
+    }
+    // Windows files written under C:\Users\poly\Documents are visible in /home/poly/Documents.
+    let doc = vr
+        .vfs
+        .open(
+            &vr.ctx,
+            &vr.cred,
+            At::Cwd,
+            b"/nt/c/Users/poly/Documents/note.txt",
+            OpenFlags::WRONLY | OpenFlags::CREAT,
+            0o644,
+        )
+        .unwrap();
+    doc.write_at(0, b"hello").unwrap();
+    drop(doc);
+    assert_eq!(node(&vr, "/home/poly/Documents/note.txt").stat().unwrap().size, 5);
+}
+
+#[test]
+fn unify_home_reports_conflict_without_clobbering_data() {
+    // Both directories non-empty: leave both untouched.
+    let (vr, root) = setup();
+    vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Cwd, b"/home", 0o755).unwrap();
+    vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Cwd, b"/home/poly", 0o755).unwrap();
+    let a = vr
+        .vfs
+        .open(&vr.ctx, &vr.cred, At::Cwd, b"/home/poly/a.txt", OpenFlags::WRONLY | OpenFlags::CREAT, 0o644)
+        .unwrap();
+    a.write_at(0, b"a").unwrap();
+    drop(a);
+    vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Cwd, b"/nt/c/Users", 0o755).unwrap();
+    vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Cwd, b"/nt/c/Users/poly", 0o755).unwrap();
+    let b = vr
+        .vfs
+        .open(&vr.ctx, &vr.cred, At::Cwd, b"/nt/c/Users/poly/b.txt", OpenFlags::WRONLY | OpenFlags::CREAT, 0o644)
+        .unwrap();
+    b.write_at(0, b"bb").unwrap();
+    drop(b);
+    assert_eq!(unify_home(&vr, &root, "/nt/c", &POLY_USER, "/home/poly"), Ok(HomeUnified::Conflict));
+    assert_eq!(node(&vr, "/home/poly/a.txt").stat().unwrap().size, 1);
+    assert_eq!(node(&vr, "/nt/c/Users/poly/b.txt").stat().unwrap().size, 2);
+
+    // A regular file at /home/poly: conflict, left alone.
+    let (vr2, root2) = setup();
+    vr2.vfs.mkdir(&vr2.ctx, &vr2.cred, At::Cwd, b"/home", 0o755).unwrap();
+    let f =
+        vr2.vfs.open(&vr2.ctx, &vr2.cred, At::Cwd, b"/home/poly", OpenFlags::WRONLY | OpenFlags::CREAT, 0o644).unwrap();
+    f.write_at(0, b"file").unwrap();
+    drop(f);
+    assert_eq!(unify_home(&vr2, &root2, "/nt/c", &POLY_USER, "/home/poly"), Ok(HomeUnified::Conflict));
+    assert_eq!(node(&vr2, "/home/poly").stat().unwrap().size, 4);
+
+    // A user symlink pointing elsewhere: conflict, left alone.
+    let (vr3, root3) = setup();
+    vr3.vfs.mkdir(&vr3.ctx, &vr3.cred, At::Cwd, b"/home", 0o755).unwrap();
+    vr3.vfs.symlink(&vr3.ctx, &vr3.cred, b"/custom/home", At::Cwd, b"/home/poly").unwrap();
+    assert_eq!(unify_home(&vr3, &root3, "/nt/c", &POLY_USER, "/home/poly"), Ok(HomeUnified::Conflict));
+    assert_eq!(vr3.vfs.readlink(&vr3.ctx, &vr3.cred, At::Cwd, b"/home/poly").unwrap(), b"/custom/home");
 }
 
 // ----- creation

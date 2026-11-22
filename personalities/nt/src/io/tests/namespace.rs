@@ -289,3 +289,95 @@ fn a_renamed_file_is_marked_for_archiving_and_keeps_its_other_attributes() {
     assert_eq!(u32::from_le_bytes(b[32..36].try_into().unwrap()), FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_ARCHIVE);
     t.close(h);
 }
+
+#[test]
+fn unified_home_cross_world_io_in_symlink_and_bind_modes() {
+    use crate::layout::{POLY_USER, create};
+    for bind_mode in [false, true] {
+        let vfs: &'static Vfs = Box::leak(Box::new(Vfs::new(Arc::new(Tmpfs::new(Arc::new(FixedClock))))));
+        let ctx = vfs.root_context().unwrap();
+        let cred = Cred::root();
+        vfs.mkdir(&ctx, &cred, At::Cwd, b"/nt", 0o755).unwrap();
+        vfs.mkdir(&ctx, &cred, At::Cwd, b"/nt/c", 0o755).unwrap();
+        let c_root = vfs.lookup(&ctx, &cred, At::Cwd, b"/nt/c", true).unwrap();
+        if bind_mode {
+            vfs.mkdir(&ctx, &cred, At::Cwd, b"/home", 0o755).unwrap();
+            vfs.mkdir(&ctx, &cred, At::Cwd, b"/home/poly", 0o755).unwrap();
+            vfs.mkdir(&ctx, &cred, At::Cwd, b"/home/poly/Downloads", 0o755).unwrap();
+            let pre = vfs
+                .open(
+                    &ctx,
+                    &cred,
+                    At::Cwd,
+                    b"/home/poly/Downloads/pre.txt",
+                    OpenFlags::WRONLY | OpenFlags::CREAT,
+                    0o644,
+                )
+                .unwrap();
+            pre.write_at(0, b"before").unwrap();
+        }
+        let vr = crate::io::VfsRoot::new(vfs, vfs.root_context().unwrap(), cred.clone());
+        let how = create::unify_home(&vr, &c_root, "/nt/c", &POLY_USER, "/home/poly").unwrap();
+        assert_eq!(
+            how,
+            if bind_mode {
+                create::HomeUnified::BoundProfileToPosix
+            } else {
+                create::HomeUnified::LinkedPosixToProfile
+            }
+        );
+        let report = create::create(&vr, &c_root, &POLY_USER);
+        assert!(report.conflicts.is_empty(), "{:?}", report.conflicts);
+
+        // `default_volumes` does not add a spurious volume for a bind-mounted profile below `/nt/c`.
+        let vols = default_volumes(vfs, &ctx);
+        assert_eq!(vols.len(), 2, "bind_mode={bind_mode}: {vols:?}");
+
+        let mut f = Fake::new();
+        f.sys.io.set_home_alias(&POLY_USER.profile_vfs("/nt/c"), &POLY_USER.posix_home());
+        f.sys.io.attach(&mut f.sys.objects, vfs, &vols).unwrap();
+        let mut t = T { f, vfs };
+
+        // `C:\Users\poly` is a real directory (not a reparse point) in both modes.
+        let (s, dir_h, _) = t.create(
+            "\\??\\C:\\Users\\poly",
+            FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+            SHARE_ALL,
+            FILE_OPEN,
+            SYNC | FILE_DIRECTORY_FILE | FILE_OPEN_REPARSE_POINT,
+            0,
+        );
+        assert_eq!(s, STATUS_SUCCESS, "bind_mode={bind_mode}");
+        let (_, basic) = t.query(dir_h, FILE_BASIC_INFORMATION, 40);
+        let attrs = u32::from_le_bytes(basic[32..36].try_into().unwrap());
+        assert!(attrs & FILE_ATTRIBUTE_DIRECTORY != 0 && attrs & FILE_ATTRIBUTE_REPARSE_POINT == 0, "{attrs:#x}");
+        t.close(dir_h);
+
+        // Linux writes `/home/poly/Downloads/linux.txt` -> Windows opens case-insensitively.
+        t.vfs_create(b"/home/poly/Downloads/linux.txt", b"from-linux");
+        let (s, h, _) = t.create(
+            "\\??\\C:\\Users\\poly\\DOWNLOADS\\LINUX.TXT",
+            FILE_GENERIC_READ | SYNCHRONIZE,
+            SHARE_ALL,
+            FILE_OPEN,
+            SYNC | FILE_NON_DIRECTORY_FILE,
+            0,
+        );
+        assert_eq!(s, STATUS_SUCCESS, "bind_mode={bind_mode}");
+        assert_eq!(t.read(h, 32, Some(0)).1, b"from-linux");
+        // `native_path` reports the unified POSIX home path.
+        let caller = poly_ntobj::Caller::kernel(t.f.proc.pid, poly_ntobj::ThreadRef(1));
+        let (_, cookie) = crate::io::services::file_handle(&mut t.f.sys, &caller, poly_ntobj::Handle(h), 0).unwrap();
+        assert_eq!(t.f.sys.io.native_path(cookie).as_deref(), Some("/home/poly/Downloads/linux.txt"));
+        t.close(h);
+
+        // Windows writes `C:\Users\poly\Documents\win.txt` -> Linux reads `/home/poly/Documents/win.txt`.
+        let wh = t.file("\\??\\C:\\Users\\poly\\Documents\\win.txt");
+        t.write(wh, b"from-win", None);
+        t.close(wh);
+        let f = vfs.open(&ctx, &cred, At::Cwd, b"/home/poly/Documents/win.txt", OpenFlags::RDONLY, 0).unwrap();
+        let mut buf = [0u8; 16];
+        let n = f.read_at(0, &mut buf).unwrap();
+        assert_eq!(&buf[..n], b"from-win");
+    }
+}

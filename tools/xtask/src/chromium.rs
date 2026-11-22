@@ -300,6 +300,9 @@ pub const USER_SCRIPT: &str = "#!/bin/bash
 U=/run/user/1000
 mkdir -p \"$U\" /home/poly
 chown poly:poly \"$U\" /home/poly && chmod 700 \"$U\"
+for d in Desktop Documents Downloads Music Pictures Videos; do
+    [ -d \"/home/poly/$d\" ] && chown poly:poly \"/home/poly/$d\"
+done
 S=\"$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY\"
 # A new name every time: the disk outlives boots (`chromium run`), and a link
 # left by an earlier boot names a socket nobody listens on any more.
@@ -345,6 +348,9 @@ BIN=/usr/bin/dbus-daemon
 U=/run/user/1000
 mkdir -p \"$U\" /home/poly
 chown poly:poly \"$U\" /home/poly && chmod 700 \"$U\"
+for d in Desktop Documents Downloads Music Pictures Videos; do
+    [ -d \"/home/poly/$d\" ] && chown poly:poly \"/home/poly/$d\"
+done
 P=\"$U/dbus.pid\"
 PID=
 [ -r \"$P\" ] && read -r PID < \"$P\"
