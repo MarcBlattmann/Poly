@@ -21,18 +21,189 @@
 //! `vc_redist`): a file there that is not Poly's (it lacks
 //! [`OWN_COPY_MARKER`]) is left as it is.
 
-use super::{FOLDERS, User};
+use super::{Base, FOLDERS, User};
 use crate::io::consts::{FILE_ATTRIBUTE_ARCHIVE, FILE_ATTRIBUTE_HIDDEN, STATUS_NOT_A_DIRECTORY};
 use crate::io::info::{NT_XATTR, Stored};
 use crate::io::names::vfs_to_wide;
 use crate::io::walk::find_child;
-use crate::io::{VfsRoot, status_of};
+use crate::io::{NodeKey, VfsRoot, status_of};
 use alloc::string::String;
 use alloc::vec::Vec;
 use poly_ntobj::NtStatus;
 use poly_ntobj::name::wide;
 use poly_ntobj::status::STATUS_OBJECT_NAME_COLLISION;
-use poly_vfs::{At, FileType, NodeRef, OpenFlags};
+use poly_vfs::{At, Errno, FileType, NodeRef, OpenFlags};
+
+/// How [`unify_home`] unified the POSIX home directory (`/home/<user>`) with the
+/// Windows user profile (`C:\Users\<user>`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HomeUnified {
+    /// Both paths already name the same directory (same device and inode).
+    AlreadyUnified,
+    /// The POSIX home path was created (or replaced from an empty directory) as a symbolic
+    /// link pointing to the Windows profile directory on `C:`.
+    LinkedPosixToProfile,
+    /// The existing POSIX home directory was bind-mounted onto the Windows profile directory
+    /// so both paths expose the same directory tree without disturbing existing files.
+    BoundProfileToPosix,
+    /// Both paths already exist as separate non-empty directories, or a non-directory blocks
+    /// one of them; neither was modified.
+    Conflict,
+}
+
+fn is_empty_dir(vr: &VfsRoot, dir: &NodeRef) -> Result<bool, NtStatus> {
+    Ok(crate::io::walk::list(vr, dir)?.into_iter().all(|n| n == b"." || n == b".."))
+}
+
+fn is_tmpfs(node: &NodeRef) -> bool {
+    node.mount().fs().info().name == "tmpfs"
+}
+
+fn mkdir_all_posix(vr: &VfsRoot, path: &str) -> Result<(), NtStatus> {
+    let mut at = String::new();
+    for part in path.split('/').filter(|p| !p.is_empty()) {
+        at.push('/');
+        at.push_str(part);
+        match vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Cwd, at.as_bytes(), 0o755) {
+            Ok(()) | Err(Errno::EEXIST) => {}
+            Err(e) => return Err(status_of(e)),
+        }
+    }
+    Ok(())
+}
+
+/// Unify `posix_home` (e.g. `/home/poly`) and the Windows profile `C:\Users\<user>`
+/// below `c_root` (reached at `c_path`, e.g. `/nt/c`) so both worlds share one home
+/// directory tree (Phase 8).
+///
+/// - If both paths already resolve to the same directory inode: [`HomeUnified::AlreadyUnified`].
+/// - If `posix_home` is missing, or is an empty directory on tmpfs, or is empty while the
+///   Windows profile already holds files: ensures the profile directory exists on `C:`,
+///   removes the empty `posix_home` if present, and makes `posix_home` a symbolic link to
+///   `<c_path>/<Users>/<user>` ([`HomeUnified::LinkedPosixToProfile`]).
+/// - If `posix_home` is an existing directory (non-empty, or empty on a persistent disk) and
+///   the Windows profile is missing or empty: creates the profile mountpoint if missing and
+///   bind-mounts `posix_home` onto it ([`HomeUnified::BoundProfileToPosix`]).
+/// - If both are non-empty directories on different inodes, or something other than a
+///   directory blocks either path: leaves both untouched and returns [`HomeUnified::Conflict`].
+///
+/// Call before [`create`] so that missing profile folders (`Desktop`, `Documents`,
+/// `Downloads`, `Music`, `Pictures`, `Videos`, `AppData`, ...) are created inside the
+/// unified directory. Idempotent.
+pub fn unify_home(
+    vr: &VfsRoot,
+    c_root: &NodeRef,
+    c_path: &str,
+    user: &User,
+    posix_home: &str,
+) -> Result<HomeUnified, NtStatus> {
+    let posix_home = posix_home.trim_end_matches('/');
+    if !posix_home.starts_with('/') || posix_home.is_empty() {
+        return Ok(HomeUnified::Conflict);
+    }
+    // 1. Ensure `C:\Users` exists (case-insensitively).
+    let (users_dir, users_name) = match find_child(vr, c_root, &wide("Users"))? {
+        Some(existing) => {
+            let node = vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(c_root), &existing, true).map_err(status_of)?;
+            if node.kind().map_err(status_of)? != FileType::Directory {
+                return Ok(HomeUnified::Conflict);
+            }
+            (node, existing)
+        }
+        None => {
+            vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Node(c_root), b"Users", 0o755).map_err(status_of)?;
+            let node = vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(c_root), b"Users", true).map_err(status_of)?;
+            (node, b"Users".to_vec())
+        }
+    };
+    // 2. Inspect `C:\Users\<user>` (case-insensitively).
+    let (nt_node, nt_name, nt_empty) = match find_child(vr, &users_dir, &wide(user.name))? {
+        Some(existing) => {
+            let node = vr.vfs.lookup(&vr.ctx, &vr.cred, At::Node(&users_dir), &existing, false).map_err(status_of)?;
+            if node.kind().map_err(status_of)? != FileType::Directory {
+                return Ok(HomeUnified::Conflict);
+            }
+            let empty = is_empty_dir(vr, &node)?;
+            (Some(node), existing, empty)
+        }
+        None => (None, user.name.as_bytes().to_vec(), true),
+    };
+    let profile_target = alloc::format!(
+        "{}/{}/{}",
+        c_path.trim_end_matches('/'),
+        String::from_utf8_lossy(&users_name),
+        String::from_utf8_lossy(&nt_name)
+    );
+    let ensure_nt_profile = || -> Result<(), NtStatus> {
+        if nt_node.is_none() {
+            vr.vfs.mkdir(&vr.ctx, &vr.cred, At::Node(&users_dir), &nt_name, 0o755).map_err(status_of)?;
+        }
+        Ok(())
+    };
+    // 3. Inspect `posix_home`.
+    match vr.vfs.lookup(&vr.ctx, &vr.cred, At::Cwd, posix_home.as_bytes(), false) {
+        Err(Errno::ENOENT) => {
+            ensure_nt_profile()?;
+            if let Some(cut) = posix_home.rfind('/')
+                && cut > 0
+            {
+                mkdir_all_posix(vr, &posix_home[..cut])?;
+            }
+            vr.vfs
+                .symlink(&vr.ctx, &vr.cred, profile_target.as_bytes(), At::Cwd, posix_home.as_bytes())
+                .map_err(status_of)?;
+            Ok(HomeUnified::LinkedPosixToProfile)
+        }
+        Err(e) => Err(status_of(e)),
+        Ok(posix_raw) => {
+            if let Some(nt) = &nt_node
+                && let Ok(posix_followed) = vr.vfs.lookup(&vr.ctx, &vr.cred, At::Cwd, posix_home.as_bytes(), true)
+                && NodeKey::of(&posix_followed)? == NodeKey::of(nt)?
+            {
+                return Ok(HomeUnified::AlreadyUnified);
+            }
+            match posix_raw.kind().map_err(status_of)? {
+                FileType::Symlink => {
+                    if posix_raw.readlink().map_err(status_of)? == profile_target.as_bytes() {
+                        ensure_nt_profile()?;
+                        Ok(HomeUnified::AlreadyUnified)
+                    } else {
+                        Ok(HomeUnified::Conflict)
+                    }
+                }
+                FileType::Directory => {
+                    let posix_empty = is_empty_dir(vr, &posix_raw)?;
+                    let prefer_link_to_profile = posix_empty && (!nt_empty || is_tmpfs(&posix_raw));
+                    if prefer_link_to_profile {
+                        ensure_nt_profile()?;
+                        vr.vfs.rmdir(&vr.ctx, &vr.cred, At::Cwd, posix_home.as_bytes()).map_err(status_of)?;
+                        vr.vfs
+                            .symlink(&vr.ctx, &vr.cred, profile_target.as_bytes(), At::Cwd, posix_home.as_bytes())
+                            .map_err(status_of)?;
+                        Ok(HomeUnified::LinkedPosixToProfile)
+                    } else if nt_empty {
+                        ensure_nt_profile()?;
+                        vr.vfs
+                            .bind(
+                                &vr.ctx,
+                                &vr.cred,
+                                At::Cwd,
+                                posix_home.as_bytes(),
+                                At::Node(&users_dir),
+                                &nt_name,
+                                false,
+                            )
+                            .map_err(status_of)?;
+                        Ok(HomeUnified::BoundProfileToPosix)
+                    } else {
+                        Ok(HomeUnified::Conflict)
+                    }
+                }
+                _ => Ok(HomeUnified::Conflict),
+            }
+        }
+    }
+}
 
 /// What [`create`] did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -80,8 +251,14 @@ pub fn ensure_path(vr: &VfsRoot, root: &NodeRef, path: &str) -> Result<(NodeRef,
 /// behind `C:`). See the module documentation.
 pub fn create(vr: &VfsRoot, root: &NodeRef, user: &User) -> Report {
     let mut report = Report::default();
+    // If the user's profile directory is owned by a non-root POSIX user (e.g. uid 1000
+    // for `/home/poly` unified with `C:\Users\poly`), newly created folders inside it
+    // inherit that owner so Linux apps running as that user can write into `Downloads`,
+    // `Desktop`, `Documents`, etc.
+    let mut profile_owner: Option<(u32, u32)> = None;
     for folder in FOLDERS {
         let below = folder.below_drive(user);
+        let profile_root = folder.base == Base::Profile && folder.path.is_empty();
         // Make each component, so every directory made is reported.
         let mut cur = root.clone();
         let mut walked = String::new();
@@ -95,6 +272,12 @@ pub fn create(vr: &VfsRoot, root: &NodeRef, user: &User) -> Report {
                 Ok((node, made)) => {
                     if made {
                         report.created.push(alloc::format!("{}\\{walked}", super::SYSTEM_DRIVE));
+                        if folder.base == Base::Profile
+                            && !profile_root
+                            && let Some((uid, gid)) = profile_owner
+                        {
+                            let _ = node.chown(&vr.cred, Some(uid), Some(gid));
+                        }
                         if folder.hidden && walked == below {
                             set_hidden(vr, &node);
                         }
@@ -106,6 +289,13 @@ pub fn create(vr: &VfsRoot, root: &NodeRef, user: &User) -> Report {
                     break;
                 }
             }
+        }
+        if failed.is_none()
+            && profile_root
+            && let Ok(attr) = cur.attr()
+            && (attr.uid != 0 || attr.gid != 0)
+        {
+            profile_owner = Some((attr.uid, attr.gid));
         }
         if let Some(e) = failed {
             let path = folder.dos_path(user);

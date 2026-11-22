@@ -57,6 +57,8 @@ pub const USERS: &str = "C:\\Users";
 pub const PUBLIC: &str = "C:\\Users\\Public";
 /// The profile new users are copied from (`GetDefaultUserProfileDirectory`).
 pub const DEFAULT_PROFILE: &str = "C:\\Users\\Default";
+/// The POSIX parent directory for user homes (`/home/<name>`).
+pub const POSIX_HOMES: &str = "/home";
 
 /// A user with a profile on the system drive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,6 +77,16 @@ impl User {
     /// `%USERPROFILE%`: `C:\Users\<name>`.
     pub fn profile(&self) -> String {
         alloc::format!("{USERS}\\{}", self.name)
+    }
+
+    /// The POSIX home directory (`~`): `/home/<name>`.
+    pub fn posix_home(&self) -> String {
+        alloc::format!("{POSIX_HOMES}/{}", self.name)
+    }
+
+    /// The VFS path of the user's Windows profile below `c_path` (e.g. `/nt/c/Users/<name>`).
+    pub fn profile_vfs(&self, c_path: &str) -> String {
+        alloc::format!("{}/Users/{}", c_path.trim_end_matches('/'), self.name)
     }
 
     /// `%HOMEPATH%`: the profile without the drive.
@@ -298,11 +310,20 @@ pub fn known_folder(id: &str) -> Option<&'static Folder> {
     FOLDERS.iter().find(|f| f.known == Some(id))
 }
 
+/// A VFS path prefix mapped directly to a DOS path prefix (e.g. `/home/poly` → `C:\Users\poly`
+/// when the POSIX home and Windows profile are unified).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PathAlias<'a> {
+    pub vfs: &'a [u8],
+    pub dos: &'a str,
+}
+
 /// An NT-side path for a VFS path (an executable a Linux program started):
-/// below `c_root` (the VFS directory behind `C:`) it is `C:\...`, anything
-/// else is on `Z:` (ADR 0067: `Z:` is the whole VFS). `/` becomes `\`.
+/// below `c_root` (the VFS directory behind `C:`) it is `C:\...`, below any
+/// `aliases` (such as `/home/poly` → `C:\Users\poly`) it uses that DOS prefix,
+/// and anything else is on `Z:` (ADR 0067: `Z:` is the whole VFS). `/` becomes `\`.
 /// Bytes that are not UTF-8 are shown as U+FFFD.
-pub fn dos_path_of_vfs(path: &[u8], c_roots: &[&[u8]]) -> String {
+pub fn dos_path_of_vfs_with(path: &[u8], c_roots: &[&[u8]], aliases: &[PathAlias<'_>]) -> String {
     let path = String::from_utf8_lossy(path);
     let path = path.as_ref();
     for root in c_roots {
@@ -317,22 +338,80 @@ pub fn dos_path_of_vfs(path: &[u8], c_roots: &[&[u8]]) -> String {
             return alloc::format!("{SYSTEM_DRIVE}\\{}", rest.trim_start_matches('/').replace('/', "\\"));
         }
     }
+    for alias in aliases {
+        let prefix = String::from_utf8_lossy(alias.vfs);
+        let prefix = prefix.trim_end_matches('/');
+        if prefix.is_empty() {
+            continue;
+        }
+        if let Some(rest) = path.strip_prefix(prefix)
+            && (rest.is_empty() || rest.starts_with('/'))
+        {
+            let base = alias.dos.trim_end_matches('\\');
+            let tail = rest.trim_start_matches('/');
+            return if tail.is_empty() {
+                String::from(base)
+            } else {
+                alloc::format!("{base}\\{}", tail.replace('/', "\\"))
+            };
+        }
+    }
     let rest = path.trim_start_matches('/');
     alloc::format!("Z:\\{}", rest.replace('/', "\\"))
 }
 
+/// [`dos_path_of_vfs_with`] without extra path aliases.
+pub fn dos_path_of_vfs(path: &[u8], c_roots: &[&[u8]]) -> String {
+    dos_path_of_vfs_with(path, c_roots, &[])
+}
+
 /// An argument of a Windows program started from Poly's side (a launcher entry, Files' "open
 /// with", `xdg-open`) as the program is given it (ADR 0234): an absolute path that names a file or
-/// folder of Poly's file system (`exists`) becomes its DOS path ([`dos_path_of_vfs`]:
-/// `/nt/c/Users/poly/Downloads/a.txt` is `C:\Users\poly\Downloads\a.txt`), since a Windows program
-/// cannot open the other kind. `None` for every other argument: switches such as `/S` (no such
-/// file), relative paths, URLs, `//` names.
-pub fn dos_argument(arg: &str, c_roots: &[&[u8]], exists: impl Fn(&str) -> bool) -> Option<String> {
+/// folder of Poly's file system (`exists`) becomes its DOS path ([`dos_path_of_vfs_with`]:
+/// `/nt/c/Users/poly/Downloads/a.txt` and unified `/home/poly/Downloads/a.txt` are
+/// `C:\Users\poly\Downloads\a.txt`), since a Windows program cannot open the other kind. `None`
+/// for every other argument: switches such as `/S` (no such file), relative paths, URLs, `//`
+/// names.
+pub fn dos_argument_with(
+    arg: &str,
+    c_roots: &[&[u8]],
+    aliases: &[PathAlias<'_>],
+    exists: impl Fn(&str) -> bool,
+) -> Option<String> {
     let path = arg.strip_prefix('/')?;
     if path.is_empty() || path.starts_with('/') || !exists(arg) {
         return None;
     }
-    Some(dos_path_of_vfs(arg.as_bytes(), c_roots))
+    Some(dos_path_of_vfs_with(arg.as_bytes(), c_roots, aliases))
+}
+
+/// [`dos_argument_with`] without extra path aliases.
+pub fn dos_argument(arg: &str, c_roots: &[&[u8]], exists: impl Fn(&str) -> bool) -> Option<String> {
+    dos_argument_with(arg, c_roots, &[], exists)
+}
+
+/// Rewrite a VFS path under `vfs_prefix` (matched ASCII case-insensitively on a `/` component
+/// boundary) to `replacement` (e.g. `/nt/c/Users/poly/Downloads/a.txt` →
+/// `/home/poly/Downloads/a.txt`). Returns `None` if `path` is not equal to or inside `vfs_prefix`.
+pub fn rewrite_prefix_ci(path: &str, vfs_prefix: &str, replacement: &str) -> Option<String> {
+    let prefix = vfs_prefix.trim_end_matches('/');
+    if prefix.is_empty() || path.len() < prefix.len() {
+        return None;
+    }
+    let (head, rest) = path.split_at(prefix.len());
+    if !head.eq_ignore_ascii_case(prefix) {
+        return None;
+    }
+    if !rest.is_empty() && !rest.starts_with('/') {
+        return None;
+    }
+    let rep = replacement.trim_end_matches('/');
+    let tail = rest.trim_start_matches('/');
+    if tail.is_empty() {
+        Some(if rep.is_empty() { "/".into() } else { String::from(rep) })
+    } else {
+        Some(alloc::format!("{rep}/{tail}"))
+    }
 }
 
 /// The folders of the layout as full DOS paths, in [`FOLDERS`] order.

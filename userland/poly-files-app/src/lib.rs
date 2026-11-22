@@ -201,9 +201,10 @@ pub fn main() -> i32 {
     let mounts = native_fs::read_text("/proc/mounts").unwrap_or_default();
     let exists = |p: &str| poly_rt::fs::metadata(p).is_ok_and(|m| m.is_dir());
     let places = poly_files::places::places(&home, user_dirs.as_deref(), &mounts, &exists);
-    // The browsers run as the desktop's user and save there (ADR 0218).
-    let apps_home = poly_rt::env::var(poly_files::places::APPS_USER_HOME);
-    let places = poly_files::places::with_apps_user_downloads(places, apps_home, &exists);
+    // The browsers and Windows apps share the desktop user's unified home (ADR 0218, Phase 8).
+    let apps_home = poly_rt::env::var(poly_files::places::APPS_USER_HOME)
+        .or_else(|| (home != poly_files::places::DEFAULT_USER_HOME).then_some(poly_files::places::DEFAULT_USER_HOME));
+    let places = poly_files::places::with_apps_user_dirs(places, apps_home, &exists);
     let data_home = poly_rt::env::var("XDG_DATA_HOME");
     let trash = poly_files::trash::trash_dir(&home, data_home);
     let (with_apps, folder) = applications::overlay(Box::new(fs), Box::new(installed_apps), Box::new(removable_apps));
