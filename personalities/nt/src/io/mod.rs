@@ -332,6 +332,9 @@ pub struct IoState {
     pub(crate) consoles: crate::console::Consoles,
     /// The directory watches of change notification, by file object ([`notify`]).
     pub(crate) watches: BTreeMap<u64, notify::DirWatch>,
+    /// Unified user home mapping (`(profile_vfs_prefix, posix_home)`, e.g.
+    /// `("/nt/c/Users/poly", "/home/poly")`) for rewriting [`Self::native_path`].
+    home_alias: Option<(String, String)>,
     next_cookie: u64,
     pub(crate) next_irp: u64,
 }
@@ -411,12 +414,22 @@ pub fn default_volumes(vfs: &Vfs, ctx: &FsContext) -> Vec<VolumeConfig> {
             label: "System".into()
         },
     ];
+    // Internal bind mounts strictly below `C:` (such as a unified user profile bound at
+    // `/nt/c/Users/poly` or `<disk>/poly/nt/c/Users/poly`) are part of `C:`, not separate volumes.
+    let c_real = vfs.lookup(ctx, &Cred::root(), At::Cwd, SYSTEM_ROOT, true).and_then(|n| vfs.path_of(ctx, &n)).ok();
+    let below_c = |p: &[u8]| -> bool {
+        let starts = |base: &[u8]| {
+            let b = base.strip_suffix(b"/").unwrap_or(base);
+            !b.is_empty() && p.starts_with(b) && p.get(b.len()) == Some(&b'/')
+        };
+        starts(SYSTEM_ROOT) || c_real.as_deref().is_some_and(starts)
+    };
     let mut paths: Vec<Vec<u8>> = vfs
         .mounts()
         .iter()
         .filter(|m| m.parent.is_some())
         .filter_map(|m| vfs.mount_path(ctx, m.id).ok())
-        .filter(|p| p.as_slice() != b"/")
+        .filter(|p| p.as_slice() != b"/" && !below_c(p))
         .collect();
     paths.sort();
     paths.dedup();
@@ -509,7 +522,15 @@ impl IoState {
             next_irp: 1,
             watches: BTreeMap::new(),
             accept_targets: BTreeMap::new(),
+            home_alias: None,
         }
+    }
+
+    /// Record the unified user home mapping so [`Self::native_path`] reports files under the
+    /// Windows profile (`profile_vfs`, e.g. `/nt/c/Users/poly`) at their POSIX home path
+    /// (`posix_home`, e.g. `/home/poly`).
+    pub fn set_home_alias(&mut self, profile_vfs: &str, posix_home: &str) {
+        self.home_alias = Some((String::from(profile_vfs), String::from(posix_home)));
     }
 
     pub fn is_attached(&self) -> bool {
@@ -668,7 +689,9 @@ impl IoState {
 
     /// The path in Poly's file system of a file object of a disk volume: the volume's VFS
     /// path and the file's path below it, with `/` between the names (ADR 0223: what a
-    /// Windows program's "open" or "show in folder" hands to the desktop).
+    /// Windows program's "open" or "show in folder" hands to the desktop). When the user's
+    /// Windows profile is unified with their POSIX home ([`Self::set_home_alias`]), paths
+    /// under the profile are reported at the POSIX home (e.g. `/home/poly/Downloads/...`).
     pub fn native_path(&self, cookie: u64) -> Option<alloc::string::String> {
         let disk = self.file(cookie)?.disk()?;
         let volume = self.volumes.get(disk.volume)?;
@@ -679,6 +702,11 @@ impl IoState {
         }
         if out.is_empty() {
             out.push('/');
+        }
+        if let Some((profile_vfs, posix_home)) = &self.home_alias
+            && let Some(rewritten) = crate::layout::rewrite_prefix_ci(&out, profile_vfs, posix_home)
+        {
+            return Some(rewritten);
         }
         Some(out)
     }

@@ -127,6 +127,10 @@ pub fn places(home: &str, user_dirs: Option<&str>, mounts: &str, exists: &dyn Fn
 /// desktop's), the browsers save into that user's Downloads.
 pub const APPS_USER_HOME: &str = "POLY_APPS_USER_HOME";
 
+/// The default POSIX home directory for Poly's single user (`poly`, unified with
+/// `C:\Users\poly` in Phase 8).
+pub const DEFAULT_USER_HOME: &str = "/home/poly";
+
 /// `places` with the Downloads folder of the user the desktop runs apps as
 /// (`apps_home`, [`APPS_USER_HOME`]) after Home, labelled Downloads, when
 /// it exists and the list has no Downloads place of its own: what a browser
@@ -144,6 +148,41 @@ pub fn with_apps_user_downloads(
     let at = places.iter().position(|p| p.kind == PlaceKind::Home).map_or(0, |i| i + 1);
     places
         .insert(at, Place { label: "Downloads".into(), path, icon: PlaceIcon::Downloads, kind: PlaceKind::Downloads });
+    places
+}
+
+/// `places` with every existing standard user folder (Desktop, Documents, Downloads, Music,
+/// Pictures, Videos) of `apps_home` (e.g. `/home/poly`, unified with `C:\Users\poly`) inserted
+/// after Home when `places` does not already list that folder kind or path.
+pub fn with_apps_user_dirs(
+    mut places: Vec<Place>,
+    apps_home: Option<&str>,
+    exists: &dyn Fn(&str) -> bool,
+) -> Vec<Place> {
+    let Some(apps_home) = apps_home.filter(|h| h.starts_with('/')) else { return places };
+    let apps_home = normalize(apps_home);
+    let mut insert_at = places.iter().position(|p| p.kind == PlaceKind::Home).map_or(0, |i| i + 1);
+    while insert_at < places.len()
+        && matches!(
+            places[insert_at].kind,
+            PlaceKind::Desktop
+                | PlaceKind::Documents
+                | PlaceKind::Downloads
+                | PlaceKind::Music
+                | PlaceKind::Pictures
+                | PlaceKind::Videos
+        )
+    {
+        insert_at += 1;
+    }
+    for (_, default, kind, icon) in USER_DIRS {
+        let path = crate::path::join(&apps_home, default);
+        if places.iter().any(|p| p.kind == kind || p.path == path) || !exists(&path) {
+            continue;
+        }
+        places.insert(insert_at, Place { label: default.into(), path, icon, kind });
+        insert_at += 1;
+    }
     places
 }
 
@@ -240,7 +279,8 @@ const PSEUDO: [&str; 27] = [
 ];
 
 /// Mount points (and everything below them) that belong to the system.
-const SYSTEM: [&str; 11] = ["/boot", "/efi", "/usr", "/var", "/home", "/tmp", "/snap", "/opt", "/srv", "/proc", "/sys"];
+const SYSTEM: [&str; 12] =
+    ["/boot", "/efi", "/usr", "/var", "/home", "/tmp", "/snap", "/opt", "/srv", "/proc", "/sys", "/nt"];
 
 /// The user-visible disks in a `/proc/mounts` text.
 pub fn disks(mounts: &str) -> Vec<Place> {
@@ -382,6 +422,52 @@ garbage
         assert_eq!(labels, ["Home", "Desktop", "Downloads", "Computer", "Trash"]);
         assert_eq!(all[0].path, "/home/u");
         assert_eq!(all[1].path, "/home/u/Desktop");
+    }
+
+    #[test]
+    fn the_apps_users_dirs_join_the_places_of_roots_files() {
+        let existing = ["/home/poly/Desktop", "/home/poly/Documents", "/home/poly/Downloads", "/home/poly/Pictures"];
+        let exists = |p: &str| existing.contains(&p);
+        let base = places("/root", None, "", &exists);
+        let with = with_apps_user_dirs(base.clone(), Some(DEFAULT_USER_HOME), &exists);
+        let got: Vec<(&str, &str)> = with.iter().map(|p| (p.label.as_str(), p.path.as_str())).collect();
+        assert_eq!(
+            got,
+            [
+                ("Home", "/root"),
+                ("Desktop", "/home/poly/Desktop"),
+                ("Documents", "/home/poly/Documents"),
+                ("Downloads", "/home/poly/Downloads"),
+                ("Pictures", "/home/poly/Pictures"),
+                ("Computer", "/"),
+                ("Trash", TRASH_URI),
+            ]
+        );
+        // When Home already has one of those folders, only missing kinds are added.
+        let root_has_desktop =
+            |p: &str| p == "/root/Desktop" || p == "/home/poly/Desktop" || p == "/home/poly/Downloads";
+        let partial = places("/root", None, "", &root_has_desktop);
+        let merged = with_apps_user_dirs(partial, Some("/home/poly"), &root_has_desktop);
+        let merged_got: Vec<(&str, &str)> = merged.iter().map(|p| (p.label.as_str(), p.path.as_str())).collect();
+        assert_eq!(
+            merged_got[..3],
+            [("Home", "/root"), ("Desktop", "/root/Desktop"), ("Downloads", "/home/poly/Downloads")]
+        );
+        // Already running with HOME=/home/poly: idempotent.
+        let poly = places("/home/poly", None, "", &exists);
+        assert_eq!(with_apps_user_dirs(poly.clone(), Some("/home/poly"), &exists), poly);
+    }
+
+    #[test]
+    fn nt_bind_mounts_are_not_shown_as_disks() {
+        let mounts = "\
+/dev/vda / ext2 rw 0 0
+/dev/vda /nt/c/Users/poly ext2 rw 0 0
+/dev/nvme0n1p3 /data ext4 rw 0 0
+";
+        let d = disks(mounts);
+        let got: Vec<&str> = d.iter().map(|p| p.path.as_str()).collect();
+        assert_eq!(got, ["/data"]);
     }
 
     #[test]
