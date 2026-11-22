@@ -55,6 +55,18 @@ unsafe extern "system" {
     pub fn CloseHandle(h: Handle) -> i32;
     pub fn WaitForSingleObjectEx(h: Handle, ms: u32, alertable: i32) -> u32;
     pub fn WaitForMultipleObjectsEx(n: u32, handles: *const Handle, all: i32, ms: u32, alertable: i32) -> u32;
+    pub fn GetTickCount64() -> u64;
+    pub fn Sleep(ms: u32);
+    pub fn CreateFileW(
+        name: *const u16,
+        access: u32,
+        share: u32,
+        sa: *const u8,
+        disposition: u32,
+        flags: u32,
+        template: Handle,
+    ) -> Handle;
+    pub fn ReadFile(h: Handle, buf: *mut u8, len: u32, got: *mut u32, ov: *mut u8) -> i32;
 }
 
 /// `alloc` (used by `poly-winsock`) on the process heap, 16-byte aligned.

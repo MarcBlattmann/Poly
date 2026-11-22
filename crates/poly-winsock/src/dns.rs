@@ -41,19 +41,65 @@ pub struct Answer {
     pub addrs: Vec<IpAddr>,
     /// The canonical name, if the answer had a `CNAME` for the question.
     pub canonical: Option<String>,
+    /// The shortest TTL (seconds) of the matching address records.
+    pub ttl: u32,
+}
+
+/// Normalize a host name for cache keys and comparisons: strip a single
+/// trailing dot and fold ASCII uppercase to lowercase.
+pub fn normalize_name(name: &str) -> String {
+    let trimmed = name.strip_suffix('.').unwrap_or(name);
+    let mut out = String::with_capacity(trimmed.len());
+    for b in trimmed.bytes() {
+        out.push(char::from(b.to_ascii_lowercase()));
+    }
+    out
+}
+
+/// Whether `name` is syntactically valid for a DNS query (RFC 1035 2.3.4:
+/// non-empty after stripping an optional trailing dot, at most 253 bytes,
+/// every label 1..=63 bytes, and no ASCII spaces or control characters).
+pub fn is_valid_name(name: &str) -> bool {
+    let name = name.strip_suffix('.').unwrap_or(name);
+    if name.is_empty() || name.len() > 253 {
+        return false;
+    }
+    name.split('.')
+        .all(|label| !label.is_empty() && label.len() <= 63 && !label.bytes().any(|b| b <= b' ' || b == 0x7f))
+}
+
+/// Whether a name without a DNS answer triggers Windows' local-network
+/// fallback (LLMNR / mDNS / NetBIOS) when `AI_DNS_ONLY` is not set:
+/// valid single-label names (no dot at all, such as `wpad` or
+/// `polytest-<hex>`) and valid names under `.local` (with or without a
+/// trailing dot).
+pub fn needs_local_fallback(name: &str) -> bool {
+    if !is_valid_name(name) {
+        return false;
+    }
+    if !name.contains('.') {
+        return true;
+    }
+    let trimmed = name.strip_suffix('.').unwrap_or(name);
+    match trimmed.rsplit_once('.') {
+        Some((prefix, last)) => !prefix.is_empty() && last.eq_ignore_ascii_case("local"),
+        None => false,
+    }
+}
+
+/// The 16-bit DNS transaction id of a reply packet, if it is at least 2 bytes.
+pub fn reply_id(msg: &[u8]) -> Option<u16> {
+    msg.get(0..2).map(|x| u16::from_be_bytes([x[0], x[1]]))
 }
 
 /// Write `name` as labels (a trailing dot is allowed). Each label is
 /// 1..=63 bytes, the whole name at most 253 characters (RFC 1035 2.3.4).
 pub fn encode_name(name: &str, out: &mut Vec<u8>) -> Result<(), DnsError> {
-    let name = name.strip_suffix('.').unwrap_or(name);
-    if name.is_empty() || name.len() > 253 {
+    if !is_valid_name(name) {
         return Err(DnsError::BadName);
     }
+    let name = name.strip_suffix('.').unwrap_or(name);
     for label in name.split('.') {
-        if label.is_empty() || label.len() > 63 || label.bytes().any(|b| b <= b' ' || b == 0x7f) {
-            return Err(DnsError::BadName);
-        }
         out.push(label.len() as u8);
         out.extend_from_slice(label.as_bytes());
     }
@@ -76,6 +122,10 @@ pub fn query(id: u16, name: &str, qtype: u16) -> Result<Vec<u8>, DnsError> {
 
 fn u16_at(b: &[u8], at: usize) -> Result<u16, DnsError> {
     b.get(at..at + 2).map(|x| u16::from_be_bytes([x[0], x[1]])).ok_or(DnsError::Fail)
+}
+
+fn u32_at(b: &[u8], at: usize) -> Result<u32, DnsError> {
+    b.get(at..at + 4).map(|x| u32::from_be_bytes([x[0], x[1], x[2], x[3]])).ok_or(DnsError::Fail)
 }
 
 /// Read the name at `at` (following compression pointers); returns it
@@ -145,10 +195,12 @@ pub fn parse(msg: &[u8], id: u16, name: &str, qtype: u16) -> Result<Answer, DnsE
     }
     let mut want = String::from(name.strip_suffix('.').unwrap_or(name));
     let mut answer = Answer::default();
+    let mut min_ttl: Option<u32> = None;
     for _ in 0..an {
         let (owner, next) = read_name(msg, at)?;
         let ty = u16_at(msg, next)?;
         let class = u16_at(msg, next + 2)?;
+        let ttl = u32_at(msg, next + 4)?;
         let rdlen = u16_at(msg, next + 8)? as usize;
         let rdata = next + 10;
         let data = msg.get(rdata..rdata + rdlen).ok_or(DnsError::Fail)?;
@@ -164,11 +216,13 @@ pub fn parse(msg: &[u8], id: u16, name: &str, qtype: u16) -> Result<Answer, DnsE
             }
             TYPE_A if qtype == TYPE_A && rdlen == 4 => {
                 answer.addrs.push(IpAddr::V4(Ipv4Addr::new(data[0], data[1], data[2], data[3])));
+                min_ttl = Some(min_ttl.map_or(ttl, |m| m.min(ttl)));
             }
             TYPE_AAAA if qtype == TYPE_AAAA && rdlen == 16 => {
                 let mut a = [0u8; 16];
                 a.copy_from_slice(data);
                 answer.addrs.push(IpAddr::V6(Ipv6Addr::from(a)));
+                min_ttl = Some(min_ttl.map_or(ttl, |m| m.min(ttl)));
             }
             _ => {}
         }
@@ -176,6 +230,7 @@ pub fn parse(msg: &[u8], id: u16, name: &str, qtype: u16) -> Result<Answer, DnsE
     if answer.addrs.is_empty() {
         return Err(DnsError::NoData);
     }
+    answer.ttl = min_ttl.unwrap_or(0);
     Ok(answer)
 }
 
@@ -219,6 +274,9 @@ mod tests {
         let a = parse(&reply(7, 0), 7, "WWW.example.com.", TYPE_A).unwrap();
         assert_eq!(a.addrs, [IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))]);
         assert_eq!(a.canonical.as_deref(), Some("web.example.com"));
+        assert_eq!(a.ttl, 60);
+        assert_eq!(reply_id(&reply(7, 0)), Some(7));
+        assert_eq!(reply_id(&[1]), None);
         assert_eq!(parse(&reply(7, 0), 8, "www.example.com", TYPE_A), Err(DnsError::Fail));
         assert_eq!(parse(&reply(7, 3), 7, "www.example.com", TYPE_A), Err(DnsError::NotFound));
         assert_eq!(parse(&reply(7, 2), 7, "www.example.com", TYPE_A), Err(DnsError::TryAgain));
@@ -228,6 +286,42 @@ mod tests {
         // A query is not an answer.
         let q = query(7, "www.example.com", TYPE_A).unwrap();
         assert_eq!(parse(&q, 7, "www.example.com", TYPE_A), Err(DnsError::Fail));
+    }
+
+    #[test]
+    fn local_fallback_and_normalization() {
+        assert_eq!(normalize_name("PolyTest.INVALID."), "polytest.invalid");
+        assert_eq!(normalize_name("WPAD"), "wpad");
+        // Single-label names and .local names trigger local-network fallback when AI_DNS_ONLY is absent.
+        assert!(needs_local_fallback("wpad"));
+        assert!(needs_local_fallback("polytest-0123456789abcdef"));
+        assert!(needs_local_fallback("polytest-x.local"));
+        assert!(needs_local_fallback("polytest-x.LOCAL."));
+        assert!(needs_local_fallback("a.b.local"));
+        // Fully qualified names, .invalid, .test, .localhost, .localdomain, and trailing-dot single labels do not.
+        assert!(!needs_local_fallback("wpad."));
+        assert!(!needs_local_fallback("polytest-x.invalid"));
+        assert!(!needs_local_fallback("polytest-x.invalid."));
+        assert!(!needs_local_fallback("polytest-x.test"));
+        assert!(!needs_local_fallback("polytest.localhost"));
+        assert!(!needs_local_fallback("localhost.localdomain"));
+        assert!(!needs_local_fallback(""));
+        assert!(!needs_local_fallback("."));
+        assert!(!needs_local_fallback(".local"));
+        assert!(!needs_local_fallback("bad name"));
+        assert!(!needs_local_fallback(&"a".repeat(64)));
+    }
+
+    #[test]
+    fn odd_name_validation() {
+        let label63 = alloc::format!("{}.invalid", "a".repeat(63));
+        let label64 = alloc::format!("{}.invalid", "a".repeat(64));
+        assert!(encode_name(&label63, &mut Vec::new()).is_ok());
+        assert_eq!(encode_name(&label64, &mut Vec::new()), Err(DnsError::BadName));
+        assert_eq!(encode_name("poly test.invalid", &mut Vec::new()), Err(DnsError::BadName));
+        assert_eq!(encode_name(".", &mut Vec::new()), Err(DnsError::BadName));
+        assert!(encode_name("_polytest-x.invalid", &mut Vec::new()).is_ok());
+        assert!(encode_name("polytest-x.test", &mut Vec::new()).is_ok());
     }
 
     #[test]

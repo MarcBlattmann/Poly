@@ -246,6 +246,13 @@ pub(super) fn prepare(sys: &mut NtSystem) {
         Ok(_) => {}
         Err(e) => crate::kprintln!("nt: layout: cannot install win.ini ({:#x})", e.0),
     }
+    /// Poly's default `hosts` file (`%SystemRoot%\System32\drivers\etc\hosts`).
+    const HOSTS_FILE: &[u8] = b"# Poly hosts file\r\n";
+    match create::install_if_missing(&vr, &root, "Windows\\System32\\drivers\\etc", "hosts", HOSTS_FILE) {
+        Ok(create::Installed::Written) => crate::kprintln!("nt: layout: hosts written to System32\\drivers\\etc"),
+        Ok(_) => {}
+        Err(e) => crate::kprintln!("nt: layout: cannot install hosts ({:#x})", e.0),
+    }
     // The session shell's stand-in (ADR 0222), where Windows keeps its shell.
     if !super::EXPLORER_EXE.is_empty() {
         match create::install_file(&vr, &root, "Windows", "explorer.exe", super::EXPLORER_EXE) {

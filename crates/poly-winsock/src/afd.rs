@@ -393,6 +393,47 @@ impl NetInfo {
     }
 }
 
+/// The largest buffer [`IF_LIST`] can return (8-byte header + up to 8 72-byte records;
+/// matches `poly_iphlp::wire`).
+pub const IF_LIST_MAX_BYTES: usize = 8 + 8 * 72;
+
+/// Decode the interface addresses from an [`IF_LIST`] reply (`poly_iphlp::wire` format):
+/// returns `(is_loopback, ip)` for every up interface.
+pub fn decode_if_addrs(b: &[u8]) -> alloc::vec::Vec<(bool, core::net::IpAddr)> {
+    const HEADER: usize = 8;
+    const RECORD: usize = 72;
+    const MAX_IF: usize = 8;
+    const UP: u32 = 1;
+    const HAS_V4: u32 = 2;
+    const HAS_V6: u32 = 8;
+
+    let Some(count) = u32_at(b, 0).map(|n| n as usize) else {
+        return alloc::vec::Vec::new();
+    };
+    if count > MAX_IF || b.len() < HEADER + count * RECORD {
+        return alloc::vec::Vec::new();
+    }
+    let mut out = alloc::vec::Vec::new();
+    for i in 0..count {
+        let r = &b[HEADER + i * RECORD..HEADER + (i + 1) * RECORD];
+        let kind = u32_at(r, 4).unwrap_or(0);
+        let flags = u32_at(r, 8).unwrap_or(0);
+        if flags & UP == 0 {
+            continue;
+        }
+        let is_loopback = kind == 0;
+        if flags & HAS_V6 != 0 {
+            let mut a = [0u8; 16];
+            a.copy_from_slice(&r[56..72]);
+            out.push((is_loopback, core::net::IpAddr::V6(core::net::Ipv6Addr::from(a))));
+        }
+        if flags & HAS_V4 != 0 {
+            out.push((is_loopback, core::net::IpAddr::V4(core::net::Ipv4Addr::new(r[32], r[33], r[34], r[35]))));
+        }
+    }
+    out
+}
+
 /// [`INFO`]: what the endpoint is.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Info {
@@ -581,6 +622,33 @@ mod tests {
         assert_eq!(Info::decode(&i.encode()), Some(i));
         assert_eq!(read_u32(&option_header(0xffff, 4), 4), Some(4));
         assert_eq!(read_u32(&internal_option_header(0xffff, 4), 0), Some(0x4000_ffff));
+    }
+
+    #[test]
+    fn if_list_addrs_decode() {
+        let mut buf = alloc::vec![0u8; 8 + 2 * 72];
+        buf[0..4].copy_from_slice(&2u32.to_le_bytes());
+        // Record 0: loopback, up + v4 + v6.
+        let r0 = &mut buf[8..80];
+        r0[4..8].copy_from_slice(&0u32.to_le_bytes());
+        r0[8..12].copy_from_slice(&(1u32 | 2 | 8).to_le_bytes());
+        r0[32..36].copy_from_slice(&[127, 0, 0, 1]);
+        r0[71] = 1;
+        // Record 1: ethernet, up + v4.
+        let r1 = &mut buf[80..152];
+        r1[4..8].copy_from_slice(&1u32.to_le_bytes());
+        r1[8..12].copy_from_slice(&(1u32 | 2).to_le_bytes());
+        r1[32..36].copy_from_slice(&[10, 0, 2, 15]);
+        let addrs = decode_if_addrs(&buf);
+        assert_eq!(
+            addrs,
+            alloc::vec![
+                (true, core::net::IpAddr::V6(core::net::Ipv6Addr::LOCALHOST)),
+                (true, core::net::IpAddr::V4(core::net::Ipv4Addr::LOCALHOST)),
+                (false, core::net::IpAddr::V4(core::net::Ipv4Addr::new(10, 0, 2, 15))),
+            ]
+        );
+        assert!(decode_if_addrs(&buf[..10]).is_empty());
     }
 
     #[test]
