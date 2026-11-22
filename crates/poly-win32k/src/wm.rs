@@ -1665,6 +1665,41 @@ impl Wm {
         Reply::Clip { res }
     }
 
+    /// Whether a Windows app changed or materialized clipboard data that has
+    /// not yet been exported to the desktop link.
+    pub fn clipboard_bridge_dirty(&self) -> bool {
+        self.clip.bridge_dirty()
+    }
+
+    /// Take the latest Windows clipboard snapshot if a Windows app modified it
+    /// since the last call.
+    pub fn take_clipboard_bridge(&mut self) -> Option<crate::clip::BridgeSnapshot> {
+        self.clip.take_bridge_dirty().then(|| self.clip.export_bridge())
+    }
+
+    /// Import clipboard contents bridged from the desktop (Wayland/Linux) into
+    /// win32k's clipboard: sets `CF_UNICODETEXT` and/or `CF_DIB` with standard
+    /// synthesis, bumps the sequence number, and notifies `WM_CLIPBOARDUPDATE`
+    /// listeners (plus `WM_DESTROYCLIPBOARD` to any displaced Windows owner).
+    /// Does not mark the clipboard bridge-dirty, avoiding echo loops.
+    pub fn set_clipboard_from_bridge(
+        &mut self,
+        text: Option<Vec<u8>>,
+        dib: Option<Vec<u8>>,
+        now: u64,
+        fx: &mut Effects,
+    ) {
+        let applied = self.clip.set_from_bridge(text, dib);
+        if applied.old_owner != 0 {
+            self.post_system_message(applied.old_owner, crate::user::WM_DESTROYCLIPBOARD, now, fx);
+        }
+        if applied.changed {
+            for l in self.clip.listeners_newest_first() {
+                self.post_system_message(l, crate::clip::WM_CLIPBOARDUPDATE, now, fx);
+            }
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn post(&mut self, ctx: Ctx, to: Key, hwnd: u32, msg: u32, w: u64, l: u64, fx: &mut Effects) -> Reply {
         let cursor = self.cursor;

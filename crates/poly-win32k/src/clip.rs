@@ -128,6 +128,43 @@ struct Open {
     hwnd: u32,
 }
 
+/// Materialized clipboard payload ready to bridge to the desktop compositor.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BridgeSnapshot {
+    /// Clipboard sequence number when this snapshot was taken.
+    pub seq: u32,
+    /// UTF-8 text (LF line endings, no trailing NUL), if a materialized text
+    /// format is present.
+    pub text: Option<Vec<u8>>,
+    /// Packed `CF_DIB` bytes (40-byte `BITMAPINFOHEADER` + optional
+    /// masks/palette + pixels), if a materialized image format is present.
+    pub dib: Option<Vec<u8>>,
+}
+
+impl BridgeSnapshot {
+    pub fn is_empty(&self) -> bool {
+        self.text.is_none() && self.dib.is_none()
+    }
+}
+
+/// Outcome of applying a desktop-bridge clipboard update into [`Clipboard`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct BridgeApply {
+    /// Whether the Windows clipboard contents changed (listeners should get
+    /// `WM_CLIPBOARDUPDATE`).
+    pub changed: bool,
+    /// Previous Windows clipboard owner window (nonzero: send
+    /// `WM_DESTROYCLIPBOARD`).
+    pub old_owner: u32,
+}
+
+/// A deferred bridge update waiting for a Windows thread to close the clipboard.
+#[derive(Clone, Debug)]
+struct PendingBridge {
+    text: Option<Vec<u8>>,
+    dib: Option<Vec<u8>>,
+}
+
 /// The clipboard.
 #[derive(Clone, Debug, Default)]
 pub struct Clipboard {
@@ -138,6 +175,13 @@ pub struct Clipboard {
     seq: u32,
     formats: Vec<Fmt>,
     dirty: bool,
+    /// Set when a Windows app changed or materialized clipboard contents,
+    /// signalling the desktop bridge to export a snapshot. Never set by
+    /// [`Clipboard::set_from_bridge`], preventing echo loops.
+    bridge_dirty: bool,
+    /// A bridge update that arrived while a Windows thread held the clipboard
+    /// open; applied on `Close` if the Windows thread did not write newer data.
+    pending_bridge: Option<PendingBridge>,
     /// Registered listeners, oldest first.
     listeners: Vec<u32>,
     names: Vec<Vec<u16>>,
@@ -191,6 +235,104 @@ impl Clipboard {
         self.listeners.contains(&hwnd)
     }
 
+    /// The current clipboard sequence number.
+    pub fn sequence(&self) -> u32 {
+        self.seq
+    }
+
+    /// Whether a Windows app changed or materialized clipboard contents since
+    /// the last [`Clipboard::take_bridge_dirty`].
+    pub fn bridge_dirty(&self) -> bool {
+        self.bridge_dirty
+    }
+
+    /// Consume the bridge-dirty flag, returning whether a Windows app update
+    /// is ready to export to the desktop compositor.
+    pub fn take_bridge_dirty(&mut self) -> bool {
+        core::mem::take(&mut self.bridge_dirty)
+    }
+
+    /// Resolve a format to its materialized bytes (following at most one
+    /// `Content::Synth` hop). Returns `None` for missing or unrendered
+    /// `Content::Delayed` formats without ever blocking.
+    fn materialized(&self, format: u32) -> Option<(u32, &[u8])> {
+        let i = self.find(format)?;
+        match &self.formats[i].content {
+            Content::Bytes(b) => Some((format, b.as_slice())),
+            Content::Delayed => None,
+            Content::Synth(src) => {
+                let j = self.find(*src)?;
+                match &self.formats[j].content {
+                    Content::Bytes(b) => Some((*src, b.as_slice())),
+                    Content::Delayed | Content::Synth(_) => None,
+                }
+            }
+        }
+    }
+
+    /// Export materialized text and/or image contents for the desktop bridge.
+    /// Delayed formats that have not been rendered are skipped without
+    /// blocking; once rendered, a subsequent export includes them.
+    pub fn export_bridge(&self) -> BridgeSnapshot {
+        let text = [CF_UNICODETEXT, CF_TEXT, CF_OEMTEXT]
+            .into_iter()
+            .find_map(|f| self.materialized(f))
+            .and_then(|(fmt, bytes)| to_utf8(fmt, bytes));
+        let dib = [CF_DIB, CF_BITMAP, CF_DIBV5]
+            .into_iter()
+            .find_map(|f| self.materialized(f))
+            .filter(|(_, bytes)| !bytes.is_empty())
+            .and_then(|(fmt, bytes)| {
+                if fmt == CF_DIBV5 {
+                    crate::dib::from_v5(bytes)
+                } else {
+                    crate::dib::info(bytes).map(|_| bytes.to_vec())
+                }
+            });
+        BridgeSnapshot { seq: self.seq, text, dib }
+    }
+
+    /// Replace the Windows clipboard with contents bridged from the desktop
+    /// (Wayland/Linux/native apps). Sets `CF_UNICODETEXT` and/or `CF_DIB`,
+    /// synthesizes standard companion formats (`CF_TEXT`, `CF_OEMTEXT`,
+    /// `CF_LOCALE`, `CF_BITMAP`, `CF_DIBV5`), and bumps the sequence number.
+    /// Never sets `bridge_dirty`, preventing echo loops back to the compositor.
+    ///
+    /// If a Windows thread currently holds the clipboard open, the update is
+    /// deferred until `CloseClipboard` (unless the Windows thread itself
+    /// writes newer data).
+    pub fn set_from_bridge(&mut self, text: Option<Vec<u8>>, dib: Option<Vec<u8>>) -> BridgeApply {
+        if self.open.is_some() {
+            self.pending_bridge = Some(PendingBridge { text, dib });
+            return BridgeApply { changed: false, old_owner: 0 };
+        }
+        self.apply_bridge(text, dib)
+    }
+
+    fn apply_bridge(&mut self, text: Option<Vec<u8>>, dib: Option<Vec<u8>>) -> BridgeApply {
+        let dib = dib.filter(|d| crate::dib::info(d).is_some());
+        if text.is_none() && dib.is_none() && self.formats.is_empty() && self.owner == 0 {
+            return BridgeApply { changed: false, old_owner: 0 };
+        }
+        let old_owner = core::mem::take(&mut self.owner);
+        self.formats.clear();
+        self.rendering.clear();
+        self.seq = self.seq.wrapping_add(1);
+        if let Some(utf8) = text {
+            let utf16 = from_utf8(&utf8);
+            self.formats.push(Fmt { format: CF_UNICODETEXT, content: Content::Bytes(utf16), handle: 0, pid: 0 });
+            self.seq = self.seq.wrapping_add(1);
+        }
+        if let Some(dib_bytes) = dib {
+            self.formats.push(Fmt { format: CF_DIB, content: Content::Bytes(dib_bytes), handle: 0, pid: 0 });
+            self.seq = self.seq.wrapping_add(1);
+        }
+        self.synthesize();
+        self.dirty = false;
+        self.bridge_dirty = false;
+        BridgeApply { changed: true, old_owner }
+    }
+
     /// Run `op` for thread (`pid`, `tid`). `close_notify` is set when a
     /// close changed something (the caller posts `WM_CLIPBOARDUPDATE` to
     /// [`Clipboard::listeners_newest_first`]).
@@ -205,7 +347,19 @@ impl Clipboard {
                 self.open = None;
                 self.holders.clear();
                 self.rendering.clear();
-                *close_notify = core::mem::take(&mut self.dirty);
+                let changed = core::mem::take(&mut self.dirty);
+                if changed {
+                    // The Windows app wrote newer data: supersede any deferred
+                    // bridge update and export to the compositor.
+                    self.pending_bridge = None;
+                    self.bridge_dirty = true;
+                    *close_notify = true;
+                } else if let Some(pending) = self.pending_bridge.take() {
+                    let applied = self.apply_bridge(pending.text, pending.dib);
+                    *close_notify = applied.changed;
+                } else {
+                    *close_notify = false;
+                }
                 ClipRes::Ok {}
             }
             ClipOp::Empty {} => {
@@ -336,6 +490,7 @@ impl Clipboard {
             None => Content::Delayed,
             Some(b) => Content::Bytes(b),
         };
+        let materialized = matches!(&content, Content::Bytes(_));
         let rendering = self.rendering.contains(&format);
         let slot = Fmt { format, content, handle, pid };
         match self.find(format) {
@@ -343,8 +498,13 @@ impl Clipboard {
             None => self.formats.push(slot),
         }
         if rendering {
-            // The owner's answer to WM_RENDERFORMAT is not a change.
+            // The owner's answer to WM_RENDERFORMAT is not a change for Win32
+            // listeners/sequence, but a newly materialized format can now be
+            // bridged to the compositor without blocking.
             self.rendering.retain(|&f| f != format);
+            if materialized {
+                self.bridge_dirty = true;
+            }
         } else {
             self.seq = self.seq.wrapping_add(1);
             self.dirty = true;
@@ -462,6 +622,9 @@ impl Clipboard {
             self.open = None;
             self.holders.clear();
             self.rendering.clear();
+            if let Some(pending) = self.pending_bridge.take() {
+                self.apply_bridge(pending.text, pending.dib);
+            }
         }
         if self.owner == hwnd {
             self.owner = 0;
@@ -475,6 +638,9 @@ impl Clipboard {
         if self.holders.is_empty() && self.open.is_some() {
             self.open = None;
             self.rendering.clear();
+            if let Some(pending) = self.pending_bridge.take() {
+                self.apply_bridge(pending.text, pending.dib);
+            }
         }
     }
 
@@ -484,11 +650,74 @@ impl Clipboard {
         if self.holders.is_empty() && self.open.is_some() {
             self.open = None;
             self.rendering.clear();
+            if let Some(pending) = self.pending_bridge.take() {
+                self.apply_bridge(pending.text, pending.dib);
+            }
         }
     }
 }
 
 // ----- text conversion
+
+/// Convert a Windows clipboard text format (`CF_UNICODETEXT`, `CF_TEXT`, or
+/// `CF_OEMTEXT`) into UTF-8 bytes (no trailing NUL, `\r\n` normalized to
+/// `\n`). Returns `None` for non-text formats.
+pub fn to_utf8(format: u32, bytes: &[u8]) -> Option<Vec<u8>> {
+    let units: Vec<u16> = match format {
+        CF_UNICODETEXT => {
+            bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect()
+        }
+        CF_TEXT | CF_OEMTEXT => {
+            let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+            let slice = &bytes[..end];
+            let cp = poly_nls::codepage::CodePage::get(if format == CF_OEMTEXT { OEM_CP } else { ANSI_CP });
+            match cp.and_then(|c| c.decode(slice, false).ok()) {
+                Some(u) => u,
+                None => slice.iter().map(|&x| u16::from(x)).collect(),
+            }
+        }
+        _ => return None,
+    };
+    let mut s = alloc::string::String::with_capacity(units.len());
+    for ch in core::char::decode_utf16(units) {
+        s.push(ch.unwrap_or('\u{FFFD}'));
+    }
+    // Normalize CRLF -> LF for Linux/Wayland apps.
+    let mut out = Vec::with_capacity(s.len());
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'\r' && b.get(i + 1) == Some(&b'\n') {
+            out.push(b'\n');
+            i += 2;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    Some(out)
+}
+
+/// Convert UTF-8 bytes (from Wayland/Linux) into NUL-terminated UTF-16LE
+/// bytes for `CF_UNICODETEXT`, normalizing bare `\n` (not preceded by `\r`)
+/// to `\r\n`.
+pub fn from_utf8(utf8: &[u8]) -> Vec<u8> {
+    let text = alloc::string::String::from_utf8_lossy(utf8);
+    let mut out = Vec::with_capacity((text.len() + 1) * 2);
+    let mut prev_cr = false;
+    let mut buf = [0u16; 2];
+    for ch in text.chars() {
+        if ch == '\n' && !prev_cr {
+            out.extend_from_slice(&(b'\r' as u16).to_le_bytes());
+        }
+        for u in ch.encode_utf16(&mut buf) {
+            out.extend_from_slice(&u.to_le_bytes());
+        }
+        prev_cr = ch == '\r';
+    }
+    out.extend_from_slice(&0u16.to_le_bytes());
+    out
+}
 
 /// Convert text between the clipboard's text formats. `bytes` is the
 /// content of format `from`; the result is the content of format `to`.
@@ -673,5 +902,110 @@ mod tests {
         let ab: Vec<u8> = [0x41u16, 0x42].iter().flat_map(|u| u.to_le_bytes()).collect();
         assert_eq!(convert_text(CF_UNICODETEXT, CF_UNICODETEXT, &ab), vec![0x41, 0, 0, 0]);
         assert_eq!(convert_text(CF_TEXT, CF_UNICODETEXT, b"AB"), vec![0x41, 0, 0, 0]);
+    }
+
+    #[test]
+    fn utf8_text_bridge_handles_ascii_unicode_surrogates_and_newlines() {
+        // ASCII + Unicode BMP + supplementary plane (surrogate pair: U+1F30D 🌍).
+        let src = "Hello 🌍 café\nLine 2\n";
+        let utf16 = from_utf8(src.as_bytes());
+        // Must end with UTF-16LE NUL and have CRLF line endings.
+        assert!(utf16.ends_with(&[0, 0]));
+        let units: Vec<u16> = utf16.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        assert!(units.contains(&0xD83C) && units.contains(&0xDF0D), "surrogate pair encoded");
+        assert_eq!(to_utf8(CF_UNICODETEXT, &utf16).unwrap(), src.as_bytes());
+
+        // Already-CRLF input must not double into \r\r\n.
+        let crlf = b"one\r\ntwo\nthree\r";
+        let w = from_utf8(crlf);
+        let back = to_utf8(CF_UNICODETEXT, &w).unwrap();
+        assert_eq!(back, b"one\ntwo\nthree\r");
+        // Verify exact UTF-16 sequence has single \r\n for both line breaks.
+        let units: Vec<u16> = w.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+        let expected: Vec<u16> = "one\r\ntwo\r\nthree\r\0".encode_utf16().collect();
+        assert_eq!(units, expected);
+
+        // Empty string preserves empty string (NUL-terminated [0, 0]).
+        let empty = from_utf8(b"");
+        assert_eq!(empty, [0, 0]);
+        assert_eq!(to_utf8(CF_UNICODETEXT, &empty).unwrap(), b"");
+
+        // ANSI (CP1252) and OEM (CP850) conversion to UTF-8.
+        assert_eq!(to_utf8(CF_TEXT, &[0x48, 0xE9, 0x80, b'\r', b'\n', 0]).unwrap(), "Hé€\n".as_bytes());
+        assert_eq!(to_utf8(CF_OEMTEXT, &[0x48, 0x82, 0]).unwrap(), "Hé".as_bytes());
+        assert!(to_utf8(CF_DIB, &[1, 2, 3]).is_none());
+    }
+
+    #[test]
+    fn bridge_export_import_delayed_and_loop_prevention() {
+        let mut c = Clipboard::new();
+        // Windows app sets Unicode text + closes: bridge_dirty becomes true.
+        run(&mut c, ClipOp::Open { hwnd: 0x10 });
+        run(&mut c, ClipOp::Empty {});
+        set(&mut c, CF_UNICODETEXT, &from_utf8(b"win\ntext"));
+        run(&mut c, ClipOp::Close {});
+        assert!(c.take_bridge_dirty());
+        assert!(!c.bridge_dirty());
+        let snap = c.export_bridge();
+        assert_eq!(snap.text.as_deref(), Some(&b"win\ntext"[..]));
+        assert!(snap.dib.is_none());
+
+        // Bridge import from Wayland sets CF_UNICODETEXT + synthesizes CF_TEXT/CF_OEMTEXT
+        // and CF_DIB + synthesizes CF_BITMAP/CF_DIBV5, bumps seq, reports old owner,
+        // and does NOT set bridge_dirty (no echo loop!).
+        let s0 = c.sequence();
+        let dib = crate::dib::make32(2, 1, &[1, 2, 3, 255, 4, 5, 6, 255]);
+        let applied = c.set_from_bridge(Some(b"from wayland\nline2".to_vec()), Some(dib.clone()));
+        assert_eq!(applied, BridgeApply { changed: true, old_owner: 0x10 });
+        assert!(c.sequence() > s0);
+        assert!(!c.bridge_dirty(), "bridge import must not echo back");
+        assert_eq!(c.owner(), 0);
+        run(&mut c, ClipOp::Open { hwnd: 0 });
+        assert_eq!(formats(&mut c), vec![CF_UNICODETEXT, CF_DIB, CF_LOCALE, CF_TEXT, CF_OEMTEXT, CF_BITMAP, CF_DIBV5]);
+        let ClipRes::Data { bytes, .. } = run(&mut c, ClipOp::Get { format: CF_UNICODETEXT }) else { panic!() };
+        assert_eq!(to_utf8(CF_UNICODETEXT, &bytes).unwrap(), b"from wayland\nline2");
+        let ClipRes::Data { from, bytes, .. } = run(&mut c, ClipOp::Get { format: CF_TEXT }) else { panic!() };
+        assert_eq!(from, CF_UNICODETEXT);
+        assert_eq!(convert_text(from, CF_TEXT, &bytes), b"from wayland\r\nline2\0");
+        let ClipRes::Data { bytes: got_dib, .. } = run(&mut c, ClipOp::Get { format: CF_DIB }) else { panic!() };
+        assert_eq!(got_dib, dib);
+        run(&mut c, ClipOp::Close {});
+        assert!(!c.bridge_dirty(), "reading and closing does not mark bridge dirty");
+
+        // Clearing from bridge empties clipboard without echo; second clear is a no-op.
+        let cleared = c.set_from_bridge(None, None);
+        assert!(cleared.changed);
+        assert!(!c.bridge_dirty());
+        assert!(c.export_bridge().is_empty());
+        assert!(!c.set_from_bridge(None, None).changed);
+
+        // Delayed rendering: never blocks export; skipped until materialized, then exported.
+        run(&mut c, ClipOp::Open { hwnd: 0x20 });
+        run(&mut c, ClipOp::Empty {});
+        assert_eq!(run(&mut c, ClipOp::Set { format: CF_UNICODETEXT, handle: 0, data: None }), ClipRes::Ok {});
+        run(&mut c, ClipOp::Close {});
+        assert!(c.take_bridge_dirty());
+        assert!(c.export_bridge().is_empty(), "unrendered delayed format is skipped cleanly");
+        // Another thread triggers render, owner renders it.
+        run(&mut c, ClipOp::Open { hwnd: 0 });
+        assert_eq!(
+            run(&mut c, ClipOp::Get { format: CF_UNICODETEXT }),
+            ClipRes::Render { owner: 0x20, format: CF_UNICODETEXT }
+        );
+        set(&mut c, CF_UNICODETEXT, &from_utf8(b"rendered"));
+        assert!(c.take_bridge_dirty(), "materializing a delayed format notifies bridge");
+        assert_eq!(c.export_bridge().text.as_deref(), Some(&b"rendered"[..]));
+        run(&mut c, ClipOp::RenderDone { format: CF_UNICODETEXT });
+        run(&mut c, ClipOp::Close {});
+
+        // Deferred bridge update while open for reading applies cleanly on Close without echo.
+        run(&mut c, ClipOp::Open { hwnd: 0 });
+        let deferred = c.set_from_bridge(Some(b"deferred".to_vec()), None);
+        assert!(!deferred.changed);
+        let mut notify = false;
+        assert_eq!(c.run(1, 1, ClipOp::Close {}, &mut notify), ClipRes::Ok {});
+        assert!(notify, "listeners notified once deferred bridge update applies");
+        assert!(!c.bridge_dirty(), "deferred bridge update must not echo");
+        assert_eq!(c.export_bridge().text.as_deref(), Some(&b"deferred"[..]));
     }
 }

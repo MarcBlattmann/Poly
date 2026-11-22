@@ -257,10 +257,16 @@ pub struct PollFd {
 
 /// Readable (`POLLIN`).
 pub const POLLIN: u16 = events::READABLE;
+/// Writable (`POLLOUT`).
+pub const POLLOUT: u16 = events::WRITABLE;
 
 impl PollFd {
     pub fn readable(fd: RawFd) -> PollFd {
         PollFd { fd, events: POLLIN, revents: 0 }
+    }
+
+    pub fn writable(fd: RawFd) -> PollFd {
+        PollFd { fd, events: POLLOUT, revents: 0 }
     }
 }
 
@@ -347,9 +353,34 @@ pub fn read(fd: RawFd, buf: &mut [u8]) -> io::Result<usize> {
     }
 }
 
+/// Non-blocking read from `fd`: `Ok(None)` on `WouldBlock`/`Interrupted`,
+/// `Ok(Some(0))` on EOF, `Ok(Some(n))` on `n` bytes read.
+pub fn read_nonblock(fd: RawFd, buf: &mut [u8]) -> io::Result<Option<usize>> {
+    match sys::read(h(fd), buf) {
+        Ok(n) => Ok(Some(n)),
+        Err(ErrorKind::WouldBlock | ErrorKind::Interrupted) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// Write to `fd`.
 pub fn write(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
     Ok(sys::write(h(fd), buf)?)
+}
+
+/// Non-blocking write to `fd`: `Ok(None)` on `WouldBlock`/`Interrupted`,
+/// `Ok(Some(n))` on `n` bytes written.
+pub fn write_nonblock(fd: RawFd, buf: &[u8]) -> io::Result<Option<usize>> {
+    match sys::write(h(fd), buf) {
+        Ok(n) => Ok(Some(n)),
+        Err(ErrorKind::WouldBlock | ErrorKind::Interrupted) => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
+/// Set or clear non-blocking mode on `fd`.
+pub fn set_nonblocking(fd: RawFd, on: bool) -> io::Result<()> {
+    Ok(sys::set_nonblocking(h(fd), on)?)
 }
 
 /// Map `len` bytes of `fd`'s file (a DRM buffer, a frame buffer) from

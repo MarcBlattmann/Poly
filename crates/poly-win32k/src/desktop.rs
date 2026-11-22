@@ -97,6 +97,9 @@ pub struct Desktop {
     retired: BTreeSet<BufferId>,
     /// Buffers nobody reads any more, for the kernel to free.
     released: Vec<BufferId>,
+    /// Latest Windows-origin clipboard snapshot, replayed on compositor
+    /// (re)connect when non-empty.
+    clipboard: Option<crate::link::ClipPayload>,
     errors: u32,
 }
 
@@ -120,6 +123,7 @@ impl Desktop {
             incoming: Stream::new(),
             retired: BTreeSet::new(),
             released: Vec::new(),
+            clipboard: None,
             errors: 0,
         }
     }
@@ -427,6 +431,25 @@ impl Desktop {
         true
     }
 
+    /// Publish a Windows-origin clipboard update to the compositor (and keep
+    /// non-empty data for replay on compositor reconnect).
+    pub fn set_clipboard(&mut self, seq: u32, text: Option<Vec<u8>>, dib: Option<Vec<u8>>) {
+        if self.connected {
+            crate::link::encode_to_compositor_clip(&mut self.out, seq, text.as_deref(), dib.as_deref());
+        }
+        if text.is_some() || dib.is_some() {
+            self.clipboard = Some(crate::link::ClipPayload { seq, text, dib });
+        } else {
+            self.clipboard = None;
+        }
+    }
+
+    /// Forget any cached Windows-origin clipboard replay (called when the
+    /// desktop/Wayland side becomes the clipboard owner).
+    pub fn clear_replayed_clipboard(&mut self) {
+        self.clipboard = None;
+    }
+
     /// The bytes to hand to the compositor's next `read`.
     pub fn take_output(&mut self) -> Vec<u8> {
         core::mem::take(&mut self.out)
@@ -543,6 +566,9 @@ impl Desktop {
             if s.shown {
                 put(ToCompositor::Visible { surface: id, shown: true });
             }
+        }
+        if let Some(clip) = &self.clipboard {
+            crate::link::encode_to_compositor_clip(&mut out, clip.seq, clip.text.as_deref(), clip.dib.as_deref());
         }
         self.out = out;
     }

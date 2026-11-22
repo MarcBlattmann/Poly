@@ -45,10 +45,46 @@ pub(crate) struct DataSource {
     pub used: bool,
 }
 
+/// What backs a `wl_data_offer`: a Wayland client's `wl_data_source`, or an
+/// external (compositor-managed) clipboard selection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OfferSource {
+    Client(ClientId, ObjectId),
+    External(u64),
+}
+
+/// Who currently owns the seat's clipboard selection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Selection {
+    Client(ClientId, ObjectId),
+    External { id: u64, mime_types: Vec<String> },
+}
+
+/// A selection change initiated by a Wayland client (never emitted for
+/// external selections installed via [`Server::set_external_selection`] /
+/// [`Server::clear_external_selection`], preventing feedback loops).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SelectionEvent {
+    /// Client `client` set `source` offering `mime_types` as the selection.
+    ClientSelection { client: ClientId, source: ObjectId, mime_types: Vec<String> },
+    /// The selection was cleared by a Wayland client (explicit clear, source
+    /// destroyed, or owning client disconnected).
+    Cleared,
+}
+
+/// A Wayland client asked to paste `mime_type` from the current external
+/// selection into `fd`. The compositor owns `fd` once taken and must close it.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ExternalPasteRequest {
+    pub id: u64,
+    pub mime_type: String,
+    pub fd: Fd,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct DataOffer {
     /// The source it offers, while it is there.
-    pub source: Option<(ClientId, ObjectId)>,
+    pub source: Option<OfferSource>,
     pub dnd: bool,
     pub accepted: Option<String>,
     pub actions: u32,
@@ -73,8 +109,11 @@ pub(crate) struct Drag {
 /// The seat's clipboard and drag.
 #[derive(Debug, Default)]
 pub(crate) struct DataState {
-    pub selection: Option<(ClientId, ObjectId)>,
+    pub selection: Option<Selection>,
     pub drag: Option<Drag>,
+    pub next_external_id: u64,
+    pub selection_events: Vec<SelectionEvent>,
+    pub paste_requests: Vec<ExternalPasteRequest>,
 }
 
 /// The action a drag does: the destination's preference if both allow it,
@@ -156,14 +195,15 @@ impl Server {
         for client in self.clients.values_mut() {
             for o in client.objects.values_mut() {
                 if let Data::DataOffer(offer) = &mut o.data
-                    && offer.source == Some((c, id))
+                    && offer.source == Some(OfferSource::Client(c, id))
                 {
                     offer.source = None;
                 }
             }
         }
-        if self.data.selection == Some((c, id)) {
+        if matches!(self.data.selection, Some(Selection::Client(sc, sid)) if (sc, sid) == (c, id)) {
             self.data.selection = None;
+            self.data.selection_events.push(SelectionEvent::Cleared);
             if let Some((fc, _)) = self.keyboard_focus() {
                 self.send_selection(fc, None);
             }
@@ -177,9 +217,23 @@ impl Server {
         }
     }
 
+    /// Invalidate every `wl_data_offer` pointing at external selection `ext_id`.
+    fn invalidate_external_offers(&mut self, ext_id: u64) {
+        for client in self.clients.values_mut() {
+            for o in client.objects.values_mut() {
+                if let Data::DataOffer(offer) = &mut o.data
+                    && offer.source == Some(OfferSource::External(ext_id))
+                {
+                    offer.source = None;
+                }
+            }
+        }
+    }
+
     pub(super) fn data_device_request(&mut self, c: ClientId, device: ObjectId, req: wl_data_device::Request) -> Res {
         match req {
             wl_data_device::Request::SetSelection { source, .. } => {
+                let mut mimes = Vec::new();
                 if let Some(s) = source {
                     let Some(src) = self.data_source(c, s) else { return Ok(()) };
                     if src.used {
@@ -187,14 +241,31 @@ impl Server {
                         return Err(error(device, code, "the source was used already"));
                     }
                     src.used = true;
+                    mimes = src.mime_types.clone();
                 }
-                let new = source.map(|s| (c, s));
-                let old = core::mem::replace(&mut self.data.selection, new);
-                if let Some((oc, os)) = old
-                    && old != new
-                    && let Some(client) = self.clients.get_mut(&oc)
-                {
-                    client.send(os, wl_data_source::Event::Cancelled);
+                let new = source.map(|s| Selection::Client(c, s));
+                let old = core::mem::replace(&mut self.data.selection, new.clone());
+                match &old {
+                    Some(Selection::Client(oc, os)) if old != new => {
+                        if let Some(client) = self.clients.get_mut(oc) {
+                            client.send(*os, wl_data_source::Event::Cancelled);
+                        }
+                    }
+                    Some(Selection::External { id, .. }) => self.invalidate_external_offers(*id),
+                    _ => {}
+                }
+                match new {
+                    Some(Selection::Client(sc, ss)) => {
+                        self.data.selection_events.push(SelectionEvent::ClientSelection {
+                            client: sc,
+                            source: ss,
+                            mime_types: mimes,
+                        });
+                    }
+                    None if old.is_some() => {
+                        self.data.selection_events.push(SelectionEvent::Cleared);
+                    }
+                    _ => {}
                 }
                 if let Some((fc, _)) = self.keyboard_focus() {
                     self.send_selection(fc, None);
@@ -215,16 +286,11 @@ impl Server {
         &mut self,
         c: ClientId,
         device: ObjectId,
-        source: Option<(ClientId, ObjectId)>,
+        source: Option<OfferSource>,
+        mimes: Vec<String>,
+        actions: u32,
         dnd: bool,
     ) -> ObjectId {
-        let (mimes, actions) = match source {
-            Some((sc, s)) => match self.clients.get(&sc).and_then(|cl| cl.data(s)) {
-                Some(Data::DataSource(src)) => (src.mime_types.clone(), src.actions.unwrap_or(COPY)),
-                _ => (Vec::new(), 0),
-            },
-            None => (Vec::new(), 0),
-        };
         let client = self.client(c);
         let version = client.version(device);
         let id = client.new_server_id();
@@ -247,9 +313,20 @@ impl Server {
             Some(d) => alloc::vec![d],
             None => self.client(c).ids_where(|d| matches!(d, Data::DataDevice)),
         };
-        let selection = self.data.selection;
+        let resolved: Option<(OfferSource, Vec<String>)> = match &self.data.selection {
+            Some(Selection::Client(sc, s)) => {
+                let mimes = match self.clients.get(sc).and_then(|cl| cl.data(*s)) {
+                    Some(Data::DataSource(src)) => src.mime_types.clone(),
+                    _ => Vec::new(),
+                };
+                Some((OfferSource::Client(*sc, *s), mimes))
+            }
+            Some(Selection::External { id, mime_types }) => Some((OfferSource::External(*id), mime_types.clone())),
+            None => None,
+        };
         for device in devices {
-            let id = selection.map(|src| self.make_offer(c, device, Some(src), false));
+            let id =
+                resolved.as_ref().map(|(src, mimes)| self.make_offer(c, device, Some(*src), mimes.clone(), 0, false));
             self.client(c).send(device, wl_data_device::Event::Selection { id });
         }
     }
@@ -269,7 +346,8 @@ impl Server {
             }
             wl_data_offer::Request::Accept { mime_type, .. } => {
                 offer.accepted = mime_type.clone();
-                if let Some((sc, s)) = offer.source.filter(|_| offer.dnd)
+                if offer.dnd
+                    && let Some(OfferSource::Client(sc, s)) = offer.source
                     && let Some(client) = self.clients.get_mut(&sc)
                 {
                     client.send(s, wl_data_source::Event::Target { mime_type });
@@ -297,7 +375,7 @@ impl Server {
                     let code = wl_data_offer::Error::INVALID_FINISH.0;
                     return Err(error(id, code, "finish before a drop with an accepted type and action"));
                 }
-                if let Some((sc, s)) = offer.source.take()
+                if let Some(OfferSource::Client(sc, s)) = offer.source.take()
                     && let Some(client) = self.clients.get_mut(&sc)
                 {
                     client.send(s, wl_data_source::Event::DndFinished);
@@ -310,10 +388,22 @@ impl Server {
 
     /// Ask the source to write `mime_type` into `fd` (or close it if the
     /// source is gone).
-    fn data_send(&mut self, source: Option<(ClientId, ObjectId)>, mime_type: String, fd: Fd) {
-        let alive = source.filter(|(sc, s)| self.clients.get(sc).is_some_and(|cl| cl.get(*s).is_some()));
-        match alive {
-            Some((sc, s)) => self.client(sc).send(s, wl_data_source::Event::Send { mime_type, fd }),
+    fn data_send(&mut self, source: Option<OfferSource>, mime_type: String, fd: Fd) {
+        match source {
+            Some(OfferSource::Client(sc, s)) => {
+                if self.clients.get(&sc).is_some_and(|cl| cl.get(s).is_some()) {
+                    self.client(sc).send(s, wl_data_source::Event::Send { mime_type, fd });
+                } else {
+                    self.host().close_fd(fd);
+                }
+            }
+            Some(OfferSource::External(eid)) => {
+                if matches!(self.data.selection, Some(Selection::External { id, .. }) if id == eid) {
+                    self.data.paste_requests.push(ExternalPasteRequest { id: eid, mime_type, fd });
+                } else {
+                    self.host().close_fd(fd);
+                }
+            }
             None => self.host().close_fd(fd),
         }
     }
@@ -322,18 +412,19 @@ impl Server {
     fn update_action(&mut self, c: ClientId, offer_id: ObjectId) {
         let Some(offer) = self.data_offer(c, offer_id) else { return };
         let (source, actions, preferred) = (offer.source, offer.actions, offer.preferred);
-        let source_actions = source
-            .and_then(|(sc, s)| match self.clients.get(&sc)?.data(s) {
-                Some(Data::DataSource(src)) => Some(src.actions.unwrap_or(COPY)),
-                _ => None,
-            })
-            .unwrap_or(0);
+        let source_actions = match source {
+            Some(OfferSource::Client(sc, s)) => match self.clients.get(&sc).and_then(|cl| cl.data(s)) {
+                Some(Data::DataSource(src)) => src.actions.unwrap_or(COPY),
+                _ => 0,
+            },
+            _ => 0,
+        };
         let action = choose_action(source_actions, actions, preferred);
         if let Some(offer) = self.data_offer(c, offer_id) {
             offer.action = action;
         }
         self.client(c).send(offer_id, wl_data_offer::Event::Action { dnd_action: action });
-        if let Some((sc, s)) = source
+        if let Some(OfferSource::Client(sc, s)) = source
             && let Some(client) = self.clients.get_mut(&sc)
         {
             client.send(s, wl_data_source::Event::Action { dnd_action: action });
@@ -424,11 +515,20 @@ impl Server {
     fn drag_enter(&mut self, f: Focus) {
         let Some(drag) = &self.data.drag else { return };
         let source = drag.source.map(|s| (drag.client, s));
+        let (mimes, actions) = match source {
+            Some((sc, s)) => match self.clients.get(&sc).and_then(|cl| cl.data(s)) {
+                Some(Data::DataSource(src)) => (src.mime_types.clone(), src.actions.unwrap_or(COPY)),
+                _ => (Vec::new(), 0),
+            },
+            None => (Vec::new(), 0),
+        };
         let serial = self.next_serial();
         let (sx, sy) = self.local(f.window);
         let mut offers = Vec::new();
         for d in self.client(f.client).ids_where(|d| matches!(d, Data::DataDevice)) {
-            let id = source.map(|src| self.make_offer(f.client, d, Some(src), true));
+            let id = source.map(|(sc, s)| {
+                self.make_offer(f.client, d, Some(OfferSource::Client(sc, s)), mimes.clone(), actions, true)
+            });
             offers.extend(id);
             let enter = wl_data_device::Event::Enter { serial, surface: f.surface, x: sx, y: sy, id };
             self.client(f.client).send(d, enter);
@@ -542,8 +642,9 @@ impl Server {
 
     /// Client `c` left: its selection and drag go.
     pub(super) fn data_client_gone(&mut self, c: ClientId) {
-        if self.data.selection.is_some_and(|(sc, _)| sc == c) {
+        if matches!(self.data.selection, Some(Selection::Client(sc, _)) if sc == c) {
             self.data.selection = None;
+            self.data.selection_events.push(SelectionEvent::Cleared);
             if let Some((fc, _)) = self.keyboard_focus().filter(|(fc, _)| *fc != c) {
                 self.send_selection(fc, None);
             }
@@ -565,6 +666,74 @@ impl Server {
                 d.focus = None;
                 d.offers.clear();
             }
+        }
+    }
+
+    /// Install an external (compositor-managed) clipboard selection offering
+    /// `mime_types`. Cancels any previous Wayland client's `wl_data_source`,
+    /// offers the new selection to the focused client, and does **not** emit a
+    /// [`SelectionEvent`]. Returns the external selection ID used to match
+    /// subsequent [`ExternalPasteRequest`]s.
+    pub fn set_external_selection(&mut self, mime_types: Vec<String>) -> u64 {
+        self.data.next_external_id = self.data.next_external_id.wrapping_add(1).max(1);
+        let id = self.data.next_external_id;
+        let old = self.data.selection.replace(Selection::External { id, mime_types });
+        match old {
+            Some(Selection::Client(oc, os)) => {
+                if let Some(client) = self.clients.get_mut(&oc) {
+                    client.send(os, wl_data_source::Event::Cancelled);
+                }
+            }
+            Some(Selection::External { id: old_id, .. }) => self.invalidate_external_offers(old_id),
+            None => {}
+        }
+        if let Some((fc, _)) = self.keyboard_focus() {
+            self.send_selection(fc, None);
+        }
+        id
+    }
+
+    /// Clear the Wayland selection on behalf of an external clipboard clear.
+    /// Cancels any active Wayland client source and sends `selection(None)` to
+    /// the focused client without emitting a [`SelectionEvent`].
+    pub fn clear_external_selection(&mut self) {
+        let Some(old) = self.data.selection.take() else { return };
+        match old {
+            Selection::Client(oc, os) => {
+                if let Some(client) = self.clients.get_mut(&oc) {
+                    client.send(os, wl_data_source::Event::Cancelled);
+                }
+            }
+            Selection::External { id: old_id, .. } => self.invalidate_external_offers(old_id),
+        }
+        if let Some((fc, _)) = self.keyboard_focus() {
+            self.send_selection(fc, None);
+        }
+    }
+
+    /// Drain Wayland-client selection changes since the last call.
+    pub fn take_selection_events(&mut self) -> Vec<SelectionEvent> {
+        core::mem::take(&mut self.data.selection_events)
+    }
+
+    /// Drain paste requests from Wayland clients targeting the current
+    /// external selection.
+    pub fn take_external_paste_requests(&mut self) -> Vec<ExternalPasteRequest> {
+        core::mem::take(&mut self.data.paste_requests)
+    }
+
+    /// Ask the Wayland client that currently owns the selection (`client`,
+    /// `source`) to write `mime_type` into `fd` (`wl_data_source.send`).
+    /// Takes ownership of `fd`: queued for sending to `client`, or closed
+    /// immediately if `(client, source)` is no longer the active selection.
+    pub fn request_client_selection(&mut self, client: ClientId, source: ObjectId, mime_type: String, fd: Fd) -> bool {
+        let active = matches!(self.data.selection, Some(Selection::Client(sc, ss)) if (sc, ss) == (client, source));
+        if active && self.clients.get(&client).is_some_and(|cl| cl.get(source).is_some()) {
+            self.client(client).send(source, wl_data_source::Event::Send { mime_type, fd });
+            true
+        } else {
+            self.host().close_fd(fd);
+            false
         }
     }
 
