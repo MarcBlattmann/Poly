@@ -184,6 +184,7 @@ fn user_classes() -> Option<Handle> {
 #[cfg_attr(not(target_arch = "x86"), link(name = "ntdll", kind = "raw-dylib"))]
 unsafe extern "system" {
     fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> NtStatus;
+    fn NtSetSecurityObject(handle: Handle, info: u32, sd: *const u8) -> NtStatus;
 }
 
 /// `RegGetKeySecurity(hKey, SecurityInformation, pSecurityDescriptor, lpcbSecurityDescriptor)`
@@ -212,6 +213,65 @@ pub unsafe extern "system" fn RegGetKeySecurity(hkey: HKey, information: u32, sd
     // SAFETY: the caller's variable.
     unsafe { size.write(needed) };
     ERROR_SUCCESS
+}
+
+/// `RegSetKeySecurity(hKey, SecurityInformation, pSecurityDescriptor)` (Learn): writes the
+/// requested parts of `pSecurityDescriptor` to the key verbatim without propagating inheritable
+/// ACEs (`RegSetKeySecurity.yaml`). Needs `WRITE_DAC` / `WRITE_OWNER` / `ACCESS_SYSTEM_SECURITY`
+/// on the handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "system" fn RegSetKeySecurity(hkey: HKey, information: u32, sd: *const u8) -> u32 {
+    use poly_security::sd::{self, SdPtr};
+    let h = match handle_of(hkey) {
+        Ok(h) => h,
+        Err(e) => return e,
+    };
+    if sd.is_null() {
+        return ERROR_INVALID_PARAMETER;
+    }
+    // SAFETY: `sd` is checked non-null; `IsValidSecurityDescriptor` probes readable memory and
+    // checks revision and embedded pointers/offsets.
+    if unsafe { crate::secdata::IsValidSecurityDescriptor(sd as *mut u8) } == 0 {
+        return ERROR_INVALID_PARAMETER;
+    }
+    // Copy to a self-relative buffer and clear `SE_DACL_AUTO_INHERIT_REQ | SE_DACL_AUTO_INHERITED`
+    // so `NtSetSecurityObject` stores the descriptor verbatim without triggering automatic
+    // inheritance even if the caller set those bits (`RegSetKeySecurity.yaml` `stored_exactly`).
+    let mut rel = {
+        let s = SdPtr(sd as *mut u8);
+        // SAFETY: `sd` just passed `IsValidSecurityDescriptor`.
+        let control = unsafe { s.control() };
+        if control & sd::SE_SELF_RELATIVE != 0 {
+            // SAFETY: valid self-relative descriptor of `sd::length(s)` bytes.
+            let len = unsafe { sd::length(s) };
+            // SAFETY: readable slice of `len` bytes.
+            unsafe { core::slice::from_raw_parts(sd, len) }.to_vec()
+        } else {
+            let mut len = 0u32;
+            // SAFETY: size probe on a validated absolute descriptor.
+            let _ = unsafe { sd::make_self_relative(s, core::ptr::null_mut(), &mut len, false) };
+            let mut buf = alloc::vec![0u8; len as usize];
+            // SAFETY: `buf` holds `len` bytes.
+            if unsafe { sd::make_self_relative(s, buf.as_mut_ptr(), &mut len, false) }.is_err() {
+                return ERROR_INVALID_PARAMETER;
+            }
+            buf
+        }
+    };
+    if rel.len() >= 4 {
+        let ctl = u16::from_le_bytes([rel[2], rel[3]]) & !(sd::SE_DACL_AUTO_INHERIT_REQ | sd::SE_DACL_AUTO_INHERITED);
+        rel[2..4].copy_from_slice(&ctl.to_le_bytes());
+    }
+    // SAFETY: `rel` is a local valid self-relative descriptor.
+    let st = unsafe { NtSetSecurityObject(h, information, rel.as_ptr()) };
+    if st.is_success() {
+        return ERROR_SUCCESS;
+    }
+    // Invalid descriptor status codes map to `ERROR_INVALID_PARAMETER` for `RegSetKeySecurity`.
+    if st.0 == 0xC000_0079 || st.0 == 0xC000_0058 {
+        return ERROR_INVALID_PARAMETER;
+    }
+    err(st)
 }
 
 /// Keys a 32-bit process opened or made through `HKEY_CLASSES_ROOT`: a create below them is in

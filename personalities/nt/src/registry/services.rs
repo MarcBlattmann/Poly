@@ -80,7 +80,7 @@ pub fn create_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus
             let mut hook = KeyParse {
                 reg: &mut sys.registry.reg,
                 open_link: attrs.attributes & OBJ_OPENLINK != 0,
-                create: Some(CreateArgs { options, class: &class, root }),
+                create: Some(CreateArgs { options, class: &class, root, security: attrs.security.as_deref() }),
                 now,
                 disposition: None,
             };
@@ -199,7 +199,20 @@ fn with_key<K: NtKernel, R>(
 pub fn delete_key<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result<NtStatus> {
     let h = abi::arg(k, regs, 0)?;
     let now = k.system_time();
-    with_key(k, h, DELETE, |reg, key| reg.delete_key(key, now))?;
+    let caller = k.caller();
+    k.with_state(|sys, _, b| {
+        let r = key_of_handle(sys, &caller, Handle(h), DELETE).and_then(|(_, _, key)| {
+            let path = sys.registry.reg.full_path(key).ok();
+            sys.registry.reg.delete_key(key, now)?;
+            if let Some(p) = path {
+                sys.objects.remove_path_security(&poly_ntobj::path_key("K", &p));
+            }
+            Ok(())
+        });
+        sys.registry.deliver(&mut sys.objects, Some(caller.process));
+        sys.reap(b);
+        r
+    })?;
     Ok(STATUS_SUCCESS)
 }
 

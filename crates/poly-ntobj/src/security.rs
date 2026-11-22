@@ -419,11 +419,12 @@ impl ObjectManager {
 
     /// A file or key just made with the descriptor of its creator's `SECURITY_ATTRIBUTES` or
     /// `OBJECT_ATTRIBUTES`: what the descriptor names is kept for its path as if it had been
-    /// set on it (`replace_security`), the rest stays what the parents pass down. A descriptor
+    /// set on it (`replace_security_as`), the rest stays what the parents pass down. A descriptor
     /// that does not parse is left out.
     pub fn set_creation_security(&mut self, id: ObjectId, kind: ObjectType, explicit: &[u8]) {
         if let Some(parts) = Parts::from_relative(explicit) {
-            self.replace_security(id, kind, parts);
+            let mode = if parts.control & sd::SE_DACL_PRESENT != 0 { StoreMode::Inherit } else { StoreMode::Keep };
+            self.replace_security_as(id, kind, parts, mode);
         }
     }
 
@@ -432,7 +433,7 @@ impl ObjectManager {
         self.replace_security_as(id, kind, parts, StoreMode::Keep);
     }
 
-    /// [`Self::replace_security`] with how a file's DACL is kept ([`StoreMode`]).
+    /// [`Self::replace_security`] with how a file's or key's DACL is kept ([`StoreMode`]).
     pub fn replace_security_as(&mut self, id: ObjectId, kind: ObjectType, mut parts: Parts, mode: StoreMode) {
         let mapping = mapping_of(kind);
         let map = |m: u32| mapping.map(m);
@@ -440,58 +441,214 @@ impl ObjectManager {
         if let Some((key, container)) = self.security.object_path.get(&id).cloned() {
             parts.dacl = parts.dacl.map(|d| sdops::trimmed_acl(&d));
             parts.sacl = parts.sacl.map(|a| sdops::trimmed_acl(&a));
-            // A file or key: what is set is kept by path, and what the
-            // object shows is that plus what its parents pass down, unless
-            // the DACL is kept as it was given (`StoreMode::Verbatim`).
-            let before = self.security.paths.get(&key);
-            let verbatim = match mode {
-                StoreMode::Verbatim => true,
-                StoreMode::Inherit => false,
-                StoreMode::Keep => before.is_some_and(|s| s.verbatim),
-            };
-            if verbatim {
-                let st = Stored {
+            let before = self.security.paths.get(&key).cloned();
+            let sacl_ai = before.as_ref().is_some_and(|s| s.sacl_auto_inherited)
+                && parts.sacl == before.as_ref().and_then(|s| s.sacl.clone());
+            let st = match mode {
+                StoreMode::Keep => Stored {
                     owner: parts.owner.clone(),
                     group: parts.group.clone(),
-                    dacl: (parts.control & sd::SE_DACL_PRESENT != 0).then(|| parts.dacl.clone()),
-                    protected: parts.control & sd::SE_DACL_PROTECTED != 0,
+                    dacl: before.as_ref().and_then(|s| s.dacl.clone()),
+                    protected: before.as_ref().is_some_and(|s| s.protected),
                     sacl: parts.sacl.clone(),
-                    verbatim: true,
-                };
-                self.security.paths.insert(key.clone(), st);
-                let which = if kind == ObjectType::Key { DefaultSd::Key } else { DefaultSd::File };
-                let eff = self.path_descriptor(which, &key, container);
-                self.security.sds.insert(id, eff.to_relative());
-                return;
-            }
-            // Inheritance flags mean nothing on a file: they are dropped.
-            if !container && let Some(d) = parts.dacl.take() {
-                let aces: Vec<_> = poly_security::acl::aces_in(&d)
-                    .into_iter()
-                    .map(|mut a| {
-                        a.flags &= !0x0F;
-                        a.bytes[1] = a.flags;
-                        a
-                    })
-                    .collect();
-                parts.dacl = Some(sdops::acl_of(d[0], &aces));
-            }
-            let st = Stored {
-                owner: parts.owner.clone(),
-                group: parts.group.clone(),
-                dacl: (parts.control & sd::SE_DACL_PRESENT != 0)
-                    .then(|| parts.dacl.as_deref().map(poly_security::inherit::explicit_acl)),
-                protected: parts.control & sd::SE_DACL_PROTECTED != 0,
-                sacl: parts.sacl.clone(),
-                verbatim: false,
+                    verbatim: before.as_ref().is_some_and(|s| s.verbatim),
+                    auto_inherited: before.as_ref().and_then(|s| s.auto_inherited),
+                    sacl_auto_inherited: sacl_ai,
+                    snapshot: before.as_ref().is_some_and(|s| s.snapshot),
+                },
+                StoreMode::Verbatim => {
+                    // `RegSetKeySecurity` on a key: a non-NULL DACL with no `INHERITED_ACE` is
+                    // stored protected (`0x9004`); a NULL DACL or one that carries inherited ACEs
+                    // is stored unprotected (`0x8004`) (`RegSetKeySecurity.yaml`).
+                    let protected = if kind == ObjectType::Key {
+                        parts.control & sd::SE_DACL_PRESENT != 0
+                            && parts.dacl.as_deref().is_some_and(|d| {
+                                !poly_security::acl::aces_in(d)
+                                    .iter()
+                                    .any(|a| a.flags & poly_security::inherit::INHERITED != 0)
+                            })
+                    } else {
+                        parts.control & sd::SE_DACL_PROTECTED != 0
+                    };
+                    Stored {
+                        owner: parts.owner.clone(),
+                        group: parts.group.clone(),
+                        dacl: (parts.control & sd::SE_DACL_PRESENT != 0).then(|| parts.dacl.clone()),
+                        protected,
+                        sacl: parts.sacl.clone(),
+                        verbatim: true,
+                        auto_inherited: None,
+                        sacl_auto_inherited: sacl_ai,
+                        snapshot: false,
+                    }
+                }
+                StoreMode::Inherit => {
+                    // Inheritance flags mean nothing on a file: they are dropped.
+                    if !container && let Some(d) = parts.dacl.take() {
+                        let aces: Vec<_> = poly_security::acl::aces_in(&d)
+                            .into_iter()
+                            .map(|mut a| {
+                                a.flags &= !0x0F;
+                                a.bytes[1] = a.flags;
+                                a
+                            })
+                            .collect();
+                        parts.dacl = Some(sdops::acl_of(d[0], &aces));
+                    }
+                    let protected = parts.control & sd::SE_DACL_PROTECTED != 0;
+                    // Protecting a DACL via `SetSecurityInfo` / `SetNamedSecurityInfoW` turns any
+                    // copied inherited ACEs in the input into explicit ACEs (`INHERITED_ACE`
+                    // cleared); an unprotected set keeps only explicit ACEs and inherits from the
+                    // parent (`SetSecurityInfo.RegistryKey.yaml` `protected`, `stored`).
+                    let dacl = (parts.control & sd::SE_DACL_PRESENT != 0).then(|| {
+                        parts.dacl.as_deref().map(if protected {
+                            poly_security::inherit::unmark_inherited_acl
+                        } else {
+                            poly_security::inherit::explicit_acl
+                        })
+                    });
+                    Stored {
+                        owner: parts.owner.clone(),
+                        group: parts.group.clone(),
+                        dacl,
+                        protected,
+                        sacl: parts.sacl.clone(),
+                        verbatim: false,
+                        auto_inherited: None,
+                        sacl_auto_inherited: sacl_ai,
+                        snapshot: false,
+                    }
+                }
             };
             self.security.paths.insert(key.clone(), st);
+            if mode == StoreMode::Inherit {
+                // Propagating an ancestor's DACL clears non-propagating child snapshots below it so
+                // they resume inheriting from the updated ancestor.
+                for (p, entry) in self.security.paths.iter_mut() {
+                    if p.len() > key.len()
+                        && p.starts_with(&key)
+                        && p.as_bytes().get(key.len()) == Some(&b'\\')
+                        && entry.snapshot
+                    {
+                        entry.dacl = None;
+                        entry.protected = false;
+                        entry.verbatim = false;
+                        entry.auto_inherited = None;
+                        entry.snapshot = false;
+                    }
+                }
+            }
             let which = if kind == ObjectType::Key { DefaultSd::Key } else { DefaultSd::File };
-            let eff = self.path_descriptor(which, &key, container);
-            self.security.sds.insert(id, eff.to_relative());
+            let affected: Vec<(ObjectId, String, bool)> = self
+                .security
+                .object_path
+                .iter()
+                .filter(|(_, (p, _))| {
+                    p == &key
+                        || (p.len() > key.len() && p.starts_with(&key) && p.as_bytes().get(key.len()) == Some(&b'\\'))
+                })
+                .map(|(&oid, (p, c))| (oid, p.clone(), *c))
+                .collect();
+            for (oid, p, c) in affected {
+                let eff = self.path_descriptor(which, &p, c);
+                self.security.sds.insert(oid, eff.to_relative());
+            }
             return;
         }
         self.security.sds.insert(id, parts.to_relative());
+    }
+
+    /// Freeze an existing child key's effective DACL before a non-propagating `RegSetKeySecurity`
+    /// modifies its parent (`RegSetKeySecurity.yaml` `no_propagation`). No-op if the child
+    /// already has its own stored DACL.
+    pub fn snapshot_key_security(&mut self, child_key: &str) {
+        if self.security.paths.get(child_key).is_some_and(|s| s.dacl.is_some()) {
+            return;
+        }
+        let eff = self.path_descriptor(DefaultSd::Key, child_key, true);
+        let prev = self.security.paths.get(child_key).cloned();
+        let st = Stored {
+            owner: prev.as_ref().and_then(|s| s.owner.clone()).or(eff.owner),
+            group: prev.as_ref().and_then(|s| s.group.clone()).or(eff.group),
+            dacl: Some(eff.dacl),
+            protected: eff.control & sd::SE_DACL_PROTECTED != 0,
+            sacl: prev.as_ref().and_then(|s| s.sacl.clone()),
+            verbatim: true,
+            auto_inherited: Some(eff.control & sd::SE_DACL_AUTO_INHERITED != 0),
+            sacl_auto_inherited: prev.as_ref().is_some_and(|s| s.sacl_auto_inherited),
+            snapshot: true,
+        };
+        self.security.paths.insert(child_key.into(), st);
+    }
+
+    /// Seed the descriptor of a built-in registry key at `key` (`path_key("K", ...)`).
+    /// When `sddl_text` omits `D:`, only owner/group/SACL inheritance are recorded and the key
+    /// inherits its DACL from its parent.
+    pub fn seed_key_security(&mut self, key: &str, sddl_text: &str, verbatim: bool, sacl_auto_inherited: bool) -> bool {
+        let w: Vec<u16> = sddl_text.encode_utf16().collect();
+        let Ok(rel) = poly_security::sdstr::parse(&w) else { return false };
+        let Some(parts) = Parts::from_relative(&rel) else { return false };
+        let dacl = (parts.control & sd::SE_DACL_PRESENT != 0).then(|| {
+            if verbatim { parts.dacl.clone() } else { parts.dacl.as_deref().map(poly_security::inherit::explicit_acl) }
+        });
+        let st = Stored {
+            owner: parts.owner,
+            group: parts.group,
+            dacl,
+            protected: parts.control & sd::SE_DACL_PROTECTED != 0,
+            sacl: parts.sacl,
+            verbatim,
+            auto_inherited: None,
+            sacl_auto_inherited,
+            snapshot: false,
+        };
+        self.security.paths.insert(key.into(), st);
+        true
+    }
+
+    /// Record the security descriptor of a newly created registry key (`NtCreateKey`,
+    /// `Disposition::Created`): owner and primary group from the creator's token, inheriting its
+    /// parent's DACL unless `explicit` supplies one (`GetSecurityInfo.RegistryKey.yaml` `new_key`).
+    pub fn created_key_security(&mut self, caller: &Caller, key: &str, explicit: Option<&[u8]>) {
+        if caller.mode == Mode::Kernel && explicit.is_none() {
+            return;
+        }
+        let mut st = Stored::default();
+        if let Some(token) = self.security.effective(caller.process, caller.thread).and_then(|t| self.security.token(t))
+        {
+            st.owner = Some(token.owner.to_bytes());
+            st.group = Some(token.primary_group.to_bytes());
+        }
+        if let Some(e) = explicit.and_then(Parts::from_relative) {
+            let mapping = mapping_of(ObjectType::Key);
+            let map = |m: u32| mapping.map(m);
+            if let Some(o) = e.owner {
+                st.owner = Some(o);
+            }
+            if let Some(g) = e.group {
+                st.group = Some(g);
+            }
+            if e.control & sd::SE_DACL_PRESENT != 0 {
+                st.protected = e.control & sd::SE_DACL_PROTECTED != 0;
+                st.dacl = Some(e.dacl.map(|d| {
+                    let mapped = sdops::trimmed_acl(&map_acl(&d, &map));
+                    if st.protected {
+                        poly_security::inherit::unmark_inherited_acl(&mapped)
+                    } else {
+                        poly_security::inherit::explicit_acl(&mapped)
+                    }
+                }));
+            }
+            if e.control & sd::SE_SACL_PRESENT != 0 {
+                st.sacl = e.sacl.map(|a| sdops::trimmed_acl(&a));
+            }
+        }
+        self.security.paths.insert(key.into(), st);
+    }
+
+    /// Remove any stored security descriptor at `key` (called when a registry key is deleted).
+    pub fn remove_path_security(&mut self, key: &str) {
+        self.security.paths.remove(key);
     }
 
     /// The descriptor of the file or key at `key` (`volume`, `dir`, `name` joined by backslashes, the
@@ -566,6 +723,7 @@ impl ObjectManager {
             protected: parts.control & sd::SE_DACL_PROTECTED != 0,
             sacl: None,
             verbatim: true,
+            ..Stored::default()
         };
         self.security.paths.insert(key.into(), st);
     }
@@ -586,6 +744,7 @@ impl ObjectManager {
             protected: parts.control & sd::SE_DACL_PROTECTED != 0,
             sacl: parts.sacl.clone(),
             verbatim: false,
+            ..Stored::default()
         };
         self.security.paths.insert(key.into(), st);
     }
@@ -685,6 +844,7 @@ impl ObjectManager {
                 protected: false,
                 sacl: None,
                 verbatim: true,
+                ..Stored::default()
             }
         };
         self.security.paths.insert(key.into(), st);
@@ -876,5 +1036,78 @@ mod tests {
             assert_eq!(om.path_access(&c, "F1\\WINDOWS", true, 2), Ok(()));
             assert_eq!(om.holds_privilege(&c, 20), allowed);
         }
+    }
+
+    #[test]
+    fn registry_key_live_refresh_snapshot_and_delete() {
+        let tok = Token::poly_user();
+        let (mut om, c) = setup(tok.clone(), tok);
+        let sw = r"K\REGISTRY\MACHINE\SOFTWARE";
+        let base = r"K\REGISTRY\MACHINE\SOFTWARE\TESTKEY";
+        let child = r"K\REGISTRY\MACHINE\SOFTWARE\TESTKEY\SUB";
+        assert!(om.seed_key_security(
+            sw,
+            "O:BAG:SYD:PAI(A;CI;KR;;;BU)(A;CI;KA;;;BA)(A;CI;KA;;;SY)(A;CIIO;KA;;;CO)",
+            false,
+            false
+        ));
+        om.created_key_security(&c, base, None);
+        om.created_key_security(&c, child, None);
+
+        let make_key_obj = |om: &mut ObjectManager, p: &str| {
+            let id = om
+                .new_object(
+                    NewObject::Opaque { kind: ObjectType::Key, cookie: 1, signaled: None, parse: true },
+                    c.thread,
+                )
+                .unwrap();
+            om.assign_path_security(id, DefaultSd::Key, p, true);
+            id
+        };
+        let parent_h1 = make_key_obj(&mut om, base);
+        let parent_h2 = make_key_obj(&mut om, base);
+        let child_h = make_key_obj(&mut om, child);
+
+        // Inheriting update propagates to all live handles (parent_h2 and child_h).
+        let mut p = Parts::from_relative(om.security.sd(parent_h1).unwrap()).unwrap();
+        let extra = Parts::from_relative(
+            &poly_security::sdstr::parse(&"D:(A;CI;KR;;;AU)".encode_utf16().collect::<Vec<_>>()).unwrap(),
+        )
+        .unwrap()
+        .dacl
+        .unwrap();
+        let mut aces = poly_security::acl::aces_in(p.dacl.as_ref().unwrap());
+        aces.extend(poly_security::acl::aces_in(&extra));
+        p.dacl = Some(sdops::acl_of(poly_security::acl::ACL_REVISION, &aces));
+        om.replace_security_as(parent_h1, ObjectType::Key, p, StoreMode::Inherit);
+
+        let p2 = Parts::from_relative(om.security.sd(parent_h2).unwrap()).unwrap();
+        assert_eq!(poly_security::acl::aces_in(p2.dacl.as_ref().unwrap()).len(), 5);
+        assert_eq!(poly_security::acl::aces_in(p2.dacl.as_ref().unwrap())[0].flags, 0x02);
+        let ch = Parts::from_relative(om.security.sd(child_h).unwrap()).unwrap();
+        assert_eq!(poly_security::acl::aces_in(ch.dacl.as_ref().unwrap()).len(), 5);
+        assert_eq!(poly_security::acl::aces_in(ch.dacl.as_ref().unwrap())[0].flags, 0x12);
+
+        // Non-propagating verbatim update (`RegSetKeySecurity`) with snapshot leaves child unchanged.
+        om.snapshot_key_security(child);
+        let mut one = Parts::from_relative(
+            &poly_security::sdstr::parse(&"O:BAG:SYD:(A;;KR;;;SY)".encode_utf16().collect::<Vec<_>>()).unwrap(),
+        )
+        .unwrap();
+        one.control = sd::SE_DACL_PRESENT;
+        om.replace_security_as(parent_h1, ObjectType::Key, one, StoreMode::Verbatim);
+        let p_after = Parts::from_relative(om.security.sd(parent_h2).unwrap()).unwrap();
+        assert_eq!(p_after.control & sd::SE_DACL_PROTECTED, sd::SE_DACL_PROTECTED);
+        assert_eq!(p_after.control & sd::SE_DACL_AUTO_INHERITED, 0);
+        assert_eq!(poly_security::acl::aces_in(p_after.dacl.as_ref().unwrap()).len(), 1);
+        let ch_after = Parts::from_relative(om.security.sd(child_h).unwrap()).unwrap();
+        assert_eq!(ch_after.control & sd::SE_DACL_AUTO_INHERITED, sd::SE_DACL_AUTO_INHERITED);
+        assert_eq!(poly_security::acl::aces_in(ch_after.dacl.as_ref().unwrap()).len(), 5);
+
+        // Removing path security restores fresh inheritance on recreate.
+        om.remove_path_security(base);
+        om.created_key_security(&c, base, None);
+        let fresh = om.path_descriptor(DefaultSd::Key, base, true);
+        assert_eq!(poly_security::acl::aces_in(fresh.dacl.as_ref().unwrap()).len(), 4);
     }
 }

@@ -50,6 +50,13 @@ pub fn trimmed_acl(acl_bytes: &[u8]) -> Vec<u8> {
 /// marks the control `SE_SACL_AUTO_INHERITED` (spec sheet: a label query
 /// of an object without a label answers control 0x8800).
 pub fn select(stored: &Parts, info: u32) -> Parts {
+    select_for(stored, info, false)
+}
+
+/// [`select`] with registry-key SACL-inheritance semantics when `key` is true: a key without
+/// a SACL reports `SE_SACL_AUTO_INHERITED` on SACL and label queries only when its stored
+/// control carries it (`GetSecurityInfo.RegistryKey.yaml` `parts`).
+pub fn select_for(stored: &Parts, info: u32, key: bool) -> Parts {
     let mut out = Parts { revision: SECURITY_DESCRIPTOR_REVISION, ..Parts::default() };
     if info & OWNER_SECURITY_INFORMATION != 0 {
         out.owner = stored.owner.clone();
@@ -62,7 +69,7 @@ pub fn select(stored: &Parts, info: u32) -> Parts {
         out.control |= SE_DACL_PRESENT
             | (stored.control & (SE_DACL_PROTECTED | SE_DACL_AUTO_INHERITED | SE_DACL_AUTO_INHERIT_REQ));
     }
-    // The flag is the stored one, and a descriptor without any SACL answers a
+    // The flag is the stored one, and a non-key descriptor without any SACL answers a
     // label-side query (label, attribute, scope, process trust label, access
     // filter: 0x10, 0x20, 0x40, 0x80, 0x100) with it (control 0x8800); a label
     // set by `SetSecurityObject` clears it (the sheets: control 0x8010).
@@ -70,7 +77,11 @@ pub fn select(stored: &Parts, info: u32) -> Parts {
     // whose SACL holds only its label is an empty ACL with control 0x8810).
     let label_side = info & (LABEL_SECURITY_INFORMATION | 0x20 | 0x40 | 0x80 | 0x100) != 0;
     let inherited = stored.control & SE_SACL_AUTO_INHERITED != 0;
-    if (label_side && (inherited || stored.sacl.is_none()))
+    if key {
+        if (label_side || info & SACL_SECURITY_INFORMATION != 0) && inherited {
+            out.control |= SE_SACL_AUTO_INHERITED;
+        }
+    } else if (label_side && (inherited || stored.sacl.is_none()))
         || (info & SACL_SECURITY_INFORMATION != 0 && inherited && stored.sacl.is_some())
     {
         out.control |= SE_SACL_AUTO_INHERITED;
@@ -263,6 +274,14 @@ mod tests {
         stored.control &= !SE_SACL_AUTO_INHERITED;
         assert_eq!(select(&stored, SACL_SECURITY_INFORMATION).control, SE_SACL_PRESENT);
         assert_eq!(select(&parts("O:BA"), SACL_SECURITY_INFORMATION).control, 0);
+        // Key queries report SE_SACL_AUTO_INHERITED on SACL and LABEL only when stored carries it.
+        let key_plain = parts("O:BA");
+        assert_eq!(select_for(&key_plain, SACL_SECURITY_INFORMATION, true).control, 0);
+        assert_eq!(select_for(&key_plain, LABEL_SECURITY_INFORMATION, true).control, 0);
+        let mut key_wow = parts("O:BA");
+        key_wow.control |= SE_SACL_AUTO_INHERITED;
+        assert_eq!(select_for(&key_wow, SACL_SECURITY_INFORMATION, true).control, SE_SACL_AUTO_INHERITED);
+        assert_eq!(select_for(&key_wow, LABEL_SECURITY_INFORMATION, true).control, SE_SACL_AUTO_INHERITED);
     }
 
     #[test]

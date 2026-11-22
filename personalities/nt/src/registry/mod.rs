@@ -116,14 +116,48 @@ impl NtRegistry {
             .expect("\\REGISTRY goes in a fresh namespace");
         om.close(&caller, c.handle).expect("the kernel handle just made");
         self.root_object = Some(c.object);
-        // The user's hive is the user's (ADR 0222): a program without administrator rights
-        // writes its settings under `HKEY_CURRENT_USER`, as on Windows.
+        // Seed the default security descriptors of the standard registry roots and hives
+        // (`GetSecurityInfo.RegistryKey.yaml` `predefined`/`new_key`,
+        // `NamedSecurityInfo.RegistryKey.yaml` `content`, `GetNamedSecurityInfoW.yaml`
+        // `registry_content`, ADR 0222).
+        const CAP: &str =
+            "S-1-15-3-1024-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681";
         let u = poly_registry::defaults::POLY_USER_SID;
-        let key = poly_ntobj::path_key("K", &poly_ntobj::name::wide(&alloc::format!("\\REGISTRY\\USER\\{u}")));
-        om.seed_path_security(
-            &key,
-            &alloc::format!("O:{u}G:{u}D:P(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KA;;;{u})(A;CI;KR;;;RC)"),
+        let kpath = |p: &str| poly_ntobj::path_key("K", &poly_ntobj::name::wide(p));
+        let root_sddl = alloc::format!(
+            "O:SYG:SYD:(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;WD)(A;CI;KR;;;RC)(A;CI;KR;;;AC)(A;CI;KR;;;{CAP})"
         );
+        let hklm_hive_sddl = alloc::format!(
+            "O:BAG:SYD:PAI(A;CI;KR;;;BU)(A;CI;KA;;;BA)(A;CI;KA;;;SY)(A;CIIO;KA;;;CO)(A;CI;KR;;;AC)(A;CI;KR;;;{CAP})"
+        );
+        let classes_sddl = alloc::format!(
+            "O:SYG:SYD:PAI(A;;KR;;;BU)(A;CIIO;GR;;;BU)(A;;KA;;;BA)(A;CIIO;GA;;;BA)(A;;KA;;;SY)(A;CIIO;GA;;;SY)(A;CIIO;GA;;;CO)(A;;KR;;;AC)(A;CIIO;GR;;;AC)(A;;KR;;;{CAP})(A;CIIO;GR;;;{CAP})(A;;KR;;;RC)"
+        );
+        let clsid_sddl = alloc::format!(
+            "O:{u}G:SYD:P(A;CI;KA;;;{u})(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;CI;KR;;;AC)(A;CI;KR;;;{CAP})"
+        );
+        let default_user_sddl = alloc::format!(
+            "O:BAG:SYD:PAI(A;CI;KA;;;SY)(A;CI;KA;;;BA)(A;CI;KR;;;BU)(A;CI;KR;;;RC)(A;CI;KR;;;AC)(A;CI;KR;;;{CAP})"
+        );
+        let hkcu_sddl = alloc::format!(
+            "O:BAG:SYD:P(A;OICI;KA;;;{u})(A;OICI;KA;;;SY)(A;OICI;KA;;;BA)(A;OICI;KR;;;RC)(A;;KR;;;AC)(A;;KR;;;{CAP})"
+        );
+        om.seed_key_security(&kpath("\\REGISTRY\\MACHINE"), &root_sddl, true, false);
+        om.seed_key_security(&kpath("\\REGISTRY\\USER"), &root_sddl, true, false);
+        om.seed_key_security(&kpath("\\REGISTRY\\MACHINE\\SYSTEM"), &hklm_hive_sddl, false, false);
+        om.seed_key_security(
+            &kpath("\\REGISTRY\\MACHINE\\SYSTEM\\ControlSet001\\Hardware Profiles\\Current"),
+            &root_sddl,
+            true,
+            false,
+        );
+        om.seed_key_security(&kpath("\\REGISTRY\\MACHINE\\SOFTWARE"), &hklm_hive_sddl, false, false);
+        om.seed_key_security(&kpath("\\REGISTRY\\MACHINE\\SOFTWARE\\WOW6432Node"), "O:SYG:SY", false, true);
+        om.seed_key_security(&kpath("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes"), &classes_sddl, false, false);
+        om.seed_key_security(&kpath("\\REGISTRY\\MACHINE\\SOFTWARE\\Classes\\CLSID"), &clsid_sddl, true, false);
+        om.seed_key_security(&kpath("\\REGISTRY\\USER\\.DEFAULT"), &default_user_sddl, false, false);
+        om.seed_key_security(&kpath(&alloc::format!("\\REGISTRY\\USER\\{u}")), &hkcu_sddl, true, false);
+        om.seed_key_security(&kpath(&alloc::format!("\\REGISTRY\\USER\\{u}\\Software")), "O:SYG:SY", false, false);
     }
 
     /// A key object was deleted (the object manager's `Deleted`): its open
@@ -257,6 +291,8 @@ pub struct CreateArgs<'a> {
     /// `KEY_CREATE_SUB_KEY` (Learn: "ZwCreateKey": the key RootDirectory
     /// refers to "must have been opened for KEY_CREATE_SUB_KEY access").
     pub root: Option<(OpenId, bool)>,
+    /// Explicit self-relative security descriptor from `OBJECT_ATTRIBUTES`, if any.
+    pub security: Option<&'a [u8]>,
 }
 
 /// The parse procedure of `\REGISTRY` and of every key object.
@@ -340,7 +376,14 @@ impl ParseHook for KeyParse<'_> {
             Resolved::Missing { parent, name } => match create {
                 None => Parsed::Fail(STATUS_OBJECT_NAME_NOT_FOUND),
                 Some(args) => match self.create(parent, &name, args) {
-                    Ok(key) => self.make_object(om, key, thread),
+                    Ok(key) => {
+                        if let Some(caller) = request.caller
+                            && let Ok(path) = self.reg.full_path(key)
+                        {
+                            om.created_key_security(&caller, &poly_ntobj::path_key("K", &path), args.security);
+                        }
+                        self.make_object(om, key, thread)
+                    }
                     Err(e) => Parsed::Fail(e),
                 },
             },

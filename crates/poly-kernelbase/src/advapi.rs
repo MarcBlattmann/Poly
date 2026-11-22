@@ -35,6 +35,7 @@ pub const ADVAPI32_FORWARDS: &[(&str, &str)] = &[
     ("RegCreateKeyExW", REGISTRY),
     ("RegCreateKeyExA", REGISTRY),
     ("RegGetKeySecurity", REGISTRY),
+    ("RegSetKeySecurity", REGISTRY),
     ("RegQueryValueExW", REGISTRY),
     ("RegQueryValueExA", REGISTRY),
     ("RegSetValueExW", REGISTRY),

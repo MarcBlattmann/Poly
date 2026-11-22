@@ -1131,7 +1131,8 @@ pub fn query_security_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Resu
         let Some(parts) = sys.objects.security.sd(obj).and_then(Parts::from_relative) else {
             return Ok(Parts { revision: sd::SECURITY_DESCRIPTOR_REVISION, ..Parts::default() }.to_relative_kernel());
         };
-        Ok(sdops::select(&parts, info).to_relative_kernel())
+        let is_key = sys.objects.object_type(obj) == Some(ObjectType::Key);
+        Ok(sdops::select_for(&parts, info, is_key).to_relative_kernel())
     })?;
     if needed != 0 {
         abi::write_u32(k, needed, bytes.len() as u32)?;
@@ -1193,12 +1194,12 @@ pub fn set_security_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
                 return Err(SecErr::InvalidAcl.nt());
             }
         }
-        // A file's DACL is kept as given unless the descriptor asks for automatic inheritance
-        // (`SE_DACL_AUTO_INHERIT_REQ`, which `SetSecurityInfo` sets): `SetFileSecurityW` and
-        // `SetKernelObjectSecurity` store exactly what they were given, its protection the
-        // descriptor's own (specs/windows/advapi32.dll/SetFileSecurityW.yaml: `dacl_replaced`,
-        // `protection`).
-        let mode = if kind != ObjectType::File || info & sd::DACL_SECURITY_INFORMATION == 0 {
+        // A file's or key's DACL is kept as given unless the descriptor asks for automatic
+        // inheritance (`SE_DACL_AUTO_INHERIT_REQ`, which `SetSecurityInfo` sets):
+        // `SetFileSecurityW`, `SetKernelObjectSecurity` and `RegSetKeySecurity` store what they
+        // were given without propagating to existing children (`SetFileSecurityW.yaml`,
+        // `RegSetKeySecurity.yaml`).
+        let mode = if !matches!(kind, ObjectType::File | ObjectType::Key) || info & sd::DACL_SECURITY_INFORMATION == 0 {
             poly_ntobj::StoreMode::Keep
         } else if new.control & sd::SE_DACL_AUTO_INHERIT_REQ != 0 {
             poly_ntobj::StoreMode::Inherit
@@ -1208,6 +1209,25 @@ pub fn set_security_object<K: NtKernel>(k: &mut K, regs: &SyscallRegs) -> Result
         let mut merged = merged;
         if mode == poly_ntobj::StoreMode::Verbatim {
             merged.control = (merged.control & !sd::SE_DACL_PROTECTED) | (new.control & sd::SE_DACL_PROTECTED);
+            if kind == ObjectType::Key
+                && let Some(cookie) = sys.objects.cookie(obj)
+                && let Ok(key_id) = sys.registry.reg.key_of(poly_registry::OpenId::from_bits(cookie))
+            {
+                // `RegSetKeySecurity` does not propagate to existing subkeys: freeze any subkey
+                // that currently inherits its DACL before replacing the parent's DACL.
+                for sub_path in sys.registry.reg.subkey_paths(key_id) {
+                    sys.objects.snapshot_key_security(&poly_ntobj::path_key("K", &sub_path));
+                }
+            }
+        } else if mode == poly_ntobj::StoreMode::Inherit
+            && kind == ObjectType::Key
+            && info & (sd::PROTECTED_DACL_SECURITY_INFORMATION | sd::UNPROTECTED_DACL_SECURITY_INFORMATION) == 0
+            && new.control & sd::SE_DACL_PROTECTED == 0
+        {
+            // Setting a key's DACL through `SetSecurityInfo` / `SetNamedSecurityInfoW` without
+            // PROTECTED or UNPROTECTED preserves an existing `SE_DACL_PROTECTED` bit
+            // (`SetSecurityInfo.RegistryKey.yaml` `null_and_empty`).
+            merged.control |= stored.control & sd::SE_DACL_PROTECTED;
         }
         sys.objects.replace_security_as(obj, kind, merged, mode);
         let _ = b;

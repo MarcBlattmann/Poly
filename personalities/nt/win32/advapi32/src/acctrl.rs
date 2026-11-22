@@ -427,18 +427,21 @@ unsafe extern "system" {
 const SE_FILE_OBJECT: u32 = 1;
 const SE_REGISTRY_KEY: u32 = 4;
 const SE_KERNEL_OBJECT: u32 = 6;
+const SE_REGISTRY_WOW64_32KEY: u32 = 9;
 const READ_CONTROL: u32 = 0x20000;
 const WRITE_DAC: u32 = 0x40000;
 const WRITE_OWNER: u32 = 0x80000;
 const ACCESS_SYSTEM_SECURITY: u32 = 0x100_0000;
 const ERROR_ACCESS_DENIED: u32 = 5;
+const ERROR_INVALID_HANDLE: u32 = 6;
+const ERROR_DEV_NOT_EXIST: u32 = 55;
 const ERROR_INVALID_NAME: u32 = 123;
 const ERROR_FILE_NOT_FOUND: u32 = 2;
 const ERROR_PATH_NOT_FOUND: u32 = 3;
 
 /// The calling process's user SID as a string (`CURRENT_USER` is the key
 /// `\REGISTRY\USER\<it>`).
-fn user_sid_string() -> String {
+pub(crate) fn user_sid_string() -> String {
     /// `NtCurrentProcessToken()` (`winnt.h`): the process token for queries.
     const CURRENT_PROCESS_TOKEN: Handle = -4;
     const TOKEN_USER: u32 = 1;
@@ -456,14 +459,11 @@ fn user_sid_string() -> String {
     poly_security::sddl::to_string(&sid.unwrap_or_else(poly_security::poly_user_sid))
 }
 
-/// Open the registry key an `SE_REGISTRY_KEY` name stands for: a handle to
-/// the key object itself (also for a bare root such as `CLASSES_ROOT`), so
-/// its security descriptor can be read through it.
-unsafe fn open_registry_key(name: &str, access: u32) -> Result<Handle, u32> {
+/// Open a registry key by NT path (relative to `root` when non-zero; an empty `path` with a
+/// non-zero `root` re-opens the same key with `access`).
+pub(crate) unsafe fn open_key_path(root: Handle, path: &str, access: u32) -> Result<Handle, u32> {
     const OBJ_CASE_INSENSITIVE: u32 = 0x40;
-    let Some(path) = poly_kernelbase::registry::named_object_path(name, &user_sid_string()) else {
-        return Err(ERROR_INVALID_PARAMETER);
-    };
+    const STATUS_PRIVILEGE_NOT_HELD: u32 = 0xC000_0061;
     let units: Vec<u16> = path.encode_utf16().collect();
     // UNICODE_STRING and OBJECT_ATTRIBUTES (`winternl.h`) in this process's width: 16 and 48
     // bytes on x64, 8 and 24 in a 32-bit process (the buffer at P; root, name, attributes,
@@ -473,16 +473,38 @@ unsafe fn open_registry_key(name: &str, access: u32) -> Result<Handle, u32> {
     // SAFETY: the structures are locals of at least the sizes written.
     unsafe {
         put_u32(ustr.as_mut_ptr(), 0, (units.len() * 2) as u32 | ((units.len() * 2) as u32) << 16);
-        put_ptr(ustr.as_mut_ptr(), P, units.as_ptr() as usize);
+        put_ptr(ustr.as_mut_ptr(), P, if units.is_empty() { 0 } else { units.as_ptr() as usize });
         put_u32(oa.as_mut_ptr(), 0, (6 * P) as u32);
+        put_ptr(oa.as_mut_ptr(), P, root as usize);
         put_ptr(oa.as_mut_ptr(), 2 * P, ustr.as_ptr() as usize);
         put_u32(oa.as_mut_ptr(), 3 * P, OBJ_CASE_INSENSITIVE);
         let mut h: Handle = 0;
         match NtOpenKey(&mut h, access, oa.as_ptr()) {
             0 => Ok(h),
+            STATUS_PRIVILEGE_NOT_HELD => Err(ERROR_ACCESS_DENIED),
             st => Err(RtlNtStatusToDosError(st)),
         }
     }
+}
+
+/// Open the registry key an `SE_REGISTRY_KEY` name stands for: a handle to
+/// the key object itself (also for a bare root such as `CLASSES_ROOT`), so
+/// its security descriptor can be read through it.
+unsafe fn open_registry_key(name: &str, access: u32) -> Result<Handle, u32> {
+    let Some(path) = poly_kernelbase::registry::named_object_path(name, &user_sid_string()) else {
+        return Err(ERROR_INVALID_PARAMETER);
+    };
+    // SAFETY: valid absolute NT path.
+    unsafe { open_key_path(0, &path, access) }
+}
+
+/// Whether `name` begins with a real Win32 kernel-object namespace prefix (`Local\`, `Global\`,
+/// `Session\`), ignoring ASCII case.
+fn has_kernel_namespace_prefix(name: &str) -> bool {
+    let Some((prefix, _)) = name.split_once('\\') else { return false };
+    prefix.eq_ignore_ascii_case("Local")
+        || prefix.eq_ignore_ascii_case("Global")
+        || prefix.eq_ignore_ascii_case("Session")
 }
 
 /// Open the object `name` of `object_type` with `access`: a file or
@@ -501,11 +523,17 @@ unsafe fn open_named(name: *const u16, object_type: u32, access: u32) -> Result<
                 if h == -1 { Err(GetLastError()) } else { Ok(h) }
             }
             SE_REGISTRY_KEY => open_registry_key(&String::from_utf16_lossy(w), access),
+            SE_REGISTRY_WOW64_32KEY => Err(ERROR_DEV_NOT_EXIST),
             SE_KERNEL_OBJECT => {
                 if w.is_empty() {
-                    Err(ERROR_INVALID_PARAMETER)
+                    Err(ERROR_INVALID_HANDLE)
                 } else {
-                    Err(ERROR_FILE_NOT_FOUND)
+                    let s = String::from_utf16_lossy(w);
+                    if s.contains('\\') && !has_kernel_namespace_prefix(&s) {
+                        Err(ERROR_PATH_NOT_FOUND)
+                    } else {
+                        Err(ERROR_FILE_NOT_FOUND)
+                    }
                 }
             }
             _ => Err(ERROR_INVALID_PARAMETER),

@@ -30,7 +30,6 @@ poly_win32_rt::fail_exports!(
         RegRenameKey,
         RegReplaceKeyW,
         RegRestoreKeyW,
-        RegSetKeySecurity,
         RegSetKeyValueW,
         RegSetValueW,
         SetEntriesInAclA,
