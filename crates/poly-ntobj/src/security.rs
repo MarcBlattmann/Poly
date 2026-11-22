@@ -677,7 +677,17 @@ impl ObjectManager {
         if !any {
             return default;
         }
-        poly_security::inherit::effective(&default, &chain, container)
+        let mut eff = poly_security::inherit::effective(&default, &chain, container);
+        let kind = match which {
+            DefaultSd::File => ObjectType::File,
+            DefaultSd::Key => ObjectType::Key,
+        };
+        let mapping = mapping_of(kind);
+        let map = |m: u32| mapping.map(m);
+        if let Some(d) = eff.dacl {
+            eff.dacl = Some(map_effective_acl(&d, &map));
+        }
+        eff
     }
 
     /// Set the security of the file or key at `key` (as [`path_key`] spells it) from SDDL, as if
@@ -855,6 +865,35 @@ impl ObjectManager {
         self.security.sds.insert(id, eff.to_relative());
         self.security.object_path.insert(id, (path.into(), container));
     }
+}
+
+/// An ACL with the generic rights of each effective (non-`INHERIT_ONLY`) allow and deny ACE
+/// mapped: when an `INHERIT_ONLY` parent ACE carrying `GENERIC_ALL` / `GENERIC_READ` (such as
+/// `HKLM\SOFTWARE\Classes`) is inherited onto a child object and becomes effective, its generic
+/// mask maps to the object type's specific rights.
+fn map_effective_acl(acl_bytes: &[u8], map: &dyn Fn(u32) -> u32) -> Vec<u8> {
+    let mut out = acl_bytes.to_vec();
+    let mut at = acl::ACL_HEADER;
+    let count = usize::from(u16::from_le_bytes([out[4], out[5]]));
+    for _ in 0..count {
+        if at + acl::ACE_FIXED > out.len() {
+            break;
+        }
+        let kind = out[at];
+        let flags = out[at + 1];
+        let len = usize::from(u16::from_le_bytes([out[at + 2], out[at + 3]]));
+        if len < acl::ACE_FIXED {
+            break;
+        }
+        if (kind == acl::ACCESS_ALLOWED_ACE_TYPE || kind == acl::ACCESS_DENIED_ACE_TYPE)
+            && flags & poly_security::inherit::INHERIT_ONLY == 0
+        {
+            let m = u32::from_le_bytes([out[at + 4], out[at + 5], out[at + 6], out[at + 7]]);
+            out[at + 4..at + 8].copy_from_slice(&map(m).to_le_bytes());
+        }
+        at += len;
+    }
+    out
 }
 
 /// An ACL with the generic rights of each allow and deny ACE mapped.

@@ -828,6 +828,17 @@ fn registry_default_and_new_key_security_descriptors() {
     assert_eq!(sddl::to_string(&sid::Sid::from_bytes(pu.owner.as_deref().unwrap()).unwrap()), "S-1-5-32-544");
     assert_eq!(acl::aces_in(pu.dacl.as_deref().unwrap()).len(), 4);
     close(&mut f, hu);
+
+    // New key below HKLM\SOFTWARE\Classes: inherited CIIO GA/GR ACEs map to KEY_ALL_ACCESS/KEY_READ
+    // so creating, writing, reading, and deleting under HKEY_CLASSES_ROOT succeeds (`a32test`).
+    let (s, hc, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Classes\\.polya32", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(set_value(&mut f, hc, "", REG_SZ, &sz("PolyFile")), STATUS_SUCCESS);
+    let (s_ro, h_ro) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Classes\\.polya32", KEY_READ);
+    assert_eq!(s_ro, STATUS_SUCCESS);
+    close(&mut f, h_ro);
+    assert_eq!(f.call(Service::DeleteKey, &[hc]), STATUS_SUCCESS);
+    close(&mut f, hc);
 }
 
 #[test]
