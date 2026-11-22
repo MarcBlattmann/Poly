@@ -8,6 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+poly-compress.workspace = true
 poly-png.workspace = true
 poly-shell.workspace = true
 

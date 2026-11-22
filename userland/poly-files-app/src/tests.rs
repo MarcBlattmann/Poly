@@ -892,3 +892,120 @@ fn zip_files_extract_from_context_menu_and_double_click() {
     assert_eq!(s.app.status, "corrupt.zip: Not a valid ZIP archive");
     assert!(!s.root.join("home/m/corrupt").exists());
 }
+
+/// Build a minimal POSIX ustar archive for UI tests.
+fn make_ustar(entries: &[(&str, u8, &[u8])]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for &(name, kind, body) in entries {
+        let mut h = [0u8; 512];
+        h[..name.len()].copy_from_slice(name.as_bytes());
+        h[100..108].copy_from_slice(b"0000644\0");
+        h[108..116].copy_from_slice(b"0000000\0");
+        h[116..124].copy_from_slice(b"0000000\0");
+        h[124..136].copy_from_slice(alloc::format!("{:011o}\0", body.len()).as_bytes());
+        h[136..148].copy_from_slice(b"00000000000\0");
+        h[148..156].copy_from_slice(b"        ");
+        h[156] = kind;
+        h[257..263].copy_from_slice(b"ustar\0");
+        h[263..265].copy_from_slice(b"00");
+        let sum: u32 = h.iter().map(|&b| u32::from(b)).sum();
+        h[148..156].copy_from_slice(alloc::format!("{sum:06o}\0 ").as_bytes());
+        out.extend_from_slice(&h);
+        out.extend_from_slice(body);
+        out.resize(out.len().next_multiple_of(512), 0);
+    }
+    out.resize(out.len() + 1024, 0);
+    out
+}
+
+/// Wrap raw bytes in a valid RFC 1952 GZIP member using stored DEFLATE blocks.
+fn wrap_gzip(data: &[u8]) -> Vec<u8> {
+    let mut out = alloc::vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 3];
+    let mut pos = 0;
+    while pos < data.len() {
+        let end = (pos + 65535).min(data.len());
+        let chunk = &data[pos..end];
+        let last = u8::from(end == data.len());
+        let len = chunk.len() as u16;
+        out.push(last);
+        out.extend_from_slice(&len.to_le_bytes());
+        out.extend_from_slice(&(!len).to_le_bytes());
+        out.extend_from_slice(chunk);
+        pos = end;
+    }
+    out.extend_from_slice(&poly_files::zip::crc32(data).to_le_bytes());
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out
+}
+
+#[test]
+fn tar_gzip_and_xz_archives_extract_from_context_menu_and_double_click() {
+    const REAL_XZ: &[u8] = include_bytes!("../../../crates/poly-pkg/testdata/control.tar.xz");
+    let mut s = setup();
+    let plain_tar = make_ustar(&[("hello.txt", b'0', b"from tar"), ("dir/inner.txt", b'0', b"inside")]);
+    let root_tar = make_ustar(&[("proj/", b'5', b""), ("proj/main.rs", b'0', b"fn main() {}")]);
+    let tar_gz = wrap_gzip(&root_tar);
+
+    std::fs::write(s.root.join("home/m/bundle.tar"), &plain_tar).unwrap();
+    std::fs::write(s.root.join("home/m/release.tar.gz"), &tar_gz).unwrap();
+    std::fs::write(s.root.join("home/m/short.tgz"), &tar_gz).unwrap();
+    std::fs::write(s.root.join("home/m/pkg.tar.xz"), REAL_XZ).unwrap();
+    std::fs::write(s.root.join("home/m/mini.txz"), REAL_XZ).unwrap();
+    std::fs::write(s.root.join("home/m/single.gz"), &tar_gz).unwrap();
+    std::fs::write(s.root.join("home/m/broken.tar.xz"), b"not an xz").unwrap();
+    s.app.go("/home/m");
+
+    let mut cx = Cx::default();
+
+    // Plain .gz (not .tar.gz) does not offer Extract Here.
+    let gz_idx = names(&s.app).iter().position(|n| n == "single.gz").unwrap();
+    let r = s.app.item_rect(gz_idx);
+    s.app.event(button(poly_app::BTN_RIGHT, r.x + 20, r.y + 10, 1), &mut cx);
+    let menu = s.app.menu.take().expect("single.gz menu");
+    assert!(!menu.items.iter().any(|i| i.id == act::EXTRACT));
+
+    // Right-clicking .tar offers Extract Here and extracts into stem folder.
+    let tar_idx = names(&s.app).iter().position(|n| n == "bundle.tar").unwrap();
+    let r = s.app.item_rect(tar_idx);
+    s.app.event(button(poly_app::BTN_RIGHT, r.x + 20, r.y + 10, 1), &mut cx);
+    let menu = s.app.menu.take().expect("tar menu");
+    assert!(menu.items.iter().any(|i| i.id == act::EXTRACT && i.label == "Extract Here"));
+    s.app.act(act::EXTRACT, &mut cx);
+    assert_eq!(s.app.status, "Extracted bundle.tar to bundle (2 files)");
+    assert_eq!(std::fs::read_to_string(s.root.join("home/m/bundle/hello.txt")).unwrap(), "from tar");
+    assert_eq!(std::fs::read_to_string(s.root.join("home/m/bundle/dir/inner.txt")).unwrap(), "inside");
+
+    // Pressing Enter on .tar.gz extracts with single-root deduplication -> "proj".
+    s.app.browser.select_name("release.tar.gz");
+    key(&mut s.app, Some(Key::Enter), None, Mods::default());
+    assert_eq!(s.app.status, "Extracted release.tar.gz to proj (1 file)");
+    assert_eq!(std::fs::read_to_string(s.root.join("home/m/proj/main.rs")).unwrap(), "fn main() {}");
+
+    // Pressing Enter on .tgz with same root deduplicates with collision suffix -> "proj 2".
+    s.app.browser.select_name("short.tgz");
+    key(&mut s.app, Some(Key::Enter), None, Mods::default());
+    assert_eq!(s.app.status, "Extracted short.tgz to proj 2 (1 file)");
+    assert_eq!(std::fs::read_to_string(s.root.join("home/m/proj 2/main.rs")).unwrap(), "fn main() {}");
+
+    // Right-clicking .tar.xz offers Extract Here and extracts real xz fixture.
+    let xz_idx = names(&s.app).iter().position(|n| n == "pkg.tar.xz").unwrap();
+    let r = s.app.item_rect(xz_idx);
+    s.app.event(button(poly_app::BTN_RIGHT, r.x + 20, r.y + 10, 1), &mut cx);
+    let menu = s.app.menu.take().expect("tar.xz menu");
+    assert!(menu.items.iter().any(|i| i.id == act::EXTRACT && i.label == "Extract Here"));
+    s.app.act(act::EXTRACT, &mut cx);
+    assert!(s.app.status.starts_with("Extracted pkg.tar.xz to pkg ("), "status={}", s.app.status);
+    assert!(std::fs::read_to_string(s.root.join("home/m/pkg/control")).unwrap().contains("Package: tiny"));
+
+    // Pressing Enter on .txz extracts into "mini".
+    s.app.browser.select_name("mini.txz");
+    key(&mut s.app, Some(Key::Enter), None, Mods::default());
+    assert!(s.app.status.starts_with("Extracted mini.txz to mini ("), "status={}", s.app.status);
+    assert!(std::fs::read_to_string(s.root.join("home/m/mini/control")).unwrap().contains("Package: tiny"));
+
+    // Corrupt .tar.xz reports a clear error and creates no directory.
+    s.app.browser.select_name("broken.tar.xz");
+    s.app.act(act::EXTRACT, &mut cx);
+    assert_eq!(s.app.status, "broken.tar.xz: Not a valid XZ archive");
+    assert!(!s.root.join("home/m/broken").exists());
+}

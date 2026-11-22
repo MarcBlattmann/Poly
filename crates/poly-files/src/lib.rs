@@ -22,6 +22,8 @@
 //! - [`ops`]: new folder, rename, copy/cut and paste, permanent delete.
 //! - [`trash`]: the freedesktop.org trash (home trash).
 //! - [`zip`]: extracting ZIP archives into a folder.
+//! - [`tar`]: extracting TAR, TAR+GZIP and TAR+XZ archives into a folder.
+//! - [`archive`]: unified archive extraction across ZIP and TAR formats.
 //!
 //! `no_std` with `alloc`, no `unsafe`, and no panics on any input.
 
@@ -33,12 +35,14 @@ extern crate alloc;
 extern crate std;
 
 pub mod apps;
+pub mod archive;
 pub mod fs;
 pub mod mime;
 pub mod model;
 pub mod ops;
 pub mod path;
 pub mod places;
+pub mod tar;
 pub mod trash;
 pub mod zip;
 
