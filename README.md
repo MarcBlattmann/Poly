@@ -7,13 +7,13 @@ Poly runs Windows, macOS and Linux apps. A few apps work on Windows and Linux to
 ### Linux
 
 <p>
-  <img src="https://cdn.simpleicons.org/googlechrome" width="40" height="40" alt="Chrome" title="Chrome">
+  <img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/chrome/chrome-original.svg" width="40" height="40" alt="Chrome" title="Chrome">
 </p>
 
 ### Windows
 
 <p>
-  <img src="https://cdn.simpleicons.org/googlechrome" width="40" height="40" alt="Chrome" title="Chrome">&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/chrome/chrome-original.svg" width="40" height="40" alt="Chrome" title="Chrome">&nbsp;&nbsp;&nbsp;
   <img src="https://cdn.simpleicons.org/7zip/888888" width="40" height="40" alt="7-Zip" title="7-Zip">&nbsp;&nbsp;&nbsp;
   <img src="https://cdn.simpleicons.org/git" width="40" height="40" alt="Git" title="Git">
 </p>
