@@ -16,7 +16,7 @@ How much of each system's API Poly implements. This is not how many apps work.
 
 Poly runs Windows, macOS and Linux apps. A few apps work on Windows and Linux today; macOS is in progress.
 
-## What works
+## What works (tested)
 
 ### Linux
 
