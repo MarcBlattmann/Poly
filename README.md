@@ -1,21 +1,22 @@
-<h1 align="center">Poly</h1>
+# Poly
 
-<p align="center">
-  Poly runs Windows, macOS and Linux apps.<br>
-  A few apps work on Windows and Linux today; macOS is in progress. See the list below.
-</p>
+Poly runs Windows, macOS and Linux apps. A few apps work on Windows and Linux today; macOS is in progress.
 
 ## What works
 
-<table align="center">
-  <tr>
-    <td align="center" width="110"><img src="https://raw.githubusercontent.com/chromium/chromium/main/chrome/app/theme/chromium/product_logo_64.png" width="40" height="40" alt="Chromium"><br><b>Chromium</b><br><sub>Linux</sub></td>
-    <td align="center" width="110"><img src="https://cdn.simpleicons.org/googlechrome" width="40" height="40" alt="Google Chrome"><br><b>Google Chrome</b><br><sub>Linux</sub></td>
-    <td align="center" width="110"><img src="https://cdn.simpleicons.org/googlechrome" width="40" height="40" alt="Chrome"><br><b>Chrome</b><br><sub>Windows (beta)</sub></td>
-    <td align="center" width="110"><img src="https://cdn.simpleicons.org/7zip/888888" width="40" height="40" alt="7-Zip"><br><b>7-Zip</b><br><sub>Windows</sub></td>
-    <td align="center" width="110"><img src="https://cdn.simpleicons.org/git" width="40" height="40" alt="Git"><br><b>Git</b><br><sub>Windows</sub></td>
-  </tr>
-</table>
+### Linux
+
+<p>
+  <img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/chrome/chrome-original.svg" width="40" height="40" alt="Chrome" title="Chrome">
+</p>
+
+### Windows
+
+<p>
+  <img src="https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/chrome/chrome-original.svg" width="40" height="40" alt="Chrome" title="Chrome">&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.simpleicons.org/7zip/888888" width="40" height="40" alt="7-Zip" title="7-Zip">&nbsp;&nbsp;&nbsp;
+  <img src="https://cdn.simpleicons.org/git" width="40" height="40" alt="Git" title="Git">
+</p>
 
 ## How it works
 
@@ -55,6 +56,9 @@ flowchart TB
     style WX fill:#ddf4ff,stroke:#0969da,color:#0a3069
     style MX fill:#f6f0ff,stroke:#8250df,color:#3e1f79
 ```
+
+> [!NOTE]
+> **Clean-room implementation:** Poly's kernel and compatibility layers are written from scratch using public documentation, public SDK headers, and black-box observation — never by reading or copying source code from Windows, macOS, Linux, Wine, or ReactOS. See [CLEAN_ROOM.md](CLEAN_ROOM.md).
 
 ## Progress
 
