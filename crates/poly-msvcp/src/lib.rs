@@ -12,6 +12,8 @@
 //! - [`mutex`]: the `_Mtx_*` types and what a lock, trylock and unlock do to the owner and count.
 //! - [`classes`]: the standard exception classes the `_X*` helpers throw, and the assembly of
 //!   their virtual tables, RTTI records and throw descriptors.
+//! - [`winerror`]: the map from Windows error codes to generic values (`_Winerror_map`) and
+//!   the length rule of `_Winerror_message`.
 //! - [`exports`]: the fail-only exports (ADR 0155): which decorated names are data, how big
 //!   their zeroed objects are, and the Rust source of the stubs.
 
@@ -24,3 +26,4 @@ pub mod errc;
 pub mod exports;
 pub mod mutex;
 pub mod time;
+pub mod winerror;
