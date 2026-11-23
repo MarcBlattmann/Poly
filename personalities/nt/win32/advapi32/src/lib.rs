@@ -535,6 +535,7 @@ pub unsafe extern "system" fn ConvertSecurityDescriptorToStringSecurityDescripto
 unsafe extern "system" {
     fn NtQuerySecurityObject(handle: Handle, info: u32, sd: *mut u8, length: u32, needed: *mut u32) -> u32;
     fn NtSetSecurityObject(handle: Handle, info: u32, sd: *const u8) -> u32;
+    fn NtQueryObject(handle: Handle, class: u32, info: *mut u8, length: u32, ret: *mut u32) -> u32;
     fn RtlNtStatusToDosError(status: u32) -> u32;
     fn NtOpenKey(out: *mut Handle, access: u32, attributes: *const u8) -> u32;
 }
@@ -587,13 +588,90 @@ pub extern "system" fn ImpersonateNamedPipeClient(pipe: Handle) -> i32 {
     1
 }
 
+/// Predefined registry key encoded in `handle`, if any (sign-extended on x86/x64).
+fn predefined_key(handle: Handle) -> Option<poly_kernelbase::registry::Predefined> {
+    poly_kernelbase::registry::predefined(handle as i64 as u64)
+}
+
+/// Whether `handle` is a registry key handle (a served predefined key or an open NT `Key` object).
+unsafe fn is_key_handle(handle: Handle) -> bool {
+    const OBJECT_TYPE_INFORMATION: u32 = 2;
+    const P: usize = core::mem::size_of::<usize>();
+    if let Some(p) = predefined_key(handle) {
+        return poly_kernelbase::registry::root_path(p, "").is_some();
+    }
+    let mut buf = [0u8; 256];
+    let mut ret = 0u32;
+    // SAFETY: local 256-byte buffer for `PUBLIC_OBJECT_TYPE_INFORMATION`.
+    let st = unsafe { NtQueryObject(handle, OBJECT_TYPE_INFORMATION, buf.as_mut_ptr(), buf.len() as u32, &mut ret) };
+    if st != 0 {
+        return false;
+    }
+    let byte_len = u16::from_le_bytes([buf[0], buf[1]]) as usize;
+    if byte_len != 6 {
+        return false;
+    }
+    let mut ptr_bytes = [0u8; P];
+    ptr_bytes.copy_from_slice(&buf[P..2 * P]);
+    let ptr = usize::from_ne_bytes(ptr_bytes) as *const u16;
+    if ptr.is_null() {
+        return false;
+    }
+    // SAFETY: `NtQueryObject` wrote a valid 3-unit UTF-16 type name inside `buf`.
+    let name = unsafe { core::slice::from_raw_parts(ptr, 3) };
+    name == [u16::from(b'K'), u16::from(b'e'), u16::from(b'y')]
+}
+
+/// Access mask needed to query `info` on a registry key.
+fn key_query_access(info: u32) -> u32 {
+    const READ_CONTROL: u32 = 0x20000;
+    const ACCESS_SYSTEM_SECURITY: u32 = 0x100_0000;
+    let mut access = 0;
+    if info & (1 | 2 | 4 | 0x10 | 0x20 | 0x100) != 0 {
+        access |= READ_CONTROL;
+    }
+    if info & 8 != 0 {
+        access |= ACCESS_SYSTEM_SECURITY;
+    }
+    access
+}
+
+/// Access mask needed to set `info` on a registry key.
+fn key_set_access(info: u32) -> u32 {
+    const WRITE_DAC: u32 = 0x40000;
+    const WRITE_OWNER: u32 = 0x80000;
+    const ACCESS_SYSTEM_SECURITY: u32 = 0x100_0000;
+    let mut access = 0;
+    if info & (1 | 2 | 0x10) != 0 {
+        access |= WRITE_OWNER;
+    }
+    if info & 4 != 0 {
+        access |= WRITE_DAC;
+    }
+    if info & 8 != 0 {
+        access |= ACCESS_SYSTEM_SECURITY;
+    }
+    access
+}
+
+/// Open a predefined registry key with `access` for a single security operation.
+unsafe fn open_predefined_key(p: poly_kernelbase::registry::Predefined, access: u32) -> Result<Handle, u32> {
+    let Some(path) = poly_kernelbase::registry::root_path(p, &acctrl::user_sid_string()) else {
+        return Err(6);
+    };
+    // SAFETY: valid absolute NT registry path.
+    unsafe { acctrl::open_key_path(0, &path, access) }
+}
+
 /// `SE_OBJECT_TYPE` (`accctrl.h`): the kinds `GetSecurityInfo` and
-/// `SetSecurityInfo` work on through a handle here. `SE_FILE_OBJECT` and
-/// `SE_KERNEL_OBJECT` are handles to kernel objects; the service, printer
-/// and registry key types are other handles (`ERROR_INVALID_HANDLE`).
-fn object_type_ok(ty: u32) -> Result<(), u32> {
+/// `SetSecurityInfo` work on through a handle here (`GetSecurityInfo.yaml`,
+/// `GetSecurityInfo.RegistryKey.yaml`, `SetSecurityInfo.RegistryKey.yaml`).
+/// `SE_REGISTRY_KEY` (4) is accepted on key handles and rejected with
+/// `ERROR_INVALID_HANDLE` (6) on non-key handles.
+fn object_type_ok(ty: u32, is_key: bool) -> Result<(), u32> {
     match ty {
         1 | 6 | 7 | 11 => Ok(()),
+        4 if is_key => Ok(()),
         2..=4 => Err(6),
         _ => Err(ERROR_INVALID_PARAMETER),
     }
@@ -671,10 +749,15 @@ unsafe fn get_security_info(
     descriptor: *mut *mut u8,
     check_type: bool,
 ) -> u32 {
+    const STATUS_BUFFER_TOO_SMALL: u32 = 0xC000_0023;
+    const STATUS_ACCESS_DENIED: u32 = 0xC000_0022;
     if handle == 0 {
         return 6;
     }
-    if check_type && let Err(e) = object_type_ok(object_type) {
+    let predef = predefined_key(handle);
+    // SAFETY: probes handle type via `NtQueryObject` when not a predefined key.
+    let is_key = unsafe { is_key_handle(handle) };
+    if check_type && let Err(e) = object_type_ok(object_type, is_key) {
         return e;
     }
     // A requested part has to have somewhere to go.
@@ -682,19 +765,55 @@ unsafe fn get_security_info(
     if wants.iter().any(|&(w, p)| w && p.is_null() && descriptor.is_null()) {
         return ERROR_INVALID_PARAMETER;
     }
+    let (mut query_h, mut owned) = if let Some(p) = predef {
+        // SAFETY: opens the predefined key for the query.
+        match unsafe { open_predefined_key(p, key_query_access(info)) } {
+            Ok(h) => (h, true),
+            Err(e) => return e,
+        }
+    } else {
+        (handle, false)
+    };
     let mut needed = 0u32;
     // SAFETY: a size probe.
-    let st = unsafe { NtQuerySecurityObject(handle, info, core::ptr::null_mut(), 0, &mut needed) };
-    if st != 0 && st != 0xC000_0023 {
+    let mut st = unsafe { NtQuerySecurityObject(query_h, info, core::ptr::null_mut(), 0, &mut needed) };
+    // For a registry key handle that lacks `READ_CONTROL` / `ACCESS_SYSTEM_SECURITY`, re-open
+    // the same key with the access the query needs against the caller's token
+    // (`GetSecurityInfo.RegistryKey.yaml` `rights`).
+    if st == STATUS_ACCESS_DENIED && is_key && !owned {
+        // SAFETY: re-opens `handle` with empty relative name.
+        match unsafe { acctrl::open_key_path(handle, "", key_query_access(info)) } {
+            Ok(reopened) => {
+                query_h = reopened;
+                owned = true;
+                // SAFETY: size probe on the re-opened handle.
+                st = unsafe { NtQuerySecurityObject(query_h, info, core::ptr::null_mut(), 0, &mut needed) };
+            }
+            Err(e) => return e,
+        }
+    }
+    if st != 0 && st != STATUS_BUFFER_TOO_SMALL {
+        if owned {
+            // SAFETY: our temporary key handle.
+            unsafe { CloseHandle(query_h) };
+        }
         return status_error(st);
     }
     // SAFETY: no preconditions.
     let sd = unsafe { LocalAlloc(LMEM_FIXED, needed.max(20) as usize) };
     if sd.is_null() {
+        if owned {
+            // SAFETY: our temporary key handle.
+            unsafe { CloseHandle(query_h) };
+        }
         return ERROR_NOT_ENOUGH_MEMORY;
     }
     // SAFETY: `sd` holds `needed` bytes.
-    let st = unsafe { NtQuerySecurityObject(handle, info, sd, needed.max(20), &mut needed) };
+    let st = unsafe { NtQuerySecurityObject(query_h, info, sd, needed.max(20), &mut needed) };
+    if owned {
+        // SAFETY: our temporary key handle.
+        unsafe { CloseHandle(query_h) };
+    }
     if st != 0 {
         // SAFETY: our block.
         unsafe { LocalFree(sd) };
@@ -741,13 +860,17 @@ pub unsafe extern "system" fn SetSecurityInfo(
     sacl: *const u8,
 ) -> u32 {
     use poly_security::acl::{self, AclPtr};
+    const STATUS_ACCESS_DENIED: u32 = 0xC000_0022;
     if handle == 0 {
         return 6;
     }
-    if let Err(e) = object_type_ok(object_type) {
+    let predef = predefined_key(handle);
+    // SAFETY: probes handle type via `NtQueryObject` when not a predefined key.
+    let is_key = unsafe { is_key_handle(handle) };
+    if let Err(e) = object_type_ok(object_type, is_key) {
         return e;
     }
-    if object_type != 1 && object_type != 6 {
+    if !is_key && object_type != 1 && object_type != 6 {
         return if object_type == 7 || object_type == 11 { 0 } else { ERROR_INVALID_PARAMETER };
     }
     let mut parts = sd::Parts { revision: sd::SECURITY_DESCRIPTOR_REVISION, ..sd::Parts::default() };
@@ -810,8 +933,36 @@ pub unsafe extern "system" fn SetSecurityInfo(
         }
     }
     let rel = parts.to_relative();
+    if let Some(p) = predef {
+        // SAFETY: opens the predefined key for the write and closes it afterwards.
+        let h = match unsafe { open_predefined_key(p, key_set_access(info)) } {
+            Ok(h) => h,
+            Err(e) => return e,
+        };
+        // SAFETY: local self-relative descriptor.
+        let st = unsafe { NtSetSecurityObject(h, info, rel.as_ptr()) };
+        // SAFETY: our temporary key handle.
+        unsafe { CloseHandle(h) };
+        return status_error(st);
+    }
     // SAFETY: a local self-relative descriptor.
-    status_error(unsafe { NtSetSecurityObject(handle, info, rel.as_ptr()) })
+    let st = unsafe { NtSetSecurityObject(handle, info, rel.as_ptr()) };
+    // For a registry key handle that lacks `WRITE_DAC` / `WRITE_OWNER` / `ACCESS_SYSTEM_SECURITY`,
+    // re-open the same key with the access needed against the caller's token without widening the
+    // caller's handle (`SetSecurityInfo.RegistryKey.yaml` `handle_rights`, `owner_implied`, `non_owner`).
+    if st == STATUS_ACCESS_DENIED && is_key {
+        // SAFETY: re-opens `handle` with empty relative name.
+        let reopened = match unsafe { acctrl::open_key_path(handle, "", key_set_access(info)) } {
+            Ok(h) => h,
+            Err(e) => return e,
+        };
+        // SAFETY: local self-relative descriptor.
+        let st2 = unsafe { NtSetSecurityObject(reopened, info, rel.as_ptr()) };
+        // SAFETY: our temporary key handle.
+        unsafe { CloseHandle(reopened) };
+        return status_error(st2);
+    }
+    status_error(st)
 }
 
 // ----- the user ---------------------------------------------------------------------------

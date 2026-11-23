@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::consts::*;
-use poly_ntobj::access::EVENT_ALL_ACCESS;
+use poly_ntobj::access::{ACCESS_SYSTEM_SECURITY, EVENT_ALL_ACCESS, READ_CONTROL, WRITE_DAC};
 use poly_ntobj::status::*;
 use poly_ntobj::{Handle, OBJ_CASE_INSENSITIVE, OBJ_OPENLINK};
 use poly_registry::consts::*;
@@ -730,4 +730,328 @@ fn deleting_a_key_deletes_the_one_the_handle_names() {
     let (s, h) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Gone64", DELETE | KEY_WOW64_64KEY);
     assert_eq!(s, STATUS_SUCCESS);
     assert_eq!(f.call(Service::DeleteKey, &[h]), STATUS_SUCCESS);
+}
+
+fn query_sd(f: &mut Fake, h: u64, info: u32) -> (NtStatus, Option<(u16, poly_security::sd::Parts)>) {
+    let buf = f.alloc(1024);
+    let need = f.alloc(4);
+    let s = f.call(Service::QuerySecurityObject, &[h, u64::from(info), buf, 1024, need]);
+    if s != STATUS_SUCCESS {
+        return (s, None);
+    }
+    let n = f.u32_at(need) as usize;
+    let bytes = f.bytes_at(buf, n);
+    let wire_ctl = u16::from_le_bytes([bytes[2], bytes[3]]);
+    (s, poly_security::sd::Parts::from_relative(&bytes).map(|p| (wire_ctl, p)))
+}
+
+fn set_sd(f: &mut Fake, h: u64, info: u32, parts: &poly_security::sd::Parts) -> NtStatus {
+    let rel = parts.to_relative();
+    let p = f.put(&rel);
+    f.call(Service::SetSecurityObject, &[h, u64::from(info), p])
+}
+
+#[test]
+fn registry_default_and_new_key_security_descriptors() {
+    use poly_security::{acl, sd, sddl, sid};
+    let mut f = Fake::new();
+    let u = poly_registry::defaults::POLY_USER_SID;
+
+    // Predefined / seeded roots: control, owner, ACE count.
+    for (path, want_ctl, want_owner, want_aces) in [
+        ("\\Registry\\Machine", 0x8004u16, "S-1-5-18", 6usize),
+        ("\\Registry\\User", 0x8004, "S-1-5-18", 6),
+        ("\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Hardware Profiles\\Current", 0x8004, "S-1-5-18", 6),
+        ("\\Registry\\Machine\\SOFTWARE", 0x9404, "S-1-5-32-544", 6),
+        ("\\Registry\\Machine\\SOFTWARE\\WOW6432Node", 0x8404, "S-1-5-18", 6),
+        ("\\Registry\\Machine\\SOFTWARE\\Classes", 0x9404, "S-1-5-18", 12),
+        ("\\Registry\\Machine\\SOFTWARE\\Classes\\CLSID", 0x9004, u, 6),
+        ("\\Registry\\User\\.DEFAULT", 0x9404, "S-1-5-32-544", 6),
+        (&alloc::format!("\\Registry\\User\\{u}"), 0x9004, "S-1-5-32-544", 6),
+    ] {
+        let (s, h) = open_key(&mut f, 0, path, READ_CONTROL);
+        assert_eq!(s, STATUS_SUCCESS, "{path}");
+        let (qs, res) = query_sd(&mut f, h, sd::OWNER_SECURITY_INFORMATION | sd::DACL_SECURITY_INFORMATION);
+        assert_eq!(qs, STATUS_SUCCESS, "{path}");
+        let (ctl, p) = res.unwrap();
+        assert_eq!(ctl, want_ctl, "{path} control");
+        let owner = sddl::to_string(&sid::Sid::from_bytes(p.owner.as_deref().unwrap()).unwrap());
+        assert_eq!(owner, want_owner, "{path} owner");
+        assert_eq!(acl::aces_in(p.dacl.as_deref().unwrap()).len(), want_aces, "{path} aces");
+        close(&mut f, h);
+    }
+
+    // New 64-bit key below HKLM\SOFTWARE: BA owner, <machine>-513 group, 0x8404, 6 inherited ACEs (CO 0x1a).
+    let (s, h64, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\SecTest64", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (ctl, p) = query_sd(&mut f, h64, 7).1.unwrap();
+    assert_eq!(ctl, 0x8404);
+    assert_eq!(sddl::to_string(&sid::Sid::from_bytes(p.owner.as_deref().unwrap()).unwrap()), "S-1-5-32-544");
+    assert_eq!(
+        sddl::to_string(&sid::Sid::from_bytes(p.group.as_deref().unwrap()).unwrap()),
+        "S-1-5-21-520193847-884726105-1936024571-513"
+    );
+    let aces = acl::aces_in(p.dacl.as_deref().unwrap());
+    assert_eq!(aces.len(), 6);
+    assert_eq!(aces[0].flags, 0x12);
+    assert_eq!(aces[3].flags, 0x1a);
+    // 64-bit key LABEL returns 0x8000; SACL needs SeSecurityPrivilege enabled (`Token::poly_user`).
+    assert_eq!(query_sd(&mut f, h64, sd::LABEL_SECURITY_INFORMATION).1.unwrap().0, 0x8000);
+    let (tid_admin, _) = f.sys.objects.new_token(poly_security::token::Token::poly_user(), TID).unwrap();
+    f.sys.objects.set_process_token(PID, tid_admin).unwrap();
+    let (so, hs64) = open_key(&mut f, h64, "", ACCESS_SYSTEM_SECURITY | READ_CONTROL);
+    assert_eq!(so, STATUS_SUCCESS, "open hs64");
+    assert_eq!(query_sd(&mut f, hs64, sd::SACL_SECURITY_INFORMATION).1.unwrap().0, 0x8000);
+    assert_eq!(query_sd(&mut f, hs64, sd::LABEL_SECURITY_INFORMATION).1.unwrap().0, 0x8000);
+    close(&mut f, hs64);
+    close(&mut f, h64);
+
+    // New 32-bit key below HKLM\SOFTWARE (WOW64 -> Wow6432Node): SACL and LABEL return 0x8800.
+    f.proc.wow64 = true;
+    let (s, h32, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\SecTest32", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(query_sd(&mut f, h32, sd::DACL_SECURITY_INFORMATION).1.unwrap().0, 0x8404);
+    let (so32, hs32) = open_key(&mut f, h32, "", ACCESS_SYSTEM_SECURITY | READ_CONTROL);
+    assert_eq!(so32, STATUS_SUCCESS, "open hs32");
+    assert_eq!(query_sd(&mut f, hs32, sd::SACL_SECURITY_INFORMATION).1.unwrap().0, 0x8800);
+    assert_eq!(query_sd(&mut f, hs32, sd::LABEL_SECURITY_INFORMATION).1.unwrap().0, 0x8800);
+    close(&mut f, hs32);
+    close(&mut f, h32);
+    f.proc.wow64 = false;
+
+    // New key below HKCU\Software: control 0x8004, owner BA, 4 inherited ACEs.
+    let (s, hu, _) =
+        create_key(&mut f, 0, &alloc::format!("\\Registry\\User\\{u}\\Software\\SecTestU"), KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (ctl_u, pu) = query_sd(&mut f, hu, sd::OWNER_SECURITY_INFORMATION | sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_u, 0x8004);
+    assert_eq!(sddl::to_string(&sid::Sid::from_bytes(pu.owner.as_deref().unwrap()).unwrap()), "S-1-5-32-544");
+    assert_eq!(acl::aces_in(pu.dacl.as_deref().unwrap()).len(), 4);
+    close(&mut f, hu);
+
+    // New key below HKLM\SOFTWARE\Classes: inherited CIIO GA/GR ACEs map to KEY_ALL_ACCESS/KEY_READ
+    // so creating, writing, reading, and deleting under HKEY_CLASSES_ROOT succeeds (`a32test`).
+    let (s, hc, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Classes\\.polya32", KEY_ALL_ACCESS, 0);
+    assert_eq!(s, STATUS_SUCCESS);
+    assert_eq!(set_value(&mut f, hc, "", REG_SZ, &sz("PolyFile")), STATUS_SUCCESS);
+    let (s_ro, h_ro) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\Classes\\.polya32", KEY_READ);
+    assert_eq!(s_ro, STATUS_SUCCESS);
+    close(&mut f, h_ro);
+    assert_eq!(f.call(Service::DeleteKey, &[hc]), STATUS_SUCCESS);
+    close(&mut f, hc);
+}
+
+#[test]
+fn registry_set_security_inheritance_protection_and_verbatim() {
+    use poly_security::{acl, sd, sdops, sdstr};
+    let mut f = Fake::new();
+    let (_, hb, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\SecBase", KEY_ALL_ACCESS, 0);
+    let (_, ha, _) = create_key(&mut f, hb, "A", KEY_ALL_ACCESS, 0);
+    let (_, hab, _) = create_key(&mut f, ha, "B", KEY_ALL_ACCESS, 0);
+
+    let parse_dacl = |s: &str| {
+        sd::Parts::from_relative(&sdstr::parse(&s.encode_utf16().collect::<Vec<_>>()).unwrap()).unwrap().dacl.unwrap()
+    };
+
+    // 1. SetSecurityInfo-style (SE_DACL_AUTO_INHERIT_REQ): canonical order (explicit first) & propagation.
+    let mut aces =
+        acl::aces_in(query_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION).1.unwrap().1.dacl.as_deref().unwrap());
+    aces.extend(acl::aces_in(&parse_dacl("D:(A;CI;KR;;;AU)")));
+    let mut new_p = sd::Parts {
+        revision: sd::SECURITY_DESCRIPTOR_REVISION,
+        control: sd::SE_DACL_PRESENT | sd::SE_DACL_AUTO_INHERIT_REQ,
+        dacl: Some(sdops::acl_of(acl::ACL_REVISION, &aces)),
+        ..sd::Parts::default()
+    };
+    assert_eq!(set_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION, &new_p), STATUS_SUCCESS);
+    let (ctl_b, pb) = query_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_b, 0x8404);
+    let ab = acl::aces_in(pb.dacl.as_deref().unwrap());
+    assert_eq!(ab.len(), 7);
+    assert_eq!(ab[0].flags, 0x02);
+    for h_sub in [ha, hab] {
+        let (ctl_s, ps) = query_sd(&mut f, h_sub, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+        assert_eq!(ctl_s, 0x8404);
+        let asub = acl::aces_in(ps.dacl.as_deref().unwrap());
+        assert_eq!(asub.len(), 7);
+        assert_eq!(asub[0].flags, 0x12);
+    }
+
+    // 2. PROTECTED_DACL_SECURITY_INFORMATION: inherited ACEs converted to explicit (0x02 / 0x0a), control 0x9404.
+    let mut aces2 = acl::aces_in(pb.dacl.as_deref().unwrap());
+    aces2.extend(acl::aces_in(&parse_dacl("D:(A;CI;0x1;;;IU)")));
+    new_p.dacl = Some(sdops::acl_of(acl::ACL_REVISION, &aces2));
+    assert_eq!(
+        set_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION | sd::PROTECTED_DACL_SECURITY_INFORMATION, &new_p),
+        STATUS_SUCCESS
+    );
+    let (ctl_b2, pb2) = query_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_b2, 0x9404);
+    let ab2 = acl::aces_in(pb2.dacl.as_deref().unwrap());
+    assert_eq!(ab2.len(), 8);
+    assert!(ab2.iter().all(|a| a.flags & 0x10 == 0));
+    assert_eq!(
+        acl::aces_in(query_sd(&mut f, ha, sd::DACL_SECURITY_INFORMATION).1.unwrap().1.dacl.as_deref().unwrap()).len(),
+        8
+    );
+
+    // 3. UNPROTECTED_DACL_SECURITY_INFORMATION: 9 explicit + 6 re-inherited = 15, child deduplicates to 8!
+    let mut aces3 = acl::aces_in(pb2.dacl.as_deref().unwrap());
+    aces3.extend(acl::aces_in(&parse_dacl("D:(A;CI;0x1;;;IU)")));
+    new_p.dacl = Some(sdops::acl_of(acl::ACL_REVISION, &aces3));
+    assert_eq!(
+        set_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION | sd::UNPROTECTED_DACL_SECURITY_INFORMATION, &new_p),
+        STATUS_SUCCESS
+    );
+    let (ctl_b3, pb3) = query_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_b3, 0x8404);
+    assert_eq!(acl::aces_in(pb3.dacl.as_deref().unwrap()).len(), 15);
+    assert_eq!(
+        acl::aces_in(query_sd(&mut f, ha, sd::DACL_SECURITY_INFORMATION).1.unwrap().1.dacl.as_deref().unwrap()).len(),
+        8
+    );
+
+    // 4. NULL DACL (SetSecurityInfo): 0x9404, child has 0 ACEs (0x8404); empty DACL afterwards stays 0x9404.
+    let null_p = sd::Parts {
+        revision: sd::SECURITY_DESCRIPTOR_REVISION,
+        control: sd::SE_DACL_PRESENT | sd::SE_DACL_AUTO_INHERIT_REQ | sd::SE_DACL_PROTECTED,
+        dacl: None,
+        ..sd::Parts::default()
+    };
+    assert_eq!(set_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION, &null_p), STATUS_SUCCESS);
+    let (ctl_null, pnull) = query_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_null, 0x9404);
+    assert!(pnull.dacl.is_none());
+    let (ctl_cnull, cnull) = query_sd(&mut f, ha, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_cnull, 0x8404);
+    assert_eq!(acl::aces_in(cnull.dacl.as_deref().unwrap()).len(), 0);
+
+    let empty_p = sd::Parts {
+        revision: sd::SECURITY_DESCRIPTOR_REVISION,
+        control: sd::SE_DACL_PRESENT | sd::SE_DACL_AUTO_INHERIT_REQ,
+        dacl: Some(sdops::acl_of(acl::ACL_REVISION, &[])),
+        ..sd::Parts::default()
+    };
+    assert_eq!(set_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION, &empty_p), STATUS_SUCCESS);
+    let (ctl_empty, pempty) = query_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_empty, 0x9404);
+    assert_eq!(acl::aces_in(pempty.dacl.as_deref().unwrap()).len(), 0);
+
+    // 5. Delete and recreate resets to fresh inherited SD; then test RegSetKeySecurity verbatim non-propagation.
+    assert_eq!(f.call(Service::DeleteKey, &[hab]), STATUS_SUCCESS);
+    close(&mut f, hab);
+    assert_eq!(f.call(Service::DeleteKey, &[ha]), STATUS_SUCCESS);
+    close(&mut f, ha);
+    assert_eq!(f.call(Service::DeleteKey, &[hb]), STATUS_SUCCESS);
+    close(&mut f, hb);
+
+    let (_, hb, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\SecBase", KEY_ALL_ACCESS, 0);
+    let (_, ha, _) = create_key(&mut f, hb, "A", KEY_ALL_ACCESS, 0);
+    let mut raw_aces =
+        acl::aces_in(query_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION).1.unwrap().1.dacl.as_deref().unwrap());
+    raw_aces.extend(acl::aces_in(&parse_dacl("D:(A;CI;KR;;;AU)")));
+    let verb = sd::Parts {
+        revision: sd::SECURITY_DESCRIPTOR_REVISION,
+        control: sd::SE_DACL_PRESENT,
+        dacl: Some(sdops::acl_of(acl::ACL_REVISION, &raw_aces)),
+        ..sd::Parts::default()
+    };
+    assert_eq!(set_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION, &verb), STATUS_SUCCESS);
+    let (ctl_v, pv) = query_sd(&mut f, hb, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_v, 0x8004);
+    let av = acl::aces_in(pv.dacl.as_deref().unwrap());
+    assert_eq!(av.len(), 7);
+    assert_eq!(av[6].flags, 0x02, "verbatim keeps appended ACE last");
+    // Existing child was NOT modified by RegSetKeySecurity.
+    let (ctl_ca, ca) = query_sd(&mut f, ha, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_ca, 0x8404);
+    assert_eq!(acl::aces_in(ca.dacl.as_deref().unwrap()).len(), 6);
+
+    // 1 explicit ACE (no inherited ACEs) via verbatim -> 0x9004.
+    let one = sd::Parts {
+        revision: sd::SECURITY_DESCRIPTOR_REVISION,
+        control: sd::SE_DACL_PRESENT,
+        dacl: Some(parse_dacl("D:(A;;KR;;;SY)")),
+        ..sd::Parts::default()
+    };
+    assert_eq!(set_sd(&mut f, ha, sd::DACL_SECURITY_INFORMATION, &one), STATUS_SUCCESS);
+    assert_eq!(query_sd(&mut f, ha, sd::DACL_SECURITY_INFORMATION).1.unwrap().0, 0x9004);
+
+    // Verbatim NULL DACL -> 0x8004.
+    let vnull =
+        sd::Parts { revision: sd::SECURITY_DESCRIPTOR_REVISION, control: 0, dacl: None, ..sd::Parts::default() };
+    assert_eq!(set_sd(&mut f, ha, sd::DACL_SECURITY_INFORMATION, &vnull), STATUS_SUCCESS);
+    let (ctl_n, pn) = query_sd(&mut f, ha, sd::DACL_SECURITY_INFORMATION).1.unwrap();
+    assert_eq!(ctl_n, 0x8004);
+    assert!(pn.dacl.is_none());
+    close(&mut f, ha);
+    close(&mut f, hb);
+}
+
+#[test]
+fn registry_key_reopen_owner_implied_and_non_owner_rights() {
+    use poly_security::{sd, sdstr, sid};
+    let mut f = Fake::new();
+    let (_, hk, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\OwnTest", KEY_WRITE, 0);
+    let (_, hall) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\OwnTest", KEY_ALL_ACCESS);
+    // Replace DACL with protected SYSTEM-only ACE (owner BA is not in DACL).
+    let sy_only = sd::Parts {
+        revision: sd::SECURITY_DESCRIPTOR_REVISION,
+        control: sd::SE_DACL_PRESENT | sd::SE_DACL_AUTO_INHERIT_REQ | sd::SE_DACL_PROTECTED,
+        dacl: sd::Parts::from_relative(&sdstr::parse(&"D:(A;;KA;;;SY)".encode_utf16().collect::<Vec<_>>()).unwrap())
+            .unwrap()
+            .dacl,
+        ..sd::Parts::default()
+    };
+    assert_eq!(
+        set_sd(&mut f, hall, sd::DACL_SECURITY_INFORMATION | sd::PROTECTED_DACL_SECURITY_INFORMATION, &sy_only),
+        STATUS_SUCCESS
+    );
+    close(&mut f, hall);
+    // New opens with KEY_WRITE fail, but READ_CONTROL and WRITE_DAC succeed by owner's implied rights.
+    assert_eq!(open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\OwnTest", KEY_WRITE).0, STATUS_ACCESS_DENIED);
+    let (s_wd, h_wd) = open_key(&mut f, hk, "", WRITE_DAC);
+    assert_eq!(s_wd, STATUS_SUCCESS);
+    close(&mut f, h_wd);
+    // Original KEY_WRITE handle's granted access is unchanged (0x20006).
+    let basic = f.alloc(64);
+    let ret = f.alloc(4);
+    assert_eq!(
+        f.call(Service::QueryObject, &[hk, u64::from(OBJECT_BASIC_INFORMATION), basic, 64, ret]),
+        STATUS_SUCCESS
+    );
+    assert_eq!(f.u32_at(basic + 4), KEY_WRITE);
+    close(&mut f, hk);
+
+    // Non-owner: transfer ownership to SYSTEM and give BA only DELETE|KEY_WRITE|KEY_READ (no WRITE_DAC).
+    let (_, h, _) = create_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\NonOwnTest", KEY_ALL_ACCESS, 0);
+    let set_owner = sd::Parts {
+        revision: sd::SECURITY_DESCRIPTOR_REVISION,
+        owner: Some(sid::nt(18).to_bytes()),
+        ..sd::Parts::default()
+    };
+    assert_eq!(set_sd(&mut f, h, sd::OWNER_SECURITY_INFORMATION, &set_owner), STATUS_SUCCESS);
+    let no_wd = sd::Parts {
+        revision: sd::SECURITY_DESCRIPTOR_REVISION,
+        control: sd::SE_DACL_PRESENT | sd::SE_DACL_AUTO_INHERIT_REQ | sd::SE_DACL_PROTECTED,
+        dacl: sd::Parts::from_relative(
+            &sdstr::parse(&"D:(A;;KA;;;SY)(A;;0x3001f;;;BA)".encode_utf16().collect::<Vec<_>>()).unwrap(),
+        )
+        .unwrap()
+        .dacl,
+        ..sd::Parts::default()
+    };
+    assert_eq!(
+        set_sd(&mut f, h, sd::DACL_SECURITY_INFORMATION | sd::PROTECTED_DACL_SECURITY_INFORMATION, &no_wd),
+        STATUS_SUCCESS
+    );
+    close(&mut f, h);
+
+    let (s, hkw) = open_key(&mut f, 0, "\\Registry\\Machine\\SOFTWARE\\NonOwnTest", KEY_WRITE);
+    assert_eq!(s, STATUS_SUCCESS);
+    let (s_rc, h_rc) = open_key(&mut f, hkw, "", READ_CONTROL);
+    assert_eq!(s_rc, STATUS_SUCCESS);
+    close(&mut f, h_rc);
+    assert_eq!(open_key(&mut f, hkw, "", WRITE_DAC).0, STATUS_ACCESS_DENIED);
+    close(&mut f, hkw);
 }

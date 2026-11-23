@@ -595,6 +595,12 @@ impl Registry {
         Ok((id, Disposition::Created))
     }
 
+    /// The full NT paths of every direct subkey of `id`.
+    pub fn subkey_paths(&self, id: KeyId) -> Vec<Vec<u16>> {
+        let Ok(k) = self.key(id) else { return Vec::new() };
+        k.subkeys.values().filter_map(|&sub| self.full_path(sub).ok()).collect()
+    }
+
     /// `NtDeleteKey`.
     pub fn delete_key(&mut self, id: KeyId, now: u64) -> Result<()> {
         let k = self.key(id)?;
