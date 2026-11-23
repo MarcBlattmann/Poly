@@ -59,3 +59,57 @@ one 259 s boot.
 - A faster serial path in the kernel (`rep outsb` bursts of 16 bytes were
   tried: 38 to 52 KB/s through a nested hypervisor) or a different way to
   hand a test's output file to the host would speed up every boot test.
+
+## Addendum (2026-11-23): slices that fit again, no Rust in the Chrome jobs, scopes for pull requests
+
+By November a pull request's CI took 20 to 23 minutes (run 45156193996 on
+`main`): `pipeline (extras)` ran win polycheck's 1 790 tests one after the
+other (22 minutes: 3.5 minutes of cargo for the Windows test programs, then
+17.5 of boots), `boot (userland)` held `macho-specs` (832 boots, 11.5
+minutes), and `chrome (s3-window)` three window checks (10 minutes). Every
+`chrome` job also installed Rust and built `ntdll.dll`, the Win32 modules and
+the launcher (about 95 s) before it booted.
+
+- **win polycheck in slices.** `pipeline win polycheck --shard I/N` builds and
+  checks only the tests whose name hashes (FNV-1a) to slice I, the
+  vcruntime140 parity pass included, so every test is in exactly one slice and
+  stays there when others are added. CI runs four (`ci pipeline --shard
+  win-I/4`, xtask's `WIN_PIPELINE_SHARDS`) beside polycheck's four (`I/4`,
+  with selfcheck in the first). The `extras` slice is gone. Each `win-*`
+  slice keeps its cargo target directory in a cache that `main` saves, and
+  cargo compares checksums there (`CARGO_UNSTABLE_CHECKSUM_FRESHNESS`), so a
+  pull request rebuilds only the test programs it changed.
+- **`macho-specs` per architecture.** The group is two, `macho-specs`
+  (x86-64) and `macho-specs-a64`, each its own shard and job (the ratchet
+  file is read per architecture); `boot-tests macho-specs` still runs both.
+- **The window checks in jobs of their own.** `chrome-try` and
+  `chrome-try-max` left the `chrome-win-window` shard for shards and `chrome`
+  jobs of their own (`s3-try`, `s3-try-max`). `x11` and `desktop-shell`
+  share a job.
+- **No Rust in the `chrome` jobs.** `prebuild tools` also builds Chrome's
+  launcher and probe and the desktop's Windows GUI test program
+  (`winapp::prebuild`), and `prebuild kernel` packs the caches of the modules
+  the kernel embeds (`target/ntdll-cache`, `target/win32-cache`,
+  `target/wow64-cache`), so `polystub.dll` is made from their exports without
+  building them. `winapp::build` takes the prebuilt programs in prebuilt mode.
+  The boot jobs that built them (`desktop`, `desktop-shell`, `sevenzip-b`) no
+  longer do either.
+- **Scopes for pull requests.** `changes` lists the pull request's files
+  (a renamed file with its old path too; a list of 3 000 files or none means
+  everything) and sets four scopes: `host` (anything but prose), `heavy`
+  (anything but prose and `tools/coverage/`: build, boot, chrome),
+  `pipeline` (anything but those and `crates/poly-pkg`, `crates/poly-files`,
+  `userland/poly-files-app`, `userland/poly-installer-app`, which neither the
+  kernel nor the pipeline tool nor its test programs use) and `aarch64` (the
+  kernel tree, the crates, xtask, the toolchain, Cargo's files, the
+  workflows). A push to `main` and a manual run set them all. The `ci` job
+  lets a job be skipped only when `changes` succeeded and that job's scope is
+  false; any other result but success fails it.
+
+Not done: a narrower scope for the desktop crates (only the `apps` boot job)
+was left out, because xtask itself uses `poly-pkg` and `poly-files` (the
+`chromium` and `linux-installer-2` groups) and the native programs they make
+are on every desktop the boot and chrome jobs start. The `chrome` jobs still
+spend 1.5 to 2 minutes in `chrome-win fetch`: a debug build of xtask checks
+and inflates the 200 MiB archive (moving SHA-256 and inflate into a crate
+built with optimizations, as `poly-coverage` is, would take that to seconds).

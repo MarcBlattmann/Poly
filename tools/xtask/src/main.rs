@@ -1713,10 +1713,11 @@ const BOOT_GROUPS: &[BootGroup] = &[
     // The Mach core's visible spec tests that run on Poly today, x86-64
     // builds, output compared with macOS's (macho.rs, ADR 0238).
     ("macho-mach", macho::mach_boot_test),
-    // Every visible macOS system call test, x86-64 and arm64, compared with
-    // macOS's output; a list of passing runs is the ratchet (macho_specs.rs,
-    // ADR 0246).
+    // Every visible macOS system call test, x86-64 and arm64 (a group each),
+    // compared with macOS's output; a list of passing runs is the ratchet
+    // (macho_specs.rs, ADR 0246).
     ("macho-specs", macho_specs::boot_test),
+    ("macho-specs-a64", macho_specs::a64_boot_test),
     // arm64 Mach-O programs on x86-64 through the translator's runtime:
     // static, universal, dynamically linked, malloc-heavy under the JIT and
     // the interpreter (macho_a64.rs, ADR 0257).
@@ -1882,10 +1883,10 @@ const BOOT_GROUPS: &[BootGroup] = &[
 /// workflow can combine them into jobs of equal length as the times change
 /// without moving groups (the times of a CI run on KVM are in the comments).
 /// `cargo xtask ci lint` checks that the workflow runs exactly these.
-const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
+const CI_BOOT_SHARDS: [(&str, &[&str]); 19] = [
     // About 40 s.
     ("selftest", &["selftest-default", "selftest-2g", "selftest-polled", "selftest-max", "smp", "keyboard", "shell"]),
-    // About 75 s: Linux programs and the root disk.
+    // About 170 s: Linux programs, the root disk, Mach-O programs.
     (
         "userland",
         &[
@@ -1894,7 +1895,6 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "dynamic",
             "macho",
             "macho-mach",
-            "macho-specs",
             "macho-a64",
             "libsystem",
             "objc",
@@ -1910,6 +1910,10 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
             "linux-chrome",
         ],
     ),
+    // About 6 minutes each: every macOS system call test, a boot each, one
+    // shard per architecture (macho_specs.rs).
+    ("macho-specs", &["macho-specs"]),
+    ("macho-specs-a64", &["macho-specs-a64"]),
     // About 60 s each: 7-Zip's command line on the NT personality, one boot per
     // step, every second step in each.
     ("sevenzip", &["7zip"]),
@@ -1918,7 +1922,10 @@ const CI_BOOT_SHARDS: [(&str, &[&str]); 15] = [
     // (the `chrome` job of the workflow fetches the package; ADR 0214).
     ("chrome-win", &["chrome-win"]),
     ("chrome-win-sandbox", &["chrome-win-sandbox", "chrome-win-defaults"]),
-    ("chrome-win-window", &["chrome-win-window", "chrome-try", "chrome-try-max"]),
+    // The window checks: about 220, 170 and 190 s, a job each.
+    ("chrome-win-window", &["chrome-win-window"]),
+    ("chrome-try", &["chrome-try"]),
+    ("chrome-try-max", &["chrome-try-max"]),
     ("chrome-win-gpu", &["chrome-win-gpu"]),
     // The traced 7-Zip scenario, one boot: about 30 s on TCG (sevenzip_trace.rs).
     ("wintrace", &["wintrace"]),
@@ -2448,51 +2455,97 @@ fn coverage_checks() -> Result {
     coverage(&args)
 }
 
-/// The slices CI runs the agent pipeline's checks in, one job each
-/// (`cargo xtask ci pipeline --shard I/N`, I from 1 to N): `polycheck`, the
-/// longest, runs a slice of the corpus in each; `--shard extras` runs the
-/// rest (selfcheck, win polycheck). `cargo xtask ci lint` checks that the
-/// workflow runs every slice and the extras.
+/// The slices CI runs Linux `polycheck` in, one job each (`cargo xtask ci
+/// pipeline --shard I/N`, I from 1 to N): a slice of the corpus in each, and
+/// selfcheck in the first.
 const PIPELINE_SHARDS: usize = 4;
 
-/// The slice of the pipeline checks to run, `I/N` (`ci pipeline --shard`);
-/// unset: all of them.
-static PIPELINE_SHARD: std::sync::OnceLock<(usize, usize)> = std::sync::OnceLock::new();
+/// The slices CI runs `win polycheck` in, one job each (`cargo xtask ci
+/// pipeline --shard win-I/N`): the green Windows entries' tests whose name
+/// hashes to slice I (ADR 0156, addendum). `cargo xtask ci lint` checks that
+/// the workflow runs every slice of both.
+const WIN_PIPELINE_SHARDS: usize = 4;
 
-/// `ci pipeline --shard extras`: only the checks that are not sliced.
-static PIPELINE_EXTRAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// A slice of the pipeline checks (`ci pipeline --shard`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PipelineSlice {
+    /// `I/N`: slice I of N of Linux `polycheck` (and selfcheck in slice 1).
+    Linux(usize, usize),
+    /// `win-I/N`: slice I of N of `win polycheck`.
+    Windows(usize, usize),
+}
+
+impl PipelineSlice {
+    /// `I/N` or `win-I/N`, with 1 <= I <= N.
+    fn parse(text: &str) -> std::result::Result<Self, String> {
+        let bad = || format!("ci: --shard {text}: expected I/N or win-I/N with 1 <= I <= N, like 2/4 or win-1/4");
+        let (windows, rest) = match text.strip_prefix("win-") {
+            Some(rest) => (true, rest),
+            None => (false, text),
+        };
+        let (i, n) = rest.split_once('/').ok_or_else(bad)?;
+        let (i, n): (usize, usize) = (i.parse().map_err(|_| bad())?, n.parse().map_err(|_| bad())?);
+        if i == 0 || i > n {
+            return Err(bad());
+        }
+        Ok(if windows { Self::Windows(i, n) } else { Self::Linux(i, n) })
+    }
+
+    /// Every slice the workflow's pipeline matrix runs, in its order.
+    fn all() -> Vec<String> {
+        (1..=PIPELINE_SHARDS)
+            .map(|i| format!("{i}/{PIPELINE_SHARDS}"))
+            .chain((1..=WIN_PIPELINE_SHARDS).map(|i| format!("win-{i}/{WIN_PIPELINE_SHARDS}")))
+            .collect()
+    }
+}
+
+/// The slice of the pipeline checks to run (`ci pipeline --shard`); unset:
+/// all of them.
+static PIPELINE_SHARD: std::sync::OnceLock<PipelineSlice> = std::sync::OnceLock::new();
 
 /// The agent pipeline's checks against the reference OS (or one slice of
 /// them, [`PIPELINE_SHARD`]).
 fn pipeline_checks() -> Result {
     prebuilt::check_stamps(&["kernel", "tools"])?;
     let shard = PIPELINE_SHARD.get().copied();
-    // No slicing, or `extras`, runs the checks that are not sliced; with
-    // `extras` they are all it runs.
-    let extras = PIPELINE_EXTRAS.load(std::sync::atomic::Ordering::Relaxed);
-    let first = shard.is_none();
-    if first {
-        // The test corpus on Linux against itself: the tracer and the diff
-        // runner must find no differences. Takes a few seconds; skips itself
-        // without a C compiler or where ptrace is not permitted.
-        pipeline(&["selfcheck".into()])?;
-    }
-    // The corpus and the visible spec tests of every green coverage entry
-    // on Poly against Linux (one QEMU boot per test, several at a time):
-    // the tests of tests/linux/poly-pass.txt and of the green entries must
-    // pass. Skips itself like selfcheck, and without QEMU.
-    let mut polycheck = vec!["polycheck".to_string()];
-    if let Some((i, n)) = shard {
-        polycheck.extend(["--shard".to_string(), format!("{i}/{n}")]);
-    }
-    if !extras {
+    let linux = match shard {
+        None => Some(None),
+        Some(PipelineSlice::Linux(i, n)) => Some(Some((i, n))),
+        Some(PipelineSlice::Windows(..)) => None,
+    };
+    if let Some(slice) = linux {
+        if slice.is_none_or(|(i, _)| i == 1) {
+            // The test corpus on Linux against itself: the tracer and the
+            // diff runner must find no differences. Takes a few seconds;
+            // skips itself without a C compiler or where ptrace is not
+            // permitted.
+            pipeline(&["selfcheck".into()])?;
+        }
+        // The corpus and the visible spec tests of every green coverage
+        // entry on Poly against Linux (one QEMU boot per test, several at a
+        // time): the tests of tests/linux/poly-pass.txt and of the green
+        // entries must pass. Skips itself like selfcheck, and without QEMU.
+        let mut polycheck = vec!["polycheck".to_string()];
+        if let Some((i, n)) = slice {
+            polycheck.extend(["--shard".to_string(), format!("{i}/{n}")]);
+        }
         pipeline(&polycheck)?;
     }
-    if first {
+    let windows = match shard {
+        None => Some(None),
+        Some(PipelineSlice::Windows(i, n)) => Some(Some((i, n))),
+        Some(PipelineSlice::Linux(..)) => None,
+    };
+    if let Some(slice) = windows {
         // The visible tests of every green Windows entry on Poly against
         // their recorded Windows results (ADR 0099). Skips itself without
         // QEMU, and without clang++/lld-link/llvm-dlltool for C++ tests.
-        pipeline(&["win".into(), "polycheck".into()])?;
+        let mut win = vec!["win".to_string(), "polycheck".to_string()];
+        if let Some((i, n)) = slice {
+            win.extend(["--shard".to_string(), format!("{i}/{n}")]);
+        }
+        pipeline(&win)?;
     }
     Ok(())
 }
@@ -2571,9 +2624,7 @@ fn workflow_problems(text: &str) -> std::result::Result<(), Vec<String>> {
         problems.push("no job runs `boot-tests --shard ${{ matrix.shards }}`".into());
     }
     let slices = text.lines().map(str::trim).find_map(|l| l.strip_prefix("slice: [")?.strip_suffix(']'));
-    let want_slices: Vec<String> = std::iter::once("extras".to_string())
-        .chain((1..=PIPELINE_SHARDS).map(|i| format!("{i}/{PIPELINE_SHARDS}")))
-        .collect();
+    let want_slices = PipelineSlice::all();
     match slices {
         None => problems.push("no pipeline matrix line `slice: [...]`".into()),
         Some(list) => {
@@ -2623,18 +2674,8 @@ fn ci(args: &[String]) -> Result {
         if a == "--quick" {
             LINT_QUICK.store(true, std::sync::atomic::Ordering::Relaxed);
         } else if a == "--shard" {
-            let text = it.next().ok_or("ci: --shard needs I/N")?;
-            if text == "extras" {
-                PIPELINE_EXTRAS.store(true, std::sync::atomic::Ordering::Relaxed);
-                continue;
-            }
-            let bad = || format!("ci: --shard {text}: expected I/N with 1 <= I <= N, like 2/4, or extras");
-            let (i, n) = text.split_once('/').ok_or_else(bad)?;
-            let (i, n): (usize, usize) = (i.parse().map_err(|_| bad())?, n.parse().map_err(|_| bad())?);
-            if i == 0 || i > n {
-                return Err(bad());
-            }
-            PIPELINE_SHARD.set((i, n)).map_err(|_| "ci: --shard twice".to_string())?;
+            let text = it.next().ok_or("ci: --shard needs I/N or win-I/N")?;
+            PIPELINE_SHARD.set(PipelineSlice::parse(text)?).map_err(|_| "ci: --shard twice".to_string())?;
         } else {
             parts.push(a);
         }
@@ -2643,9 +2684,7 @@ fn ci(args: &[String]) -> Result {
     if let Some(bad) = parts.iter().find(|a| !names.contains(&a.as_str())) {
         return Err(format!("ci: no part {bad:?}; the parts are {}", names.join(", ")));
     }
-    if (PIPELINE_SHARD.get().is_some() || PIPELINE_EXTRAS.load(std::sync::atomic::Ordering::Relaxed))
-        && !parts.iter().any(|a| a.as_str() == "pipeline")
-    {
+    if PIPELINE_SHARD.get().is_some() && !parts.iter().any(|a| a.as_str() == "pipeline") {
         return Err("ci: --shard slices the pipeline part: name it (`ci pipeline --shard 1/4`)".into());
     }
     if LINT_QUICK.load(std::sync::atomic::Ordering::Relaxed) && (parts.len() != 1 || parts[0] != "lint") {
@@ -2791,5 +2830,20 @@ mod tests {
         assert!(workflow_problems(&lost).unwrap_err()[0].contains("the boot test matrix runs shards"));
         let no_lint = text.replace("cargo xtask ci lint", "cargo xtask lint");
         assert!(workflow_problems(&no_lint).unwrap_err()[0].contains("ci lint"));
+        let lost_win = text.replacen(", win-4/4", "", 1);
+        assert_ne!(lost_win, text, "the pipeline matrix lists win-4/4 after another slice");
+        assert!(workflow_problems(&lost_win).unwrap_err()[0].contains("the pipeline matrix lists slices"));
+    }
+
+    #[test]
+    fn pipeline_slices() {
+        assert_eq!(PipelineSlice::parse("2/4"), Ok(PipelineSlice::Linux(2, 4)));
+        assert_eq!(PipelineSlice::parse("win-1/4"), Ok(PipelineSlice::Windows(1, 4)));
+        for bad in ["extras", "0/4", "5/4", "win-0/4", "win-", "win-2", "w-1/4", "1/", "/4"] {
+            assert!(PipelineSlice::parse(bad).is_err(), "{bad}");
+        }
+        let all = PipelineSlice::all();
+        assert_eq!(all.len(), PIPELINE_SHARDS + WIN_PIPELINE_SHARDS);
+        assert!(all.iter().all(|s| PipelineSlice::parse(s).is_ok()), "{all:?}");
     }
 }

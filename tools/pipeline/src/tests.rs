@@ -15,6 +15,23 @@ fn shards_partition_the_names() {
     assert!(shard_slice(&["a"], 2, 3).is_empty());
 }
 
+/// `win polycheck --shard`: every name in exactly one slice, the same one
+/// whatever other names exist, and the slices about equal.
+#[test]
+fn stable_slices_partition_the_names() {
+    let names: Vec<String> = (0..2000).map(|i| format!("win_test_{i}")).collect();
+    let mut sizes = [0usize; 4];
+    for n in &names {
+        let s = stable_slice(n, 4);
+        assert!((1..=4).contains(&s), "{n}: {s}");
+        assert_eq!(stable_slice(n, 4), s, "{n}: the same slice every time");
+        sizes[s - 1] += 1;
+    }
+    assert_eq!(sizes.iter().sum::<usize>(), names.len());
+    assert!(sizes.iter().all(|&c| c > 400 && c < 600), "slices of 2000 names: {sizes:?}");
+    assert_eq!(stable_slice("anything", 1), 1);
+}
+
 #[test]
 fn parses_a_shard() {
     assert_eq!(parse_shard("2/3"), Ok((2, 3)));

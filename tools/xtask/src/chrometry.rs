@@ -205,7 +205,7 @@ const TRY_STEPS: &str = concat!(
 /// The window check of what the menu boots: the same disk and entry as `desktop --chrome-win`
 /// (the entry only adds the first page and where the window is), started from the launcher by its
 /// name, then the page of stage 3 is painted after 125 s, a URL typed into the address field loads
-/// (`chromewin::S3_STEPS`); the boot test group `chrome-try`, in the shard of `chrome-win-window`. Skipped where Chrome is not fetched or there is no Unix host (QMP
+/// (`chromewin::S3_STEPS`); the boot test group `chrome-try`, a CI shard of its own. Skipped where Chrome is not fetched or there is no Unix host (QMP
 /// over a Unix socket); an exception, a window that never came or a wrong colour fails it, and a
 /// page that never finished loading (the slow start) is inconclusive after three runs, as stage 3.
 pub fn group_boot_test(kernel: &Path, _syms: &std::sync::Arc<crate::symbols::Symbols>) -> Result {

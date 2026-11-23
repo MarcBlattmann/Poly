@@ -13,10 +13,13 @@
 //! What goes in which artifact:
 //!
 //! - `kernel`: the kernel ELF (with our ntdll.dll and Win32 modules
-//!   embedded);
+//!   embedded), and those modules' caches (`target/ntdll-cache`,
+//!   `target/win32-cache`, `target/wow64-cache`): the Chrome and Windows app
+//!   boots read their exports (`polystub.dll`) without building them;
 //! - `tools`: the native programs (`userland/native`), the xtask binary itself, the pipeline tool's binary, the
-//!   traced 7-Zip scenario's kit and driver, the 7-Zip scenario's driver
-//!   and the desktop's Windows test program.
+//!   traced 7-Zip scenario's kit and driver, the 7-Zip scenario's driver,
+//!   the desktop's Windows test program and Chrome's launcher and probe
+//!   (`winapp::prebuild`).
 //!
 //! Each artifact carries a stamp file holding the commit it was built from;
 //! a consumer of another commit's artifact refuses to run ([`check_stamps`]).
@@ -154,11 +157,18 @@ fn native_files() -> Vec<PathBuf> {
     crate::native::PROGRAMS.iter().chain(crate::native::RUNTIMES.iter().map(|(n, _)| n)).map(|n| dir.join(n)).collect()
 }
 
-/// The kernel part: the kernel alone (the native programs are the tools
-/// part's, which has time to spare).
+/// The kernel part: the kernel (the native programs are the tools part's,
+/// which has time to spare) and the caches of the modules it embeds, which
+/// building it filled. A cache outside the checkout (a worktree's, kept in
+/// the main checkout) is left out: nothing unpacks this part there.
 fn kernel_files() -> Result<Vec<PathBuf>> {
     crate::build_kernel_only(false)?;
-    Ok(vec![crate::kernel_elf(false)])
+    let mut files = vec![crate::kernel_elf(false)];
+    let mut caches = vec![crate::ntdll::ensure()?];
+    caches.extend(dir_files(&crate::win32::ensure()?));
+    caches.extend(dir_files(&crate::wow64::ensure()?));
+    files.extend(caches.into_iter().filter(|p| p.starts_with(root())));
+    Ok(files)
 }
 
 /// Every file below `dir`, in order (nothing for a missing directory).
@@ -205,6 +215,7 @@ fn tools_files_after_native() -> Result<Vec<PathBuf>> {
     files.extend(crate::sevenzip::stage_prebuild()?);
     files.extend(crate::desktop::prebuild_windows_app()?);
     files.extend(crate::desktop::wininstaller::prebuild()?);
+    files.extend(crate::winapp::prebuild()?);
     Ok(files)
 }
 

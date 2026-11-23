@@ -1930,7 +1930,7 @@ fn drive_resize(socket: &Path, vnc: &Path, lines: Lines) -> std::result::Result<
 }
 
 /// The Windows GUI program of `desktop-win32` (`tests/windows/<name>.rs`).
-const WIN32_TEST: &str = "win_gui_fill";
+pub(crate) const WIN32_TEST: &str = "win_gui_fill";
 /// Where `pipeline win build` puts it.
 const WIN32_BIN: &str = "target/pipeline/windows/desktop-bin";
 /// Its desktop file.

@@ -46,9 +46,12 @@
 //! win diff --reference WIN.json [--target poly|FILE.json] [--tests a,b] [--strict] [poly options]
 //!                                                compare Windows results with Poly (or another result file)
 //! win show <results.json> [--tests a,b]          print a result file's observations
-//! win polycheck [--kernel ELF] [--jobs N]         the visible tests of every green Windows entry on Poly
+//! win polycheck [--kernel ELF] [--jobs N] [--shard I/N]
+//!                                                the visible tests of every green Windows entry on Poly
 //!                                                against their recorded windows.json: all must pass (CI);
-//!                                                the msvcrt.dll C++ tests again built for vcruntime140 (ADR 0199)
+//!                                                the msvcrt.dll C++ tests again built for vcruntime140 (ADR 0199);
+//!                                                with --shard, only the tests whose name hashes to slice I of N
+//!                                                (CI runs the slices in parallel jobs)
 //! win scenario poly [--bin-dir DIR] [--data-dir DIR] [--tests a,b] [--kernel ELF] [--build-kernel]
 //!                   [--timeout SECS] [--out FILE]
 //!                                                run scenario drivers (ADR 0088) on Poly with their data files
@@ -631,6 +634,20 @@ fn shard_slice(names: &[&str], index: usize, count: usize) -> Vec<String> {
     let mut sorted: Vec<&str> = names.to_vec();
     sorted.sort_unstable();
     sorted.into_iter().skip(index - 1).step_by(count).map(String::from).collect()
+}
+
+/// The slice (1-based, of `count`) a test named `name` is in, from a hash of
+/// the name alone (FNV-1a): a test stays in its slice when others are added
+/// or removed, so each slice's cached build (`win polycheck --shard`) stays
+/// warm. With hundreds of tests the slices are about equal.
+fn stable_slice(name: &str, count: usize) -> usize {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in name.as_bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    // `count` is small: the remainder fits in usize.
+    usize::try_from(h % count as u64).unwrap_or(0) + 1
 }
 
 /// Poly test runs at a time in `polycheck`: each QEMU (TCG, two vCPUs)
