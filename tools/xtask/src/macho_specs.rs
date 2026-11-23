@@ -1,8 +1,10 @@
-//! The boot test group `macho-specs` (ADR 0246, addendum): every visible
-//! test of the macOS system call entries (`specs/macos/{bsd,mach}/
-//! *.tests/*.c`) built for x86-64 and for arm64 (through the translator,
-//! ADR 0257), each run on Poly as the first process, and compared with what
-//! macOS printed (the arm64 recording in the test's `macos.json`).
+//! The boot test groups `macho-specs` and `macho-specs-a64` (ADR 0246,
+//! addendum): every visible test of the macOS system call entries
+//! (`specs/macos/{bsd,mach}/*.tests/*.c`) built for x86-64 (`macho-specs`)
+//! and for arm64 (`macho-specs-a64`, through the translator, ADR 0257), each
+//! run on Poly as the first process, and compared with what macOS printed
+//! (the arm64 recording in the test's `macos.json`). One group per
+//! architecture, so CI runs them in two jobs (each about six minutes).
 //!
 //! - **Building.** The tests include only the raw test header
 //!   (`tests/macos/include/poly_mtest.h`), so any clang builds them for a
@@ -245,8 +247,19 @@ fn judge(arch: Arch, got: &[String], code: Option<i64>, want: &str, want_code: i
     Verdict::Pass
 }
 
-/// The boot test group `macho-specs`.
+/// The boot test group `macho-specs`: the x86-64 builds.
 pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    run(kernel, syms, Arch::X64)
+}
+
+/// The boot test group `macho-specs-a64`: the arm64 builds, through the translator.
+pub fn a64_boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
+    run(kernel, syms, Arch::A64)
+}
+
+/// Every chosen test built for `arch`, run on Poly and judged; the runs of
+/// `arch` listed as passing must pass.
+fn run(kernel: &Path, syms: &Arc<Symbols>, arch: Arch) -> Result {
     if Command::new("clang").arg("--version").output().is_err() {
         eprintln!("==> macho-specs: no clang on this host to build the tests; skipped");
         return Ok(());
@@ -263,74 +276,73 @@ pub fn boot_test(kernel: &Path, syms: &Arc<Symbols>) -> Result {
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .filter(|l| l.split_whitespace().next() == Some(arch.tag()))
         .map(str::to_string)
         .collect();
     let mut regressions = Vec::new();
     let mut new_passes = Vec::new();
     let (mut pass, mut fail, mut nothing) = (0, 0, 0);
-    for arch in [Arch::X64, Arch::A64] {
-        let mut programs = Vec::new();
-        for t in &chosen {
-            programs.push((t.name.clone(), std::fs::read(build(t, arch, &lld)?).map_err(|e| e.to_string())?));
-        }
-        let progs: Vec<(&str, &[u8])> = programs.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
-        let mut tree = Tree::default();
-        if arch == Arch::A64 {
-            tree.files.extend(native::runtime_files()?);
-        }
-        let lib = root().join(LIBSYSTEM).join(format!("libSystem_{}.dylib", arch.tag()));
-        tree.files.push(("usr/lib/libSystem.B.dylib".into(), 0o755, std::fs::read(&lib).map_err(|e| e.to_string())?));
-        let image = initramfs::write(
-            &root(),
-            &format!("poly-macho-specs-{}.cpio", arch.tag()),
-            &initramfs::programs_image_with(&progs, &tree),
-        )?;
-        for t in &chosen {
-            let key = format!("{} {}", arch.tag(), t.name);
-            // As an ordinary user in an empty scratch directory of its own, as the
-            // oracle ran them (uid 501, group staff).
-            let append = format!(
-                "poly.qemu_exit poly.test.capture poly.test.uid=501 poly.test.gid=20 poly.test.cwd=/scratch poly.init=/bin/{}",
-                t.name
-            );
-            let b = with_boot_timeout(Duration::from_secs(20), || {
-                boot_on(None, Some(&image), kernel, syms, MEMORY, &append, Devices::None)
-            });
-            let verdict = match b {
-                Err(e) => Verdict::Fail(format!("boot: {e}")),
-                Ok(b) if b.status != Some(QEMU_SUCCESS) && exit_code(&b.output).is_none() => {
-                    let last = stdout_lines(&b.output).last().cloned().unwrap_or_default();
-                    Verdict::Fail(format!("did not end (QEMU {:?}; last line {last:?})", b.status))
-                }
-                Ok(b) => {
-                    let (want, want_code) = recorded(&t.dir, &t.name)?;
-                    judge(arch, &stdout_lines(&b.output), exit_code(&b.output), &want, want_code)
-                }
-            };
-            match &verdict {
-                Verdict::Pass => {
-                    pass += 1;
-                    if !passing.contains(&key) {
-                        new_passes.push(key.clone());
-                    }
-                }
-                Verdict::Nothing => nothing += 1,
-                Verdict::Fail(why) => {
-                    fail += 1;
-                    if passing.contains(&key) {
-                        regressions.push(format!("{key} ({}): {why}", t.entry));
-                    }
+    let mut programs = Vec::new();
+    for t in &chosen {
+        programs.push((t.name.clone(), std::fs::read(build(t, arch, &lld)?).map_err(|e| e.to_string())?));
+    }
+    let progs: Vec<(&str, &[u8])> = programs.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
+    let mut tree = Tree::default();
+    if arch == Arch::A64 {
+        tree.files.extend(native::runtime_files()?);
+    }
+    let lib = root().join(LIBSYSTEM).join(format!("libSystem_{}.dylib", arch.tag()));
+    tree.files.push(("usr/lib/libSystem.B.dylib".into(), 0o755, std::fs::read(&lib).map_err(|e| e.to_string())?));
+    let image = initramfs::write(
+        &root(),
+        &format!("poly-macho-specs-{}.cpio", arch.tag()),
+        &initramfs::programs_image_with(&progs, &tree),
+    )?;
+    for t in &chosen {
+        let key = format!("{} {}", arch.tag(), t.name);
+        // As an ordinary user in an empty scratch directory of its own, as the
+        // oracle ran them (uid 501, group staff).
+        let append = format!(
+            "poly.qemu_exit poly.test.capture poly.test.uid=501 poly.test.gid=20 poly.test.cwd=/scratch poly.init=/bin/{}",
+            t.name
+        );
+        let b = with_boot_timeout(Duration::from_secs(20), || {
+            boot_on(None, Some(&image), kernel, syms, MEMORY, &append, Devices::None)
+        });
+        let verdict = match b {
+            Err(e) => Verdict::Fail(format!("boot: {e}")),
+            Ok(b) if b.status != Some(QEMU_SUCCESS) && exit_code(&b.output).is_none() => {
+                let last = stdout_lines(&b.output).last().cloned().unwrap_or_default();
+                Verdict::Fail(format!("did not end (QEMU {:?}; last line {last:?})", b.status))
+            }
+            Ok(b) => {
+                let (want, want_code) = recorded(&t.dir, &t.name)?;
+                judge(arch, &stdout_lines(&b.output), exit_code(&b.output), &want, want_code)
+            }
+        };
+        match &verdict {
+            Verdict::Pass => {
+                pass += 1;
+                if !passing.contains(&key) {
+                    new_passes.push(key.clone());
                 }
             }
-            let mark = match &verdict {
-                Verdict::Pass => "PASS".to_string(),
-                Verdict::Nothing => "-   (checks nothing on x86-64)".to_string(),
-                Verdict::Fail(why) => format!("FAIL {why}"),
-            };
-            eprintln!("    {:<4} {:<40} {:<28} {mark}", arch.tag(), t.name, t.entry);
+            Verdict::Nothing => nothing += 1,
+            Verdict::Fail(why) => {
+                fail += 1;
+                if passing.contains(&key) {
+                    regressions.push(format!("{key} ({}): {why}", t.entry));
+                }
+            }
         }
+        let mark = match &verdict {
+            Verdict::Pass => "PASS".to_string(),
+            Verdict::Nothing => "-   (checks nothing on x86-64)".to_string(),
+            Verdict::Fail(why) => format!("FAIL {why}"),
+        };
+        eprintln!("    {:<4} {:<40} {:<28} {mark}", arch.tag(), t.name, t.entry);
     }
-    eprintln!("==> macho-specs: {pass} pass, {fail} fail, {nothing} check nothing on x86-64");
+    eprintln!("==> macho-specs ({}): {pass} pass, {fail} fail, {nothing} check nothing on x86-64", arch.tag());
     if !new_passes.is_empty() {
         eprintln!("==> macho-specs: passing but not in {PASSING}:\n    {}", new_passes.join("\n    "));
     }

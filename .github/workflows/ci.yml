@@ -9,12 +9,13 @@ name: CI
 #
 # The kernel, the native programs, xtask, the pipeline tool and the Windows
 # test programs are built once, by the two `build` jobs (ADR 0156), and the
-# boot and pipeline jobs only unpack them (`POLY_PREBUILT=1`) and boot. Every
-# job takes about the same time (ADR 0150): the boot tests and the pipeline's
-# polycheck are cut into shards and slices. `cargo xtask ci lint` checks
-# that the matrices run every shard and slice; `cargo xtask boot-tests
-# --list` shows the groups of each shard, and the job summaries show how long
-# each group took.
+# boot, pipeline and chrome jobs only unpack them (`POLY_PREBUILT=1`) and
+# boot: only the pipeline's `win-*` slices install Rust (they build their
+# Windows test programs). Every job takes about the same time (ADR 0150): the
+# boot tests, the pipeline's polycheck and win polycheck are cut into shards
+# and slices. `cargo xtask ci lint` checks that the matrices run every shard
+# and slice; `cargo xtask boot-tests --list` shows the groups of each shard,
+# and the job summaries show how long each group took.
 #
 # QEMU runs on KVM (xtask uses /dev/kvm when it can open it, after the
 # "Let QEMU use KVM" step); one boot job runs the self-test boots on QEMU's
@@ -42,18 +43,37 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # A pull request that only changes prose (ADRs, Markdown files, the
-  # generated progress charts) skips the jobs that run programs: host tests,
-  # the boot tests and the pipeline. Lint and coverage always run (the
-  # coverage step checks that a pull request leaves the generated progress
-  # files alone, ADR 0213). Any other event, a push to main or a manual run
-  # (`workflow_dispatch`), runs everything.
+  # What a pull request can skip (ADR 0156, addendum). Any other event, a
+  # push to main or a manual run (`workflow_dispatch`), runs everything. The
+  # scopes only ever leave out jobs that cannot see the change; a path not
+  # named below runs everything:
+  #
+  # - `host`: anything but prose (ADRs, Markdown files, the generated
+  #   progress charts) runs the host tests. Lint and coverage always run (the
+  #   coverage step checks that a pull request leaves the generated progress
+  #   files alone, ADR 0213).
+  # - `heavy`: anything but prose and the coverage tool (`tools/coverage/`,
+  #   which only lint and the host tests run) builds and runs the boot and
+  #   chrome jobs.
+  # - `pipeline`: anything but those and the desktop's package and file
+  #   crates and apps (`crates/poly-pkg`, `crates/poly-files`,
+  #   `userland/poly-files-app`, `userland/poly-installer-app`: neither the
+  #   kernel nor the pipeline tool nor its test programs use them) runs the
+  #   pipeline's polycheck and win polycheck.
+  # - `aarch64`: the stub's inputs (the kernel tree, the crates, xtask, the
+  #   toolchain, Cargo's files, the workflows) run the aarch64 job.
+  #
+  # A renamed file counts with its old path too; a pull request the files API
+  # cannot list in full (3000 files) runs everything.
   changes:
-    name: changes (code or prose)
+    name: changes (what a pull request runs)
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
-      code: ${{ steps.diff.outputs.code }}
+      host: ${{ steps.diff.outputs.host }}
+      heavy: ${{ steps.diff.outputs.heavy }}
+      pipeline: ${{ steps.diff.outputs.pipeline }}
+      aarch64: ${{ steps.diff.outputs.aarch64 }}
     steps:
       - id: diff
         env:
@@ -62,18 +82,29 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          scope() { echo "$1=$2" | tee -a "$GITHUB_OUTPUT"; }
+          everything() { for s in host heavy pipeline aarch64; do scope "$s" true; done; }
           if [ "$EVENT" != pull_request ]; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
+            everything
             exit 0
           fi
-          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[].filename')
+          files=$(gh api --paginate "repos/$REPO/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')
           echo "$files"
-          if [ -z "$files" ] || echo "$files" | grep -qvE '^(docs/adr/|docs/progress/|docs/windows/|docs/[^/]+\.md$|[A-Za-z_]+\.md$)'; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::only prose changed: host tests, boot tests and pipeline are skipped"
-            echo "code=false" >> "$GITHUB_OUTPUT"
+          if [ -z "$files" ] || [ "$(echo "$files" | wc -l)" -ge 3000 ]; then
+            echo "::notice::the changed files could not be listed in full: everything runs"
+            everything
+            exit 0
           fi
+          prose='^(docs/adr/|docs/progress/|docs/windows/|docs/[^/]+\.md$|[A-Za-z_]+\.md$)'
+          host_only="$prose|^tools/coverage/"
+          apps="$host_only|^(crates/poly-pkg|crates/poly-files|userland/poly-files-app|userland/poly-installer-app)/"
+          aarch64='^(kernel/|crates/|tools/xtask/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|\.cargo/|\.github/)'
+          # A scope runs when a file is outside what may skip it.
+          outside() { if echo "$files" | grep -qvE "$1"; then echo true; else echo false; fi; }
+          scope host "$(outside "$prose")"
+          scope heavy "$(outside "$host_only")"
+          scope pipeline "$(outside "$apps")"
+          scope aarch64 "$(if echo "$files" | grep -qE "$aarch64"; then echo true; else echo false; fi)"
 
   lint:
     name: lint (fmt, clippy, source checks, coverage map)
@@ -132,7 +163,7 @@ jobs:
   host-tests:
     name: host tests
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.host == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -155,15 +186,16 @@ jobs:
         run: cargo xtask fonts fetch || echo "::warning::could not fetch the fonts; poly-font's tests on them are skipped"
       - run: cargo xtask ci host-tests
 
-  # Builds, once, what the boot and pipeline jobs boot (ADR 0156): `kernel`
-  # the kernel with our ntdll.dll and Win32 modules and the native programs,
-  # `tools` xtask, the pipeline tool and the Windows test programs. Each
+  # Builds, once, what the boot, pipeline and chrome jobs boot (ADR 0156):
+  # `kernel` the kernel with our ntdll.dll and Win32 modules and those
+  # modules' caches, `tools` xtask, the pipeline tool, the native programs and
+  # the Windows test programs (Chrome's launcher and probe among them). Each
   # packs its files (the list `cargo xtask prebuild` writes) into an artifact
   # that the other jobs unpack with the `prebuilt` action.
   build:
     name: build (${{ matrix.part }})
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -238,7 +270,7 @@ jobs:
   boot:
     name: boot (${{ matrix.boot }}, ${{ matrix.accel }})
     needs: [changes, build]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -247,12 +279,12 @@ jobs:
         # Each entry runs the shards of xtask's CI_BOOT_SHARDS it lists
         # (`cargo xtask boot-tests --list` shows the groups of each); `ci
         # lint` checks that every shard is in exactly one entry. The entries
-        # take about the same time (their groups' boots, in seconds on KVM:
-        # 80 to 105). `x11` is true where the root disk wants Xwayland and
+        # take about the same time (their groups' boots on KVM: 2 to 6
+        # minutes). `x11` is true where the root disk wants Xwayland and
         # Mesa; `sevenzip` where 7-Zip is fetched.
         include:
           - boot: x11
-            shards: x11
+            shards: x11,desktop-shell
             accel: auto
             x11: true
           - boot: apps
@@ -277,10 +309,13 @@ jobs:
             accel: auto
             sevenzip: true
             mingit: true
-          - boot: shell
-            shards: desktop-shell
+          # Every macOS system call test, a boot each: an architecture a job.
+          - boot: macho-specs
+            shards: macho-specs
             accel: auto
-            x11: true
+          - boot: macho-specs-a64
+            shards: macho-specs-a64
+            accel: auto
           - boot: devices
             shards: devices,selftest
             accel: auto
@@ -361,31 +396,39 @@ jobs:
   pipeline:
     name: "pipeline (${{ matrix.slice }})"
     needs: [changes, build]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.pipeline == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     env:
       POLY_PREBUILT: 1
+      # The `win-*` slices build their Windows test programs with cargo into
+      # a cached target directory: compare the files' checksums, not their
+      # modification times (a fresh checkout makes every source new).
+      CARGO_UNSTABLE_CHECKSUM_FRESHNESS: true
     strategy:
       fail-fast: false
       matrix:
-        # Exactly xtask's PIPELINE_SHARDS (`ci lint` checks): `polycheck`, a
-        # QEMU boot per test, runs a quarter of the corpus in each; `extras`
-        # runs selfcheck and win polycheck.
-        slice: [extras, 1/4, 2/4, 3/4, 4/4]
+        # Exactly xtask's PIPELINE_SHARDS and WIN_PIPELINE_SHARDS (`ci lint`
+        # checks): `polycheck`, a QEMU boot per test, runs a quarter of the
+        # corpus in each `I/N` (and selfcheck in the first); `win polycheck`
+        # a quarter of the green Windows entries' tests in each `win-I/N`
+        # (by a hash of the test's name, so each slice's build cache stays
+        # warm).
+        slice: [1/4, 2/4, 3/4, 4/4, win-1/4, win-2/4, win-3/4, win-4/4]
     steps:
       - uses: actions/checkout@v4
       # Rust installs while the packages and the artifacts come in (only
-      # where something is built: `extras` builds Windows test programs).
+      # where something is built: the `win-*` slices build Windows test
+      # programs).
       - name: Start installing Rust
-        if: matrix.slice == 'extras'
+        if: startsWith(matrix.slice, 'win-')
         run: .github/scripts/rust-start.sh
       # clang++, lld-link and llvm-dlltool build the C++ Windows tests of
       # green Windows entries for `win polycheck` (ADR 0098, 0099).
-      - name: Install QEMU, a static BusyBox and the C++ Windows test tools
+      - name: Install QEMU and a static BusyBox (and the C++ Windows test tools)
         uses: ./.github/actions/apt-install
         with:
-          packages: qemu-system-x86 busybox-static clang lld llvm
+          packages: ${{ startsWith(matrix.slice, 'win-') && 'qemu-system-x86 busybox-static clang lld llvm' || 'qemu-system-x86 busybox-static' }}
       - name: Let QEMU use KVM
         run: |
           if [ -e /dev/kvm ]; then
@@ -399,21 +442,41 @@ jobs:
           fi
       # `win polycheck` builds Windows test programs with cargo.
       - name: Wait for Rust
-        if: matrix.slice == 'extras'
+        if: startsWith(matrix.slice, 'win-')
         run: .github/scripts/rust-wait.sh
       - uses: ./.github/actions/prebuilt
+      # `main` keeps each `win-*` slice's cargo target directory; a pull
+      # request restores main's and rebuilds only the programs it changed.
+      - name: The Windows test programs' build cache
+        id: wincache
+        if: startsWith(matrix.slice, 'win-')
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            target/pipeline/windows/cargo
+            target/pipeline/windows/cargo32
+          key: wintests-${{ strategy.job-index }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: wintests-${{ strategy.job-index }}-${{ hashFiles('rust-toolchain.toml') }}-
       # `win polycheck` runs the DirectWrite entries' tests, which need the
       # system fonts (ADR 0170): the same pinned DejaVu fonts as host tests.
       - name: The fonts' cache
-        if: matrix.slice == 'extras'
+        if: startsWith(matrix.slice, 'win-')
         uses: actions/cache@v4
         with:
           path: target/fonts
           key: fonts-dejavu-2.37
       - name: Fetch the fonts (DirectWrite's tests on Poly)
-        if: matrix.slice == 'extras'
+        if: startsWith(matrix.slice, 'win-')
         run: target/debug/xtask fonts fetch
       - run: target/debug/xtask ci pipeline --shard ${{ matrix.slice }}
+      - name: Keep the Windows test programs' build
+        if: startsWith(matrix.slice, 'win-') && github.ref == 'refs/heads/main' && steps.wincache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            target/pipeline/windows/cargo
+            target/pipeline/windows/cargo32
+          key: wintests-${{ strategy.job-index }}-${{ hashFiles('rust-toolchain.toml') }}-${{ github.sha }}
       - name: Keep the polycheck report
         if: failure()
         uses: actions/upload-artifact@v4
@@ -428,8 +491,10 @@ jobs:
   # Chrome for Windows on Poly (ADR 0155, ADR 0214), one job per stage so each
   # shows on its own which stage broke: `s1-headless` (headless --dump-dom,
   # required), `s2-sandbox` (the same with Chrome's sandbox on, required,
-  # ADR 0217) and `s3-window` (Chrome's window on the desktop: the page painted,
-  # a typed URL; QMP clicks). Chrome for Testing is downloaded here, from
+  # ADR 0217), `s3-window` (Chrome's window on the desktop: the page painted,
+  # a typed URL; QMP clicks), `s3-try` and `s3-try-max` (Chrome started from
+  # the desktop's menu, and maximized; ADR 0234) and `s5-gpu` (the default
+  # GPU flags, ADR 0211). Chrome for Testing is downloaded here, from
   # Google's public bucket, by `xtask chrome-win fetch` (pinned version, size
   # and SHA-256 checked), and kept only in this repository's Actions cache,
   # keyed by version: never committed, never an artifact. The stages load
@@ -439,7 +504,7 @@ jobs:
   chrome:
     name: chrome (${{ matrix.chrome }})
     needs: [changes, build]
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -454,6 +519,10 @@ jobs:
             shards: chrome-win-sandbox
           - chrome: s3-window
             shards: chrome-win-window
+          - chrome: s3-try
+            shards: chrome-try
+          - chrome: s3-try-max
+            shards: chrome-try-max
           - chrome: s5-gpu
             shards: chrome-win-gpu
     env:
@@ -462,11 +531,9 @@ jobs:
       POLY_CHROME_REQUIRED: 1
     steps:
       - uses: actions/checkout@v4
-      # The launcher and the probe are Windows programs built with cargo here
-      # (not in the build jobs): Rust installs while the packages and the
-      # artifacts come in.
-      - name: Start installing Rust
-        run: .github/scripts/rust-start.sh
+      # No Rust here: the launcher and the probe come from `build (tools)`,
+      # the Win32 modules whose exports `polystub.dll` covers from
+      # `build (kernel)`.
       - name: Install QEMU
         uses: ./.github/actions/apt-install
         with:
@@ -482,8 +549,6 @@ jobs:
           else
             echo "::warning::no /dev/kvm on this runner: QEMU runs on TCG (Chrome is several times slower)"
           fi
-      - name: Wait for Rust
-        run: .github/scripts/rust-wait.sh
       - uses: ./.github/actions/prebuilt
       # The fonts of the disk (ADR 0181): the same pinned DejaVu as host tests.
       - name: The fonts' cache
@@ -515,7 +580,7 @@ jobs:
           name: chrome-logs-${{ matrix.chrome }}
           path: |
             target/chrome-win/*.log
-            target/win-app/s3-boot/*.log
+            target/win-app/*/*.log
           if-no-files-found: ignore
           retention-days: 7
       - name: Say which stage failed, and where its log is
@@ -533,7 +598,7 @@ jobs:
   aarch64:
     name: aarch64 stub (unit tests, QEMU virt on TCG)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.aarch64 == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -557,8 +622,9 @@ jobs:
 
   # The required status check. `always()`: it runs, and fails, when a job it
   # needs failed or was cancelled (a skipped required check would count as
-  # passing). The jobs that run programs are skipped, and count as passed,
-  # only when the change is prose alone (`changes`).
+  # passing). A job may be skipped, and count as passed, only when `changes`
+  # succeeded and its scope says this pull request does not reach the job;
+  # any other result but success fails.
   ci:
     if: always()
     needs: [changes, lint, host-tests, build, boot, pipeline, chrome, aarch64]
@@ -568,11 +634,18 @@ jobs:
       - name: Every CI job passed
         env:
           NEEDS: ${{ toJSON(needs) }}
-          CODE: ${{ needs.changes.outputs.code }}
+          HOST: ${{ needs.changes.outputs.host }}
+          HEAVY: ${{ needs.changes.outputs.heavy }}
+          PIPELINE: ${{ needs.changes.outputs.pipeline }}
+          AARCH64: ${{ needs.changes.outputs.aarch64 }}
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$NEEDS" | jq -e --arg code "$CODE" '
-            to_entries | all(
-              .value.result == "success"
-              or (.value.result == "skipped" and $code == "false"
-                  and (.key | IN("host-tests", "build", "boot", "pipeline", "chrome", "aarch64"))))' > /dev/null
+          echo "scopes: host=$HOST heavy=$HEAVY pipeline=$PIPELINE aarch64=$AARCH64"
+          echo "$NEEDS" | jq -e --arg host "$HOST" --arg heavy "$HEAVY" --arg pipeline "$PIPELINE" --arg aarch64 "$AARCH64" '
+            def may_skip($job):
+              ($job == "host-tests" and $host == "false")
+              or (($job | IN("build", "boot", "chrome")) and $heavy == "false")
+              or ($job == "pipeline" and $pipeline == "false")
+              or ($job == "aarch64" and $aarch64 == "false");
+            .changes.result == "success"
+            and (to_entries | all(.value.result == "success" or (.value.result == "skipped" and may_skip(.key))))' > /dev/null

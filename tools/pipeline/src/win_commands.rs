@@ -7,12 +7,16 @@ use super::*;
 /// must pass, so a green entry stays green. Skipped, successfully, without
 /// green Windows entries, without QEMU, without clang++ when an entry has
 /// C++ tests, and for implementer agents (it reads Windows' observations).
+/// With `--shard I/N` it builds and checks only the tests in slice I of N
+/// ([`stable_slice`]), the vcruntime140 parity pass included: every test is
+/// in exactly one slice.
 fn win_polycheck(repo: &Path, a: &Args) -> Result<u8> {
+    let shard = a.opt("shard").map(parse_shard).transpose()?;
     if oracle_guard("win polycheck").is_err() {
         println!("pipeline win polycheck: skipped (implementer agents do not read Windows results)");
         return Ok(0);
     }
-    let entries = green::windows_entries(repo)?;
+    let mut entries = green::windows_entries(repo)?;
     if entries.is_empty() {
         println!("pipeline win polycheck: no green Windows entry has visible tests with recorded results");
         return Ok(0);
@@ -28,11 +32,35 @@ fn win_polycheck(repo: &Path, a: &Args) -> Result<u8> {
         println!("pipeline win polycheck: skipped (C++ tests need clang++, lld-link and llvm-dlltool: {e})");
         return Ok(0);
     }
+    // Whether the parity pass runs at all is decided on every entry, so each
+    // slice runs its part of it.
+    let parity_wanted = entries.iter().any(|w| {
+        w.entry.tests_dir.starts_with(MSVCRT_SPECS)
+            && w.entry.tests.iter().any(|t| repo.join(&w.entry.tests_dir).join(format!("{t}.cpp")).is_file())
+    });
+    let in_shard = |name: &str| shard.is_none_or(|(i, n)| stable_slice(name, n) == i);
+    if let Some((i, n)) = shard {
+        let total: usize = entries.iter().map(|w| w.entry.tests.len()).sum();
+        for w in &mut entries {
+            w.entry.tests.retain(|t| in_shard(t));
+        }
+        entries.retain(|w| !w.entry.tests.is_empty());
+        let mine: usize = entries.iter().map(|w| w.entry.tests.len()).sum();
+        println!("pipeline win polycheck: shard {i}/{n}: {mine} of the {total} tests");
+    }
     let base = repo.join(windows::WIN_DIR).join("polycheck");
     let bin = base.join("bin");
     let dirs: Vec<PathBuf> = entries.iter().map(|w| repo.join(&w.entry.tests_dir)).collect();
     let tests: Vec<String> = entries.iter().flat_map(|w| w.entry.tests.iter().cloned()).collect();
-    let manifest = windows::build(repo, &bin, &dirs, &tests)?;
+    let own: Vec<String> = VCRT_TESTS
+        .iter()
+        .filter(|t| parity_wanted && in_shard(t) && repo.join(windows::CORPUS_DIR).join(format!("{t}.cpp")).is_file())
+        .map(|t| t.to_string())
+        .collect();
+    if tests.is_empty() && own.is_empty() {
+        println!("pipeline win polycheck: no test in this slice");
+        return Ok(0);
+    }
     let kernel = match a.opt("kernel") {
         Some(k) => PathBuf::from(k),
         None => {
@@ -47,10 +75,17 @@ fn win_polycheck(repo: &Path, a: &Args) -> Result<u8> {
         Some(j) => j.parse().map_err(|_| "--jobs: a number")?,
         None => util::default_jobs(POLYCHECK_MAX_JOBS),
     };
-    let results = windows::run_poly(&target, &bin, &manifest, &run_dir, jobs)?;
-    util::write_json(&run_dir.join("poly.json"), &results)?;
     let mut report = String::new();
     let mut problems = Vec::new();
+    // A slice may hold only parity tests: an empty list would build them all.
+    let results = if tests.is_empty() {
+        windows::RunFile::default()
+    } else {
+        let manifest = windows::build(repo, &bin, &dirs, &tests)?;
+        windows::run_poly(&target, &bin, &manifest, &run_dir, jobs)?
+    };
+    std::fs::create_dir_all(&run_dir).map_err(|e| format!("{}: {e}", run_dir.display()))?;
+    util::write_json(&run_dir.join("poly.json"), &results)?;
     for w in &entries {
         let reference = windows::RunFile::load(&repo.join(&w.reference))?;
         let summary = windows::diff(&reference, &results, &w.entry.tests)?;
@@ -64,7 +99,7 @@ fn win_polycheck(repo: &Path, a: &Args) -> Result<u8> {
             problems.push(format!("green entry {}: {}", w.entry.id, bad.join(", ")));
         }
     }
-    let parity = vcruntime_parity(repo, &entries, &base, &target, jobs, &mut report, &mut problems)?;
+    let parity = vcruntime_parity(repo, &entries, &own, &base, &target, jobs, &mut report, &mut problems)?;
     util::write(&run_dir.join("report.txt"), &report)?;
     print!("{report}");
     if !problems.is_empty() {
@@ -91,9 +126,11 @@ const VCRT_TESTS: &[&str] = &["vcrt_exception_state", "vcrt_typeinfo_exception",
 /// the check that the two DLLs behave alike. The implementer's own `vcruntime140.dll` tests
 /// ([`VCRT_TESTS`], self-checking, no Windows results yet) run in the same boot and must pass.
 /// Returns how many tests ran.
+#[allow(clippy::too_many_arguments)]
 fn vcruntime_parity(
     repo: &Path,
     entries: &[green::WindowsEntry],
+    own: &[String],
     base: &Path,
     target: &poly::Target,
     jobs: usize,
@@ -114,14 +151,9 @@ fn vcruntime_parity(
         .map(|w| (w, cpp(w)))
         .filter(|(_, t)| !t.is_empty())
         .collect();
-    if chosen.is_empty() {
+    if chosen.is_empty() && own.is_empty() {
         return Ok(0);
     }
-    let own: Vec<String> = VCRT_TESTS
-        .iter()
-        .filter(|t| repo.join(windows::CORPUS_DIR).join(format!("{t}.cpp")).is_file())
-        .map(|t| t.to_string())
-        .collect();
     let bin = base.join("bin-vcruntime140");
     let dirs: Vec<PathBuf> = chosen.iter().map(|(w, _)| repo.join(&w.entry.tests_dir)).collect();
     let tests: Vec<String> = chosen.iter().flat_map(|(_, t)| t.iter().cloned()).chain(own.iter().cloned()).collect();
@@ -145,7 +177,7 @@ fn vcruntime_parity(
             problems.push(format!("{} built for vcruntime140.dll: {}", w.entry.id, bad.join(", ")));
         }
     }
-    for name in &own {
+    for name in own {
         let r = results.test(name);
         let ok = r.is_some_and(|r| r.exit_code == Some(0));
         report.push_str(&format!(
@@ -301,7 +333,7 @@ pub(super) fn win_cmd(repo: &Path, a: &Args) -> Result<u8> {
             Ok(u8::from(bad > 0))
         }
         "polycheck" => {
-            a.only(&["kernel", "jobs", "timeout"])?;
+            a.only(&["kernel", "jobs", "timeout", "shard"])?;
             win_polycheck(repo, a)
         }
         "unbundle" => {

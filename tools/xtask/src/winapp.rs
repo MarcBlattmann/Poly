@@ -75,10 +75,34 @@ fn rustflags(sysroot: &Path) -> Vec<String> {
     f
 }
 
+/// The target the programs are built for.
+const TARGET: &str = "x86_64-pc-windows-msvc";
+
+/// Where the executable of program `name` is built.
+fn exe_path(name: &str) -> PathBuf {
+    dir().join("target").join(TARGET).join("release").join(format!("{name}.exe"))
+}
+
+/// The programs CI's `build (tools)` job builds once ([`prebuild`]): Chrome's launcher and probe
+/// (the `chrome` jobs, the `git-win` boot test) and the desktop's Windows GUI test program.
+const PREBUILT: [&str; 3] = [crate::chromewin::LAUNCHER, crate::chromewin::PROBE, crate::desktop::WIN32_TEST];
+
+/// `prebuild tools`: build [`PREBUILT`] and return their executables' paths, so the jobs that take
+/// the build jobs' files need no Rust toolchain for them (ADR 0156, addendum).
+pub fn prebuild() -> Result<Vec<PathBuf>> {
+    build(&PREBUILT)?;
+    Ok(PREBUILT.iter().map(|n| exe_path(n)).collect())
+}
+
 /// Build the test programs `names` (`tests/windows/<name>.rs`); returns
-/// each one's executable.
+/// each one's executable. In prebuilt mode ([`crate::prebuilt`]) the
+/// executables the build job made are taken when they are all there.
 pub fn build(names: &[&str]) -> Result<Vec<(String, Vec<u8>)>> {
-    const TARGET: &str = "x86_64-pc-windows-msvc";
+    let exes: Vec<PathBuf> = names.iter().map(|n| exe_path(n)).collect();
+    if crate::prebuilt::active() && exes.iter().all(|p| p.is_file()) {
+        eprintln!("==> prebuilt: the Windows test apps ({})", names.join(", "));
+        return names.iter().zip(&exes).map(|(n, exe)| read_exe(n, exe)).collect();
+    }
     let out = std::process::Command::new("rustc").args(["--print", "sysroot"]).output();
     let sysroot =
         PathBuf::from(String::from_utf8_lossy(&out.map_err(|e| format!("rustc: {e}"))?.stdout).trim().to_string());
@@ -108,17 +132,16 @@ pub fn build(names: &[&str]) -> Result<Vec<(String, Vec<u8>)>> {
         .args(["--offline", "--config", "source.crates-io.replace-with=\"rustsrc\"", "--config"])
         .arg(format!("source.rustsrc.directory={}", toml_str(&vendor.to_string_lossy())));
     crate::step(&format!("build the Windows test apps ({})", names.join(", ")), &mut cmd)?;
-    names
-        .iter()
-        .map(|n| {
-            let exe = target_dir.join(TARGET).join("release").join(format!("{n}.exe"));
-            let data = std::fs::read(&exe).map_err(|e| format!("{}: {e}", exe.display()))?;
-            if !data.starts_with(b"MZ") {
-                return Err(format!("{}: not a Windows executable", exe.display()));
-            }
-            Ok((n.to_string(), data))
-        })
-        .collect()
+    names.iter().zip(&exes).map(|(n, exe)| read_exe(n, exe)).collect()
+}
+
+/// Program `name`'s executable at `exe`, checked to be one.
+fn read_exe(name: &str, exe: &Path) -> Result<(String, Vec<u8>)> {
+    let data = std::fs::read(exe).map_err(|e| format!("{}: {e}", exe.display()))?;
+    if !data.starts_with(b"MZ") {
+        return Err(format!("{}: not a Windows executable", exe.display()));
+    }
+    Ok((name.to_string(), data))
 }
 
 #[cfg(test)]
