@@ -131,7 +131,7 @@ shared by every worktree of the checkout (`<main checkout>/target/ntdll-cache`,
 found through `git rev-parse --git-common-dir`; the newest eight are kept).
 Only a miss builds, in `target/ntdll`, verifies the exports and deletes the
 build-std artifacts again (`POLY_NTDLL_KEEP_BUILD=1` keeps them for
-incremental work on `ntdll`). `xtask` names the cached file in
+incremental work on `ntdll`; since [ADR 0270](0270-faster-agent-build-loops-on-windows.md) they are kept except in CI). `xtask` names the cached file in
 `POLY_NTDLL_DLL`, and the kernel's `build.rs` copies it to `$OUT_DIR`,
 where `include_bytes!` embeds it (`nt::NTDLL`), as the vDSO is (ADR 0044).
 A bare `cargo build` in `kernel/` without `xtask` embeds an empty file

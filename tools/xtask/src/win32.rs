@@ -19,10 +19,12 @@
 //! the workspace manifest and lock file, the toolchain pin and the flags)
 //! and looks for `win32-<hash>/` in the cache next to `ntdll`'s (`<main
 //! checkout>/target/win32-cache`, shared by every worktree). Only a miss
-//! builds (about 40 s and 150 MB of build-std artifacts, deleted
-//! afterwards unless `POLY_WIN32_KEEP_BUILD=1`); the three files (~150 KB)
-//! stay. The kernel's `build.rs` embeds them from the directory
-//! `POLY_WIN32_DIR` names, which [`crate::kernel_cargo`] sets.
+//! builds; its build directory (`target/win32`, about 360 MB) stays for the
+//! next build after an edit, which then compiles only what changed, except in
+//! CI (`POLY_WIN32_KEEP_BUILD=0`/`1` decides; `ntdll::keep_build`, ADR 0270).
+//! The modules (~150 KB each) go to the cache. The kernel's `build.rs`
+//! embeds them from the directory `POLY_WIN32_DIR` names, which
+//! [`crate::kernel_cargo`] sets.
 
 use crate::{Result, cargo, root, step};
 use std::path::{Path, PathBuf};
@@ -157,7 +159,7 @@ const CACHE_KEEP: usize = 6;
 /// `cargo xtask win32 [--clippy]`: make sure the cached modules are up to
 /// date (building them if not) and verify them; `--clippy` lints the
 /// workspace for the Windows target instead (into `target/win32-clippy`,
-/// deleted afterwards).
+/// kept as the build directory is).
 pub fn command(args: &[String]) -> Result {
     // The name the modules are cached under, a hash of their inputs (CI
     // keys its cache of `target/win32-cache` with it).
@@ -170,7 +172,9 @@ pub fn command(args: &[String]) -> Result {
         let mut cmd = cargo_for(&target, "clippy")?;
         cmd.args(["--", "-D", "warnings"]);
         let r = step("clippy (win32)", &mut cmd);
-        let _ = std::fs::remove_dir_all(&target);
+        if !crate::ntdll::keep_build("POLY_WIN32_KEEP_BUILD") {
+            let _ = std::fs::remove_dir_all(&target);
+        }
         return r;
     }
     let dir = ensure()?;
@@ -213,7 +217,7 @@ pub fn ensure() -> Result<PathBuf> {
     }
     write_stub_dlls(&tmp)?;
     install_set(&tmp, &cached, RENAME_RETRIES, RENAME_PAUSE)?;
-    if std::env::var_os("POLY_WIN32_KEEP_BUILD").is_none() {
+    if !crate::ntdll::keep_build("POLY_WIN32_KEEP_BUILD") {
         let _ = std::fs::remove_dir_all(&target);
     }
     prune(&cache);

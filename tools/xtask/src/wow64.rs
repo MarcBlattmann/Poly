@@ -156,7 +156,7 @@ pub fn ensure() -> Result<PathBuf> {
         // Another worktree cached the same version first.
         let _ = std::fs::remove_dir_all(&tmp);
     }
-    if std::env::var_os("POLY_WOW64_KEEP_BUILD").is_none() {
+    if !crate::ntdll::keep_build("POLY_WOW64_KEEP_BUILD") {
         let _ = std::fs::remove_dir_all(&target);
     }
     prune(&cache);

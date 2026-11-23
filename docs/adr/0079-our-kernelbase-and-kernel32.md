@@ -65,7 +65,7 @@ the workspace manifest and lock file, the service table, the toolchain
 pin, the flags — `ntdll.rs`'s `inputs_from`/`hash_files`, shared) and
 takes `win32-<hash>/` from `<main checkout>/target/win32-cache` (shared by
 every worktree, beside `ntdll-cache`), building only on a miss and then
-deleting the build directory (`POLY_WIN32_KEEP_BUILD=1` keeps it). The
+deleting the build directory (`POLY_WIN32_KEEP_BUILD=1` keeps it; since [ADR 0270](0270-faster-agent-build-loops-on-windows.md) it is kept except in CI). The
 check: `kernelbase` exports every forwarded function as code; `kernel32`
 exports each as a forwarder string to its contract and its own functions
 as code; `k32test.exe` is an executable importing only `kernel32.dll`.
