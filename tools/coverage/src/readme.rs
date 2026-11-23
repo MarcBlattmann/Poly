@@ -118,7 +118,7 @@ fn picture(name: &str, alt: &str) -> String {
 }
 
 /// The README's compact progress block: only the percentage badges linking to
-/// [`PROGRESS_DOC`], plus a one-line caption.
+/// [`PROGRESS_DOC`].
 pub fn render_badges(c: &Coverage, r: &Roadmap) -> String {
     let (per_os, _) = tallies(c);
     let mut out = String::new();
@@ -143,7 +143,6 @@ pub fn render_badges(c: &Coverage, r: &Roadmap) -> String {
         );
     }
     out.push_str("</p>\n\n");
-    out.push_str("How much of each system's API Poly implements. This is not how many apps work.\n\n");
     out.push_str(BADGES_END);
     out
 }
@@ -383,7 +382,7 @@ mod tests {
         assert!(badges.contains(&format!("href=\"{PROGRESS_DOC}\"")));
         assert!(badges.contains(&format!("src=\"{ASSET_DIR}/badge-roadmap.svg\"")));
         assert!(badges.contains(&format!("src=\"{ASSET_DIR}/badge-linux.svg\"")));
-        assert!(badges.contains("How much of each system's API Poly implements. This is not how many apps work."));
+        assert!(!badges.contains("This is not how many apps work."));
         assert!(!badges.contains("roadmap-light.svg"));
         assert!(!badges.contains("coverage-light.svg"));
         assert!(!badges.contains("<details>"));
