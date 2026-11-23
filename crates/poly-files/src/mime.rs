@@ -159,6 +159,7 @@ const BY_EXT: &[(&str, &str)] = &[
     ("tgz", "application/x-compressed-tar"),
     ("tar.gz", "application/x-compressed-tar"),
     ("xz", "application/x-xz"),
+    ("txz", "application/x-xz-compressed-tar"),
     ("tar.xz", "application/x-xz-compressed-tar"),
     ("bz2", "application/x-bzip2"),
     ("tar.bz2", "application/x-bzip2-compressed-tar"),
@@ -619,6 +620,10 @@ mod tests {
         assert_eq!(by_name("a.TXT"), Some("text/plain"));
         assert_eq!(by_name("/x/lib.rs"), Some("text/rust"));
         assert_eq!(by_name("backup.tar.gz"), Some("application/x-compressed-tar"));
+        assert_eq!(by_name("backup.tgz"), Some("application/x-compressed-tar"));
+        assert_eq!(by_name("backup.tar.xz"), Some("application/x-xz-compressed-tar"));
+        assert_eq!(by_name("backup.txz"), Some("application/x-xz-compressed-tar"));
+        assert_eq!(by_name("backup.tar"), Some("application/x-tar"));
         assert_eq!(by_name("x.gz"), Some("application/gzip"));
         assert_eq!(by_name("Makefile"), Some("text/x-makefile"));
         assert_eq!(by_name("app.desktop"), Some(DESKTOP));

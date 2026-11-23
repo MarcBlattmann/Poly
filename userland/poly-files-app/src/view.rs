@@ -671,7 +671,9 @@ impl FilesApp {
                 let wrapper = poly_rt::env::var(poly_shell::apps::APP_USER_VAR);
                 self.run(&poly_shell::apps::opener_argv(wrapper, &argv))
             }
-            Ok(Open::NoApp { mime }) if mime == poly_files::zip::MIME && !self.in_trash() && !self.in_apps() => {
+            Ok(Open::NoApp { mime })
+                if poly_files::archive::is_supported_mime(mime) && !self.in_trash() && !self.in_apps() =>
+            {
                 self.extract_paths(&[String::from(path)]);
             }
             Ok(Open::NoApp { mime }) if mime.starts_with("text/") || mime == "application/x-shellscript" => {
@@ -742,25 +744,34 @@ impl FilesApp {
         self.run(&argv);
     }
 
-    fn is_zip(e: &Entry) -> bool {
-        !e.is_dir() && e.mime == poly_files::zip::MIME
+    fn is_archive(e: &Entry) -> bool {
+        !e.is_dir() && poly_files::archive::is_supported_mime(e.mime)
     }
 
-    fn selected_zips(&self) -> Vec<String> {
+    fn selected_archives(&self) -> Vec<String> {
         if self.in_trash() || self.in_apps() {
             return Vec::new();
         }
-        let selected: Vec<String> =
-            self.browser.selected_entries().into_iter().filter(|e| Self::is_zip(e)).map(|e| e.path.clone()).collect();
+        let selected: Vec<String> = self
+            .browser
+            .selected_entries()
+            .into_iter()
+            .filter(|e| Self::is_archive(e))
+            .map(|e| e.path.clone())
+            .collect();
         if !selected.is_empty() {
             return selected;
         }
-        self.browser.cursor_entry().filter(|e| Self::is_zip(e)).map(|e| alloc::vec![e.path.clone()]).unwrap_or_default()
+        self.browser
+            .cursor_entry()
+            .filter(|e| Self::is_archive(e))
+            .map(|e| alloc::vec![e.path.clone()])
+            .unwrap_or_default()
     }
 
-    /// Extract the selected ZIP archive(s) into the current folder.
+    /// Extract the selected archive(s) into the current folder.
     pub fn extract_selected(&mut self) {
-        let paths = self.selected_zips();
+        let paths = self.selected_archives();
         if !paths.is_empty() {
             self.extract_paths(&paths);
         }
@@ -774,9 +785,9 @@ impl FilesApp {
         let mut extracted = Vec::new();
         let mut last_err: Option<String> = None;
         for path in paths {
-            let zip_name = poly_files::path::file_name(path);
+            let archive_name = poly_files::path::file_name(path);
             let dest_parent = poly_files::path::parent(path).unwrap_or(&cwd);
-            match poly_files::zip::extract(&*self.fs, path, dest_parent) {
+            match poly_files::archive::extract(&*self.fs, path, dest_parent) {
                 Ok(report) => {
                     poly_rt::println!(
                         "poly-files: extracted {path} -> {} ({} files, {} bytes)",
@@ -784,10 +795,10 @@ impl FilesApp {
                         report.files,
                         report.bytes
                     );
-                    extracted.push((String::from(zip_name), report));
+                    extracted.push((String::from(archive_name), report));
                 }
                 Err(e) => {
-                    last_err = Some(format!("{zip_name}: {}", e.message()));
+                    last_err = Some(format!("{archive_name}: {}", e.message()));
                 }
             }
         }
@@ -802,12 +813,12 @@ impl FilesApp {
             self.status = match last_err {
                 Some(err) => err,
                 None if extracted.len() == 1 => {
-                    let (zip_name, report) = &extracted[0];
+                    let (archive_name, report) = &extracted[0];
                     if report.files == 0 {
-                        format!("Extracted {zip_name} to {}", report.name)
+                        format!("Extracted {archive_name} to {}", report.name)
                     } else {
                         format!(
-                            "Extracted {zip_name} to {} ({} file{})",
+                            "Extracted {archive_name} to {} ({} file{})",
                             report.name,
                             report.files,
                             if report.files == 1 { "" } else { "s" }
@@ -1070,7 +1081,7 @@ impl FilesApp {
             ]
         } else if on_item {
             let mut items = alloc::vec![MenuItem::new(act::OPEN, "Open", "Enter", true)];
-            if !self.selected_zips().is_empty() {
+            if !self.selected_archives().is_empty() {
                 items.push(MenuItem::new(act::EXTRACT, "Extract Here", "", true));
             }
             items.extend([
