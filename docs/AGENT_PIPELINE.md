@@ -364,6 +364,7 @@ test runs twice on Windows and must give the same bytes.
 
 ```sh
 cargo xtask pipeline win build [--tests-dir DIR]... [--tests a,b]   # target/pipeline/windows/bin/*.exe, manifest.json
+                                                    # --tests-dir alone: only that directory's tests (not tests/windows)
 cargo xtask pipeline win bundle                     # target/pipeline/windows/bundle-<id>.txt (+ .partNofM over 45 KB)
 cargo xtask pipeline win unbundle <bundle> --out DIR   # check a bundle (what the PC will do)
 cargo xtask pipeline win poly [--build-kernel] [--jobs 3]   # run them on Poly; poly.json in the run directory
@@ -490,8 +491,9 @@ ended by a hook that posts IDCANCEL.
 a test may also be one `.cpp` file, for what Rust cannot do (C++
 exceptions through `msvcrt.dll`). `win build` compiles it with `clang++
 --target=x86_64-pc-windows-msvc -ffreestanding -nostdlib -fcxx-exceptions`
-and links it with `lld-link` against import libraries made by
-`llvm-dlltool` from `tests/windows/cxx/{kernel32,msvcrt}.def`; it includes
+and links it with `lld-link` against import libraries made by the Rust
+toolchain's `rust-lld -flavor link /lib /def:` (or `$LLVM_DLLTOOL` when set; the
+bytes are the same) from `tests/windows/cxx/{kernel32,msvcrt}.def`; it includes
 `tests/windows/cxx/poly_wtest.h` (the same observation file and lines as
 `poly-wtest`, `POLY_TEST_MAIN(fn)`) and may import from `msvcrt.dll` too.
 A line `// poly-cxx: handler=__CxxFrameHandler magic=0x19930520
@@ -542,8 +544,9 @@ affected: they are sequential, and `dnp_basic` asserts the busy answer on purpos
 `cargo xtask pipeline win polycheck` (in `cargo xtask ci pipeline`) builds
 the visible tests of every green Windows entry that has a `windows.json`,
 runs them on Poly and compares them with those recorded results; every one
-must pass. It skips itself without QEMU, without clang++/lld-link/
-llvm-dlltool for C++ tests, and for implementer agents.
+must pass. It skips itself without QEMU, without clang++/lld-link when a
+C++ test is compiled here (tests built by Microsoft's compiler, a checked-in
+`.exe`, need neither; nor does `win build` then), and for implementer agents.
 
 **One round on the oracle machine, over SSH** (ADR 0097). On the owner's PC,
 where builds run in the container and SSH on the host, from the repository

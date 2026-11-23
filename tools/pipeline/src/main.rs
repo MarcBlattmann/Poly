@@ -35,7 +35,8 @@
 //! handoff verify [<entry>] [--received DIR]      prove the hand-offs (and no leaks)
 //! win build [--tests-dir DIR]... [--tests a,b] [--out DIR] [--cxx-runtime msvcrt|vcruntime140]
 //!                                                Windows test programs (tests/windows/*.rs, ADR 0075, and
-//!                                                *.cpp, ADR 0098) into
+//!                                                *.cpp, ADR 0098; with --tests-dir and no --tests, only
+//!                                                the tests of those directories) into
 //!                                                target/pipeline/windows/bin/*.exe + manifest.json
 //! win bundle [--bin-dir DIR] [--out FILE] [--part-size BYTES] [--data-dir DIR]
 //!                                                one text file for the Windows machine (and parts of it);

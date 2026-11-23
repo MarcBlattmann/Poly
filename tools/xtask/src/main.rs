@@ -226,6 +226,8 @@ const BOOT_TIMEOUT: Duration = Duration::from_secs(60);
 thread_local! {
     /// This thread's boot timeout ([`with_boot_timeout`]; [`BOOT_TIMEOUT`]
     /// unless a test asks for more).
+    // It is `const`: clippy 1.97 still asks for it on x86_64-pc-windows-msvc.
+    #[allow(clippy::missing_const_for_thread_local)]
     static THREAD_BOOT_TIMEOUT: std::cell::Cell<Duration> = const { std::cell::Cell::new(BOOT_TIMEOUT) };
 }
 
@@ -2227,6 +2229,71 @@ fn lint() -> Result {
     source_checks(Some(&changed))
 }
 
+/// The longest rustfmt command line [`fmt_all_chunked`] makes: Windows allows
+/// 32767 characters in all.
+const FMT_ARGS_MAX: usize = 16_000;
+
+/// `cargo fmt --all --check --manifest-path <manifest>`: rustfmt over the root
+/// file of every target of every local package (the workspace's members and
+/// the path dependencies they reach), grouped by edition. cargo fmt hands them
+/// all to one rustfmt, a command line longer than Windows takes for the win32
+/// workspace (os error 206); here each rustfmt gets at most [`FMT_ARGS_MAX`]
+/// characters of them.
+fn fmt_all_chunked(name: &str, manifest: &Path) -> Result {
+    let out = cargo()
+        .args(["metadata", "--format-version", "1", "--manifest-path"])
+        .arg(manifest)
+        .stderr(Stdio::inherit())
+        .output()
+        .map_err(|e| format!("cargo metadata: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("cargo metadata --manifest-path {}: {}", manifest.display(), out.status));
+    }
+    let meta: serde_json::Value = serde_json::from_slice(&out.stdout).map_err(|e| format!("cargo metadata: {e}"))?;
+    let chunks = fmt_chunks(&meta, FMT_ARGS_MAX)?;
+    for (i, (edition, files)) in chunks.iter().enumerate() {
+        let label = if chunks.len() == 1 { name.to_string() } else { format!("{name} {}/{}", i + 1, chunks.len()) };
+        step(&label, Command::new("rustfmt").current_dir(root()).args(["--check", "--edition", edition]).args(files))?;
+    }
+    Ok(())
+}
+
+/// The root files of the local packages in `cargo metadata` output, as
+/// (edition, files) groups of at most `max` characters of file names each,
+/// in a stable order.
+fn fmt_chunks(meta: &serde_json::Value, max: usize) -> Result<Vec<(String, Vec<String>)>> {
+    let mut by_edition: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        std::collections::BTreeMap::new();
+    for p in meta["packages"].as_array().ok_or("cargo metadata: no packages")? {
+        if !p["source"].is_null() {
+            continue;
+        }
+        for t in p["targets"].as_array().into_iter().flatten() {
+            let (Some(src), Some(edition)) = (t["src_path"].as_str(), t["edition"].as_str()) else {
+                return Err(format!("cargo metadata: a target of {} without src_path or edition", p["name"]));
+            };
+            by_edition.entry(edition.to_string()).or_default().insert(src.to_string());
+        }
+    }
+    let mut out = Vec::new();
+    for (edition, files) in by_edition {
+        let mut chunk: Vec<String> = Vec::new();
+        let mut len = 0;
+        for f in files {
+            if !chunk.is_empty() && len + f.len() + 1 > max {
+                out.push((edition.clone(), std::mem::take(&mut chunk)));
+                len = 0;
+            }
+            len += f.len() + 1;
+            chunk.push(f);
+        }
+        if !chunk.is_empty() {
+            out.push((edition, chunk));
+        }
+    }
+    Ok(out)
+}
+
 /// rustfmt's checks of `plan`, one after the other.
 fn fmt_checks(plan: &quicklint::Plan) -> Result {
     if plan.all_host {
@@ -2273,12 +2340,7 @@ fn fmt_checks(plan: &quicklint::Plan) -> Result {
         )?;
     }
     if plan.win32 {
-        step(
-            "fmt (win32)",
-            cargo()
-                .args(["fmt", "--all", "--check", "--manifest-path"])
-                .arg(root().join("personalities/nt/win32/Cargo.toml")),
-        )?;
+        fmt_all_chunked("fmt (win32)", &root().join("personalities/nt/win32/Cargo.toml"))?;
     }
     if plan.wintrace {
         // The Windows API tracer's DLL sources (no manifest of their own: the
@@ -2540,7 +2602,7 @@ fn pipeline_checks() -> Result {
     if let Some(slice) = windows {
         // The visible tests of every green Windows entry on Poly against
         // their recorded Windows results (ADR 0099). Skips itself without
-        // QEMU, and without clang++/lld-link/llvm-dlltool for C++ tests.
+        // QEMU, and without clang++/lld-link for C++ tests built here.
         let mut win = vec!["win".to_string(), "polycheck".to_string()];
         if let Some((i, n)) = slice {
             win.extend(["--shard".to_string(), format!("{i}/{n}")]);
@@ -2750,6 +2812,33 @@ mod tests {
 
     fn boot(status: Option<i32>, timed_out: bool, output: &str) -> Boot {
         Boot { status, output: output.into(), timed_out }
+    }
+
+    #[test]
+    fn fmt_chunks_take_local_packages_by_edition_within_the_limit() {
+        let meta = serde_json::json!({ "packages": [
+            { "name": "a", "source": null, "targets": [
+                { "src_path": "/w/a/src/lib.rs", "edition": "2024" },
+                { "src_path": "/w/a/build.rs", "edition": "2024" } ] },
+            { "name": "b", "source": null, "targets": [ { "src_path": "/w/b/src/main.rs", "edition": "2021" } ] },
+            { "name": "reg", "source": "registry+https://github.com/rust-lang/crates.io-index",
+              "targets": [ { "src_path": "/r/reg/src/lib.rs", "edition": "2021" } ] },
+            { "name": "c", "source": null, "targets": [ { "src_path": "/w/c/src/lib.rs", "edition": "2024" } ] }
+        ]});
+        let all = fmt_chunks(&meta, 10_000).unwrap();
+        assert_eq!(
+            all,
+            [
+                ("2021".to_string(), vec!["/w/b/src/main.rs".to_string()]),
+                ("2024".to_string(), vec!["/w/a/build.rs".into(), "/w/a/src/lib.rs".into(), "/w/c/src/lib.rs".into()]),
+            ]
+        );
+        // 14 + 16 characters (with the spaces) fit in 32; the third 2024 file starts a chunk.
+        let small = fmt_chunks(&meta, 32).unwrap();
+        let files: Vec<usize> = small.iter().map(|(_, f)| f.len()).collect();
+        assert_eq!(files, [1, 2, 1]);
+        let flat: Vec<&String> = small.iter().flat_map(|(_, f)| f).collect();
+        assert_eq!(flat.len(), 4);
     }
 
     /// Only an emulator crash before any device line is retried: not a

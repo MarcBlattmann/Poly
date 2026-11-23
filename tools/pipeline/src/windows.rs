@@ -173,6 +173,12 @@ pub fn sources(repo: &Path, extra: &[PathBuf]) -> Result<Vec<Source>> {
     Ok(out)
 }
 
+/// The sources of `srcs` whose file is directly in one of `dirs` (as [`sources`] reads them).
+fn in_dirs(srcs: Vec<Source>, dirs: &[PathBuf]) -> Vec<Source> {
+    let dirs: Vec<PathBuf> = dirs.iter().map(|d| util::absolute(d)).collect();
+    srcs.into_iter().filter(|s| s.path.parent().is_some_and(|p| dirs.iter().any(|d| d == p))).collect()
+}
+
 /// A TOML basic string (the paths Cargo reads).
 fn toml_str(s: &str) -> String {
     let mut out = String::from("\"");
@@ -362,7 +368,8 @@ fn rel(repo: &Path, path: &Path) -> String {
     path.strip_prefix(repo).unwrap_or(path).to_string_lossy().into_owned()
 }
 
-/// Build every test of [`sources`] (only those named in `only`, if any)
+/// Build every test of [`sources`] (only those named in `only`, if any;
+/// with `extra` directories and no `only`, only the tests in `extra`)
 /// into `out` (`<name>.exe` and `manifest.json`; older executables there
 /// are removed). Cargo's own files go to `WIN_DIR/cargo`: the first build
 /// compiles `core` for the target (about half a minute), later ones only
@@ -380,6 +387,10 @@ pub fn build_runtime(
     runtime: Option<wincxx::Runtime>,
 ) -> Result<Manifest> {
     let mut srcs = sources(repo, extra)?;
+    if only.is_empty() && !extra.is_empty() {
+        // `--tests-dir` without `--tests`: the tests of those directories, not the corpus too.
+        srcs = in_dirs(srcs, extra);
+    }
     if !only.is_empty() {
         for name in only {
             if !srcs.iter().any(|s| &s.name == name) {
@@ -407,11 +418,26 @@ pub fn build_runtime(
     }
     let tools = wincxx::Tools::from_env();
     let cxx_dir = win.join("cxx");
-    let (clang, libs) = if cpp.is_empty() {
+    // Tests Microsoft's compiler built (a checked-in `.exe`) need no tool here.
+    let compiled: Vec<&str> = cpp.iter().filter(|s| wincxx::needs_compiler(&s.path)).map(|s| s.name.as_str()).collect();
+    let (clang, libs) = if compiled.is_empty() {
+        if !cpp.is_empty() {
+            eprintln!("==> {} C++ Windows test programs built by Microsoft's compiler: taken as they are", cpp.len());
+        }
         (None, Vec::new())
     } else {
-        eprintln!("==> build {} C++ Windows test programs", cpp.len());
-        (Some(tools.version()?), wincxx::import_libraries(repo, &tools, &cxx_dir)?)
+        eprintln!(
+            "==> build {} C++ Windows test programs with clang++ ({} more built by Microsoft's compiler)",
+            compiled.len(),
+            cpp.len() - compiled.len()
+        );
+        let version = tools.version().map_err(|e| {
+            format!(
+                "{e}: these C++ tests are compiled here: {} (tests built by Microsoft's compiler need no tool)",
+                compiled.join(", ")
+            )
+        })?;
+        (Some(version), wincxx::import_libraries(repo, &tools, &cxx_dir)?)
     };
     util::create_dir(out)?;
     for e in std::fs::read_dir(out).map_err(|e| format!("{}: {e}", out.display()))? {
@@ -1487,6 +1513,12 @@ mod tests {
         let names: Vec<String> =
             sources(&dir, std::slice::from_ref(&extra)).unwrap().into_iter().map(|s| s.name).collect();
         assert_eq!(names, ["a_test", "b_test"]);
+        let only_extra: Vec<String> =
+            in_dirs(sources(&dir, std::slice::from_ref(&extra)).unwrap(), std::slice::from_ref(&extra))
+                .into_iter()
+                .map(|s| s.name)
+                .collect();
+        assert_eq!(only_extra, ["a_test"]);
         util::write(&extra.join("b_test.rs"), "").unwrap();
         assert!(sources(&dir, std::slice::from_ref(&extra)).unwrap_err().contains("two tests named b_test"));
         std::fs::remove_file(extra.join("b_test.rs")).unwrap();

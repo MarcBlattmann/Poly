@@ -17,9 +17,9 @@
 //! `Cargo.toml` path dependencies, the service table its stubs come from,
 //! the toolchain pin and the build flags) and looks for `ntdll-<hash>.dll`
 //! in the cache. Only a miss builds (about 30 s and 140 MB of build-std
-//! artifacts); the artifacts are then deleted (`POLY_NTDLL_KEEP_BUILD=1`
-//! keeps them for incremental work on `ntdll`) and only the ~100 KB DLL
-//! stays. The cache is shared by every worktree of the checkout (`<main
+//! artifacts); the artifacts stay for the next build after an edit, except
+//! in CI (`POLY_NTDLL_KEEP_BUILD=0`/`1` decides; [`keep_build`], ADR 0270),
+//! and the ~100 KB DLL goes to the cache. The cache is shared by every worktree of the checkout (`<main
 //! checkout>/target/ntdll-cache`, found through `git rev-parse
 //! --git-common-dir`), so parallel agents build each version once. The
 //! kernel's `build.rs` reads the DLL from `POLY_NTDLL_DLL`, which
@@ -134,7 +134,7 @@ pub fn ensure() -> Result<PathBuf> {
     let tmp = dir.join(format!(".ntdll-{key:016x}.{}.tmp", std::process::id()));
     std::fs::copy(&dll, &tmp).map_err(|e| format!("{}: {e}", tmp.display()))?;
     std::fs::rename(&tmp, &cached).map_err(|e| format!("{}: {e}", cached.display()))?;
-    if std::env::var_os("POLY_NTDLL_KEEP_BUILD").is_none() {
+    if !keep_build("POLY_NTDLL_KEEP_BUILD") {
         let _ = std::fs::remove_dir_all(&target);
     }
     prune(&dir);
@@ -296,6 +296,22 @@ pub(crate) fn hash_files(root: &Path, flags: &str, files: &[PathBuf]) -> Result<
 
 /// The toolchain's `rust-src` vendored-dependency directory
 /// (`<sysroot>/lib/rustlib/src/rust/library/vendor`).
+/// Whether a DLL build keeps its build directory (ADR 0270): `var` set to `0`
+/// deletes it, any other value keeps it; unset, it is kept on a developer's
+/// or agent's machine, where the next build after an edit then compiles only
+/// what changed (the Win32 workspace: minutes against seconds), and deleted
+/// in CI (`CI` set), whose caches must not take it.
+pub(crate) fn keep_build(var: &str) -> bool {
+    keep_build_from(std::env::var(var).ok().as_deref(), std::env::var_os("CI").is_some())
+}
+
+fn keep_build_from(var: Option<&str>, ci: bool) -> bool {
+    match var {
+        Some(v) => v != "0",
+        None => !ci,
+    }
+}
+
 pub(crate) fn vendor_dir() -> Result<PathBuf> {
     let out = Command::new("rustc").args(["--print", "sysroot"]).output().map_err(|e| format!("rustc: {e}"))?;
     let sysroot = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -368,6 +384,15 @@ fn opt(args: &[String], name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build directories stay unless CI runs or the variable says `0`.
+    #[test]
+    fn build_directories_stay_outside_ci() {
+        assert!(keep_build_from(None, false));
+        assert!(!keep_build_from(None, true));
+        assert!(keep_build_from(Some("1"), true));
+        assert!(!keep_build_from(Some("0"), false));
+    }
 
     /// The inputs cover the `ntdll` crate and every repo crate it uses, and
     /// nothing of the kernel.

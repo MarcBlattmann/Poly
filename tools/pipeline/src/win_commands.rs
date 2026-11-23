@@ -25,11 +25,16 @@ fn win_polycheck(repo: &Path, a: &Args) -> Result<u8> {
         println!("pipeline win polycheck: skipped (no qemu-system-x86_64)");
         return Ok(0);
     }
-    let has_cpp = entries
-        .iter()
-        .any(|w| w.entry.tests.iter().any(|t| repo.join(&w.entry.tests_dir).join(format!("{t}.cpp")).is_file()));
+    // C++ tests that clang++ compiles here (not those Microsoft's compiler built).
+    let compiled = |w: &green::WindowsEntry| {
+        w.entry.tests.iter().any(|t| {
+            let src = repo.join(&w.entry.tests_dir).join(format!("{t}.cpp"));
+            src.is_file() && wincxx::needs_compiler(&src)
+        })
+    };
+    let has_cpp = entries.iter().any(compiled);
     if has_cpp && let Err(e) = wincxx::Tools::from_env().version() {
-        println!("pipeline win polycheck: skipped (C++ tests need clang++, lld-link and llvm-dlltool: {e})");
+        println!("pipeline win polycheck: skipped (C++ tests need clang++ and lld-link: {e})");
         return Ok(0);
     }
     // Whether the parity pass runs at all is decided on every entry, so each

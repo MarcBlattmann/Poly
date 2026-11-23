@@ -423,7 +423,7 @@ jobs:
       - name: Start installing Rust
         if: startsWith(matrix.slice, 'win-')
         run: .github/scripts/rust-start.sh
-      # clang++, lld-link and llvm-dlltool build the C++ Windows tests of
+      # clang++ and lld-link build the C++ Windows tests of
       # green Windows entries for `win polycheck` (ADR 0098, 0099).
       - name: Install QEMU and a static BusyBox (and the C++ Windows test tools)
         uses: ./.github/actions/apt-install

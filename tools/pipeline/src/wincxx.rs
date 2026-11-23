@@ -5,7 +5,7 @@
 //! ```text
 //! <name>.cpp ─ clang++ --target=x86_64-pc-windows-msvc -ffreestanding -nostdlib -fcxx-exceptions ─► <name>.obj
 //!               (or -S, the assembly rewritten as the file's `poly-cxx:` line asks, then assembled)
-//! tests/windows/cxx/{msvcrt,kernel32}.def ─ llvm-dlltool ─► import libraries
+//! tests/windows/cxx/{msvcrt,kernel32}.def ─ rust-lld -flavor link /lib /def: ─► import libraries
 //! <name>.obj + import libraries ─ lld-link /NODEFAULTLIB /ENTRY:mainCRTStartup ─► <name>.exe
 //! ```
 //!
@@ -318,11 +318,14 @@ fn replace_long(line: &str, value: u32) -> Result<String> {
     Ok(format!("{indent}.long{pad}{value:<30} #{comment}"))
 }
 
-/// The tools: `CLANGXX`, `LLD_LINK`, `LLVM_DLLTOOL`, else these names.
+/// The tools: `CLANGXX`, `LLD_LINK`, else these names. The import libraries
+/// come from the Rust toolchain's own `rust-lld` (ADR 0124: no host C
+/// toolchain where one is not needed), or from `LLVM_DLLTOOL` when that is set;
+/// the two make the same bytes.
 pub struct Tools {
     pub clang: String,
     pub lld_link: String,
-    pub dlltool: String,
+    pub dlltool: Option<String>,
 }
 
 impl Tools {
@@ -331,7 +334,7 @@ impl Tools {
         Tools {
             clang: var("CLANGXX", "clang++"),
             lld_link: var("LLD_LINK", "lld-link"),
-            dlltool: var("LLVM_DLLTOOL", "llvm-dlltool"),
+            dlltool: std::env::var("LLVM_DLLTOOL").ok(),
         }
     }
 
@@ -340,9 +343,37 @@ impl Tools {
         let out = Command::new(&self.clang)
             .arg("--version")
             .output()
-            .map_err(|e| format!("{}: {e} (C++ Windows tests need clang++, lld-link and llvm-dlltool)", self.clang))?;
+            .map_err(|e| format!("{}: {e} (C++ Windows tests built here need clang++ and lld-link)", self.clang))?;
         Ok(String::from_utf8_lossy(&out.stdout).lines().next().unwrap_or_default().to_string())
     }
+}
+
+/// Whether `win build` compiles the C++ test `source` itself (with clang++,
+/// [`build_one`]) rather than taking the executable Microsoft's compiler made
+/// beside it (`compiler=msvc`). A test whose `poly-cxx:` line does not parse
+/// counts as compiled here, so [`build_one`] reports the error.
+pub fn needs_compiler(source: &Path) -> bool {
+    std::fs::read_to_string(source).ok().and_then(|t| directives(&t).ok()).is_none_or(|d| d.compiler != Compiler::Msvc)
+}
+
+/// The Rust toolchain's `rust-lld` (the one `repo`'s `rust-toolchain.toml` picks).
+fn rust_lld(repo: &Path) -> Result<PathBuf> {
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".into());
+    let text = |args: &[&str]| -> Result<String> {
+        let out = Command::new(&rustc).current_dir(repo).args(args).output().map_err(|e| format!("{rustc}: {e}"))?;
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    };
+    let sysroot = text(&["--print", "sysroot"])?.trim().to_string();
+    let host = text(&["-vV"])?
+        .lines()
+        .find_map(|l| l.strip_prefix("host: ").map(str::to_string))
+        .ok_or("rustc -vV: no host line")?;
+    let exe = if cfg!(windows) { "rust-lld.exe" } else { "rust-lld" };
+    let lld = PathBuf::from(sysroot).join("lib/rustlib").join(host).join("bin").join(exe);
+    if !lld.is_file() {
+        return Err(format!("{} not found (it ships with every Rust toolchain)", lld.display()));
+    }
+    Ok(lld)
 }
 
 fn run(cmd: &mut Command) -> Result {
@@ -383,17 +414,38 @@ pub fn clang_flags(repo: &Path) -> Vec<String> {
 pub const LINK_FLAGS: &[&str] =
     &["/NODEFAULTLIB", "/ENTRY:mainCRTStartup", "/SUBSYSTEM:CONSOLE", "/Brepro", "/DEBUG:NONE", "/MACHINE:X64"];
 
-/// Make the import libraries in `work` from the `.def` files.
+/// Make the import libraries in `work` from the `.def` files: with
+/// `rust-lld -flavor link /lib /def:` (lld's `llvm-lib` mode), or with
+/// `llvm-dlltool` when [`Tools::dlltool`] names one.
 pub fn import_libraries(repo: &Path, tools: &Tools, work: &Path) -> Result<Vec<PathBuf>> {
     util::create_dir(work)?;
+    let lld = match &tools.dlltool {
+        Some(_) => None,
+        None => Some(rust_lld(repo)?),
+    };
     let mut libs = Vec::new();
     for dll in IMPORT_DLLS {
         let def = repo.join(SUPPORT_DIR).join(format!("{dll}.def"));
         let lib = work.join(format!("{dll}.lib"));
-        run(Command::new(&tools.dlltool).args(["-m", "i386:x86-64", "-d"]).arg(&def).arg("-l").arg(&lib))?;
+        match (&lld, &tools.dlltool) {
+            (Some(lld), _) => run(Command::new(lld).args(import_lib_args(&def, &lib)))?,
+            (None, Some(dlltool)) => {
+                run(Command::new(dlltool).args(["-m", "i386:x86-64", "-d"]).arg(&def).arg("-l").arg(&lib))?
+            }
+            (None, None) => unreachable!("rust-lld is looked up when no dlltool is set"),
+        }
         libs.push(lib);
     }
     Ok(libs)
+}
+
+/// `rust-lld`'s arguments that make the x64 import library `lib` from `def`.
+fn import_lib_args(def: &Path, lib: &Path) -> Vec<String> {
+    ["-flavor", "link", "/lib", "/machine:x64"]
+        .iter()
+        .map(|s| s.to_string())
+        .chain([format!("/def:{}", def.display()), format!("/out:{}", lib.display())])
+        .collect()
 }
 
 /// The import libraries of `runtime`, in its order, from those
@@ -527,6 +579,28 @@ mod tests {
         assert!(rewrite_assembly(none, &only_magic).unwrap_err().contains("MagicNumber"));
         let only_flags = Directives { ehflags: Some(0), ..Directives::default() };
         assert!(rewrite_assembly(none, &only_flags).unwrap_err().contains("EHFlags"));
+    }
+
+    #[test]
+    fn import_libraries_come_from_rust_lld_in_lib_mode() {
+        let a = import_lib_args(Path::new("/r/kernel32.def"), Path::new("/w/kernel32.lib"));
+        assert_eq!(a, ["-flavor", "link", "/lib", "/machine:x64", "/def:/r/kernel32.def", "/out:/w/kernel32.lib"]);
+    }
+
+    #[test]
+    fn only_tests_not_built_by_microsofts_compiler_need_clang() {
+        let dir = std::env::temp_dir().join(format!("poly-wincxx-needs-{}", std::process::id()));
+        let msvc = dir.join("a.cpp");
+        let clang = dir.join("b.cpp");
+        let bad = dir.join("c.cpp");
+        util::write(&msvc, "// poly-cxx: compiler=msvc\nint x;\n").unwrap();
+        util::write(&clang, "int x;\n").unwrap();
+        util::write(&bad, "// poly-cxx: compiler=gcc\n").unwrap();
+        assert!(!needs_compiler(&msvc));
+        assert!(needs_compiler(&clang));
+        assert!(needs_compiler(&bad));
+        assert!(needs_compiler(&dir.join("missing.cpp")));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
