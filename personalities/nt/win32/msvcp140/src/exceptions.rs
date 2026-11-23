@@ -1,5 +1,6 @@
 //! The throw helpers (`?_X*`, `?_Throw_Cpp_error`), the generic category's texts
-//! (`?_Syserror_map`) and `std::uncaught_exception(s)`.
+//! (`?_Syserror_map`), the Windows error codes (`?_Winerror_map`, `?_Winerror_message`) and
+//! `std::uncaught_exception(s)`.
 //!
 //! A helper builds the exception object in its own frame and raises it with
 //! `vcruntime140!_CxxThrowException` and the class's ThrowInfo, which lives in this image
@@ -8,7 +9,7 @@
 //! the functions they name. The object layouts are in `poly_msvcp::classes`.
 
 use poly_msvcp::classes::SYSTEM_ERROR_SIZE;
-use poly_msvcp::errc;
+use poly_msvcp::{errc, winerror};
 
 /// `__std_exception_data` (`vcruntime_exception.h`).
 #[repr(C)]
@@ -277,6 +278,54 @@ pub extern "C" fn throw_cpp_error(code: i32) -> ! {
 #[unsafe(export_name = "?_Syserror_map@std@@YAPEBDH@Z")]
 pub extern "C" fn syserror_map(value: i32) -> *const u8 {
     errc::text(value).map_or(errc::UNKNOWN, |t| t.text).as_ptr()
+}
+
+// ----- Windows error codes -------------------------------------------------------------------
+
+#[cfg_attr(target_arch = "x86", link(name = "kernel32", kind = "raw-dylib", import_name_type = "undecorated"))]
+#[cfg_attr(not(target_arch = "x86"), link(name = "kernel32", kind = "raw-dylib"))]
+unsafe extern "system" {
+    fn FormatMessageA(
+        flags: u32,
+        source: *const u8,
+        id: u32,
+        language: u32,
+        buffer: *mut u8,
+        size: u32,
+        args: *const usize,
+    ) -> u32;
+}
+
+/// `int std::_Winerror_map(int)`: the generic (`errno.h`) value of a Windows error code, 0
+/// when there is none (`poly_msvcp::winerror::map`).
+#[unsafe(export_name = "?_Winerror_map@std@@YAHH@Z")]
+pub extern "C" fn winerror_map(code: i32) -> i32 {
+    winerror::map(code)
+}
+
+/// `unsigned long std::_Winerror_message(unsigned long code, char* buf, unsigned long size)`:
+/// the system's English text of the code in `buf` (followed by the CR LF the system text ends
+/// with), and its length without them; 0 for an unknown code or a buffer too small.
+#[unsafe(export_name = "?_Winerror_message@std@@YAKKPEADK@Z")]
+pub unsafe extern "C" fn winerror_message(code: u32, buf: *mut u8, size: u32) -> u32 {
+    if buf.is_null() || size == 0 {
+        return 0;
+    }
+    // SAFETY: the caller's buffer holds `size` bytes; no inserts are read.
+    let n = unsafe {
+        FormatMessageA(
+            winerror::FORMAT_FLAGS,
+            core::ptr::null(),
+            code,
+            winerror::LANGUAGE,
+            buf,
+            size,
+            core::ptr::null(),
+        )
+    };
+    // SAFETY: `FormatMessageA` wrote `n` (< `size`) bytes at `buf`.
+    let text = unsafe { core::slice::from_raw_parts(buf, n.min(size) as usize) };
+    winerror::message_length(text) as u32
 }
 
 // ----- uncaught exceptions ------------------------------------------------------------------

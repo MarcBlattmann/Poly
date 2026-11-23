@@ -633,8 +633,6 @@
 ?_W_Getdays@_Locinfo@std@@QEBAPEBGXZ
 ?_W_Getmonths@_Locinfo@std@@QEBAPEBGXZ
 ?_W_Gettnames@_Locinfo@std@@QEBA?AV_Timevec@2@XZ
-?_Winerror_map@std@@YAHH@Z
-?_Winerror_message@std@@YAKKPEADK@Z
 ?_XGetLastError@std@@YAXXZ
 ?_XLgamma@std@@YAMM@Z
 ?_XLgamma@std@@YANN@Z
